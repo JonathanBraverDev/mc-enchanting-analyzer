@@ -18,11 +18,11 @@ def verify():
     results["1.21.9_copper_tool_enchantability"] = dm.available_materials["copper"]["tools"]
     results["1.21.9_copper_armor_enchantability"] = dm.available_materials["copper"]["armor"]
 
-    # 3. Verify 25w41a - Spear pool + Tiered logic
-    dm.update_context("25w41a")
-    results["25w41a_spear_enchants"] = [e.name for e in dm.category_enchants.get("spear", [])]
-    results["25w41a_wood_spear_val"] = dm.get_material_value("wood", "spear")
-    results["25w41a_gold_spear_val"] = dm.get_material_value("gold", "spear")
+    # 3. Verify 1.21.11 - Spear pool + Tiered logic
+    dm.update_context("1.21.11")
+    results["1.21.11_spear_enchants"] = [e.name for e in dm.category_enchants.get("spear", [])]
+    results["1.21.11_wood_spear_val"] = dm.get_material_value("wood", "spear")
+    results["1.21.11_gold_spear_val"] = dm.get_material_value("gold", "spear")
 
     print("---BATCH4_VERIFY_START---")
     print(json.dumps(results, indent=2))

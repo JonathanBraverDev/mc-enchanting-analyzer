@@ -9,7 +9,10 @@ class EnchantCalculator:
         if enchantability <= 0:
             return {xp_level: 1.0}
             
-        N = enchantability // 4 + 1
+        div = self.data_manager.mechanics.get("enchantability_bonus_divisor", 4)
+        rng = self.data_manager.mechanics.get("random_bonus_range", 0.15)
+        
+        N = enchantability // div + 1
         base_dist = {}
         for r1 in range(N):
             for r2 in range(N):
@@ -17,13 +20,12 @@ class EnchantCalculator:
                 base_dist[val] = base_dist.get(val, 0) + 1.0 / (N*N)
                 
         final_dist = {}
-        # Sample the bonus (randFloat() + randFloat() - 1) * 0.15
-        # The sum of two uniform(0, 0.15) minus 0.15
+        # Sample the bonus (randFloat() + randFloat() - 1) * rng
         steps = 41 # Higher precision
         for base_val, base_prob in base_dist.items():
             for i in range(steps):
                 for j in range(steps):
-                    bonus = (i/(steps-1) * 0.15) + (j/(steps-1) * 0.15) - 0.15
+                    bonus = (i/(steps-1) * rng) + (j/(steps-1) * rng) - rng
                     # Java Math.round: floor(x + 0.5)
                     mod_val = int(base_val * (1 + bonus) + 0.5)
                     mod_val = max(1, mod_val)
