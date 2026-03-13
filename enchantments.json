@@ -204,13 +204,17 @@
     }
   },
   "enchantment_groups": {
-    "basic_armor": ["Protection", "Fire Protection", "Blast Protection", "Projectile Protection", "Unbreaking"],
+    "armor_pool": ["Protection", "Fire Protection", "Blast Protection", "Projectile Protection", "Unbreaking"],
+    "legacy_armor_pool": ["Protection", "Fire Protection", "Blast Protection", "Projectile Protection"],
     "chestplate_extras": ["Thorns"],
     "boot_extras": ["Feather Falling", "Depth Strider"],
     "helmet_extras": ["Respiration", "Aqua Affinity"],
     "sword_pool": ["Sharpness", "Smite", "Bane of Arthropods", "Knockback", "Fire Aspect", "Looting", "Sweeping Edge", "Unbreaking"],
+    "legacy_sword_pool": ["Sharpness", "Smite", "Bane of Arthropods", "Knockback", "Fire Aspect", "Looting"],
     "bow_pool": ["Power", "Punch", "Flame", "Infinity", "Unbreaking"],
+    "legacy_bow_pool": ["Power", "Punch", "Flame", "Infinity"],
     "tool_pool": ["Efficiency", "Unbreaking", "Fortune", "Silk Touch"],
+    "fishing_pool": ["Luck of the Sea", "Lure", "Unbreaking"],
     "book_pool": [
       "Protection", "Fire Protection", "Blast Protection", "Projectile Protection",
       "Sharpness", "Smite", "Bane of Arthropods", "Knockback", "Fire Aspect", "Looting", "Sweeping Edge",
@@ -223,20 +227,22 @@
       "Quick Charge", "Multishot", "Piercing",
       "Density", "Breach"
     ],
-    "mace_pool": ["Density", "Breach", "Unbreaking"],
-    "spear_pool": ["Lunge", "Unbreaking"]
+    "trident_pool": ["Impaling", "Loyalty", "Riptide", "Channeling", "Unbreaking"],
+    "crossbow_pool": ["Quick Charge", "Multishot", "Piercing", "Unbreaking"],
+    "mace_pool": ["Density", "Breach", "Smite", "Bane of Arthropods", "Fire Aspect", "Unbreaking"],
+    "spear_pool": ["Lunge", "Sharpness", "Smite", "Bane of Arthropods", "Knockback", "Fire Aspect", "Looting", "Unbreaking"]
   },
   "versions": {
     "1.0": {
       "item_enchantments": {
-        "sword": ["sword_pool"],
+        "sword": ["legacy_sword_pool"],
         "pickaxe": ["tool_pool"],
         "axe": ["tool_pool"],
         "shovel": ["tool_pool"],
-        "helmet": ["basic_armor", "helmet_extras"],
-        "chestplate": ["basic_armor"],
-        "leggings": ["basic_armor"],
-        "boots": ["basic_armor", "boot_extras"],
+        "helmet": ["legacy_armor_pool", "helmet_extras"],
+        "chestplate": ["legacy_armor_pool"],
+        "leggings": ["legacy_armor_pool"],
+        "boots": ["legacy_armor_pool", "boot_extras"],
         "book": ["book_pool"]
       },
       "materials": ["wood", "stone", "iron", "gold", "diamond", "leather", "chain", "book"]
@@ -244,27 +250,35 @@
     "1.1": {
       "extends": "1.0",
       "item_enchantments": {
-        "bow": ["bow_pool"]
+        "bow": ["legacy_bow_pool"]
       },
       "materials": ["bow"]
     },
     "1.4.6": {
       "extends": "1.1",
       "item_enchantments": {
-        "chestplate": ["basic_armor", "chestplate_extras"]
+        "chestplate": ["legacy_armor_pool", "chestplate_extras"]
       },
       "multi_enchant_books": false
     },
     "1.7.2": {
       "extends": "1.4.6",
       "item_enchantments": {
+        "helmet": ["armor_pool", "helmet_extras"],
+        "chestplate": ["armor_pool", "chestplate_extras"],
+        "leggings": ["armor_pool"],
+        "boots": ["armor_pool", "boot_extras"],
         "fishing_rod": ["fishing_pool"]
       },
       "materials": ["fishing_rod"],
       "multi_enchant_books": true
     },
     "1.8": {
-      "extends": "1.7.2"
+      "extends": "1.7.2",
+      "item_enchantments": {
+        "sword": ["sword_pool"],
+        "bow": ["bow_pool"]
+      }
     },
     "1.11.1": {
       "extends": "1.8"
@@ -272,8 +286,7 @@
     "1.13": {
       "extends": "1.11.1",
       "item_enchantments": {
-        "trident": ["trident_pool"],
-        "hoe": ["tool_pool"]
+        "trident": ["trident_pool"]
       },
       "materials": ["trident", "turtle"]
     },
@@ -309,6 +322,7 @@
     "1.21": {
       "extends": "1.16",
       "item_enchantments": {
+        "axe": ["tool_pool"],
         "mace": ["mace_pool"]
       },
       "materials": ["mace"]
