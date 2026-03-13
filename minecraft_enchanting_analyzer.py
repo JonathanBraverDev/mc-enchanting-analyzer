@@ -20,6 +20,18 @@ except ImportError:
 # Data Models and Loading
 # -------------------------------------------------
 
+def parse_version(v):
+    return [int(x) for x in v.split('.')]
+
+def is_valid_v(version, valid_from, valid_to="99.9"):
+    try:
+        curr = parse_version(version)
+        start = parse_version(valid_from)
+        end = parse_version(valid_to)
+        return start <= curr <= end
+    except:
+        return True
+
 class Enchant:
     def __init__(self, name, weight, min_level, max_level, conflicts=None, valid_from="1.0", valid_to="99.9"):
         self.name = name
@@ -31,16 +43,7 @@ class Enchant:
         self.valid_to = valid_to
 
     def is_valid_for_version(self, version):
-        def parse_version(v):
-            return [int(x) for x in v.split('.')]
-        
-        try:
-            curr = parse_version(version)
-            start = parse_version(self.valid_from)
-            end = parse_version(self.valid_to)
-            return start <= curr <= end
-        except:
-            return True
+        return is_valid_v(version, self.valid_from, self.valid_to)
 
 def load_data():
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -68,16 +71,22 @@ def load_data():
     return enchantments, enchantability
 
 # Global State
-CATEGORY_ENCHANTS, ENCHANTABILITY = load_data()
+CATEGORY_ENCHANTS, ENCHANTABILITY_DATA = load_data()
 ENCHANT_LOOKUP = {}
+AVAILABLE_MATERIALS = {}
 
-def update_lookup(version):
-    global ENCHANT_LOOKUP
+def update_context(version):
+    global ENCHANT_LOOKUP, AVAILABLE_MATERIALS
     ENCHANT_LOOKUP = {}
     for cat in CATEGORY_ENCHANTS:
         for e in CATEGORY_ENCHANTS[cat]:
             if e.is_valid_for_version(version):
                 ENCHANT_LOOKUP[e.name] = e
+    
+    AVAILABLE_MATERIALS = {
+        m: d["value"] for m, d in ENCHANTABILITY_DATA.items() 
+        if is_valid_v(version, d.get("valid_from", "1.0"))
+    }
 
 # -------------------------------------------------
 # Helper functions
@@ -192,29 +201,40 @@ def main():
         print("To enable full features, run: pip install pandas matplotlib\n")
 
     version = input("Minecraft version (e.g., 1.8, 1.20) [default 1.20]: ").strip() or "1.20"
-    update_lookup(version)
+    update_context(version)
 
     while True:
         print("\n--- New Analysis ---")
-        category = input("Item category (sword, pickaxe, boots, bow, book) [or 'exit']: ").strip().lower()
+        category = input(f"Item category ({', '.join(CATEGORY_ENCHANTS.keys())}) [or 'exit']: ").strip().lower()
         if category == 'exit':
             break
         
         if category not in CATEGORY_ENCHANTS:
-            print(f"Invalid category. Available: {', '.join(CATEGORY_ENCHANTS.keys())}")
+            print("Invalid category.")
+            continue
+
+        material = input(f"Material ({', '.join(AVAILABLE_MATERIALS.keys())}): ").strip().lower()
+        if material not in AVAILABLE_MATERIALS:
+            print("Invalid material for this version.")
             continue
 
         try:
             level_input = input("Enchant level (1-30) [default 30]: ").strip()
             level = int(level_input) if level_input else 30
         except ValueError:
-            print("Invalid level. Please enter a number between 1 and 30.")
+            print("Invalid level.")
             continue
 
-        print(f"\nAnalyzing {category} at level {level} (Version {version})...")
+        # Note: Material enchantability isn't fully integrated into the sim math yet, 
+        # but is tracked now.
+        print(f"\nAnalyzing {material} {category} at level {level} (Version {version})...")
 
         # Primary distribution
         prim = primary_distribution(category, level, version)
+        if not prim:
+            print("No valid enchantments found for these settings.")
+            continue
+
         print("\nPrimary Distribution:")
         print("-" * 30)
         for k, v in sorted(prim.items(), key=lambda x: -x[1]):
