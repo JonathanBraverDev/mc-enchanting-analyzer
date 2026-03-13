@@ -175,6 +175,11 @@
       "levels": {"I": [15, 65], "II": [24, 74], "III": [33, 83], "IV": [42, 92]},
       "conflicts": ["Density", "Smite", "Bane of Arthropods", "Sharpness"],
       "valid_from": "1.21"
+    },
+    "Lunge": {
+      "weight": 5,
+      "levels": {"I": [10, 25], "II": [20, 35], "III": [30, 45]},
+      "valid_from": "25w41a"
     }
   },
   "enchantment_groups": {
@@ -195,7 +200,9 @@
       "Impaling", "Loyalty", "Riptide", "Channeling",
       "Quick Charge", "Multishot", "Piercing",
       "Density", "Breach"
-    ]
+    ],
+    "mace_pool": ["Density", "Breach", "Unbreaking"],
+    "spear_pool": ["Lunge", "Unbreaking"]
   },
   "versions": {
     "1.4.6": {
@@ -209,9 +216,11 @@
         "leggings": ["basic_armor"],
         "boots": ["basic_armor", "boot_extras"],
         "bow": ["bow_pool"],
-        "book": ["book_pool"]
+        "book": ["book_pool"],
+        "hoe": ["tool_pool"],
+        "shears": ["tool_pool"]
       },
-      "materials": ["wood", "stone", "iron", "gold", "diamond", "leather", "chain", "book"],
+      "materials": ["wood", "stone", "iron", "gold", "diamond", "leather", "chain", "book", "bow", "fishing_rod"],
       "multi_enchant_books": false
     },
     "1.7.2": {
@@ -221,11 +230,16 @@
     "1.8": {
       "extends": "1.7.2"
     },
-    "1.14": {
+    "1.13": {
       "extends": "1.8",
+      "materials": ["trident"]
+    },
+    "1.14": {
+      "extends": "1.13",
       "item_enchantments": {
         "crossbow": ["Quick Charge", "Multishot", "Piercing", "Unbreaking"]
       },
+      "materials": ["crossbow"],
       "overrides": {
         "Protection": {"conflicts": []},
         "Fire Protection": {"conflicts": []},
@@ -252,17 +266,24 @@
     "1.21": {
       "extends": "1.16",
       "item_enchantments": {
-        "mace": ["Density", "Breach", "Smite", "Bane of Arthropods", "Unbreaking", "Fire Aspect"]
+        "mace": ["mace_pool"]
       },
-      "materials": ["copper", "mace"]
+      "materials": ["copper", "mace", "turtle"]
+    },
+    "25w41a": {
+      "extends": "1.21",
+      "item_enchantments": {
+        "spear": ["spear_pool"]
+      },
+      "materials": ["wood", "stone", "copper", "iron", "gold", "diamond", "netherite"]
     }
   },
   "material_values": {
     "tools": {
-      "wood": 15, "stone": 5, "iron": 14, "diamond": 10, "gold": 22, "netherite": 15, "book": 1, "mace": 15
+      "wood": 15, "stone": 5, "iron": 14, "diamond": 10, "gold": 22, "netherite": 15, "book": 1, "mace": 15, "copper": 13, "bow": 1, "crossbow": 1, "fishing_rod": 1, "trident": 1
     },
     "armor": {
-      "leather": 15, "chain": 12, "iron": 9, "diamond": 10, "gold": 25, "netherite": 15, "turtle": 9
+      "leather": 15, "chain": 12, "iron": 9, "diamond": 10, "gold": 25, "netherite": 15, "turtle": 9, "copper": 8
     }
   }
 }
