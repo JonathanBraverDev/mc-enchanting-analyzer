@@ -275,7 +275,7 @@
         "trident": ["trident_pool"],
         "hoe": ["tool_pool"]
       },
-      "materials": ["trident"]
+      "materials": ["trident", "turtle"]
     },
     "1.14": {
       "extends": "1.13",
@@ -311,10 +311,14 @@
       "item_enchantments": {
         "mace": ["mace_pool"]
       },
-      "materials": ["copper", "mace", "turtle"]
+      "materials": ["mace"]
+    },
+    "1.21.9": {
+      "extends": "1.21",
+      "materials": ["copper"]
     },
     "25w41a": {
-      "extends": "1.21",
+      "extends": "1.21.9",
       "item_enchantments": {
         "spear": ["spear_pool"]
       },
