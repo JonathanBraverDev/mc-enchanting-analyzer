@@ -84,11 +84,19 @@ class DataManager:
                     final_props = global_registry[name].copy()
                     final_props.update(merged_overrides.get(name, {}))
                     
+                    # Levels are now in the properties
                     e = Enchant(name=name, **final_props)
                     self.enchant_lookup[name] = e
                     cat_enchants.append(e)
             self.category_enchants[cat] = cat_enchants
             
-        self.available_materials = {
-            m: material_values.get(m, 10) for m in merged_materials
-        }
+        # Distinguish between tool and armor materials
+        self.available_materials = {}
+        for mat in merged_materials:
+            # Check both tables
+            if mat in material_values.get("tools", {}):
+                self.available_materials[mat] = {"type": "tools", "value": material_values["tools"][mat]}
+            elif mat in material_values.get("armor", {}):
+                self.available_materials[mat] = {"type": "armor", "value": material_values["armor"][mat]}
+            else:
+                self.available_materials[mat] = {"type": "tools", "value": 10} # Fallback

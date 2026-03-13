@@ -11,14 +11,25 @@ def is_valid_v(version, valid_from, valid_to="99.9"):
         return True
 
 class Enchant:
-    def __init__(self, name, weight, min_level, max_level, conflicts=None, valid_from="1.0", valid_to="99.9"):
+    def __init__(self, name, weight, levels, conflicts=None, valid_from="1.0", valid_to="99.9"):
         self.name = name
         self.weight = weight
-        self.min_level = min_level
-        self.max_level = max_level
+        self.levels = levels # Dict of rank -> [min, max]
         self.conflicts = conflicts or []
         self.valid_from = valid_from
         self.valid_to = valid_to
 
     def is_valid_for_version(self, version):
         return is_valid_v(version, self.valid_from, self.valid_to)
+
+    def get_max_rank(self, modified_level):
+        """Return the highest rank available for this modified level."""
+        best_rank = None
+        # Convert Roman numerals to ints for comparison or just use the sorted keys
+        ranks = ["V", "IV", "III", "II", "I"]
+        for r in ranks:
+            if r in self.levels:
+                r_min, r_max = self.levels[r]
+                if r_min <= modified_level <= r_max:
+                    return r
+        return None

@@ -1,40 +1,167 @@
 {
   "global_enchantments": {
-    "Sharpness": {"weight": 10, "min_level": 1, "max_level": 30, "conflicts": ["Smite", "Bane of Arthropods", "Density", "Breach"]},
-    "Smite": {"weight": 5, "min_level": 1, "max_level": 30, "conflicts": ["Sharpness", "Bane of Arthropods", "Density", "Breach"]},
-    "Bane of Arthropods": {"weight": 5, "min_level": 1, "max_level": 30, "conflicts": ["Sharpness", "Smite", "Density", "Breach"]},
-    "Knockback": {"weight": 5, "min_level": 5, "max_level": 30},
-    "Fire Aspect": {"weight": 2, "min_level": 10, "max_level": 30},
-    "Looting": {"weight": 2, "min_level": 15, "max_level": 30},
-    "Unbreaking": {"weight": 5, "min_level": 5, "max_level": 30},
-    "Sweeping Edge": {"weight": 2, "min_level": 15, "max_level": 30},
-    "Efficiency": {"weight": 10, "min_level": 1, "max_level": 30},
-    "Fortune": {"weight": 2, "min_level": 15, "max_level": 30, "conflicts": ["Silk Touch"]},
-    "Silk Touch": {"weight": 1, "min_level": 15, "max_level": 30, "conflicts": ["Fortune"]},
-    "Power": {"weight": 10, "min_level": 1, "max_level": 30},
-    "Punch": {"weight": 2, "min_level": 12, "max_level": 30},
-    "Flame": {"weight": 2, "min_level": 20, "max_level": 30},
-    "Infinity": {"weight": 1, "min_level": 20, "max_level": 30},
-    "Protection": {"weight": 10, "min_level": 1, "max_level": 30, "conflicts": ["Fire Protection", "Blast Protection", "Projectile Protection"]},
-    "Fire Protection": {"weight": 5, "min_level": 10, "max_level": 30, "conflicts": ["Protection", "Blast Protection", "Projectile Protection"]},
-    "Blast Protection": {"weight": 2, "min_level": 10, "max_level": 30, "conflicts": ["Protection", "Fire Protection", "Projectile Protection"]},
-    "Projectile Protection": {"weight": 5, "min_level": 10, "max_level": 30, "conflicts": ["Protection", "Fire Protection", "Blast Protection"]},
-    "Respiration": {"weight": 2, "min_level": 5, "max_level": 30},
-    "Aqua Affinity": {"weight": 2, "min_level": 1, "max_level": 30},
-    "Thorns": {"weight": 1, "min_level": 10, "max_level": 30},
-    "Feather Falling": {"weight": 5, "min_level": 5, "max_level": 30},
-    "Depth Strider": {"weight": 2, "min_level": 15, "max_level": 30, "conflicts": ["Frost Walker"]},
-    "Impaling": {"weight": 2, "min_level": 1, "max_level": 30},
-    "Loyalty": {"weight": 5, "min_level": 1, "max_level": 30, "conflicts": ["Riptide"]},
-    "Riptide": {"weight": 2, "min_level": 1, "max_level": 30, "conflicts": ["Loyalty", "Channeling"]},
-    "Channeling": {"weight": 1, "min_level": 1, "max_level": 30, "conflicts": ["Riptide"]},
-    "Quick Charge": {"weight": 5, "min_level": 1, "max_level": 30},
-    "Multishot": {"weight": 2, "min_level": 1, "max_level": 30, "conflicts": ["Piercing"]},
-    "Piercing": {"weight": 10, "min_level": 1, "max_level": 30, "conflicts": ["Multishot"]},
-    "Luck of the Sea": {"weight": 2, "min_level": 15, "max_level": 30},
-    "Lure": {"weight": 2, "min_level": 15, "max_level": 30},
-    "Density": {"weight": 5, "min_level": 5, "max_level": 30, "conflicts": ["Breach", "Smite", "Bane of Arthropods", "Sharpness"]},
-    "Breach": {"weight": 4, "min_level": 15, "max_level": 30, "conflicts": ["Density", "Smite", "Bane of Arthropods", "Sharpness"]}
+    "Sharpness": {
+      "weight": 10,
+      "levels": {"I": [1, 21], "II": [12, 32], "III": [23, 43], "IV": [34, 54], "V": [45, 65]},
+      "conflicts": ["Smite", "Bane of Arthropods", "Density", "Breach"]
+    },
+    "Smite": {
+      "weight": 5,
+      "levels": {"I": [5, 25], "II": [13, 33], "III": [21, 41], "IV": [29, 49], "V": [37, 57]},
+      "conflicts": ["Sharpness", "Bane of Arthropods", "Density", "Breach"]
+    },
+    "Bane of Arthropods": {
+      "weight": 5,
+      "levels": {"I": [5, 25], "II": [13, 33], "III": [21, 41], "IV": [29, 49], "V": [37, 57]},
+      "conflicts": ["Sharpness", "Smite", "Density", "Breach"]
+    },
+    "Knockback": {
+      "weight": 5,
+      "levels": {"I": [5, 55], "II": [25, 75]}
+    },
+    "Fire Aspect": {
+      "weight": 2,
+      "levels": {"I": [10, 60], "II": [30, 80]}
+    },
+    "Looting": {
+      "weight": 2,
+      "levels": {"I": [15, 65], "II": [24, 74], "III": [33, 83]}
+    },
+    "Unbreaking": {
+      "weight": 5,
+      "levels": {"I": [5, 55], "II": [13, 63], "III": [21, 71]}
+    },
+    "Sweeping Edge": {
+      "weight": 2,
+      "levels": {"I": [5, 20], "II": [14, 29], "III": [23, 38]}
+    },
+    "Efficiency": {
+      "weight": 10,
+      "levels": {"I": [1, 51], "II": [11, 61], "III": [21, 71], "IV": [31, 81], "V": [41, 91]}
+    },
+    "Fortune": {
+      "weight": 2,
+      "levels": {"I": [15, 65], "II": [24, 74], "III": [33, 83]},
+      "conflicts": ["Silk Touch"]
+    },
+    "Silk Touch": {
+      "weight": 1,
+      "levels": {"I": [15, 65]},
+      "conflicts": ["Fortune"]
+    },
+    "Power": {
+      "weight": 10,
+      "levels": {"I": [1, 16], "II": [11, 26], "III": [21, 36], "IV": [31, 46], "V": [41, 56]}
+    },
+    "Punch": {
+      "weight": 2,
+      "levels": {"I": [12, 37], "II": [32, 57]}
+    },
+    "Flame": {
+      "weight": 2,
+      "levels": {"I": [20, 50]}
+    },
+    "Infinity": {
+      "weight": 1,
+      "levels": {"I": [20, 50]}
+    },
+    "Protection": {
+      "weight": 10,
+      "levels": {"I": [1, 12], "II": [12, 23], "III": [23, 34], "IV": [34, 45]},
+      "conflicts": ["Fire Protection", "Blast Protection", "Projectile Protection"]
+    },
+    "Fire Protection": {
+      "weight": 5,
+      "levels": {"I": [10, 18], "II": [18, 26], "III": [26, 34], "IV": [34, 42]},
+      "conflicts": ["Protection", "Blast Protection", "Projectile Protection"]
+    },
+    "Blast Protection": {
+      "weight": 2,
+      "levels": {"I": [5, 13], "II": [13, 21], "III": [21, 29], "IV": [29, 37]},
+      "conflicts": ["Protection", "Fire Protection", "Projectile Protection"]
+    },
+    "Projectile Protection": {
+      "weight": 5,
+      "levels": {"I": [3, 9], "II": [9, 15], "III": [15, 21], "IV": [21, 27]},
+      "conflicts": ["Protection", "Fire Protection", "Blast Protection"]
+    },
+    "Respiration": {
+      "weight": 2,
+      "levels": {"I": [10, 40], "II": [20, 50], "III": [30, 60]}
+    },
+    "Aqua Affinity": {
+      "weight": 2,
+      "levels": {"I": [1, 41]}
+    },
+    "Thorns": {
+      "weight": 1,
+      "levels": {"I": [10, 60], "II": [30, 80], "III": [50, 100]}
+    },
+    "Feather Falling": {
+      "weight": 5,
+      "levels": {"I": [5, 11], "II": [11, 17], "III": [17, 23], "IV": [23, 29]}
+    },
+    "Depth Strider": {
+      "weight": 2,
+      "levels": {"I": [10, 25], "II": [20, 35], "III": [30, 45]},
+      "conflicts": ["Frost Walker"]
+    },
+    "Frost Walker": {
+      "weight": 2,
+      "levels": {"I": [10, 25], "II": [20, 35]},
+      "conflicts": ["Depth Strider"]
+    },
+    "Impaling": {
+      "weight": 2,
+      "levels": {"I": [1, 21], "II": [9, 29], "III": [17, 37], "IV": [25, 45], "V": [33, 53]}
+    },
+    "Loyalty": {
+      "weight": 5,
+      "levels": {"I": [12, 50], "II": [19, 50], "III": [26, 50]},
+      "conflicts": ["Riptide"]
+    },
+    "Riptide": {
+      "weight": 2,
+      "levels": {"I": [17, 50], "II": [24, 50], "III": [31, 50]},
+      "conflicts": ["Loyalty", "Channeling"]
+    },
+    "Channeling": {
+      "weight": 1,
+      "levels": {"I": [25, 50]},
+      "conflicts": ["Riptide"]
+    },
+    "Quick Charge": {
+      "weight": 5,
+      "levels": {"I": [12, 50], "II": [32, 50], "III": [52, 50]}
+    },
+    "Multishot": {
+      "weight": 2,
+      "levels": {"I": [20, 50]},
+      "conflicts": ["Piercing"]
+    },
+    "Piercing": {
+      "weight": 10,
+      "levels": {"I": [1, 50], "II": [11, 50], "III": [21, 50], "IV": [31, 50]},
+      "conflicts": ["Multishot"]
+    },
+    "Luck of the Sea": {
+      "weight": 2,
+      "levels": {"I": [15, 65], "II": [24, 74], "III": [33, 83]}
+    },
+    "Lure": {
+      "weight": 2,
+      "levels": {"I": [15, 65], "II": [24, 74], "III": [33, 83]}
+    },
+    "Density": {
+      "weight": 5,
+      "levels": {"I": [5, 25], "II": [13, 33], "III": [21, 41], "IV": [29, 49], "V": [37, 57]},
+      "conflicts": ["Breach", "Smite", "Bane of Arthropods", "Sharpness"]
+    },
+    "Breach": {
+      "weight": 2,
+      "levels": {"I": [15, 65], "II": [24, 74], "III": [33, 83], "IV": [42, 92]},
+      "conflicts": ["Density", "Smite", "Bane of Arthropods", "Sharpness"]
+    }
   },
   "enchantment_groups": {
     "basic_armor": ["Protection", "Fire Protection", "Blast Protection", "Projectile Protection", "Unbreaking"],
@@ -73,18 +200,21 @@
         "Projectile Protection": {"conflicts": []}
       }
     },
-    "1.16": {
+    "1.14.3": {
       "extends": "1.14",
-      "item_enchantments": {
-        "hoe": ["tool_pool"]
-      },
-      "materials": ["netherite"],
       "overrides": {
         "Protection": {"conflicts": ["Fire Protection", "Blast Protection", "Projectile Protection"]},
         "Fire Protection": {"conflicts": ["Protection", "Blast Protection", "Projectile Protection"]},
         "Blast Protection": {"conflicts": ["Protection", "Fire Protection", "Projectile Protection"]},
         "Projectile Protection": {"conflicts": ["Protection", "Fire Protection", "Blast Protection"]}
       }
+    },
+    "1.16": {
+      "extends": "1.14.3",
+      "item_enchantments": {
+        "hoe": ["tool_pool"]
+      },
+      "materials": ["netherite"]
     },
     "1.21": {
       "extends": "1.16",
@@ -95,7 +225,11 @@
     }
   },
   "material_values": {
-    "wood": 15, "stone": 5, "iron": 14, "diamond": 10, "gold": 22, "netherite": 15,
-    "leather": 15, "chain": 12, "copper": 10, "mace": 15, "book": 1
+    "tools": {
+      "wood": 15, "stone": 5, "iron": 14, "diamond": 10, "gold": 22, "netherite": 15, "book": 1, "mace": 15
+    },
+    "armor": {
+      "leather": 15, "chain": 12, "iron": 9, "diamond": 10, "gold": 25, "netherite": 15, "turtle": 9
+    }
   }
 }

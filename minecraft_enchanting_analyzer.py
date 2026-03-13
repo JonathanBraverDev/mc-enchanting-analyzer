@@ -84,6 +84,9 @@ def main():
         if material not in manager.available_materials:
             print("Invalid material for this version.")
             continue
+            
+        mat_info = manager.available_materials[material]
+        enchantability = mat_info["value"]
 
         try:
             level_input = input("Enchant level (1-30) [default 30]: ").strip()
@@ -92,10 +95,10 @@ def main():
             print("Invalid level.")
             continue
 
-        print(f"\nAnalyzing {material} {category} at level {level} (Version {version})...")
+        print(f"\nAnalyzing {material} {category} (Enchantability: {enchantability}) at level {level} (Version {version})...")
 
         # Primary distribution
-        prim = calculator.primary_distribution(category, level, version)
+        prim = calculator.primary_distribution(category, level, version, enchantability)
         if not prim:
             print("No valid enchantments found for these settings.")
             continue
@@ -108,7 +111,7 @@ def main():
         # Combination distribution
         print("\nTop Combinations:")
         print("-" * 30)
-        combos = calculator.combination_distribution(category, level, version)
+        combos = calculator.combination_distribution(category, level, version, enchantability)
         
         if PANDAS_AVAILABLE:
             df = pd.DataFrame([
