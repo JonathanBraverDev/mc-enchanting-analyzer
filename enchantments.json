@@ -33,7 +33,8 @@
     },
     "Sweeping Edge": {
       "weight": 2,
-      "levels": {"I": [5, 20], "II": [14, 29], "III": [23, 38]}
+      "levels": {"I": [5, 20], "II": [14, 29], "III": [23, 38]},
+      "valid_from": "1.11.1"
     },
     "Efficiency": {
       "weight": 10,
@@ -95,7 +96,8 @@
     },
     "Thorns": {
       "weight": 1,
-      "levels": {"I": [10, 60], "II": [30, 80], "III": [50, 100]}
+      "levels": {"I": [10, 60], "II": [30, 80], "III": [50, 100]},
+      "valid_from": "1.4.6"
     },
     "Feather Falling": {
       "weight": 5,
@@ -104,7 +106,8 @@
     "Depth Strider": {
       "weight": 2,
       "levels": {"I": [10, 25], "II": [20, 35], "III": [30, 45]},
-      "conflicts": ["Frost Walker"]
+      "conflicts": ["Frost Walker"],
+      "valid_from": "1.8"
     },
     "Frost Walker": {
       "weight": 2,
@@ -113,54 +116,65 @@
     },
     "Impaling": {
       "weight": 2,
-      "levels": {"I": [1, 21], "II": [9, 29], "III": [17, 37], "IV": [25, 45], "V": [33, 53]}
+      "levels": {"I": [1, 21], "II": [9, 29], "III": [17, 37], "IV": [25, 45], "V": [33, 53]},
+      "valid_from": "1.13"
     },
     "Loyalty": {
       "weight": 5,
       "levels": {"I": [12, 50], "II": [19, 50], "III": [26, 50]},
-      "conflicts": ["Riptide"]
+      "conflicts": ["Riptide"],
+      "valid_from": "1.13"
     },
     "Riptide": {
       "weight": 2,
       "levels": {"I": [17, 50], "II": [24, 50], "III": [31, 50]},
-      "conflicts": ["Loyalty", "Channeling"]
+      "conflicts": ["Loyalty", "Channeling"],
+      "valid_from": "1.13"
     },
     "Channeling": {
       "weight": 1,
       "levels": {"I": [25, 50]},
-      "conflicts": ["Riptide"]
+      "conflicts": ["Riptide"],
+      "valid_from": "1.13"
     },
     "Quick Charge": {
       "weight": 5,
-      "levels": {"I": [12, 50], "II": [32, 50], "III": [52, 50]}
+      "levels": {"I": [12, 50], "II": [32, 50], "III": [52, 50]},
+      "valid_from": "1.14"
     },
     "Multishot": {
       "weight": 2,
       "levels": {"I": [20, 50]},
-      "conflicts": ["Piercing"]
+      "conflicts": ["Piercing"],
+      "valid_from": "1.14"
     },
     "Piercing": {
       "weight": 10,
       "levels": {"I": [1, 50], "II": [11, 50], "III": [21, 50], "IV": [31, 50]},
-      "conflicts": ["Multishot"]
+      "conflicts": ["Multishot"],
+      "valid_from": "1.14"
     },
     "Luck of the Sea": {
       "weight": 2,
-      "levels": {"I": [15, 65], "II": [24, 74], "III": [33, 83]}
+      "levels": {"I": [15, 65], "II": [24, 74], "III": [33, 83]},
+      "valid_from": "1.7.2"
     },
     "Lure": {
       "weight": 2,
-      "levels": {"I": [15, 65], "II": [24, 74], "III": [33, 83]}
+      "levels": {"I": [15, 65], "II": [24, 74], "III": [33, 83]},
+      "valid_from": "1.7.2"
     },
     "Density": {
       "weight": 5,
       "levels": {"I": [5, 25], "II": [13, 33], "III": [21, 41], "IV": [29, 49], "V": [37, 57]},
-      "conflicts": ["Breach", "Smite", "Bane of Arthropods", "Sharpness"]
+      "conflicts": ["Breach", "Smite", "Bane of Arthropods", "Sharpness"],
+      "valid_from": "1.21"
     },
     "Breach": {
       "weight": 2,
       "levels": {"I": [15, 65], "II": [24, 74], "III": [33, 83], "IV": [42, 92]},
-      "conflicts": ["Density", "Smite", "Bane of Arthropods", "Sharpness"]
+      "conflicts": ["Density", "Smite", "Bane of Arthropods", "Sharpness"],
+      "valid_from": "1.21"
     }
   },
   "enchantment_groups": {
@@ -170,10 +184,21 @@
     "sword_pool": ["Sharpness", "Smite", "Bane of Arthropods", "Knockback", "Fire Aspect", "Looting", "Unbreaking"],
     "bow_pool": ["Power", "Punch", "Flame", "Infinity", "Unbreaking"],
     "tool_pool": ["Efficiency", "Unbreaking", "Fortune", "Silk Touch"],
-    "book_pool": ["Protection", "Efficiency", "Sharpness", "Unbreaking", "Power", "Fortune", "Looting"]
+    "book_pool": [
+      "Protection", "Fire Protection", "Blast Protection", "Projectile Protection",
+      "Sharpness", "Smite", "Bane of Arthropods", "Knockback", "Fire Aspect", "Looting", "Sweeping Edge",
+      "Efficiency", "Fortune", "Silk Touch", "Unbreaking",
+      "Power", "Punch", "Flame", "Infinity",
+      "Luck of the Sea", "Lure",
+      "Depth Strider", "Feather Falling",
+      "Respiration", "Aqua Affinity", "Thorns",
+      "Impaling", "Loyalty", "Riptide", "Channeling",
+      "Quick Charge", "Multishot", "Piercing",
+      "Density", "Breach"
+    ]
   },
   "versions": {
-    "1.8": {
+    "1.4.6": {
       "item_enchantments": {
         "sword": ["sword_pool"],
         "pickaxe": ["tool_pool"],
@@ -186,7 +211,15 @@
         "bow": ["bow_pool"],
         "book": ["book_pool"]
       },
-      "materials": ["wood", "stone", "iron", "gold", "diamond", "leather", "chain", "book"]
+      "materials": ["wood", "stone", "iron", "gold", "diamond", "leather", "chain", "book"],
+      "multi_enchant_books": false
+    },
+    "1.7.2": {
+      "extends": "1.4.6",
+      "multi_enchant_books": true
+    },
+    "1.8": {
+      "extends": "1.7.2"
     },
     "1.14": {
       "extends": "1.8",

@@ -61,7 +61,7 @@ class EnchantCalculator:
                     pool.append({"enchant": e, "rank": rank})
         return pool
 
-    def solve_state_internal(self, pool_ranked, level):
+    def solve_state_internal(self, pool_ranked, level, category):
         # pool_ranked is list of {"enchant": e, "rank": r}
         lookup = self.data_manager.enchant_lookup
         
@@ -89,6 +89,10 @@ class EnchantCalculator:
                 
                 next_level = L // 2
                 prob_continue = min((L + 1) / 50, 1)
+                
+                # Historical restriction: Books before 1.7.2
+                if category == "book" and not self.data_manager.multi_enchant_books:
+                    prob_continue = 0
 
                 key = (f"{p['name']} {p['rank']}",)
                 results[key] = results.get(key, 0) + p_primary * (1 - prob_continue)
@@ -112,7 +116,7 @@ class EnchantCalculator:
             pool_ranked = self.valid_enchants_at_mod_level(category, mod_level, version)
             if not pool_ranked: continue
             
-            combos = self.solve_state_internal(pool_ranked, xp_level)
+            combos = self.solve_state_internal(pool_ranked, xp_level, category)
             for combo, p in combos.items():
                 total_combos[combo] = total_combos.get(combo, 0) + p * mod_prob
         
