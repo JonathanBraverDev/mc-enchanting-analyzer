@@ -53,8 +53,16 @@ def load_data():
         raw_data = json.load(f)
     
     enchantments = {}
-    for cat, enchants in raw_data["enchantments"].items():
-        enchantments[cat] = [Enchant(**e) for e in enchants]
+    shared_pool = raw_data.get("shared_pool", {})
+    for cat, item_enchants in raw_data["enchantments"].items():
+        cat_enchants = []
+        for entry in item_enchants:
+            name = entry["name"]
+            if name in shared_pool:
+                e_data = shared_pool[name].copy()
+                e_data.update(entry)
+                cat_enchants.append(Enchant(**e_data))
+        enchantments[cat] = cat_enchants
     
     enchantability = raw_data["enchantability"]
     return enchantments, enchantability
