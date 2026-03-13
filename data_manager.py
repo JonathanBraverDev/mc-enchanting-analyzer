@@ -98,10 +98,18 @@ class DataManager:
         # Distinguish between tool and armor materials
         self.available_materials = {}
         for mat in merged_materials:
-            # Check both tables
-            if mat in material_values.get("tools", {}):
-                self.available_materials[mat] = {"type": "tools", "value": material_values["tools"][mat]}
-            elif mat in material_values.get("armor", {}):
-                self.available_materials[mat] = {"type": "armor", "value": material_values["armor"][mat]}
-            else:
-                self.available_materials[mat] = {"type": "tools", "value": 10} # Fallback
+            self.available_materials[mat] = {
+                "tools": material_values.get("tools", {}).get(mat),
+                "armor": material_values.get("armor", {}).get(mat)
+            }
+
+    def get_material_value(self, material, category):
+        if material not in self.available_materials:
+            return 10
+        m = self.available_materials[material]
+        
+        # Determine if category is armor or tool
+        # Simple heuristic or explicit list
+        armor_categories = {"helmet", "chestplate", "leggings", "boots", "turtle_shell"}
+        val = m["armor"] if category in armor_categories else m["tools"]
+        return val if val is not None else 10
