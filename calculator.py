@@ -9,8 +9,6 @@ class EnchantCalculator:
         if enchantability <= 0:
             return {xp_level: 1.0}
             
-        # 1. base = xp_level + rand(0, e/4 + 1) + rand(0, e/4 + 1) + 1
-        # Sum of two independent uniform distributions [0, N]
         N = enchantability // 4 + 1
         base_dist = {}
         for r1 in range(N):
@@ -18,34 +16,19 @@ class EnchantCalculator:
                 val = xp_level + r1 + r2 + 1
                 base_dist[val] = base_dist.get(val, 0) + 1.0 / (N*N)
                 
-        # 2. modified = round(base * (1 + (rand() + rand() - 1) * 0.15))
-        # rand() + rand() - 1 is a triangular distribution [-1, 1]
-        # For simplicity in discrete simulation, we can sample the triangular 
-        # or use a reasonably granular step. Let's use 21 steps for the triangle.
-        tri_dist = {}
-        steps = 20
-        total_steps = 0
-        for i in range(-steps, steps + 1):
-            # weight = steps - abs(i)
-            # triangular weight: 1 - |x|
-            w = (steps - abs(i)) / float(steps * steps)
-            if i == 0: w = 1.0 / steps # Adjusting for center
-            # Actually simpler: sum of two uniform [-0.5, 0.5]
-            # Let's just use a representative sample of 100 points for the triangle
-            pass
-
-        # Re-calc: (rand() + rand() - 1) * 0.15 is the bonus factor
-        # bonus = 1 + factor
         final_dist = {}
-        samples = 10
+        # Sample the bonus (randFloat() + randFloat() - 1) * 0.15
+        # The sum of two uniform(0, 0.15) minus 0.15
+        steps = 41 # Higher precision
         for base_val, base_prob in base_dist.items():
-            for i in range(samples):
-                for j in range(samples):
-                    # sum of two uniform [0, 0.15] - 0.15
-                    factor = (i/samples * 0.15) + (j/samples * 0.15) - 0.15
-                    mod_val = round(base_val * (1 + factor))
+            for i in range(steps):
+                for j in range(steps):
+                    bonus = (i/(steps-1) * 0.15) + (j/(steps-1) * 0.15) - 0.15
+                    # Java Math.round: floor(x + 0.5)
+                    mod_val = int(base_val * (1 + bonus) + 0.5)
                     mod_val = max(1, mod_val)
-                    final_dist[mod_val] = final_dist.get(mod_val, 0) + (base_prob / (samples * samples))
+                    p = base_prob / (steps * steps)
+                    final_dist[mod_val] = final_dist.get(mod_val, 0) + p
         
         return final_dist
 
@@ -88,7 +71,7 @@ class EnchantCalculator:
                     remaining.append((other["name"], other["rank"]))
                 
                 next_level = L // 2
-                prob_continue = min((L + 1) / 50, 1)
+                prob_continue = min((next_level + 1) / 50, 1)
                 
                 # Historical restriction: Books before 1.7.2
                 if category == "book" and not self.data_manager.multi_enchant_books:
