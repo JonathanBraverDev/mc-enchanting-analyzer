@@ -43,7 +43,8 @@ class Enchant:
             return True
 
 def load_data():
-    data_path = "enchantments.json"
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    data_path = os.path.join(script_dir, "enchantments.json")
     if not os.path.exists(data_path):
         print(f"Error: {data_path} not found.")
         return {}, {}
