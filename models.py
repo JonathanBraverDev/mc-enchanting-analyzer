@@ -1,11 +1,16 @@
+import re
+
 def parse_version(v):
-    return [int(x) for x in v.split('.')]
+    # Robustly handles 1.8.9, 1.21, and 25w41a by extracting numbers
+    return [int(n) for n in re.findall(r'\d+', v)]
 
 def is_valid_v(version, valid_from, valid_to="99.9"):
     try:
         curr = parse_version(version)
         start = parse_version(valid_from)
         end = parse_version(valid_to)
+        
+        # Compare lists (Python handles list comparison lexicographically)
         return start <= curr <= end
     except:
         return True
