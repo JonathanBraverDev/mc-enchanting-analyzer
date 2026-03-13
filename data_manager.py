@@ -38,6 +38,7 @@ class DataManager:
         self.available_materials = {}
         self.category_enchants = {}
         self.active_version = None
+        self.multi_enchant_books = True
 
     def update_context(self, version):
         self.active_version = version
@@ -51,6 +52,7 @@ class DataManager:
         merged_items = {}
         merged_materials = []
         merged_overrides = {}
+        self.multi_enchant_books = True # Default
         
         for v_name in chain:
             v_manifest = version_data[v_name]
@@ -73,6 +75,9 @@ class DataManager:
                 if ench_name not in merged_overrides:
                     merged_overrides[ench_name] = {}
                 merged_overrides[ench_name].update(props)
+            
+            if "multi_enchant_books" in v_manifest:
+                self.multi_enchant_books = v_manifest["multi_enchant_books"]
 
         self.enchant_lookup = {}
         self.category_enchants = {}
