@@ -22,7 +22,7 @@ from calculator import EnchantCalculator
 # Distributions and Graphing
 # -------------------------------------------------
 
-def graph_primary_across_levels(calculator, category, version):
+def graph_primary_across_levels(calculator, category, version, enchantability):
     if not MATPLOTLIB_AVAILABLE:
         print("Matplotlib not installed. Skipping graph generation.")
         return
@@ -30,7 +30,7 @@ def graph_primary_across_levels(calculator, category, version):
     levels = list(range(1, 31))
     data = {}
     for L in levels:
-        dist = calculator.primary_distribution(category, L, version)
+        dist = calculator.primary_distribution(category, L, version, enchantability)
         for ench in dist:
             data.setdefault(ench, [0]*30)
             data[ench][L-1] = dist.get(ench, 0)
@@ -85,8 +85,7 @@ def main():
             print("Invalid material for this version.")
             continue
             
-        mat_info = manager.available_materials[material]
-        enchantability = mat_info["value"]
+        enchantability = manager.get_material_value(material, category)
 
         try:
             level_input = input("Enchant level (1-30) [default 30]: ").strip()
@@ -126,7 +125,7 @@ def main():
         # Graphing
         do_graph = input("\nGenerate level sweep graph (1-30)? (y/n): ").strip().lower()
         if do_graph == 'y':
-            graph_primary_across_levels(calculator, category, version)
+            graph_primary_across_levels(calculator, category, version, enchantability)
 
     print("\nGoodbye!")
 
