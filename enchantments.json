@@ -1,5 +1,5 @@
 {
-  "shared_pool": {
+  "global_enchantments": {
     "Sharpness": {"weight": 10, "min_level": 1, "max_level": 30, "conflicts": ["Smite", "Bane of Arthropods", "Density", "Breach"]},
     "Smite": {"weight": 5, "min_level": 1, "max_level": 30, "conflicts": ["Sharpness", "Bane of Arthropods", "Density", "Breach"]},
     "Bane of Arthropods": {"weight": 5, "min_level": 1, "max_level": 30, "conflicts": ["Sharpness", "Smite", "Density", "Breach"]},
@@ -31,136 +31,71 @@
     "Quick Charge": {"weight": 5, "min_level": 1, "max_level": 30},
     "Multishot": {"weight": 2, "min_level": 1, "max_level": 30, "conflicts": ["Piercing"]},
     "Piercing": {"weight": 10, "min_level": 1, "max_level": 30, "conflicts": ["Multishot"]},
-    "Luck of the Sea": {"weight": 2, "min_level": 15, "max_level": 30, "conflicts": []},
-    "Lure": {"weight": 2, "min_level": 15, "max_level": 30, "conflicts": []},
+    "Luck of the Sea": {"weight": 2, "min_level": 15, "max_level": 30},
+    "Lure": {"weight": 2, "min_level": 15, "max_level": 30},
     "Density": {"weight": 5, "min_level": 5, "max_level": 30, "conflicts": ["Breach", "Smite", "Bane of Arthropods", "Sharpness"]},
     "Breach": {"weight": 4, "min_level": 15, "max_level": 30, "conflicts": ["Density", "Smite", "Bane of Arthropods", "Sharpness"]}
   },
-  "enchantments": {
-    "sword": [
-      {"name": "Sharpness", "valid_from": "1.0"},
-      {"name": "Smite", "valid_from": "1.0"},
-      {"name": "Bane of Arthropods", "valid_from": "1.0"},
-      {"name": "Knockback", "valid_from": "1.0"},
-      {"name": "Fire Aspect", "valid_from": "1.0"},
-      {"name": "Looting", "valid_from": "1.0"},
-      {"name": "Unbreaking", "valid_from": "1.0"},
-      {"name": "Sweeping Edge", "valid_from": "1.11"}
-    ],
-    "pickaxe": [
-      {"name": "Efficiency", "valid_from": "1.0"},
-      {"name": "Unbreaking", "valid_from": "1.0"},
-      {"name": "Fortune", "valid_from": "1.0"},
-      {"name": "Silk Touch", "valid_from": "1.0"}
-    ],
-    "axe": [
-      {"name": "Efficiency", "valid_from": "1.0"},
-      {"name": "Unbreaking", "valid_from": "1.0"},
-      {"name": "Fortune", "valid_from": "1.0"},
-      {"name": "Silk Touch", "valid_from": "1.0"}
-    ],
-    "shovel": [
-      {"name": "Efficiency", "valid_from": "1.0"},
-      {"name": "Unbreaking", "valid_from": "1.0"},
-      {"name": "Fortune", "valid_from": "1.0"},
-      {"name": "Silk Touch", "valid_from": "1.0"}
-    ],
-    "hoe": [
-      {"name": "Efficiency", "valid_from": "1.16"},
-      {"name": "Unbreaking", "valid_from": "1.16"},
-      {"name": "Fortune", "valid_from": "1.16"},
-      {"name": "Silk Touch", "valid_from": "1.16"}
-    ],
-    "bow": [
-      {"name": "Power", "valid_from": "1.1"},
-      {"name": "Punch", "valid_from": "1.1"},
-      {"name": "Flame", "valid_from": "1.1"},
-      {"name": "Infinity", "valid_from": "1.1"},
-      {"name": "Unbreaking", "valid_from": "1.1"}
-    ],
-    "helmet": [
-      {"name": "Protection", "valid_from": "1.0"},
-      {"name": "Fire Protection", "valid_from": "1.0"},
-      {"name": "Blast Protection", "valid_from": "1.0"},
-      {"name": "Projectile Protection", "valid_from": "1.0"},
-      {"name": "Respiration", "valid_from": "1.0"},
-      {"name": "Aqua Affinity", "valid_from": "1.0"},
-      {"name": "Unbreaking", "valid_from": "1.0"},
-      {"name": "Thorns", "valid_from": "1.4.6"}
-    ],
-    "chestplate": [
-      {"name": "Protection", "valid_from": "1.0"},
-      {"name": "Fire Protection", "valid_from": "1.0"},
-      {"name": "Blast Protection", "valid_from": "1.0"},
-      {"name": "Projectile Protection", "valid_from": "1.0"},
-      {"name": "Unbreaking", "valid_from": "1.0"},
-      {"name": "Thorns", "valid_from": "1.4.6"}
-    ],
-    "leggings": [
-      {"name": "Protection", "valid_from": "1.0"},
-      {"name": "Fire Protection", "valid_from": "1.0"},
-      {"name": "Blast Protection", "valid_from": "1.0"},
-      {"name": "Projectile Protection", "valid_from": "1.0"},
-      {"name": "Unbreaking", "valid_from": "1.0"},
-      {"name": "Thorns", "valid_from": "1.4.6"}
-    ],
-    "boots": [
-      {"name": "Protection", "valid_from": "1.0"},
-      {"name": "Fire Protection", "valid_from": "1.0"},
-      {"name": "Blast Protection", "valid_from": "1.0"},
-      {"name": "Projectile Protection", "valid_from": "1.0"},
-      {"name": "Feather Falling", "valid_from": "1.0"},
-      {"name": "Depth Strider", "valid_from": "1.8"},
-      {"name": "Unbreaking", "valid_from": "1.0"},
-      {"name": "Thorns", "valid_from": "1.4.6"}
-    ],
-    "trident": [
-      {"name": "Impaling", "valid_from": "1.13"},
-      {"name": "Loyalty", "valid_from": "1.13"},
-      {"name": "Riptide", "valid_from": "1.13"},
-      {"name": "Channeling", "valid_from": "1.13"},
-      {"name": "Unbreaking", "valid_from": "1.13"}
-    ],
-    "crossbow": [
-      {"name": "Quick Charge", "valid_from": "1.14"},
-      {"name": "Multishot", "valid_from": "1.14"},
-      {"name": "Piercing", "valid_from": "1.14"},
-      {"name": "Unbreaking", "valid_from": "1.14"}
-    ],
-    "fishing_rod": [
-      {"name": "Luck of the Sea", "valid_from": "1.7.2"},
-      {"name": "Lure", "valid_from": "1.7.2"},
-      {"name": "Unbreaking", "valid_from": "1.7.2"}
-    ],
-    "book": [
-      {"name": "Protection", "valid_from": "1.0"},
-      {"name": "Efficiency", "valid_from": "1.0"},
-      {"name": "Sharpness", "valid_from": "1.0"},
-      {"name": "Unbreaking", "valid_from": "1.0"},
-      {"name": "Power", "valid_from": "1.1"},
-      {"name": "Fortune", "valid_from": "1.0"},
-      {"name": "Looting", "valid_from": "1.0"}
-    ],
-    "mace": [
-      {"name": "Density", "valid_from": "1.21"},
-      {"name": "Breach", "valid_from": "1.21"},
-      {"name": "Smite", "valid_from": "1.21"},
-      {"name": "Bane of Arthropods", "valid_from": "1.21"},
-      {"name": "Unbreaking", "valid_from": "1.21"},
-      {"name": "Fire Aspect", "valid_from": "1.21"}
-    ]
+  "enchantment_groups": {
+    "basic_armor": ["Protection", "Fire Protection", "Blast Protection", "Projectile Protection", "Unbreaking"],
+    "boot_extras": ["Feather Falling", "Depth Strider"],
+    "helmet_extras": ["Respiration", "Aqua Affinity"],
+    "sword_pool": ["Sharpness", "Smite", "Bane of Arthropods", "Knockback", "Fire Aspect", "Looting", "Unbreaking"],
+    "bow_pool": ["Power", "Punch", "Flame", "Infinity", "Unbreaking"],
+    "tool_pool": ["Efficiency", "Unbreaking", "Fortune", "Silk Touch"],
+    "book_pool": ["Protection", "Efficiency", "Sharpness", "Unbreaking", "Power", "Fortune", "Looting"]
   },
-  "enchantability": {
-    "wood": {"value": 15, "valid_from": "1.0"},
-    "stone": {"value": 5, "valid_from": "1.0"},
-    "iron": {"value": 14, "valid_from": "1.0"},
-    "diamond": {"value": 10, "valid_from": "1.0"},
-    "gold": {"value": 22, "valid_from": "1.0"},
-    "netherite": {"value": 15, "valid_from": "1.16"},
-    "leather": {"value": 15, "valid_from": "1.0"},
-    "chain": {"value": 12, "valid_from": "1.0"},
-    "copper": {"value": 10, "valid_from": "1.21"},
-    "mace": {"value": 15, "valid_from": "1.21"},
-    "book": {"value": 1, "valid_from": "1.0"}
+  "versions": {
+    "1.8": {
+      "item_enchantments": {
+        "sword": ["sword_pool"],
+        "pickaxe": ["tool_pool"],
+        "axe": ["tool_pool"],
+        "shovel": ["tool_pool"],
+        "helmet": ["basic_armor", "helmet_extras"],
+        "chestplate": ["basic_armor"],
+        "leggings": ["basic_armor"],
+        "boots": ["basic_armor", "boot_extras"],
+        "bow": ["bow_pool"],
+        "book": ["book_pool"]
+      },
+      "materials": ["wood", "stone", "iron", "gold", "diamond", "leather", "chain", "book"]
+    },
+    "1.14": {
+      "extends": "1.8",
+      "item_enchantments": {
+        "crossbow": ["Quick Charge", "Multishot", "Piercing", "Unbreaking"]
+      },
+      "overrides": {
+        "Protection": {"conflicts": []},
+        "Fire Protection": {"conflicts": []},
+        "Blast Protection": {"conflicts": []},
+        "Projectile Protection": {"conflicts": []}
+      }
+    },
+    "1.16": {
+      "extends": "1.14",
+      "item_enchantments": {
+        "hoe": ["tool_pool"]
+      },
+      "materials": ["netherite"],
+      "overrides": {
+        "Protection": {"conflicts": ["Fire Protection", "Blast Protection", "Projectile Protection"]},
+        "Fire Protection": {"conflicts": ["Protection", "Blast Protection", "Projectile Protection"]},
+        "Blast Protection": {"conflicts": ["Protection", "Fire Protection", "Projectile Protection"]},
+        "Projectile Protection": {"conflicts": ["Protection", "Fire Protection", "Blast Protection"]}
+      }
+    },
+    "1.21": {
+      "extends": "1.16",
+      "item_enchantments": {
+        "mace": ["Density", "Breach", "Smite", "Bane of Arthropods", "Unbreaking", "Fire Aspect"]
+      },
+      "materials": ["copper", "mace"]
+    }
+  },
+  "material_values": {
+    "wood": 15, "stone": 5, "iron": 14, "diamond": 10, "gold": 22, "netherite": 15,
+    "leather": 15, "chain": 12, "copper": 10, "mace": 15, "book": 1
   }
 }

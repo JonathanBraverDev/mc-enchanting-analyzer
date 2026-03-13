@@ -50,42 +50,98 @@ def load_data():
     data_path = os.path.join(script_dir, "enchantments.json")
     if not os.path.exists(data_path):
         print(f"Error: {data_path} not found.")
-        return {}, {}
+        return {}
     
     with open(data_path, 'r') as f:
-        raw_data = json.load(f)
-    
-    enchantments = {}
-    shared_pool = raw_data.get("shared_pool", {})
-    for cat, item_enchants in raw_data["enchantments"].items():
-        cat_enchants = []
-        for entry in item_enchants:
-            name = entry["name"]
-            if name in shared_pool:
-                e_data = shared_pool[name].copy()
-                e_data.update(entry)
-                cat_enchants.append(Enchant(**e_data))
-        enchantments[cat] = cat_enchants
-    
-    enchantability = raw_data["enchantability"]
-    return enchantments, enchantability
+        return json.load(f)
 
-# Global State
-CATEGORY_ENCHANTS, ENCHANTABILITY_DATA = load_data()
+# Global Raw Data
+DATA = load_data()
 ENCHANT_LOOKUP = {}
 AVAILABLE_MATERIALS = {}
+CATEGORY_ENCHANTS = {}
+
+def get_version_chain(target_version, version_data):
+    # Simplistic version matching: find exact match or follow chain
+    # In a real app we'd use semantic versioning comparison
+    chain = []
+    curr = target_version
+    
+    # If exact match doesn't exist, find the highest version below it
+    if curr not in version_data:
+        sorted_versions = sorted(version_data.keys(), key=parse_version)
+        found = None
+        for v in sorted_versions:
+            if parse_version(v) <= parse_version(target_version):
+                found = v
+            else:
+                break
+        curr = found
+
+    while curr:
+        chain.insert(0, curr)
+        curr = version_data[curr].get("extends")
+    return chain
 
 def update_context(version):
-    global ENCHANT_LOOKUP, AVAILABLE_MATERIALS
-    ENCHANT_LOOKUP = {}
-    for cat in CATEGORY_ENCHANTS:
-        for e in CATEGORY_ENCHANTS[cat]:
-            if e.is_valid_for_version(version):
-                ENCHANT_LOOKUP[e.name] = e
+    global ENCHANT_LOOKUP, AVAILABLE_MATERIALS, CATEGORY_ENCHANTS
+    version_data = DATA.get("versions", {})
+    global_registry = DATA.get("global_enchantments", {})
+    groups = DATA.get("enchantment_groups", {})
+    material_values = DATA.get("material_values", {})
     
+    chain = get_version_chain(version, version_data)
+    
+    # Cumulative state
+    merged_items = {}
+    merged_materials = []
+    merged_overrides = {}
+    
+    for v_name in chain:
+        v_manifest = version_data[v_name]
+        
+        # Merge item enchantments (overwrite whole category if present)
+        for cat, content in v_manifest.get("item_enchantments", {}).items():
+            resolved_names = []
+            for item in content:
+                if item in groups:
+                    resolved_names.extend(groups[item])
+                else:
+                    resolved_names.append(item)
+            merged_items[cat] = sorted(list(set(resolved_names)))
+            
+        # Update materials
+        if "materials" in v_manifest:
+            merged_materials.extend(v_manifest["materials"])
+        elif not merged_materials and v_name == chain[0]:
+            # Initial base case if materials not defined
+            merged_materials = ["iron", "diamond"] # Fallback
+            
+        # Merge overrides
+        for ench_name, props in v_manifest.get("overrides", {}).items():
+            if ench_name not in merged_overrides:
+                merged_overrides[ench_name] = {}
+            merged_overrides[ench_name].update(props)
+
+    # Build final lookup and categories
+    ENCHANT_LOOKUP = {}
+    CATEGORY_ENCHANTS = {}
+    
+    for cat, names in merged_items.items():
+        cat_enchants = []
+        for name in names:
+            if name in global_registry:
+                # Merge: Default -> Override
+                final_props = global_registry[name].copy()
+                final_props.update(merged_overrides.get(name, {}))
+                
+                e = Enchant(name=name, **final_props)
+                ENCHANT_LOOKUP[name] = e
+                cat_enchants.append(e)
+        CATEGORY_ENCHANTS[cat] = cat_enchants
+        
     AVAILABLE_MATERIALS = {
-        m: d["value"] for m, d in ENCHANTABILITY_DATA.items() 
-        if is_valid_v(version, d.get("valid_from", "1.0"))
+        m: material_values.get(m, 10) for m in merged_materials
     }
 
 # -------------------------------------------------
