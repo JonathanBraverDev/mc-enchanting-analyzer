@@ -246,7 +246,7 @@ class EnchantEngine {
             }
         }
 
-        const stats = { ranks: {}, any: {}, count: {} };
+        const stats = { ranks: {}, any: {}, count: {}, combos: finalCombos };
         for(let [combo, p] of Object.entries(finalCombos)) {
             const parts = combo.split("+");
             const len = parts.length;

@@ -117,11 +117,11 @@ function init() {
 
 function updateInsights(stats) {
     const comboEl = document.getElementById("combo-list");
-    const ranks = Object.entries(stats.ranks).sort((a,b) => b[1] - a[1]).slice(0, 10);
-    comboEl.innerHTML = ranks.map(([name, prob]) => `
+    const topCombos = Object.entries(stats.combos).sort((a,b) => b[1] - a[1]).slice(0, 10);
+    comboEl.innerHTML = topCombos.map(([name, prob]) => `
         <div class="combo-item">
             <div style="display: flex; justify-content: space-between;">
-                <span class="combo-names">${name}</span>
+                <span class="combo-names">${name.replace(/\+/g, ' + ')}</span>
                 <span class="combo-prob">${(prob * 100).toFixed(1)}%</span>
             </div>
         </div>
