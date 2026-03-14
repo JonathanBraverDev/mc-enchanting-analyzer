@@ -186,6 +186,26 @@ class EnchantEngine {
         return out;
     }
 
+    getComboKey(chosen, initialSeed) {
+        const registry = this.data.global_enchantments;
+        const sorted = [...chosen].sort((a, b) => {
+            if (initialSeed) {
+                if (a === initialSeed) return -1;
+                if (b === initialSeed) return 1;
+            }
+            const [nameA, rankA] = [getBaseName(a), a.split(' ').pop()];
+            const [nameB, rankB] = [getBaseName(b), b.split(' ').pop()];
+            const valA = getRomanValue(rankA);
+            const valB = getRomanValue(rankB);
+            if (valA !== valB) return valB - valA;
+            const weightA = (registry[nameA] || {weight: 10}).weight;
+            const weightB = (registry[nameB] || {weight: 10}).weight;
+            if (weightA !== weightB) return weightA - weightB;
+            return nameA.localeCompare(nameB);
+        });
+        return sorted.join("+");
+    }
+
     calculateCombinations(cat, modLevel, mat, initialSeed = null, threshold = 0.0001) {
         const solveProper = (chosen, level, branchProb = 1.0) => {
             if (branchProb < threshold) return {};
@@ -194,11 +214,12 @@ class EnchantEngine {
             const eligible = this.getEligibleList(cat, level, mat, chosenNames);
 
             if (cat === "book" && chosen.length >= 1 && !this.multiEnchantBooks) {
-                return { [chosen.slice().sort().join("+")]: 1.0 };
+                return { [this.getComboKey(chosen, initialSeed)]: 1.0 };
             }
 
-            const key = `${cat}|${chosen.slice().sort().join("+")}|${level}|${initialSeed}|${threshold}`;
-            if(this.comboCache.has(key)) return this.comboCache.get(key);
+            const currentKey = this.getComboKey(chosen, initialSeed);
+            const cacheKey = `${cat}|${currentKey}|${level}|${initialSeed}|${threshold}`;
+            if(this.comboCache.has(cacheKey)) return this.comboCache.get(cacheKey);
             
             const totalWeight = eligible.reduce((s, e) => s + e.weight, 0);
             const probContinue = (cat === "book" && !this.multiEnchantBooks) ? 0 : Math.min((level + 1) / 50, 1.0);
@@ -211,19 +232,20 @@ class EnchantEngine {
                     for(let [c, p] of Object.entries(sub)) results[c] = (results[c]||0) + pWeight * p;
                 });
             } else {
-                const currentKey = chosen.slice().sort().join("+");
                 results[currentKey] = 1 - probContinue;
                 if(probContinue > 0 && eligible.length > 0) {
                     eligible.forEach(e => {
                         const pWeight = (e.weight / totalWeight) * probContinue;
-                        const sub = solveProper([...chosen, `${e.name} ${e.rank}`], Math.floor(level / 2), branchProb * pWeight);
+                        // Level reduction starts AFTER the second pick (affecting the 3rd)
+                        const nextLevel = chosen.length >= 2 ? Math.floor(level / 2) : level;
+                        const sub = solveProper([...chosen, `${e.name} ${e.rank}`], nextLevel, branchProb * pWeight);
                         for(let [c, p] of Object.entries(sub)) results[c] = (results[c]||0) + pWeight * p;
                     });
                 } else {
                     results[currentKey] = 1.0;
                 }
             }
-            this.comboCache.set(key, results);
+            this.comboCache.set(cacheKey, results);
             return results;
         };
 
