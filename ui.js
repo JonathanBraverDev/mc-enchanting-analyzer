@@ -19,7 +19,7 @@ function init() {
 
     const updateMaterials = () => {
         const cat = catSelect.value;
-        const armorCats = ["helmet", "chestplate", "leggings", "boots"];
+        const armorCats = DATA.constants.ARMOR_CATS;
         const isArmor = armorCats.includes(cat);
         const currentMat = matSelect.value;
         matSelect.innerHTML = "";
@@ -27,7 +27,7 @@ function init() {
         const mats = isArmor ? DATA.material_values.armor : DATA.material_values.tools;
         
         // Strict Material Filtering
-        const itemCats = ["bow", "crossbow", "fishing_rod", "trident", "mace", "spear", "brush", "shield"];
+        const itemCats = DATA.constants.ITEM_SPECIFIC_CATS;
         
         let eligibleKeys = Object.keys(mats);
         if (itemCats.includes(cat) && mats[cat]) {
@@ -41,7 +41,7 @@ function init() {
         }
 
         const sortedKeys = eligibleKeys.sort((a, b) => {
-            const priors = ["netherite", "diamond", "gold", "iron", "stone", "wood", "leather", "chain"];
+            const priors = DATA.constants.MATERIAL_PRIORITY;
             const ai = priors.indexOf(a), bi = priors.indexOf(b);
             if (ai !== -1 && bi !== -1) return ai - bi;
             if (ai !== -1) return -1;
@@ -171,39 +171,7 @@ async function updateChart(cat, mat, v) {
     }
 
     const getColor = (name, index) => {
-        const colors = {
-            "Efficiency": "hsl(200, 70%, 60%)",
-            "Unbreaking": "hsl(0, 70%, 60%)",
-            "Fortune": "hsl(45, 80%, 60%)",
-            "Silk Touch": "hsl(280, 70%, 60%)",
-            "Sharpness": "hsl(0, 80%, 50%)",
-            "Smite": "hsl(30, 70%, 50%)",
-            "Bane of Arthropods": "hsl(120, 60%, 40%)",
-            "Protection": "hsl(145, 60%, 50%)",
-            "Fire Protection": "hsl(15, 80%, 50%)",
-            "Blast Protection": "hsl(0, 0%, 50%)",
-            "Projectile Protection": "hsl(210, 60%, 50%)",
-            "Mending": "hsl(110, 80%, 60%)",
-            "Looting": "hsl(260, 60%, 60%)",
-            "Knockback": "hsl(180, 50%, 50%)",
-            "Fire Aspect": "hsl(10, 90%, 50%)",
-            "Sweeping Edge": "hsl(240, 50%, 60%)",
-            "Power": "hsl(30, 80%, 60%)",
-            "Punch": "hsl(210, 70%, 60%)",
-            "Flame": "hsl(15, 90%, 60%)",
-            "Infinity": "hsl(280, 80%, 70%)",
-            "Luck of the Sea": "hsl(200, 80%, 70%)",
-            "Lure": "hsl(180, 70%, 60%)",
-            "Respiration": "hsl(190, 60%, 70%)",
-            "Aqua Affinity": "hsl(180, 90%, 70%)",
-            "Thorns": "hsl(340, 70%, 60%)",
-            "Depth Strider": "hsl(220, 70%, 60%)",
-            "Frost Walker": "hsl(180, 40%, 80%)",
-            "Loyalty": "hsl(45, 70%, 60%)",
-            "Impaling": "hsl(190, 80%, 50%)",
-            "Riptide": "hsl(200, 50%, 80%)",
-            "Channeling": "hsl(50, 100%, 70%)"
-        };
+        const colors = DATA.cosmetics.ENCHANT_COLORS;
         
         const base = getBaseName(name);
         let color = colors[base];
@@ -214,8 +182,7 @@ async function updateChart(cat, mat, v) {
         }
         
         const rankPart = name.split(' ').pop();
-        const rankMap = {"I":0, "II":5, "III":10, "IV":15, "V":20};
-        const boost = rankMap[rankPart] || 0;
+        const boost = DATA.cosmetics.RANK_LIGHTNESS_BOOST[rankPart] || 0;
         
         if (color.startsWith('hsl')) {
            const parts = color.match(/\d+/g);
@@ -246,7 +213,7 @@ async function updateChart(cat, mat, v) {
         const sortedRanks = Array.from(allRanks).sort((a, b) => {
             const baseA = getBaseName(a), baseB = getBaseName(b);
             if (baseA !== baseB) return baseA.localeCompare(baseB);
-            const rankOrder = {"I":1, "II":2, "III":3, "IV":4, "V":5};
+            const rankOrder = DATA.constants.ROMAN_MAP;
             return (rankOrder[a.split(' ').pop()] || 0) - (rankOrder[b.split(' ').pop()] || 0);
         });
         

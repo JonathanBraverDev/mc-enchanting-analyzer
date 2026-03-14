@@ -22,14 +22,13 @@ function isVersionInRange(target, start, end = "99.9") {
 }
 
 function getRomanValue(r) {
-    const map = { "I": 1, "II": 2, "III": 3, "IV": 4, "V": 5 };
-    return map[r] || 0;
+    return DATA.constants.ROMAN_MAP[r] || 0;
 }
 
 function getBaseName(fullName) {
     const parts = fullName.split(" ");
     const last = parts[parts.length - 1];
-    if (["I", "II", "III", "IV", "V"].includes(last)) {
+    if (Object.keys(DATA.constants.ROMAN_MAP).includes(last)) {
         return parts.slice(0, -1).join(" ");
     }
     return fullName;
@@ -47,7 +46,7 @@ class EnchantEngine {
     }
 
     rankToRoman(rank) {
-        return ["I", "II", "III", "IV", "V"][rank - 1] || rank;
+        return Object.keys(DATA.constants.ROMAN_MAP)[rank - 1] || rank;
     }
 
     setupContext() {
@@ -108,7 +107,7 @@ class EnchantEngine {
 
     getEnchantability(mat, cat) {
         if (cat === "book") return 1;
-        const armor = ["helmet", "chestplate", "leggings", "boots"];
+        const armor = this.data.constants.ARMOR_CATS;
         const values = this.data.material_values;
         const sub = armor.includes(cat) ? values.armor : values.tools;
         return sub[mat] || 10;
@@ -171,7 +170,7 @@ class EnchantEngine {
             if (conflict) continue;
 
             let best = null;
-            const rKeys = ["V", "IV", "III", "II", "I"];
+            const rKeys = Object.keys(this.data.constants.ROMAN_MAP).reverse();
             for (let j = 0; j < rKeys.length; j++) {
                 const r = rKeys[j];
                 if(props.levels[r]) {
