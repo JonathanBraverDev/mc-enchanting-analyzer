@@ -19,7 +19,7 @@ function init() {
 
     const updateMaterials = () => {
         const cat = catSelect.value;
-        const armorCats = ["helmet", "chestplate", "leggings", "boots", "turtle_shell"];
+        const armorCats = ["helmet", "chestplate", "leggings", "boots"];
         const isArmor = armorCats.includes(cat);
         const currentMat = matSelect.value;
         matSelect.innerHTML = "";
@@ -33,7 +33,11 @@ function init() {
         if (itemCats.includes(cat) && mats[cat]) {
             eligibleKeys = [cat];
         } else {
-            eligibleKeys = eligibleKeys.filter(m => !itemCats.includes(m) || m === cat);
+            // Filter materials: only show 'turtle_shell' for helmets
+            eligibleKeys = eligibleKeys.filter(m => {
+                if (m === "turtle_shell" && cat !== "helmet") return false;
+                return !itemCats.includes(m) || m === cat;
+            });
         }
 
         const sortedKeys = eligibleKeys.sort((a, b) => {

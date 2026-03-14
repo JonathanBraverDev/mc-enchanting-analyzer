@@ -108,7 +108,7 @@ class EnchantEngine {
 
     getEnchantability(mat, cat) {
         if (cat === "book") return 1;
-        const armor = ["helmet", "chestplate", "leggings", "boots", "turtle_shell"];
+        const armor = ["helmet", "chestplate", "leggings", "boots"];
         const values = this.data.material_values;
         const sub = armor.includes(cat) ? values.armor : values.tools;
         return sub[mat] || 10;
