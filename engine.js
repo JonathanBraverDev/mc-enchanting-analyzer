@@ -3,22 +3,20 @@ function parseVersion(v) {
     return (v.match(/\d+/g) || []).map(Number);
 }
 
-function isVersionInRange(target, start, end = "99.9") {
-    const t = parseVersion(target);
-    const s = parseVersion(start);
-    const e = parseVersion(end);
-    
-    const cmp = (a, b) => {
-        for (let i = 0; i < Math.max(a.length, b.length); i++) {
-            const valA = a[i] || 0;
-            const valB = b[i] || 0;
-            if (valA > valB) return 1;
-            if (valA < valB) return -1;
-        }
-        return 0;
-    };
+function compareVersions(v1, v2) {
+    const p1 = parseVersion(v1);
+    const p2 = parseVersion(v2);
+    for (let i = 0; i < Math.max(p1.length, p2.length); i++) {
+        const a = p1[i] || 0;
+        const b = p2[i] || 0;
+        if (a > b) return 1;
+        if (a < b) return -1;
+    }
+    return 0;
+}
 
-    return cmp(t, s) >= 0 && cmp(t, e) <= 0;
+function isVersionInRange(target, start, end = "99.9") {
+    return compareVersions(target, start) >= 0 && compareVersions(target, end) <= 0;
 }
 
 function getRomanValue(r) {
@@ -28,10 +26,7 @@ function getRomanValue(r) {
 function getBaseName(fullName) {
     const parts = fullName.split(" ");
     const last = parts[parts.length - 1];
-    if (Object.keys(DATA.constants.ROMAN_MAP).includes(last)) {
-        return parts.slice(0, -1).join(" ");
-    }
-    return fullName;
+    return Object.keys(DATA.constants.ROMAN_MAP).includes(last) ? parts.slice(0, -1).join(" ") : fullName;
 }
 
 // --- CALCULATION ENGINE ---
@@ -56,16 +51,9 @@ class EnchantEngine {
 
         // Robust version finding
         if (!versions[curr]) {
-            const sorted = Object.keys(versions).sort((a,b) => {
-                const pa = parseVersion(a), pb = parseVersion(b);
-                for(let i=0; i<Math.max(pa.length, pb.length); i++){
-                    if((pa[i]||0) > (pb[i]||0)) return 1;
-                    if((pa[i]||0) < (pb[i]||0)) return -1;
-                }
-                return 0;
-            });
+            const sorted = Object.keys(versions).sort(compareVersions);
             for(let v of sorted) {
-                if(isVersionInRange(this.version, v)) curr = v;
+                if(compareVersions(this.version, v) >= 0) curr = v;
             }
         }
 
@@ -78,6 +66,7 @@ class EnchantEngine {
         this.mechanics = {};
         this.mergedItems = {};
         this.mergedOverrides = {};
+        this.mergedMaterials = new Set();
         this.multiEnchantBooks = true;
 
         for(let vName of chain) {
@@ -102,6 +91,9 @@ class EnchantEngine {
             for(let [ench, props] of Object.entries(manifest.overrides || {})) {
                 this.mergedOverrides[ench] = Object.assign(this.mergedOverrides[ench] || {}, props);
             }
+
+            // Materials
+            if(manifest.materials) manifest.materials.forEach(m => this.mergedMaterials.add(m));
         }
     }
 
