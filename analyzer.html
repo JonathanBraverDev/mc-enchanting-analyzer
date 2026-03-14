@@ -79,9 +79,15 @@
             font-size: 0.9rem;
         }
 
-        select option {
+        select option, select optgroup {
             background-color: #1a1c24;
             color: var(--text);
+        }
+
+        select optgroup {
+            color: var(--accent);
+            font-weight: 700;
+            font-style: normal;
         }
 
         input[type="range"] {
