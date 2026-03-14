@@ -1,19 +1,21 @@
+import { EnchantmentData, VersionManifest, VersionMechanics, CalculationStats } from './types';
+
 /**
  * Utility functions for version parsing and comparison.
  */
-const VersionUtils = {
+export const VersionUtils = {
     /**
      * Parses a version string into an array of numbers.
-     * @param {string} v - Version string (e.g., "1.8.9").
-     * @returns {number[]} Array of numbers.
+     * @param v - Version string (e.g., "1.8.9").
+     * @returns Array of numbers.
      */
-    parse: (v) => (v.match(/\d+/g) || []).map(Number),
+    parse: (v: string): number[] => (v.match(/\d+/g) || []).map(Number),
 
     /**
      * Compares two version strings.
-     * @returns {number} 1 if v1 > v2, -1 if v1 < v2, 0 if equal.
+     * @returns 1 if v1 > v2, -1 if v1 < v2, 0 if equal.
      */
-    compare: (v1, v2) => {
+    compare: (v1: string, v2: string): number => {
         const p1 = VersionUtils.parse(v1);
         const p2 = VersionUtils.parse(v2);
         const maxLen = Math.max(p1.length, p2.length);
@@ -29,7 +31,8 @@ const VersionUtils = {
     /**
      * Checks if a version is within a specific range.
      */
-    isInRange: (target, start, end = "99.9") => {
+    isInRange: (target: string, start?: string, end: string = "99.9"): boolean => {
+        if (!start) return true;
         return VersionUtils.compare(target, start) >= 0 && VersionUtils.compare(target, end) <= 0;
     }
 };
@@ -37,42 +40,44 @@ const VersionUtils = {
 /**
  * Core math and logic engine for Minecraft Enchanting.
  */
-class EnchantEngine {
-    static distCache = new Map();
+export class EnchantEngine {
+    static distCache = new Map<string, { [level: number]: number }>();
     
-    constructor(data, version) {
+    public data: EnchantmentData;
+    public version: string;
+    public comboCache = new Map<string, { [combo: string]: number }>();
+    
+    // Context-specific caches
+    public mechanics: VersionMechanics = {};
+    public mergedItems: { [category: string]: string[] } = {};
+    public mergedOverrides: { [enchantment: string]: any } = {};
+    public mergedMaterials = new Set<string>();
+    public multiEnchantBooks: boolean = true;
+
+    constructor(data: EnchantmentData, version: string) {
         this.data = data;
         this.version = version;
-        this.comboCache = new Map();
-        
-        // Context-specific caches
-        this.mechanics = {};
-        this.mergedItems = {};
-        this.mergedOverrides = {};
-        this.mergedMaterials = new Set();
-        this.multiEnchantBooks = true;
-
         this.setupContext();
     }
 
     /**
      * Converts a numeric rank to a Roman numeral.
      */
-    rankToRoman(rank) {
-        return Object.keys(this.data.constants.ROMAN_MAP)[rank - 1] || rank;
+    public rankToRoman(rank: number): string {
+        return Object.keys(this.data.constants.ROMAN_MAP)[rank - 1] || rank.toString();
     }
 
     /**
      * Extracts Roman numeral value from a string.
      */
-    getRomanValue(r) {
+    public getRomanValue(r: string): number {
         return this.data.constants.ROMAN_MAP[r] || 0;
     }
 
     /**
      * Gets the base name of an enchantment (removes level).
      */
-    getBaseName(fullName) {
+    public getBaseName(fullName: string): string {
         const parts = fullName.split(" ");
         const last = parts[parts.length - 1];
         return Object.keys(this.data.constants.ROMAN_MAP).includes(last) ? parts.slice(0, -1).join(" ") : fullName;
@@ -81,7 +86,7 @@ class EnchantEngine {
     /**
      * Builds the version-specific context by merging manifests according to inheritance.
      */
-    setupContext() {
+    private setupContext(): void {
         const { versions, enchantment_groups } = this.data;
         let curr = this.version;
 
@@ -93,8 +98,8 @@ class EnchantEngine {
             }
         }
 
-        const chain = [];
-        let temp = curr;
+        const chain: string[] = [];
+        let temp: string | undefined = curr;
         while (temp) {
             chain.unshift(temp);
             temp = versions[temp]?.extends;
@@ -102,7 +107,7 @@ class EnchantEngine {
 
         // Apply inheritance chain
         for (const vName of chain) {
-            const manifest = versions[vName];
+            const manifest = versions[vName] as VersionManifest;
             if (!manifest) continue;
 
             // Merge items and resolve groups
@@ -136,7 +141,7 @@ class EnchantEngine {
     /**
      * Gets base enchantability for an item/material pair.
      */
-    getEnchantability(mat, cat) {
+    public getEnchantability(mat: string, cat: string): number {
         if (cat === "book") return 1;
         const { armor, tools } = this.data.material_values;
         const isArmor = this.data.constants.ARMOR_CATS.includes(cat);
@@ -145,11 +150,10 @@ class EnchantEngine {
 
     /**
      * Calculates the probability distribution of Modified Levels.
-     * This is the "heart" of the stochastic simulation.
      */
-    getModifiedLevelDist(xp, enchantability) {
+    public getModifiedLevelDist(xp: number, enchantability: number): { [level: number]: number } {
         const key = `${xp}@${enchantability}@${this.mechanics.enchantability_bonus_divisor}@${this.mechanics.random_bonus_range}`;
-        if (EnchantEngine.distCache.has(key)) return EnchantEngine.distCache.get(key);
+        if (EnchantEngine.distCache.has(key)) return EnchantEngine.distCache.get(key)!;
 
         if (enchantability <= 0) return { [xp]: 1.0 };
         
@@ -157,8 +161,7 @@ class EnchantEngine {
         const rngRange = this.mechanics.random_bonus_range || 0.15;
         const N = Math.floor(enchantability / div) + 1;
         
-        // Phase 1: Base Enchantment Level randomness
-        const baseDist = {};
+        const baseDist: { [val: number]: number } = {};
         for (let i = 0; i < N; i++) {
             for (let j = 0; j < N; j++) {
                 const val = xp + i + j + 1;
@@ -166,11 +169,10 @@ class EnchantEngine {
             }
         }
 
-        // Phase 2: Random Bonus multiplier
-        const finalDist = {};
+        const finalDist: { [modVal: number]: number } = {};
         const steps = 25; 
-        for (let [base, bProb] of Object.entries(baseDist)) {
-            base = Number(base);
+        for (let [baseStr, bProb] of Object.entries(baseDist)) {
+            const base = Number(baseStr);
             for (let i = 0; i < steps; i++) {
                 for (let j = 0; j < steps; j++) {
                     const bonus = (i / (steps - 1) * rngRange) + (j / (steps - 1) * rngRange) - rngRange;
@@ -187,10 +189,10 @@ class EnchantEngine {
     /**
      * Gets list of enchants eligible for a specific modified level.
      */
-    getEligibleList(cat, level, mat, chosenNames = new Set()) {
+    public getEligibleList(cat: string, level: number, mat: string, chosenNames: Set<string> = new Set()): { name: string, weight: number, rank: string }[] {
         const registry = this.data.global_enchantments;
         const pool = this.mergedItems[cat] || [];
-        const out = [];
+        const out: { name: string, weight: number, rank: string }[] = [];
         
         for (const name of pool) {
             if (chosenNames.has(name)) continue;
@@ -198,15 +200,13 @@ class EnchantEngine {
             const props = Object.assign({}, registry[name], this.mergedOverrides[name] || {});
             if (!VersionUtils.isInRange(this.version, props.valid_from, props.valid_to)) continue;
             
-            // Conflict check
             const hasConflict = Array.from(chosenNames).some(chosen => {
                 const cProps = Object.assign({}, registry[chosen], this.mergedOverrides[chosen] || {});
                 return cProps.conflicts?.includes(name) || props.conflicts?.includes(chosen);
             });
             if (hasConflict) continue;
 
-            // Find best available rank for this level
-            const rKeys = Object.keys(this.data.constants.ROMAN_MAP).reverse();
+            const rKeys = (Object.keys(this.data.constants.ROMAN_MAP) as string[]).reverse();
             for (const r of rKeys) {
                 const range = props.levels[r];
                 if (range && level >= range[0] && level <= range[1]) {
@@ -221,14 +221,14 @@ class EnchantEngine {
     /**
      * Generates a unique key for a set of enchantments.
      */
-    getComboKey(chosen, initialSeed) {
+    public getComboKey(chosen: string[], initialSeed: string | null): string {
         const sorted = [...chosen].sort((a, b) => {
             if (initialSeed) {
                 if (a === initialSeed) return -1;
                 if (b === initialSeed) return 1;
             }
-            const nameA = this.getBaseName(a), rankA = a.split(' ').pop();
-            const nameB = this.getBaseName(b), rankB = b.split(' ').pop();
+            const nameA = this.getBaseName(a), rankA = a.split(' ').pop() || "";
+            const nameB = this.getBaseName(b), rankB = b.split(' ').pop() || "";
             const valA = this.getRomanValue(rankA), valB = this.getRomanValue(rankB);
             
             if (valA !== valB) return valB - valA;
@@ -243,28 +243,26 @@ class EnchantEngine {
     /**
      * Recursively calculates all possible enchantment combinations.
      */
-    calculateCombinations(cat, modLevel, mat, initialSeed = null, threshold = 0.0001) {
-        const solve = (chosen, level, branchProb = 1.0) => {
+    public calculateCombinations(cat: string, modLevel: number, mat: string, initialSeed: string | null = null, threshold: number = 0.0001): { [combo: string]: number } {
+        const solve = (chosen: string[], level: number, branchProb: number = 1.0): { [combo: string]: number } => {
             if (branchProb < threshold) return {};
 
             const chosenNames = new Set(chosen.map(e => this.getBaseName(e)));
             const eligible = this.getEligibleList(cat, level, mat, chosenNames);
 
-            // Special handle for older books
             if (cat === "book" && chosen.length >= 1 && !this.multiEnchantBooks) {
                 return { [this.getComboKey(chosen, initialSeed)]: 1.0 };
             }
 
             const currentKey = this.getComboKey(chosen, initialSeed);
             const cacheKey = `${cat}|${currentKey}|${level}|${initialSeed}|${threshold}`;
-            if (this.comboCache.has(cacheKey)) return this.comboCache.get(cacheKey);
+            if (this.comboCache.has(cacheKey)) return this.comboCache.get(cacheKey)!;
             
             const totalWeight = eligible.reduce((s, e) => s + e.weight, 0);
             const probContinue = (cat === "book" && !this.multiEnchantBooks) ? 0 : Math.min((level + 1) / 50, 1.0);
 
-            const results = {};
+            const results: { [combo: string]: number } = {};
             if (chosen.length === 0) {
-                // First enchantment pick
                 for (const e of eligible) {
                     const pWeight = e.weight / totalWeight;
                     const sub = solve([`${e.name} ${e.rank}`], level, branchProb * pWeight);
@@ -293,25 +291,25 @@ class EnchantEngine {
     /**
      * Aggregates all statistics for a given enchantment attempt.
      */
-    getFullStats(cat, xp, mat, initialSeed = null, threshold = 0.0001) {
+    public getFullStats(cat: string, xp: number, mat: string, initialSeed: string | null = null, threshold: number = 0.0001): CalculationStats {
         const enchantability = this.getEnchantability(mat, cat);
         const modDist = this.getModifiedLevelDist(xp, enchantability);
-        const finalCombos = {};
+        const finalCombos: { [combo: string]: number } = {};
 
-        for (const [ml, mProb] of Object.entries(modDist)) {
+        for (const [mlStr, mProb] of Object.entries(modDist)) {
             if (mProb < threshold) continue; 
-            const combos = this.calculateCombinations(cat, Number(ml), mat, initialSeed, threshold);
+            const combos = this.calculateCombinations(cat, Number(mlStr), mat, initialSeed, threshold);
             for (const [c, p] of Object.entries(combos)) {
                 finalCombos[c] = (finalCombos[c] || 0) + p * mProb;
             }
         }
 
-        const stats = { ranks: {}, any: {}, count: {}, combos: finalCombos };
+        const stats: CalculationStats = { ranks: {}, any: {}, count: {}, combos: finalCombos };
         for (const [combo, p] of Object.entries(finalCombos)) {
             const parts = combo.split("+");
             stats.count[parts.length] = (stats.count[parts.length] || 0) + p;
             
-            const seenBases = new Set();
+            const seenBases = new Set<string>();
             for (const entry of parts) {
                 stats.ranks[entry] = (stats.ranks[entry] || 0) + p;
                 const base = this.getBaseName(entry);

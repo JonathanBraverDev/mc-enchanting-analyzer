@@ -1,3 +1,10 @@
+import { DATA } from './data';
+import { EnchantEngine } from './engine';
+import { CalculationStats } from './types';
+
+// Declare Chart.js global for the browser environment
+declare const Chart: any;
+
 /**
  * Manages UI colors and enchantment-specific styles.
  */
@@ -5,7 +12,7 @@ const ThemeManager = {
     /**
      * Calculates a color for an enchantment based on its base name and rank.
      */
-    getEnchantColor: (name, engine) => {
+    getEnchantColor: (name: string, engine: EnchantEngine): string => {
         const base = engine.getBaseName(name);
         let color = DATA.cosmetics.ENCHANT_COLORS[base];
         
@@ -15,12 +22,14 @@ const ThemeManager = {
             color = `hsl(${Math.abs(hash) % 360}, 65%, 60%)`;
         }
 
-        const rankPart = name.split(' ').pop();
+        const rankPart = name.split(' ').pop() || "";
         const boost = DATA.cosmetics.RANK_LIGHTNESS_BOOST[rankPart] || 0;
         
         if (color.startsWith('hsl')) {
             const parts = color.match(/\d+/g);
-            return `hsl(${parts[0]}, ${parts[1]}%, ${parseInt(parts[2]) + boost}%)`;
+            if (parts && parts.length >= 3) {
+                return `hsl(${parts[0]}, ${parts[1]}%, ${parseInt(parts[2]) + boost}%)`;
+            }
         }
         return color;
     }
@@ -30,14 +39,17 @@ const ThemeManager = {
  * Main UI Controller for the Enchantment Analyzer.
  */
 const UIController = {
-    elements: {},
-    mainChart: null,
-    engine: null,
+    elements: {} as { [id: string]: HTMLElement },
+    mainChart: null as any,
+    engine: null as EnchantEngine | null,
     chartUpdateId: 0,
 
-    init() {
+    init(): void {
         const ids = ["v-select", "cat-select", "mat-select", "seed-select", "lvl-range", "lvl-val", "chart-metric"];
-        ids.forEach(id => this.elements[id] = document.getElementById(id));
+        ids.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) this.elements[id] = el;
+        });
 
         this.populateVersions();
         this.setupEventListeners();
@@ -46,8 +58,8 @@ const UIController = {
         this.run();
     },
 
-    populateVersions() {
-        const vSelect = this.elements["v-select"];
+    populateVersions(): void {
+        const vSelect = this.elements["v-select"] as HTMLSelectElement;
         Object.keys(DATA.versions).reverse().forEach(v => {
             const o = document.createElement("option");
             o.value = v; o.textContent = v;
@@ -55,8 +67,13 @@ const UIController = {
         });
     },
 
-    setupEventListeners() {
-        const { "v-select": v, "cat-select": cat, "mat-select": mat, "seed-select": seed, "lvl-range": lvl, "chart-metric": metric } = this.elements;
+    setupEventListeners(): void {
+        const v = this.elements["v-select"] as HTMLSelectElement;
+        const cat = this.elements["cat-select"] as HTMLSelectElement;
+        const mat = this.elements["mat-select"] as HTMLSelectElement;
+        const seed = this.elements["seed-select"] as HTMLSelectElement;
+        const lvl = this.elements["lvl-range"] as HTMLInputElement;
+        const metric = this.elements["chart-metric"] as HTMLSelectElement;
 
         v.onchange = () => { this.updateMaterials(); this.updateSeed(); this.run(); };
         cat.onchange = () => { this.updateMaterials(); this.updateSeed(); this.run(); };
@@ -70,18 +87,18 @@ const UIController = {
         metric.onchange = () => this.run();
     },
 
-    getEngine() {
-        const v = this.elements["v-select"].value;
+    getEngine(): EnchantEngine {
+        const v = (this.elements["v-select"] as HTMLSelectElement).value;
         if (!this.engine || this.engine.version !== v) {
             this.engine = new EnchantEngine(DATA, v);
         }
         return this.engine;
     },
 
-    updateMaterials() {
+    updateMaterials(): void {
         const engine = this.getEngine();
-        const cat = this.elements["cat-select"].value;
-        const matSelect = this.elements["mat-select"];
+        const cat = (this.elements["cat-select"] as HTMLSelectElement).value;
+        const matSelect = this.elements["mat-select"] as HTMLSelectElement;
         const currentMat = matSelect.value;
         
         matSelect.innerHTML = "";
@@ -125,12 +142,12 @@ const UIController = {
         this.updateSeed();
     },
 
-    updateSeed() {
+    updateSeed(): void {
         const engine = this.getEngine();
-        const cat = this.elements["cat-select"].value;
-        const mat = this.elements["mat-select"].value;
-        const lvl = parseInt(this.elements["lvl-range"].value);
-        const seedSelect = this.elements["seed-select"];
+        const cat = (this.elements["cat-select"] as HTMLSelectElement).value;
+        const mat = (this.elements["mat-select"] as HTMLSelectElement).value;
+        const lvl = parseInt((this.elements["lvl-range"] as HTMLInputElement).value);
+        const seedSelect = this.elements["seed-select"] as HTMLSelectElement;
         const currentSeed = seedSelect.value;
         
         seedSelect.innerHTML = '<option value="">None (Random First)</option>';
@@ -139,7 +156,7 @@ const UIController = {
         const ench = engine.getEnchantability(mat, cat);
         const dist = engine.getModifiedLevelDist(lvl, ench);
         
-        const allPossible = new Set();
+        const allPossible = new Set<string>();
         Object.keys(dist).forEach(ml => {
             const eligible = engine.getEligibleList(cat, parseInt(ml), mat);
             eligible.forEach(e => allPossible.add(`${e.name} ${e.rank}`));
@@ -153,22 +170,25 @@ const UIController = {
         });
     },
 
-    run() {
+    run(): void {
         const engine = this.getEngine();
-        const cat = this.elements["cat-select"].value;
-        const mat = this.elements["mat-select"].value;
-        const xp = parseInt(this.elements["lvl-range"].value);
-        const seed = this.elements["seed-select"].value;
+        const cat = (this.elements["cat-select"] as HTMLSelectElement).value;
+        const mat = (this.elements["mat-select"] as HTMLSelectElement).value;
+        const xp = parseInt((this.elements["lvl-range"] as HTMLInputElement).value);
+        const seed = (this.elements["seed-select"] as HTMLSelectElement).value;
 
-        document.getElementById("ench-val").textContent = engine.getEnchantability(mat, cat);
+        const enchValEl = document.getElementById("ench-val");
+        if (enchValEl) enchValEl.textContent = engine.getEnchantability(mat, cat).toString();
 
         const stats = engine.getFullStats(cat, xp, mat, seed);
         this.updateInsights(stats);
         this.updateChart(cat, mat);
     },
 
-    updateInsights(stats) {
+    updateInsights(stats: CalculationStats): void {
         const comboEl = document.getElementById("combo-list");
+        if (!comboEl) return;
+
         const topCombos = Object.entries(stats.combos).sort((a,b) => b[1] - a[1]).slice(0, 10);
         
         comboEl.innerHTML = topCombos.map(([name, prob]) => `
@@ -181,6 +201,8 @@ const UIController = {
         `).join("");
 
         const rankSection = document.getElementById("rank-section");
+        if (!rankSection) return;
+
         rankSection.innerHTML = Object.entries(stats.any).sort((a,b) => b[1] - a[1]).map(([name, prob]) => {
             const props = DATA.global_enchantments[name];
             const levelsCount = props ? Object.keys(props.levels).length : 2;
@@ -198,15 +220,15 @@ const UIController = {
         }).join("");
     },
 
-    async updateChart(cat, mat) {
+    async updateChart(cat: string, mat: string): Promise<void> {
         const currentId = ++this.chartUpdateId;
         const engine = this.getEngine();
-        const metric = this.elements["chart-metric"].value;
-        const seed = this.elements["seed-select"].value;
+        const metric = (this.elements["chart-metric"] as HTMLSelectElement).value;
+        const seed = (this.elements["seed-select"] as HTMLSelectElement).value;
         const labels = Array.from({length: 30}, (_, i) => i + 1);
         
         const threshold = cat === "book" ? 0.002 : 0.0001;
-        const sweep = [];
+        const sweep: { l: number, s: CalculationStats }[] = [];
         
         // Asynchronous sweep to keep UI responsive
         for (const l of labels) {
@@ -217,16 +239,19 @@ const UIController = {
 
         const datasets = this.generateDatasets(sweep, metric, engine);
 
+        const canvas = document.getElementById("mainChart") as HTMLCanvasElement;
+        if (!canvas) return;
+
         if (this.mainChart) this.mainChart.destroy();
-        this.mainChart = new Chart(document.getElementById("mainChart").getContext("2d"), {
+        this.mainChart = new Chart(canvas.getContext("2d"), {
             type: 'line',
             data: { labels, datasets },
             options: this.getChartOptions()
         });
     },
 
-    generateDatasets(sweep, metric, engine) {
-        const datasets = [];
+    generateDatasets(sweep: { l: number, s: CalculationStats }[], metric: string, engine: EnchantEngine): any[] {
+        const datasets: any[] = [];
         const lastSweep = sweep[sweep.length - 1].s;
 
         if (metric === "any") {
@@ -241,13 +266,13 @@ const UIController = {
                 });
             });
         } else if (metric === "ranks") {
-            const allRanks = new Set();
+            const allRanks = new Set<string>();
             sweep.forEach(e => Object.entries(e.s.ranks).forEach(([r, p]) => { if (p > 0.01) allRanks.add(r); }));
             
             Array.from(allRanks).sort((a, b) => {
                 const ba = engine.getBaseName(a), bb = engine.getBaseName(b);
                 if (ba !== bb) return ba.localeCompare(bb);
-                return engine.getRomanValue(a.split(' ').pop()) - engine.getRomanValue(b.split(' ').pop());
+                return engine.getRomanValue(a.split(' ').pop() || "") - engine.getRomanValue(b.split(' ').pop() || "");
             }).slice(0, 32).forEach(r => {
                 const color = ThemeManager.getEnchantColor(r, engine);
                 datasets.push({
@@ -259,7 +284,7 @@ const UIController = {
                 });
             });
         } else {
-            const colors = { 1: "hsl(0, 80%, 60%)", 2: "hsl(15, 80%, 55%)", 3: "hsl(45, 80%, 50%)", 4: "hsl(80, 70%, 50%)", 5: "hsl(140, 70%, 50%)" };
+            const colors: { [count: number]: string } = { 1: "hsl(0, 80%, 60%)", 2: "hsl(15, 80%, 55%)", 3: "hsl(45, 80%, 50%)", 4: "hsl(80, 70%, 50%)", 5: "hsl(140, 70%, 50%)" };
             [1, 2, 3, 4, 5].filter(c => Math.max(...sweep.map(x => x.s.count[c] || 0)) > 0.01).forEach(c => {
                 datasets.push({
                     label: `${c} Enchant${c > 1 ? 's' : ''}`,
@@ -273,7 +298,7 @@ const UIController = {
         return datasets;
     },
 
-    getChartOptions() {
+    getChartOptions(): any {
         return {
             responsive: true, maintainAspectRatio: false,
             interaction: { mode: 'index', intersect: false },
