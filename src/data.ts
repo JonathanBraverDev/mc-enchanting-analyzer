@@ -1,4 +1,6 @@
-const DATA = {
+import { EnchantmentData } from './types';
+
+export const DATA: EnchantmentData = {
   "global_enchantments": {
     "Sharpness": {
       "weight": 10,
