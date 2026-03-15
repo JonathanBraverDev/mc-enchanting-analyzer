@@ -1,4 +1,5 @@
 import { EnchantmentData, VersionManifest, VersionMechanics, CalculationStats } from './types';
+import { WASMBridge } from './wasm';
 
 /**
  * Utility functions for version parsing and comparison.
@@ -159,6 +160,15 @@ export class EnchantEngine {
         
         const div = this.mechanics.enchantability_bonus_divisor || 4;
         const rngRange = this.mechanics.random_bonus_range || 0.15;
+
+        // Try WASM first
+        const wasmDist = WASMBridge.getModifiedLevelDist(xp, enchantability, div, rngRange);
+        if (wasmDist) {
+            EnchantEngine.distCache.set(key, wasmDist);
+            console.log("WASM HIT");
+            return wasmDist;
+        }
+
         const N = Math.floor(enchantability / div) + 1;
         
         const baseDist: { [val: number]: number } = {};

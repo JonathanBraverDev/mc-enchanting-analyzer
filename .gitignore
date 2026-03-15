@@ -3,3 +3,6 @@ dist/
 package-lock.json
 .DS_Store
 *.log
+rust_engine/target/
+rust_engine/pkg/
+src/wasm/rust_engine_bg.wasm
