@@ -43,6 +43,11 @@ const UIController = {
     mainChart: null as any,
     engine: null as EnchantEngine | null,
     chartUpdateId: 0,
+    lastChartParams: "",
+    savedSeed: "",
+    DEFAULT_THRESHOLD: 0.0001,
+    BOOK_THRESHOLD: 0.001,
+    runTimeout: 0,
 
     init(): void {
         const ids = ["v-select", "cat-select", "mat-select", "seed-select", "lvl-range", "lvl-val", "chart-metric"];
@@ -79,11 +84,16 @@ const UIController = {
         v.onchange = () => { this.updateMaterials(); this.updateSeed(); this.run(); };
         cat.onchange = () => { this.updateMaterials(); this.updateSeed(); this.run(); };
         mat.onchange = () => { this.updateSeed(); this.run(); };
-        seed.onchange = () => this.run();
+        
+        seed.onchange = () => {
+            this.savedSeed = seed.value;
+            this.run();
+        };
         
         lvl.oninput = () => {
             this.elements["lvl-val"].textContent = lvl.value;
-            this.run();
+            if (this.runTimeout) clearTimeout(this.runTimeout);
+            this.runTimeout = window.setTimeout(() => this.run(), 50);
         };
         metric.onchange = () => this.run();
     },
@@ -149,7 +159,6 @@ const UIController = {
         const mat = (this.elements["mat-select"] as HTMLSelectElement).value;
         const lvl = parseInt((this.elements["lvl-range"] as HTMLInputElement).value);
         const seedSelect = this.elements["seed-select"] as HTMLSelectElement;
-        const currentSeed = seedSelect.value;
         
         seedSelect.innerHTML = '<option value="">None (Random First)</option>';
         if (!mat) return;
@@ -166,7 +175,7 @@ const UIController = {
         Array.from(allPossible).sort().forEach(s => {
             const o = document.createElement("option");
             o.value = s; o.textContent = s;
-            if (s === currentSeed) o.selected = true;
+            if (s === this.savedSeed) o.selected = true;
             seedSelect.appendChild(o);
         });
     },
@@ -176,6 +185,9 @@ const UIController = {
         const cat = (this.elements["cat-select"] as HTMLSelectElement).value;
         const mat = (this.elements["mat-select"] as HTMLSelectElement).value;
         const xp = parseInt((this.elements["lvl-range"] as HTMLInputElement).value);
+        
+        // Refresh seed list filtering based on current level
+        this.updateSeed();
         const seed = (this.elements["seed-select"] as HTMLSelectElement).value;
 
         // Visual Feedback: Show we are crunching numbers
@@ -190,11 +202,20 @@ const UIController = {
         if (currentId !== this.chartUpdateId) return;
 
         // Heavy Math
-        const stats = engine.getFullStats(cat, xp, mat, seed);
+        const threshold = cat === "book" ? this.BOOK_THRESHOLD : this.DEFAULT_THRESHOLD;
+        const stats = await engine.getFullStats(cat, xp, mat, seed, threshold);
         
         // Update UI Parts
         this.updateInsights(stats);
-        this.updateChart(cat, mat); // updateChart already uses chartUpdateId
+
+        // Only update chart if relevant parameters changed
+        const metric = (this.elements["chart-metric"] as HTMLSelectElement).value;
+        const chartParams = `${engine.version}|${cat}|${mat}|${seed}|${metric}`;
+        
+        if (chartParams !== this.lastChartParams) {
+            this.lastChartParams = chartParams;
+            this.updateChart(cat, mat);
+        }
     },
 
     updateInsights(stats: CalculationStats): void {
@@ -252,13 +273,13 @@ const UIController = {
         const labels = Array.from({length: 30}, (_, i) => i + 1);
         
         // Best-First search handles books much better now, so we can afford a tighter threshold.
-        const threshold = cat === "book" ? 0.001 : 0.0001;
+        const threshold = cat === "book" ? this.BOOK_THRESHOLD : this.DEFAULT_THRESHOLD;
         const sweep: { l: number, s: CalculationStats }[] = [];
         
         // Asynchronous sweep to keep UI responsive
         for (const l of labels) {
             if (currentId !== this.chartUpdateId) return;
-            sweep.push({ l, s: engine.getFullStats(cat, l, mat, seed, threshold) });
+            sweep.push({ l, s: await engine.getFullStats(cat, l, mat, seed, threshold) });
             if (l % (cat === "book" ? 2 : 10) === 0) await new Promise(r => requestAnimationFrame(r));
         }
 
@@ -280,7 +301,10 @@ const UIController = {
         const lastSweep = sweep[sweep.length - 1].s;
 
         if (metric === "any") {
-            Object.keys(lastSweep.any).forEach(k => {
+            const allEnchants = new Set<string>();
+            sweep.forEach(x => Object.keys(x.s.any).forEach(k => allEnchants.add(k)));
+
+            Array.from(allEnchants).sort().forEach(k => {
                 const color = ThemeManager.getEnchantColor(k, engine);
                 datasets.push({
                     label: k,
