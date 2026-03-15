@@ -17,7 +17,8 @@
     "bundle": "esbuild src/ui.ts --bundle --outfile=dist/bundle.js --minify --sourcemap --platform=browser --format=iife",
     "wasm:build": "cd rust_engine && wasm-pack build --target web",
     "wasm:inline": "node scripts/inline-wasm.js",
-    "build": "npm run wasm:build && npm run wasm:inline && npm run bundle",
+    "build:clean": "node -e \"const fs = require('fs'); if (fs.existsSync('dist')) { fs.readdirSync('dist').forEach(f => { if (f !== 'bundle.js' && f !== 'bundle.js.map') fs.rmSync('dist/' + f, {recursive: true, force: true}) }); }\"",
+    "build": "npm run wasm:build && npm run wasm:inline && npm run build:clean && npm run bundle",
     "test": "node --test",
     "start": "npx serve ."
   }
