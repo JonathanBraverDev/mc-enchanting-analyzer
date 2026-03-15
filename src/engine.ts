@@ -52,6 +52,7 @@ export class EnchantEngine {
     public mechanics: VersionMechanics = {};
     public mergedItems: { [category: string]: string[] } = {};
     public mergedOverrides: { [enchantment: string]: any } = {};
+    public resolvedRegistry: { [enchantment: string]: any } = {};
     public mergedMaterials = new Set<string>();
     public multiEnchantBooks: boolean = true;
 
@@ -137,6 +138,11 @@ export class EnchantEngine {
                 manifest.materials.forEach(m => this.mergedMaterials.add(m));
             }
         }
+
+        // Finalize Registry (Pre-merge overrides for zero-allocation access during recursion)
+        for (const [name, props] of Object.entries(this.data.global_enchantments)) {
+            this.resolvedRegistry[name] = Object.assign({}, props, this.mergedOverrides[name] || {});
+        }
     }
 
     /**
@@ -207,11 +213,11 @@ export class EnchantEngine {
         for (const name of pool) {
             if (chosenNames.has(name)) continue;
             
-            const props = Object.assign({}, registry[name], this.mergedOverrides[name] || {});
+            const props = this.resolvedRegistry[name];
             if (!VersionUtils.isInRange(this.version, props.valid_from, props.valid_to)) continue;
             
             const hasConflict = Array.from(chosenNames).some(chosen => {
-                const cProps = Object.assign({}, registry[chosen], this.mergedOverrides[chosen] || {});
+                const cProps = this.resolvedRegistry[chosen];
                 return cProps.conflicts?.includes(name) || props.conflicts?.includes(chosen);
             });
             if (hasConflict) continue;
@@ -254,6 +260,7 @@ export class EnchantEngine {
      * Recursively calculates all possible enchantment combinations.
      */
     public calculateCombinations(cat: string, modLevel: number, mat: string, initialSeed: string | null = null, threshold: number = 0.0001): { [combo: string]: number } {
+        // Higher internal precision if threshold is very low
         const solve = (chosen: string[], level: number, branchProb: number = 1.0): { [combo: string]: number } => {
             if (branchProb < threshold) return {};
 
@@ -295,7 +302,16 @@ export class EnchantEngine {
             return results;
         };
 
-        return solve(initialSeed ? [initialSeed] : [], modLevel, 1.0);
+        const raw = solve(initialSeed ? [initialSeed] : [], modLevel, 1.0);
+        
+        // Normalization Pass: Ensure total probability mass is 1.0
+        // Important for seeded runs where we know something WILL happen.
+        const totalMass = Object.values(raw).reduce((a, b) => a + b, 0);
+        if (totalMass > 0 && totalMass < 0.9999) {
+            for (const k in raw) raw[k] /= totalMass;
+        }
+        
+        return raw;
     }
 
     /**
@@ -306,16 +322,26 @@ export class EnchantEngine {
         const modDist = this.getModifiedLevelDist(xp, enchantability);
         const finalCombos: { [combo: string]: number } = {};
 
+        // Adaptive Threshold: Only use high precision when a Seed is active.
+        // For general "Book" browsing, we keep the standard threshold to ensure UI fluidness.
+        const activeThreshold = initialSeed ? threshold / 10 : threshold;
+
         for (const [mlStr, mProb] of Object.entries(modDist)) {
-            if (mProb < threshold) continue; 
-            const combos = this.calculateCombinations(cat, Number(mlStr), mat, initialSeed, threshold);
+            if (mProb < activeThreshold) continue; 
+            const combos = this.calculateCombinations(cat, Number(mlStr), mat, initialSeed, activeThreshold);
             for (const [c, p] of Object.entries(combos)) {
                 finalCombos[c] = (finalCombos[c] || 0) + p * mProb;
             }
         }
 
         const stats: CalculationStats = { ranks: {}, any: {}, count: {}, combos: finalCombos };
-        for (const [combo, p] of Object.entries(finalCombos)) {
+        
+        // Final normalization check to ensure the sum of all outcomes is 100%
+        const totalEnchantMass = Object.values(finalCombos).reduce((a, b) => a + b, 0);
+        const normFactor = totalEnchantMass > 0 ? 1 / totalEnchantMass : 1;
+
+        for (const [combo, rawP] of Object.entries(finalCombos)) {
+            const p = rawP * normFactor;
             const parts = combo.split("+");
             stats.count[parts.length] = (stats.count[parts.length] || 0) + p;
             
