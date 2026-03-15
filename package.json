@@ -1,6 +1,24 @@
 {
   "devDependencies": {
     "@types/chart.js": "^2.9.41",
+    "assemblyscript": "^0.28.10",
+    "esbuild": "^0.27.4",
     "typescript": "^5.9.3"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./build/release.js",
+      "types": "./build/release.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "bundle": "esbuild src/ui.ts --bundle --outfile=dist/bundle.js --minify --sourcemap --platform=browser --format=iife",
+    "asbuild:debug": "asc assembly/index.ts --target debug",
+    "asbuild:release": "asc assembly/index.ts --target release",
+    "asbuild": "npm run asbuild:debug && npm run asbuild:release",
+    "test": "node --test",
+    "start": "npx serve ."
   }
 }
