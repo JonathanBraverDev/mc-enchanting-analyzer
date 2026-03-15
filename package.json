@@ -13,11 +13,11 @@
     }
   },
   "scripts": {
-    "build": "tsc",
+    "build:ts": "tsc",
     "bundle": "esbuild src/ui.ts --bundle --outfile=dist/bundle.js --minify --sourcemap --platform=browser --format=iife",
-    "asbuild:debug": "asc assembly/index.ts --target debug",
-    "asbuild:release": "asc assembly/index.ts --target release",
-    "asbuild": "npm run asbuild:debug && npm run asbuild:release",
+    "wasm:build": "cd rust_engine && wasm-pack build --target web",
+    "wasm:inline": "node scripts/inline-wasm.js",
+    "build": "npm run wasm:build && npm run wasm:inline && npm run bundle",
     "test": "node --test",
     "start": "npx serve ."
   }
