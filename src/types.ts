@@ -65,4 +65,6 @@ export interface CalculationStats {
   any: { [base: string]: number };
   count: { [count: number]: number };
   combos: { [combo: string]: number };
+  residual?: number;
 }
+
