@@ -124,6 +124,7 @@ export class EnchantEngine {
     public eligiblePoolCache = new Map<string, number[]>();
     public idMap = new Map<string, number>();
     public revIdMap: string[] = [];
+    public statsCache = new Map<string, CalculationStats>();
     public conflictBitsets: BigUint64Array = new BigUint64Array(0);
     public weightMap: Uint32Array = new Uint32Array(0);
 
@@ -399,6 +400,7 @@ export class EnchantEngine {
      * to preserve accuracy in high-branching scenarios like Books.
      */
     public calculateCombinations(cat: string, modLevel: number, mat: string, initialSeed: string | null = null, threshold: number = 0.0001): { results: { [combo: string]: number }, uncertainty: number } {
+        // ... (rest of function remains synchronous for now as it is called in a loop)
         const results: { [combo: string]: number } = {};
         let uncertainty = 0;
         
@@ -503,7 +505,27 @@ export class EnchantEngine {
     /**
      * Aggregates all statistics for a given enchantment attempt.
      */
-    public getFullStats(cat: string, xp: number, mat: string, initialSeed: string | null = null, threshold: number = 0.0001): CalculationStats {
+    public async getFullStats(cat: string, xp: number, mat: string, initialSeed: string | null = null, threshold: number = 0.0001): Promise<CalculationStats> {
+        const cacheKey = `${cat}|${xp}|${mat}|${initialSeed || 'none'}|${threshold}`;
+        if (this.statsCache.has(cacheKey)) return this.statsCache.get(cacheKey)!;
+
+        // Seed validity check: If seed is provided, verify it is possible at ANY possible modified level
+        if (initialSeed) {
+            const ench = this.getEnchantability(mat, cat);
+            const dist = this.getModifiedLevelDist(xp, ench);
+            let possible = false;
+            for (const ml of Object.keys(dist)) {
+                const eligible = this.getEligibleList(cat, parseInt(ml), mat);
+                if (eligible.some(e => `${e.name} ${e.rank}` === initialSeed)) {
+                    possible = true;
+                    break;
+                }
+            }
+            if (!possible) {
+                return { ranks: {}, any: {}, count: {}, combos: {}, residual: 1.0 }; // Impossible combination
+            }
+        }
+
         const enchantability = this.getEnchantability(mat, cat);
         const modDist = this.getModifiedLevelDist(xp, enchantability);
         const finalCombos: { [combo: string]: number } = {};
@@ -513,6 +535,7 @@ export class EnchantEngine {
         let processedMProb = 0;
         let totalUncertainty = 0;
         
+        let iterCount = 0;
         for (const [mlStr, mProb] of Object.entries(modDist)) {
             if (mProb < activeThreshold) continue; 
             processedMProb += mProb;
@@ -521,6 +544,9 @@ export class EnchantEngine {
                 finalCombos[c] = (finalCombos[c] || 0) + p * mProb;
             }
             totalUncertainty += uncertainty * mProb;
+
+            // Yield every few levels to keep UI responsive
+            if (++iterCount % 5 === 0) await new Promise(r => requestAnimationFrame(r));
         }
 
         const stats: CalculationStats = { ranks: {}, any: {}, count: {}, combos: {}, residual: totalUncertainty };
@@ -547,6 +573,7 @@ export class EnchantEngine {
 
         stats.residual = totalUncertainty * normFactor;
 
+        this.statsCache.set(cacheKey, stats);
         return stats;
     }
 
