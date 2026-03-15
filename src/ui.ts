@@ -1,7 +1,6 @@
 import { DATA } from './data';
 import { EnchantEngine } from './engine';
 import { CalculationStats } from './types';
-import { WASMBridge } from './wasm';
 
 // Declare Chart.js global for the browser environment
 declare const Chart: any;
@@ -56,11 +55,7 @@ const UIController = {
         this.setupEventListeners();
         
         this.updateMaterials();
-        
-        // Asynchronously initialize WASM for math acceleration
-        WASMBridge.init().then(() => {
-            this.run();
-        });
+        this.run();
     },
 
 
