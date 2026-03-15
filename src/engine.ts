@@ -38,6 +38,81 @@ export const VersionUtils = {
 };
 
 /**
+ * Lightweight Binary Heap for priority queue operations.
+ * Optimized for objects with a numeric 'prob' property.
+ */
+class BinaryHeap<T extends { prob: number }> {
+    private heap: T[] = [];
+
+    push(item: T) {
+        this.heap.push(item);
+        this.bubbleUp();
+    }
+
+    pop(): T | undefined {
+        if (this.size() === 0) return undefined;
+        const top = this.heap[0];
+        const bottom = this.heap.pop();
+        if (this.size() > 0 && bottom !== undefined) {
+            this.heap[0] = bottom;
+            this.sinkDown();
+        }
+        return top;
+    }
+
+    size(): number {
+        return this.heap.length;
+    }
+
+    private bubbleUp() {
+        let idx = this.heap.length - 1;
+        const element = this.heap[idx];
+        while (idx > 0) {
+            let parentIdx = Math.floor((idx - 1) / 2);
+            let parent = this.heap[parentIdx];
+            if (element.prob <= parent.prob) break;
+            this.heap[parentIdx] = element;
+            this.heap[idx] = parent;
+            idx = parentIdx;
+        }
+    }
+
+    private sinkDown() {
+        let idx = 0;
+        const length = this.heap.length;
+        const element = this.heap[0];
+        while (true) {
+            let leftChildIdx = 2 * idx + 1;
+            let rightChildIdx = 2 * idx + 2;
+            let leftChild, rightChild;
+            let swap = null;
+
+            if (leftChildIdx < length) {
+                leftChild = this.heap[leftChildIdx];
+                if (leftChild.prob > element.prob) {
+                    swap = leftChildIdx;
+                }
+            }
+
+            if (rightChildIdx < length) {
+                rightChild = this.heap[rightChildIdx];
+                if (
+                    (swap === null && rightChild.prob > element.prob) ||
+                    (swap !== null && rightChild.prob > leftChild!.prob)
+                ) {
+                    swap = rightChildIdx;
+                }
+            }
+
+            if (swap === null) break;
+            this.heap[idx] = this.heap[swap];
+            this.heap[swap] = element;
+            idx = swap;
+        }
+    }
+}
+
+/**
  * Core math and logic engine for Minecraft Enchanting.
  */
 export class EnchantEngine {
@@ -46,8 +121,13 @@ export class EnchantEngine {
     public data: EnchantmentData;
     public version: string;
     public comboCache = new Map<string, { [combo: string]: number }>();
-    
-    // Context-specific caches
+    public eligiblePoolCache = new Map<string, number[]>();
+    public idMap = new Map<string, number>();
+    public revIdMap: string[] = [];
+    public conflictBitsets: BigUint64Array = new BigUint64Array(0);
+    public weightMap: Uint32Array = new Uint32Array(0);
+
+    // ... existing caches ...
     public mechanics: VersionMechanics = {};
     public mergedItems: { [category: string]: string[] } = {};
     public mergedOverrides: { [enchantment: string]: any } = {};
@@ -139,8 +219,27 @@ export class EnchantEngine {
         }
 
         // Finalize Registry (Pre-merge overrides for zero-allocation access during recursion)
-        for (const [name, props] of Object.entries(this.data.global_enchantments)) {
-            this.resolvedRegistry[name] = Object.assign({}, props, this.mergedOverrides[name] || {});
+        const allEnchNames = Object.keys(this.data.global_enchantments);
+        this.revIdMap = allEnchNames;
+        allEnchNames.forEach((name, i) => this.idMap.set(name, i));
+        
+        this.conflictBitsets = new BigUint64Array(allEnchNames.length);
+        this.weightMap = new Uint32Array(allEnchNames.length);
+
+        for (let i = 0; i < allEnchNames.length; i++) {
+            const name = allEnchNames[i];
+            const props = Object.assign({}, this.data.global_enchantments[name], this.mergedOverrides[name] || {});
+            this.resolvedRegistry[name] = props;
+            this.weightMap[i] = props.weight;
+            
+            let bitset = 0n;
+            if (props.conflicts) {
+                for (const cName of props.conflicts) {
+                    const cId = this.idMap.get(cName);
+                    if (cId !== undefined) bitset |= (1n << BigInt(cId));
+                }
+            }
+            this.conflictBitsets[i] = bitset;
         }
     }
 
@@ -196,114 +295,210 @@ export class EnchantEngine {
     /**
      * Gets list of enchants eligible for a specific modified level.
      */
-    public getEligibleList(cat: string, level: number, mat: string, chosenNames: Set<string> = new Set()): { name: string, weight: number, rank: string }[] {
-        const registry = this.data.global_enchantments;
-        const pool = this.mergedItems[cat] || [];
-        const out: { name: string, weight: number, rank: string }[] = [];
+    /**
+     * Gets list of enchants eligible for a specific modified level (numeric format).
+     * Returns array of (id << 8 | rankValue).
+     */
+    public getEligibleListNumeric(cat: string, level: number, mat: string, chosenIdsBitset: bigint): number[] {
+        const cacheKey = `${cat}|${level}|${mat}`;
+        const hasChosen = chosenIdsBitset !== 0n;
         
+        if (!hasChosen && this.eligiblePoolCache.has(cacheKey)) {
+            return this.eligiblePoolCache.get(cacheKey)!;
+        }
+
+        const pool = this.mergedItems[cat] || [];
+        const out: number[] = [];
+        
+        const romanMap = this.data.constants.ROMAN_MAP;
+        const rEntries = Object.entries(romanMap).sort((a, b) => b[1] - a[1]); // Descending ranks
+
         for (const name of pool) {
-            if (chosenNames.has(name)) continue;
+            const id = this.idMap.get(name)!;
             
+            // Conflict Check (Fast Bitwise)
+            if ((chosenIdsBitset & (1n << BigInt(id))) !== 0n) continue;
+            if ((chosenIdsBitset & this.conflictBitsets[id]) !== 0n) continue;
+
             const props = this.resolvedRegistry[name];
             if (!VersionUtils.isInRange(this.version, props.valid_from, props.valid_to)) continue;
             
-            const hasConflict = Array.from(chosenNames).some(chosen => {
-                const cProps = this.resolvedRegistry[chosen];
-                return cProps.conflicts?.includes(name) || props.conflicts?.includes(chosen);
-            });
-            if (hasConflict) continue;
-
-            const rKeys = (Object.keys(this.data.constants.ROMAN_MAP) as string[]).reverse();
-            for (const r of rKeys) {
+            for (const [r, rankVal] of rEntries) {
                 const range = props.levels[r];
                 if (range && level >= range[0] && level <= range[1]) {
-                    out.push({ name, weight: props.weight, rank: r });
+                    out.push((id << 8) | rankVal);
                     break;
                 }
             }
         }
+
+        if (!hasChosen) {
+            this.eligiblePoolCache.set(cacheKey, out);
+        }
         return out;
     }
 
+    // Deprecated string-based version for legacy/UI code if needed
+    public getEligibleList(cat: string, level: number, mat: string, chosenNames: Set<string> = new Set()): { name: string, weight: number, rank: string }[] {
+        let bitset = 0n;
+        for (const name of chosenNames) {
+            const id = this.idMap.get(name);
+            if (id !== undefined) bitset |= (1n << BigInt(id));
+        }
+        const numeric = this.getEligibleListNumeric(cat, level, mat, bitset);
+        const romanMap = this.data.constants.ROMAN_MAP;
+        const revRomanMap = Object.entries(romanMap).reduce((acc, [k, v]) => { acc[v] = k; return acc; }, {} as any);
+        
+        return numeric.map(n => ({
+            name: this.revIdMap[n >> 8],
+            weight: this.weightMap[n >> 8],
+            rank: revRomanMap[n & 0xFF]
+        }));
+    }
+
     /**
-     * Generates a unique key for a set of enchantments.
+     * Generates a unique key for a set of enchantments (numeric version).
      */
-    public getComboKey(chosen: string[], initialSeed: string | null): string {
+    public getComboKeyNumeric(chosen: number[], initialSeedId: number | null): string {
+        // chosen is already (id << 8 | rank)
+        // We need to sort them consistently, except the seed if present
         const sorted = [...chosen].sort((a, b) => {
-            if (initialSeed) {
-                if (a === initialSeed) return -1;
-                if (b === initialSeed) return 1;
+            if (initialSeedId !== null) {
+                if ((a >> 8) === initialSeedId) return -1;
+                if ((b >> 8) === initialSeedId) return 1;
             }
-            const nameA = this.getBaseName(a), rankA = a.split(' ').pop() || "";
-            const nameB = this.getBaseName(b), rankB = b.split(' ').pop() || "";
-            const valA = this.getRomanValue(rankA), valB = this.getRomanValue(rankB);
+            const idA = a >> 8, idB = b >> 8;
+            const rankA = a & 0xFF, rankB = b & 0xFF;
             
-            if (valA !== valB) return valB - valA;
-            const weightA = (this.data.global_enchantments[nameA] || { weight: 10 }).weight;
-            const weightB = (this.data.global_enchantments[nameB] || { weight: 10 }).weight;
+            if (rankA !== rankB) return rankB - rankA;
+            const weightA = this.weightMap[idA];
+            const weightB = this.weightMap[idB];
             if (weightA !== weightB) return weightA - weightB;
-            return nameA.localeCompare(nameB);
+            return idA - idB;
         });
-        return sorted.join("+");
+
+        // Convert back to string format for the key (UI expects "Name Rank+Name Rank")
+        let key = "";
+        const romanMap = this.data.constants.ROMAN_MAP;
+        const revRomanMap = Object.entries(romanMap).reduce((acc, [k, v]) => { acc[v] = k; return acc; }, {} as any);
+        
+        for (let i = 0; i < sorted.length; i++) {
+            if (i > 0) key += "+";
+            const id = sorted[i] >> 8;
+            const rank = sorted[i] & 0xFF;
+            key += this.revIdMap[id] + " " + revRomanMap[rank];
+        }
+        return key;
     }
 
     /**
      * Recursively calculates all possible enchantment combinations.
      */
-    public calculateCombinations(cat: string, modLevel: number, mat: string, initialSeed: string | null = null, threshold: number = 0.0001): { [combo: string]: number } {
-        // Higher internal precision if threshold is very low
-        const solve = (chosen: string[], level: number, branchProb: number = 1.0): { [combo: string]: number } => {
-            if (branchProb < threshold) return {};
+    /**
+     * Iteratively calculates enchantment combinations using a Best-First approach 
+     * to preserve accuracy in high-branching scenarios like Books.
+     */
+    public calculateCombinations(cat: string, modLevel: number, mat: string, initialSeed: string | null = null, threshold: number = 0.0001): { results: { [combo: string]: number }, uncertainty: number } {
+        const results: { [combo: string]: number } = {};
+        let uncertainty = 0;
+        
+        const initialSeedBase = initialSeed ? this.getBaseName(initialSeed) : null;
+        const initialSeedId = initialSeedBase ? this.idMap.get(initialSeedBase)! : null;
+        const initialSeedRank = initialSeed ? this.getRomanValue(initialSeed.split(' ').pop()!) : null;
+        const initialSeedFull = initialSeedId !== null && initialSeedRank !== null ? (initialSeedId << 8 | initialSeedRank) : null;
 
-            const chosenNames = new Set(chosen.map(e => this.getBaseName(e)));
-            const eligible = this.getEligibleList(cat, level, mat, chosenNames);
+        const queue = new BinaryHeap<{ chosen: number[], bitset: bigint, level: number, prob: number }>();
+        queue.push({ 
+            chosen: initialSeedFull !== null ? [initialSeedFull] : [], 
+            bitset: initialSeedId !== null ? (1n << BigInt(initialSeedId)) : 0n,
+            level: modLevel, 
+            prob: 1.0 
+        });
 
-            if (cat === "book" && chosen.length >= 1 && !this.multiEnchantBooks) {
-                return { [this.getComboKey(chosen, initialSeed)]: 1.0 };
+        let iterations = 0;
+        let cumulativeAccountedMass = 0;
+        const MAX_ITERATIONS = initialSeed ? 5000 : 2000;
+
+        while (queue.size() > 0 && iterations < MAX_ITERATIONS) {
+            iterations++;
+            const current = queue.pop()!;
+            const currentKey = current.chosen.length > 0 ? this.getComboKeyNumeric(current.chosen, initialSeedId) : "";
+
+            if (current.prob < threshold || cumulativeAccountedMass > 0.999) {
+                if (currentKey) {
+                    results[currentKey] = (results[currentKey] || 0) + current.prob;
+                    uncertainty += current.prob;
+                } else {
+                    uncertainty += current.prob;
+                }
+                continue;
             }
 
-            const currentKey = this.getComboKey(chosen, initialSeed);
-            const cacheKey = `${cat}|${currentKey}|${level}|${initialSeed}|${threshold}`;
-            if (this.comboCache.has(cacheKey)) return this.comboCache.get(cacheKey)!;
-            
-            const totalWeight = eligible.reduce((s, e) => s + e.weight, 0);
-            const probContinue = (cat === "book" && !this.multiEnchantBooks) ? 0 : Math.min((level + 1) / 50, 1.0);
+            const eligible = this.getEligibleListNumeric(cat, current.level, mat, current.bitset);
 
-            const results: { [combo: string]: number } = {};
-            if (chosen.length === 0) {
-                for (const e of eligible) {
-                    const pWeight = e.weight / totalWeight;
-                    const sub = solve([`${e.name} ${e.rank}`], level, branchProb * pWeight);
-                    for (const [c, p] of Object.entries(sub)) results[c] = (results[c] || 0) + pWeight * p;
+            if (cat === "book" && current.chosen.length >= 1 && !this.multiEnchantBooks) {
+                results[currentKey] = (results[currentKey] || 0) + current.prob;
+                cumulativeAccountedMass += current.prob;
+                continue;
+            }
+
+            const probContinue = (cat === "book" && !this.multiEnchantBooks) ? 0 : Math.min((current.level + 1) / 50, 1.0);
+
+            if (current.chosen.length === 0) {
+                let totalWeight = 0;
+                for (let i = 0; i < eligible.length; i++) totalWeight += this.weightMap[eligible[i] >> 8];
+                
+                if (totalWeight === 0) {
+                    uncertainty += current.prob;
+                    continue;
+                }
+                for (let i = 0; i < eligible.length; i++) {
+                    const e = eligible[i];
+                    queue.push({ 
+                        chosen: [e], 
+                        bitset: 1n << BigInt(e >> 8),
+                        level: current.level, 
+                        prob: current.prob * (this.weightMap[e >> 8] / totalWeight) 
+                    });
                 }
             } else {
-                results[currentKey] = 1 - probContinue;
                 if (probContinue > 0 && eligible.length > 0) {
-                    for (const e of eligible) {
-                        const pWeight = (e.weight / totalWeight) * probContinue;
-                        const nextLevel = chosen.length >= 2 ? Math.floor(level / 2) : level;
-                        const sub = solve([...chosen, `${e.name} ${e.rank}`], nextLevel, branchProb * pWeight);
-                        for (const [c, p] of Object.entries(sub)) results[c] = (results[c] || 0) + pWeight * p;
+                    const probStop = current.prob * (1 - probContinue);
+                    results[currentKey] = (results[currentKey] || 0) + probStop;
+                    cumulativeAccountedMass += probStop;
+
+                    let totalWeight = 0;
+                    for (let i = 0; i < eligible.length; i++) totalWeight += this.weightMap[eligible[i] >> 8];
+                    const nextLevel = current.chosen.length >= 2 ? Math.floor(current.level / 2) : current.level;
+                    
+                    for (let i = 0; i < eligible.length; i++) {
+                        const e = eligible[i];
+                        queue.push({
+                            chosen: [...current.chosen, e],
+                            bitset: current.bitset | (1n << BigInt(e >> 8)),
+                            level: nextLevel,
+                            prob: current.prob * probContinue * (this.weightMap[e >> 8] / totalWeight)
+                        });
                     }
                 } else {
-                    results[currentKey] = 1.0;
+                    results[currentKey] = (results[currentKey] || 0) + current.prob;
+                    cumulativeAccountedMass += current.prob;
                 }
             }
-            this.comboCache.set(cacheKey, results);
-            return results;
-        };
-
-        const raw = solve(initialSeed ? [initialSeed] : [], modLevel, 1.0);
-        
-        // Normalization Pass: Ensure total probability mass is 1.0
-        // Important for seeded runs where we know something WILL happen.
-        const totalMass = Object.values(raw).reduce((a, b) => a + b, 0);
-        if (totalMass > 0 && totalMass < 0.9999) {
-            for (const k in raw) raw[k] /= totalMass;
         }
-        
-        return raw;
+
+        while (queue.size() > 0) {
+            const current = queue.pop()!;
+            uncertainty += current.prob;
+            const key = current.chosen.length > 0 ? this.getComboKeyNumeric(current.chosen, initialSeedId) : "";
+            if (key) results[key] = (results[key] || 0) + current.prob;
+        }
+
+        return { results, uncertainty };
     }
+
+
+
 
     /**
      * Aggregates all statistics for a given enchantment attempt.
@@ -313,26 +508,29 @@ export class EnchantEngine {
         const modDist = this.getModifiedLevelDist(xp, enchantability);
         const finalCombos: { [combo: string]: number } = {};
 
-        // Adaptive Threshold: Only use high precision when a Seed is active.
-        // For general "Book" browsing, we keep the standard threshold to ensure UI fluidness.
         const activeThreshold = initialSeed ? threshold / 10 : threshold;
 
+        let processedMProb = 0;
+        let totalUncertainty = 0;
+        
         for (const [mlStr, mProb] of Object.entries(modDist)) {
             if (mProb < activeThreshold) continue; 
-            const combos = this.calculateCombinations(cat, Number(mlStr), mat, initialSeed, activeThreshold);
-            for (const [c, p] of Object.entries(combos)) {
+            processedMProb += mProb;
+            const { results, uncertainty } = this.calculateCombinations(cat, Number(mlStr), mat, initialSeed, activeThreshold);
+            for (const [c, p] of Object.entries(results)) {
                 finalCombos[c] = (finalCombos[c] || 0) + p * mProb;
             }
+            totalUncertainty += uncertainty * mProb;
         }
 
-        const stats: CalculationStats = { ranks: {}, any: {}, count: {}, combos: finalCombos };
+        const stats: CalculationStats = { ranks: {}, any: {}, count: {}, combos: {}, residual: totalUncertainty };
         
-        // Final normalization check to ensure the sum of all outcomes is 100%
-        const totalEnchantMass = Object.values(finalCombos).reduce((a, b) => a + b, 0);
-        const normFactor = totalEnchantMass > 0 ? 1 / totalEnchantMass : 1;
+        // Normalization DISABLED for auditing purposes
+        const normFactor = 1.0; 
 
         for (const [combo, rawP] of Object.entries(finalCombos)) {
             const p = rawP * normFactor;
+            stats.combos[combo] = p;
             const parts = combo.split("+");
             stats.count[parts.length] = (stats.count[parts.length] || 0) + p;
             
@@ -346,6 +544,10 @@ export class EnchantEngine {
                 }
             }
         }
+
+        stats.residual = totalUncertainty * normFactor;
+
         return stats;
     }
+
 }

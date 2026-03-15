@@ -203,7 +203,7 @@ const UIController = {
 
         const topCombos = Object.entries(stats.combos).sort((a,b) => b[1] - a[1]).slice(0, 10);
         
-        comboEl.innerHTML = topCombos.map(([name, prob]) => `
+        const comboListHtml = topCombos.map(([name, prob]) => `
             <div class="combo-item">
                 <div style="display: flex; justify-content: space-between;">
                     <span class="combo-names">${name.replace(/\+/g, ' + ')}</span>
@@ -211,6 +211,18 @@ const UIController = {
                 </div>
             </div>
         `).join("");
+
+        const uncertaintyHtml = stats.residual && stats.residual > 0.005 ? `
+            <div class="combo-item" style="border-top: 1px solid rgba(255,255,255,0.05); margin-top: 10px; padding-top: 10px; opacity: 0.8;">
+                <div style="display: flex; justify-content: space-between; font-size: 0.85rem;">
+                    <span>Calculation Confidence</span>
+                    <span style="color: ${stats.residual > 0.1 ? '#ffca28' : '#66bb6a'}">${((1 - stats.residual) * 100).toFixed(1)}%</span>
+                </div>
+                ${stats.residual > 0.1 ? `<div style="font-size: 0.7rem; color: #ffca28; margin-top: 3px;">⚠️ High branching complexity - some combinations were collapsed into their parents for speed.</div>` : ''}
+            </div>
+        ` : '';
+
+        comboEl.innerHTML = comboListHtml + uncertaintyHtml;
 
         const rankSection = document.getElementById("rank-section");
         if (!rankSection) return;
@@ -239,7 +251,8 @@ const UIController = {
         const seed = (this.elements["seed-select"] as HTMLSelectElement).value;
         const labels = Array.from({length: 30}, (_, i) => i + 1);
         
-        const threshold = cat === "book" ? 0.002 : 0.0001;
+        // Best-First search handles books much better now, so we can afford a tighter threshold.
+        const threshold = cat === "book" ? 0.001 : 0.0001;
         const sweep: { l: number, s: CalculationStats }[] = [];
         
         // Asynchronous sweep to keep UI responsive
