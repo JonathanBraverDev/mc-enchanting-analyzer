@@ -58,10 +58,11 @@ const UIController = {
         this.updateMaterials();
         
         // Asynchronously initialize WASM for math acceleration
-        WASMBridge.init().then(() => this.run());
-        
-        this.run();
+        WASMBridge.init().then(() => {
+            this.run();
+        });
     },
+
 
     populateVersions(): void {
         const vSelect = this.elements["v-select"] as HTMLSelectElement;
@@ -175,19 +176,30 @@ const UIController = {
         });
     },
 
-    run(): void {
+    async run(): Promise<void> {
         const engine = this.getEngine();
         const cat = (this.elements["cat-select"] as HTMLSelectElement).value;
         const mat = (this.elements["mat-select"] as HTMLSelectElement).value;
         const xp = parseInt((this.elements["lvl-range"] as HTMLInputElement).value);
         const seed = (this.elements["seed-select"] as HTMLSelectElement).value;
 
+        // Visual Feedback: Show we are crunching numbers
         const enchValEl = document.getElementById("ench-val");
         if (enchValEl) enchValEl.textContent = engine.getEnchantability(mat, cat).toString();
 
+        // Increment Chart ID to cancel stale sweeps
+        const currentId = ++this.chartUpdateId;
+
+        // Yield to browser to handle dropdown closure/UI state
+        await new Promise(r => requestAnimationFrame(r));
+        if (currentId !== this.chartUpdateId) return;
+
+        // Heavy Math
         const stats = engine.getFullStats(cat, xp, mat, seed);
+        
+        // Update UI Parts
         this.updateInsights(stats);
-        this.updateChart(cat, mat);
+        this.updateChart(cat, mat); // updateChart already uses chartUpdateId
     },
 
     updateInsights(stats: CalculationStats): void {
@@ -322,3 +334,4 @@ const UIController = {
 };
 
 window.onload = () => UIController.init();
+
