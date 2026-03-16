@@ -31,7 +31,7 @@ describe('EnchantEngine Baselines', () => {
             const multiProts = combos.filter(c => {
                 const parts = c.split(",").map(nStr => {
                     const n = parseInt(nStr);
-                    return engine114.revIdMap[n >> 8];
+                    return engine114.registry.revIdMap[n >> 8];
                 });
                 const found = protTypes.filter(t => parts.includes(t));
                 return found.length > 1;
@@ -48,7 +48,7 @@ describe('EnchantEngine Baselines', () => {
             const hasConflict = combos.some(c => {
                 const parts = c.split(",").map(nStr => {
                     const n = parseInt(nStr);
-                    return engine1143.revIdMap[n >> 8];
+                    return engine1143.registry.revIdMap[n >> 8];
                 });
                 const found = protTypes.filter(t => parts.includes(t));
                 return found.length > 1;

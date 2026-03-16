@@ -269,9 +269,6 @@ export const DATA: EnchantmentData = {
         "random_bonus_range": 0.15
       }
     },
-    "12w22a": {
-      "extends": "1.3.1"
-    },
     "1.4.6": {
       "extends": "1.3.1",
       "item_enchantments": {
