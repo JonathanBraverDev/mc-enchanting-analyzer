@@ -244,10 +244,9 @@ export const DATA: EnchantmentData = {
         "helmet": ["legacy_armor_pool", "helmet_extras"],
         "chestplate": ["legacy_armor_pool"],
         "leggings": ["legacy_armor_pool"],
-        "boots": ["legacy_armor_pool", "boot_extras"],
-        "book": ["book_pool"]
+        "boots": ["legacy_armor_pool", "boot_extras"]
       },
-      "materials": ["wood", "stone", "iron", "gold", "diamond", "leather", "chain", "book"],
+      "materials": ["wood", "stone", "iron", "gold", "diamond", "leather", "chain"],
       "mechanics": {
         "enchantability_bonus_divisor": 2,
         "random_bonus_range": 0.25,
@@ -272,8 +271,10 @@ export const DATA: EnchantmentData = {
     "1.4.6": {
       "extends": "1.3.1",
       "item_enchantments": {
-        "chestplate": ["legacy_armor_pool", "chestplate_extras"]
+        "chestplate": ["legacy_armor_pool", "chestplate_extras"],
+        "book": ["book_pool"]
       },
+      "materials": ["book"],
       "multi_enchant_books": false
     },
     "1.7.2": {
