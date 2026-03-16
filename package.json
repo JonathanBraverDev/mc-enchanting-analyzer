@@ -17,6 +17,7 @@
   "scripts": {
     "build:ts": "tsc",
     "build": "esbuild src/ui.ts --bundle --outfile=dist/bundle.js --minify --sourcemap --platform=browser --format=iife",
+    "build:standalone": "npm run build && node scripts/inline-assets.js",
     "test": "tsx --test src/engine.test.ts",
     "start": "npx serve ."
   }
