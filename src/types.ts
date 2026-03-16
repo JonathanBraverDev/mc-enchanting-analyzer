@@ -64,7 +64,7 @@ export interface CalculationStats {
   ranks: { [entry: string]: number };
   any: { [base: string]: number };
   count: { [count: number]: number };
-  combos: { [combo: string]: number };
+  combos: { [ids: string]: number }; // Keys are comma-separated numeric IDs
   residual?: number;
 }
 

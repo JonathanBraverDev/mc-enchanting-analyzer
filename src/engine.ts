@@ -1,4 +1,4 @@
-import { EnchantmentData, VersionManifest, VersionMechanics, CalculationStats } from './types';
+import { EnchantmentData, VersionManifest, VersionMechanics, CalculationStats } from './types.js';
 
 /**
  * Utility functions for version parsing and comparison.
@@ -120,13 +120,15 @@ export class EnchantEngine {
     
     public data: EnchantmentData;
     public version: string;
-    public comboCache = new Map<string, { [combo: string]: number }>();
+    public comboCache = new Map<string, { results: { [ids: string]: number }, uncertainty: number }>();
     public eligiblePoolCache = new Map<string, number[]>();
     public idMap = new Map<string, number>();
     public revIdMap: string[] = [];
     public statsCache = new Map<string, CalculationStats>();
     public conflictBitsets: BigUint64Array = new BigUint64Array(0);
     public weightMap: Uint32Array = new Uint32Array(0);
+
+    private readonly MAX_CACHE_SIZE = 500;
 
     // ... existing caches ...
     public mechanics: VersionMechanics = {};
@@ -277,12 +279,15 @@ export class EnchantEngine {
         }
 
         const finalDist: { [modVal: number]: number } = {};
-        const steps = 25; 
+        const steps = 100; // Increased resolution
+        const stepSize = rngRange / (steps - 1);
+        
         for (let [baseStr, bProb] of Object.entries(baseDist)) {
             const base = Number(baseStr);
             for (let i = 0; i < steps; i++) {
+                const bonusI = i * stepSize;
                 for (let j = 0; j < steps; j++) {
-                    const bonus = (i / (steps - 1) * rngRange) + (j / (steps - 1) * rngRange) - rngRange;
+                    const bonus = bonusI + (j * stepSize) - rngRange;
                     const modVal = Math.max(1, Math.floor(base * (1 + bonus) + 0.5));
                     finalDist[modVal] = (finalDist[modVal] || 0) + (bProb / (steps * steps));
                 }
@@ -364,44 +369,42 @@ export class EnchantEngine {
         // chosen is already (id << 8 | rank)
         // We need to sort them consistently, except the seed if present
         const sorted = [...chosen].sort((a, b) => {
-            if (initialSeedId !== null) {
-                if ((a >> 8) === initialSeedId) return -1;
-                if ((b >> 8) === initialSeedId) return 1;
-            }
             const idA = a >> 8, idB = b >> 8;
-            const rankA = a & 0xFF, rankB = b & 0xFF;
-            
-            if (rankA !== rankB) return rankB - rankA;
-            const weightA = this.weightMap[idA];
-            const weightB = this.weightMap[idB];
-            if (weightA !== weightB) return weightA - weightB;
-            return idA - idB;
+            if (initialSeedId !== null) {
+                if (idA === initialSeedId) return -1;
+                if (idB === initialSeedId) return 1;
+            }
+            if (idA !== idB) return idA - idB;
+            return (b & 0xFF) - (a & 0xFF);
         });
-
-        // Convert back to string format for the key (UI expects "Name Rank+Name Rank")
-        let key = "";
-        const romanMap = this.data.constants.ROMAN_MAP;
-        const revRomanMap = Object.entries(romanMap).reduce((acc, [k, v]) => { acc[v] = k; return acc; }, {} as any);
-        
-        for (let i = 0; i < sorted.length; i++) {
-            if (i > 0) key += "+";
-            const id = sorted[i] >> 8;
-            const rank = sorted[i] & 0xFF;
-            key += this.revIdMap[id] + " " + revRomanMap[rank];
-        }
-        return key;
+        return sorted.join(",");
     }
 
     /**
-     * Recursively calculates all possible enchantment combinations.
+     * Translates a numeric combo key to a human-readable string.
      */
+    public translateComboKey(key: string): string {
+        if (!key) return "";
+        const romanMap = this.data.constants.ROMAN_MAP;
+        const revRomanMap = Object.entries(romanMap).reduce((acc, [k, v]) => { acc[v] = k; return acc; }, {} as any);
+        
+        return key.split(",").map(nStr => {
+            const n = parseInt(nStr);
+            const id = n >> 8;
+            const rank = n & 0xFF;
+            return `${this.revIdMap[id]} ${revRomanMap[rank]}`;
+        }).join("+");
+    }
+
     /**
      * Iteratively calculates enchantment combinations using a Best-First approach 
      * to preserve accuracy in high-branching scenarios like Books.
      */
-    public calculateCombinations(cat: string, modLevel: number, mat: string, initialSeed: string | null = null, threshold: number = 0.0001): { results: { [combo: string]: number }, uncertainty: number } {
-        // ... (rest of function remains synchronous for now as it is called in a loop)
-        const results: { [combo: string]: number } = {};
+    public calculateCombinations(cat: string, modLevel: number, mat: string, initialSeed: string | null = null, threshold: number = 0.0001): { results: { [ids: string]: number }, uncertainty: number } {
+        const cacheKey = `${cat}|${modLevel}|${mat}|${initialSeed || "none"}|${threshold}`;
+        if (this.comboCache.has(cacheKey)) return this.comboCache.get(cacheKey)!;
+
+        const results: { [ids: string]: number } = {};
         let uncertainty = 0;
         
         const initialSeedBase = initialSeed ? this.getBaseName(initialSeed) : null;
@@ -419,7 +422,7 @@ export class EnchantEngine {
 
         let iterations = 0;
         let cumulativeAccountedMass = 0;
-        const MAX_ITERATIONS = initialSeed ? 5000 : 2000;
+        const MAX_ITERATIONS = initialSeed ? 8000 : 5000;
 
         while (queue.size() > 0 && iterations < MAX_ITERATIONS) {
             iterations++;
@@ -496,7 +499,13 @@ export class EnchantEngine {
             if (key) results[key] = (results[key] || 0) + current.prob;
         }
 
-        return { results, uncertainty };
+        const out = { results, uncertainty };
+        if (this.comboCache.size >= this.MAX_CACHE_SIZE) {
+            const firstKey = this.comboCache.keys().next().value;
+            if (firstKey !== undefined) this.comboCache.delete(firstKey);
+        }
+        this.comboCache.set(cacheKey, out);
+        return out;
     }
 
 
@@ -554,16 +563,24 @@ export class EnchantEngine {
         // Normalization DISABLED for auditing purposes
         const normFactor = 1.0; 
 
-        for (const [combo, rawP] of Object.entries(finalCombos)) {
+        for (const [ids, rawP] of Object.entries(finalCombos)) {
             const p = rawP * normFactor;
-            stats.combos[combo] = p;
-            const parts = combo.split("+");
-            stats.count[parts.length] = (stats.count[parts.length] || 0) + p;
+            stats.combos[ids] = p;
+            
+            const comboIds = ids.split(",").map(Number);
+            stats.count[comboIds.length] = (stats.count[comboIds.length] || 0) + p;
             
             const seenBases = new Set<string>();
-            for (const entry of parts) {
+            const romanMap = this.data.constants.ROMAN_MAP;
+            const revRomanMap = Object.entries(romanMap).reduce((acc, [k, v]) => { acc[v] = k; return acc; }, {} as any);
+
+            for (const n of comboIds) {
+                const id = n >> 8;
+                const rank = n & 0xFF;
+                const entry = `${this.revIdMap[id]} ${revRomanMap[rank]}`;
                 stats.ranks[entry] = (stats.ranks[entry] || 0) + p;
-                const base = this.getBaseName(entry);
+                
+                const base = this.revIdMap[id];
                 if (!seenBases.has(base)) {
                     stats.any[base] = (stats.any[base] || 0) + p;
                     seenBases.add(base);
@@ -573,6 +590,10 @@ export class EnchantEngine {
 
         stats.residual = totalUncertainty * normFactor;
 
+        if (this.statsCache.size >= this.MAX_CACHE_SIZE) {
+            const firstKey = this.statsCache.keys().next().value;
+            if (firstKey !== undefined) this.statsCache.delete(firstKey);
+        }
         this.statsCache.set(cacheKey, stats);
         return stats;
     }
