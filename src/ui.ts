@@ -1,46 +1,16 @@
-import { DATA } from './data';
-import { EnchantEngine } from './engine';
-import { CalculationStats } from './types';
-
-// Declare Chart.js global for the browser environment
-declare const Chart: any;
-
-/**
- * Manages UI colors and enchantment-specific styles.
- */
-const ThemeManager = {
-    /**
-     * Calculates a color for an enchantment based on its base name and rank.
-     */
-    getEnchantColor: (name: string, engine: EnchantEngine): string => {
-        const base = engine.getBaseName(name);
-        let color = DATA.cosmetics.ENCHANT_COLORS[base];
-        
-        if (!color) {
-            let hash = 0;
-            for (let i = 0; i < base.length; i++) hash = base.charCodeAt(i) + ((hash << 5) - hash);
-            color = `hsl(${Math.abs(hash) % 360}, 65%, 60%)`;
-        }
-
-        const rankPart = name.split(' ').pop() || "";
-        const boost = DATA.cosmetics.RANK_LIGHTNESS_BOOST[rankPart] || 0;
-        
-        if (color.startsWith('hsl')) {
-            const parts = color.match(/\d+/g);
-            if (parts && parts.length >= 3) {
-                return `hsl(${parts[0]}, ${parts[1]}%, ${parseInt(parts[2]) + boost}%)`;
-            }
-        }
-        return color;
-    }
-};
+import { DATA } from './data.js';
+import { EnchantEngine } from './engine.js';
+import { CalculationStats } from './types.js';
+import { ThemeManager } from './theme.js';
+import { ChartManager } from './chart-manager.js';
+import { RomanUtils } from './utils.js';
 
 /**
  * Main UI Controller for the Enchantment Analyzer.
  */
 const UIController = {
     elements: {} as { [id: string]: HTMLElement },
-    mainChart: null as any,
+    chartManager: null as ChartManager | null,
     engine: null as EnchantEngine | null,
     chartUpdateId: 0,
     lastChartParams: "",
@@ -56,13 +26,13 @@ const UIController = {
             if (el) this.elements[id] = el;
         });
 
+        this.chartManager = new ChartManager("mainChart");
         this.populateVersions();
         this.setupEventListeners();
         
         this.updateMaterials();
         this.run();
     },
-
 
     populateVersions(): void {
         const vSelect = this.elements["v-select"] as HTMLSelectElement;
@@ -100,7 +70,7 @@ const UIController = {
 
     getEngine(): EnchantEngine {
         const v = (this.elements["v-select"] as HTMLSelectElement).value;
-        if (!this.engine || this.engine.version !== v) {
+        if (!this.engine || this.engine.registry.version !== v) {
             this.engine = new EnchantEngine(DATA, v);
         }
         return this.engine;
@@ -113,7 +83,7 @@ const UIController = {
         const currentMat = matSelect.value;
         
         matSelect.innerHTML = "";
-        const eligibleKeys = engine.getEligibleMaterials(cat);
+        const eligibleKeys = engine.registry.getEligibleMaterials(cat);
 
         // Determine best selection
         let bestMat = currentMat;
@@ -142,7 +112,7 @@ const UIController = {
         seedSelect.innerHTML = '<option value="">None (Random First)</option>';
         if (!mat) return;
         
-        const ench = engine.getEnchantability(mat, cat);
+        const ench = engine.registry.getEnchantability(mat, cat);
         const dist = engine.getModifiedLevelDist(lvl, ench);
         
         const allPossible = new Set<string>();
@@ -165,31 +135,23 @@ const UIController = {
         const mat = (this.elements["mat-select"] as HTMLSelectElement).value;
         const xp = parseInt((this.elements["lvl-range"] as HTMLInputElement).value);
         
-        // Refresh seed list filtering based on current level
         this.updateSeed();
         const seed = (this.elements["seed-select"] as HTMLSelectElement).value;
 
-        // Visual Feedback: Show we are crunching numbers
         const enchValEl = document.getElementById("ench-val");
-        if (enchValEl) enchValEl.textContent = engine.getEnchantability(mat, cat).toString();
+        if (enchValEl) enchValEl.textContent = engine.registry.getEnchantability(mat, cat).toString();
 
-        // Increment Chart ID to cancel stale sweeps
         const currentId = ++this.chartUpdateId;
-
-        // Yield to browser to handle dropdown closure/UI state
         await new Promise(r => requestAnimationFrame(r));
         if (currentId !== this.chartUpdateId) return;
 
-        // Heavy Math
         const threshold = cat === "book" ? this.BOOK_THRESHOLD : this.DEFAULT_THRESHOLD;
         const stats = await engine.getFullStats(cat, xp, mat, seed, threshold);
         
-        // Update UI Parts
         this.updateInsights(stats);
 
-        // Only update chart if relevant parameters changed
         const metric = (this.elements["chart-metric"] as HTMLSelectElement).value;
-        const chartParams = `${engine.version}|${cat}|${mat}|${seed}|${metric}`;
+        const chartParams = `${engine.registry.version}|${cat}|${mat}|${seed}|${metric}`;
         
         if (chartParams !== this.lastChartParams) {
             this.lastChartParams = chartParams;
@@ -252,96 +214,19 @@ const UIController = {
         const seed = (this.elements["seed-select"] as HTMLSelectElement).value;
         const labels = Array.from({length: 30}, (_, i) => i + 1);
         
-        // Best-First search handles books much better now, so we can afford a tighter threshold.
         const threshold = cat === "book" ? this.BOOK_THRESHOLD : this.DEFAULT_THRESHOLD;
         const sweep: { l: number, s: CalculationStats }[] = [];
         
-        // Asynchronous sweep to keep UI responsive
         for (const l of labels) {
             if (currentId !== this.chartUpdateId) return;
             sweep.push({ l, s: await engine.getFullStats(cat, l, mat, seed, threshold) });
             if (l % (cat === "book" ? 2 : 10) === 0) await new Promise(r => requestAnimationFrame(r));
         }
 
-        const datasets = this.generateDatasets(sweep, metric, engine);
-
-        const canvas = document.getElementById("mainChart") as HTMLCanvasElement;
-        if (!canvas) return;
-
-        if (this.mainChart) this.mainChart.destroy();
-        this.mainChart = new Chart(canvas.getContext("2d"), {
-            type: 'line',
-            data: { labels, datasets },
-            options: this.getChartOptions()
-        });
-    },
-
-    generateDatasets(sweep: { l: number, s: CalculationStats }[], metric: string, engine: EnchantEngine): any[] {
-        const datasets: any[] = [];
-        const lastSweep = sweep[sweep.length - 1].s;
-
-        if (metric === "any") {
-            const allEnchants = new Set<string>();
-            sweep.forEach(x => Object.keys(x.s.any).forEach(k => allEnchants.add(k)));
-
-            Array.from(allEnchants).sort().forEach(k => {
-                const color = ThemeManager.getEnchantColor(k, engine);
-                datasets.push({
-                    label: k,
-                    data: sweep.map(x => (x.s.any[k] || 0) * 100),
-                    borderColor: color,
-                    backgroundColor: color.replace(')', ', 0.1)'),
-                    borderWidth: 2, tension: 0.3, pointRadius: 0
-                });
-            });
-        } else if (metric === "ranks") {
-            const allRanks = new Set<string>();
-            sweep.forEach(e => Object.entries(e.s.ranks).forEach(([r, p]) => { if (p > 0.01) allRanks.add(r); }));
-            
-            Array.from(allRanks).sort((a, b) => {
-                const ba = engine.getBaseName(a), bb = engine.getBaseName(b);
-                if (ba !== bb) return ba.localeCompare(bb);
-                return engine.getRomanValue(a.split(' ').pop() || "") - engine.getRomanValue(b.split(' ').pop() || "");
-            }).slice(0, 32).forEach(r => {
-                const color = ThemeManager.getEnchantColor(r, engine);
-                datasets.push({
-                    label: r,
-                    data: sweep.map(x => (x.s.ranks[r] || 0) * 100),
-                    borderColor: color,
-                    backgroundColor: color.replace(')', ', 0.1)'),
-                    borderWidth: 2, tension: 0.35, pointRadius: 0
-                });
-            });
-        } else {
-            const colors: { [count: number]: string } = { 1: "hsl(0, 80%, 60%)", 2: "hsl(15, 80%, 55%)", 3: "hsl(45, 80%, 50%)", 4: "hsl(80, 70%, 50%)", 5: "hsl(140, 70%, 50%)" };
-            [1, 2, 3, 4, 5].filter(c => Math.max(...sweep.map(x => x.s.count[c] || 0)) > 0.01).forEach(c => {
-                datasets.push({
-                    label: `${c} Enchant${c > 1 ? 's' : ''}`,
-                    data: sweep.map(x => (x.s.count[c] || 0) * 100),
-                    borderColor: colors[c],
-                    backgroundColor: colors[c].replace(')', ', 0.1)'),
-                    borderWidth: 2, tension: 0.3, pointRadius: 0
-                });
-            });
+        if (this.chartManager) {
+            const datasets = this.chartManager.generateDatasets(sweep, metric, engine.registry);
+            this.chartManager.update(labels, datasets);
         }
-        return datasets;
-    },
-
-    getChartOptions(): any {
-        return {
-            responsive: true, maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
-            scales: {
-                y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' } },
-                x: { grid: { color: 'rgba(255,255,255,0.05)' } }
-            },
-            plugins: { 
-                legend: { 
-                    position: 'bottom', 
-                    labels: { color: '#ccc', font: { size: 10 }, boxWidth: 10 } 
-                } 
-            }
-        };
     }
 };
 

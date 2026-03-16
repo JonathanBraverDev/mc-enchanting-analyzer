@@ -1,5 +1,6 @@
-import { EnchantmentData, VersionManifest, VersionMechanics, CalculationStats } from './types.js';
-import { VersionUtils, BinaryHeap } from './utils.js';
+import { EnchantmentData, CalculationStats } from './types.js';
+import { VersionUtils, BinaryHeap, RomanUtils } from './utils.js';
+import { Registry } from './registry.js';
 
 /**
  * Core math and logic engine for Minecraft Enchanting.
@@ -7,182 +8,29 @@ import { VersionUtils, BinaryHeap } from './utils.js';
 export class EnchantEngine {
     static distCache = new Map<string, { [level: number]: number }>();
     
-    public data: EnchantmentData;
-    public version: string;
+    public registry: Registry;
     public comboCache = new Map<string, { results: { [ids: string]: number }, uncertainty: number }>();
     public eligiblePoolCache = new Map<string, number[]>();
-    public idMap = new Map<string, number>();
-    public revIdMap: string[] = [];
     public statsCache = new Map<string, CalculationStats>();
-    public conflictBitsets: BigUint64Array = new BigUint64Array(0);
-    public weightMap: Uint32Array = new Uint32Array(0);
-
+    
     private readonly MAX_CACHE_SIZE = 500;
 
-    // ... existing caches ...
-    public mechanics: VersionMechanics = {};
-    public mergedItems: { [category: string]: string[] } = {};
-    public mergedOverrides: { [enchantment: string]: any } = {};
-    public resolvedRegistry: { [enchantment: string]: any } = {};
-    public mergedMaterials = new Set<string>();
-    public multiEnchantBooks: boolean = true;
-
     constructor(data: EnchantmentData, version: string) {
-        this.data = data;
-        this.version = version;
-        this.setupContext();
-    }
-
-    /**
-     * Converts a numeric rank to a Roman numeral.
-     */
-    public rankToRoman(rank: number): string {
-        return Object.keys(this.data.constants.ROMAN_MAP)[rank - 1] || rank.toString();
-    }
-
-    /**
-     * Extracts Roman numeral value from a string.
-     */
-    public getRomanValue(r: string): number {
-        return this.data.constants.ROMAN_MAP[r] || 0;
-    }
-
-    /**
-     * Gets the base name of an enchantment (removes level).
-     */
-    public getBaseName(fullName: string): string {
-        const parts = fullName.split(" ");
-        const last = parts[parts.length - 1];
-        return Object.keys(this.data.constants.ROMAN_MAP).includes(last) ? parts.slice(0, -1).join(" ") : fullName;
-    }
-
-    /**
-     * Builds the version-specific context by merging manifests according to inheritance.
-     */
-    private setupContext(): void {
-        const { versions, enchantment_groups } = this.data;
-        let curr = this.version;
-
-        // Ensure we handle sub-versions correctly
-        if (!versions[curr]) {
-            const sorted = Object.keys(versions).sort(VersionUtils.compare);
-            for (const v of sorted) {
-                if (VersionUtils.compare(this.version, v) >= 0) curr = v;
-            }
-        }
-
-        const chain: string[] = [];
-        let temp: string | undefined = curr;
-        while (temp) {
-            chain.unshift(temp);
-            temp = versions[temp]?.extends;
-        }
-
-        // Apply inheritance chain
-        for (const vName of chain) {
-            const manifest = versions[vName] as VersionManifest;
-            if (!manifest) continue;
-
-            // Merge items and resolve groups
-            if (manifest.item_enchantments) {
-                for (const [cat, content] of Object.entries(manifest.item_enchantments)) {
-                    const resolved = content.flatMap(item => enchantment_groups[item] || [item]);
-                    this.mergedItems[cat] = [...new Set(resolved)];
-                }
-            }
-
-            // Merge mechanics and flags
-            Object.assign(this.mechanics, manifest.mechanics || {});
-            if (manifest.multi_enchant_books !== undefined) {
-                this.multiEnchantBooks = manifest.multi_enchant_books;
-            }
-            
-            // Merge overrides
-            if (manifest.overrides) {
-                for (const [ench, props] of Object.entries(manifest.overrides)) {
-                    this.mergedOverrides[ench] = Object.assign(this.mergedOverrides[ench] || {}, props);
-                }
-            }
-
-            // Merge materials
-            if (manifest.materials) {
-                manifest.materials.forEach(m => this.mergedMaterials.add(m));
-            }
-        }
-
-        // Finalize Registry (Pre-merge overrides for zero-allocation access during recursion)
-        const allEnchNames = Object.keys(this.data.global_enchantments);
-        this.revIdMap = allEnchNames;
-        allEnchNames.forEach((name, i) => this.idMap.set(name, i));
-        
-        this.conflictBitsets = new BigUint64Array(allEnchNames.length);
-        this.weightMap = new Uint32Array(allEnchNames.length);
-
-        for (let i = 0; i < allEnchNames.length; i++) {
-            const name = allEnchNames[i];
-            const props = Object.assign({}, this.data.global_enchantments[name], this.mergedOverrides[name] || {});
-            this.resolvedRegistry[name] = props;
-            this.weightMap[i] = props.weight;
-            
-            let bitset = 0n;
-            if (props.conflicts) {
-                for (const cName of props.conflicts) {
-                    const cId = this.idMap.get(cName);
-                    if (cId !== undefined) bitset |= (1n << BigInt(cId));
-                }
-            }
-            this.conflictBitsets[i] = bitset;
-        }
-    }
-
-    /**
-     * Gets base enchantability for an item/material pair.
-     */
-    public getEnchantability(mat: string, cat: string): number {
-        if (cat === "book") return 1;
-        const { armor, tools } = this.data.material_values;
-        const isArmor = this.data.constants.ARMOR_CATS.includes(cat);
-        return (isArmor ? armor[mat] : tools[mat]) || 10;
-    }
-
-    /**
-     * Gets a list of materials eligible for a given category in the current version.
-     */
-    public getEligibleMaterials(cat: string): string[] {
-        const isArmor = this.data.constants.ARMOR_CATS.includes(cat);
-        const mats = isArmor ? this.data.material_values.armor : this.data.material_values.tools;
-        const itemCats = this.data.constants.ITEM_SPECIFIC_CATS;
-        
-        let eligibleKeys = Object.keys(mats).filter(m => {
-            if (!this.mergedMaterials.has(m)) return false;
-            return !itemCats.includes(m) || m === cat;
-        });
-
-        if (itemCats.includes(cat) && mats[cat]) {
-            eligibleKeys = [cat];
-        }
-
-        return eligibleKeys.sort((a, b) => {
-            const priors = this.data.constants.MATERIAL_PRIORITY;
-            const ai = priors.indexOf(a), bi = priors.indexOf(b);
-            if (ai !== -1 && bi !== -1) return ai - bi;
-            if (ai !== -1) return -1;
-            if (bi !== -1) return 1;
-            return a.localeCompare(b);
-        });
+        this.registry = new Registry(data, version);
     }
 
     /**
      * Calculates the probability distribution of Modified Levels.
      */
     public getModifiedLevelDist(xp: number, enchantability: number): { [level: number]: number } {
-        const key = `${xp}@${enchantability}@${this.mechanics.enchantability_bonus_divisor}@${this.mechanics.random_bonus_range}`;
+        const mech = this.registry.mechanics;
+        const key = `${xp}@${enchantability}@${mech.enchantability_bonus_divisor}@${mech.random_bonus_range}`;
         if (EnchantEngine.distCache.has(key)) return EnchantEngine.distCache.get(key)!;
 
         if (enchantability <= 0) return { [xp]: 1.0 };
         
-        const div = this.mechanics.enchantability_bonus_divisor || 4;
-        const rngRange = this.mechanics.random_bonus_range || 0.15;
+        const div = mech.enchantability_bonus_divisor || 4;
+        const rngRange = mech.random_bonus_range || 0.15;
 
         const N = Math.floor(enchantability / div) + 1;
         
@@ -215,9 +63,6 @@ export class EnchantEngine {
     }
 
     /**
-     * Gets list of enchants eligible for a specific modified level.
-     */
-    /**
      * Gets list of enchants eligible for a specific modified level (numeric format).
      * Returns array of (id << 8 | rankValue).
      */
@@ -229,21 +74,21 @@ export class EnchantEngine {
             return this.eligiblePoolCache.get(cacheKey)!;
         }
 
-        const pool = this.mergedItems[cat] || [];
+        const pool = this.registry.mergedItems[cat] || [];
         const out: number[] = [];
         
-        const romanMap = this.data.constants.ROMAN_MAP;
+        const romanMap = this.registry.data.constants.ROMAN_MAP;
         const rEntries = Object.entries(romanMap).sort((a, b) => b[1] - a[1]); // Descending ranks
 
         for (const name of pool) {
-            const id = this.idMap.get(name)!;
+            const id = this.registry.idMap.get(name)!;
             
             // Conflict Check (Fast Bitwise)
             if ((chosenIdsBitset & (1n << BigInt(id))) !== 0n) continue;
-            if ((chosenIdsBitset & this.conflictBitsets[id]) !== 0n) continue;
+            if ((chosenIdsBitset & this.registry.conflictBitsets[id]) !== 0n) continue;
 
-            const props = this.resolvedRegistry[name];
-            if (!VersionUtils.isInRange(this.version, props.valid_from, props.valid_to)) continue;
+            const props = this.registry.resolvedRegistry[name];
+            if (!VersionUtils.isInRange(this.registry.version, props.valid_from, props.valid_to)) continue;
             
             for (const [r, rankVal] of rEntries) {
                 const range = props.levels[r];
@@ -264,16 +109,16 @@ export class EnchantEngine {
     public getEligibleList(cat: string, level: number, mat: string, chosenNames: Set<string> = new Set()): { name: string, weight: number, rank: string }[] {
         let bitset = 0n;
         for (const name of chosenNames) {
-            const id = this.idMap.get(name);
+            const id = this.registry.idMap.get(name);
             if (id !== undefined) bitset |= (1n << BigInt(id));
         }
         const numeric = this.getEligibleListNumeric(cat, level, mat, bitset);
-        const romanMap = this.data.constants.ROMAN_MAP;
+        const romanMap = this.registry.data.constants.ROMAN_MAP;
         const revRomanMap = Object.entries(romanMap).reduce((acc, [k, v]) => { acc[v] = k; return acc; }, {} as any);
         
         return numeric.map(n => ({
-            name: this.revIdMap[n >> 8],
-            weight: this.weightMap[n >> 8],
+            name: this.registry.revIdMap[n >> 8],
+            weight: this.registry.weightMap[n >> 8],
             rank: revRomanMap[n & 0xFF]
         }));
     }
@@ -301,14 +146,14 @@ export class EnchantEngine {
      */
     public translateComboKey(key: string): string {
         if (!key) return "";
-        const romanMap = this.data.constants.ROMAN_MAP;
+        const romanMap = this.registry.data.constants.ROMAN_MAP;
         const revRomanMap = Object.entries(romanMap).reduce((acc, [k, v]) => { acc[v] = k; return acc; }, {} as any);
         
         return key.split(",").map(nStr => {
             const n = parseInt(nStr);
             const id = n >> 8;
             const rank = n & 0xFF;
-            return `${this.revIdMap[id]} ${revRomanMap[rank]}`;
+            return `${this.registry.revIdMap[id]} ${revRomanMap[rank]}`;
         }).join("+");
     }
 
@@ -323,9 +168,10 @@ export class EnchantEngine {
         const results: { [ids: string]: number } = {};
         let uncertainty = 0;
         
-        const initialSeedBase = initialSeed ? this.getBaseName(initialSeed) : null;
-        const initialSeedId = initialSeedBase ? this.idMap.get(initialSeedBase)! : null;
-        const initialSeedRank = initialSeed ? this.getRomanValue(initialSeed.split(' ').pop()!) : null;
+        const romanMap = this.registry.data.constants.ROMAN_MAP;
+        const initialSeedBase = initialSeed ? RomanUtils.getBaseName(initialSeed, romanMap) : null;
+        const initialSeedId = initialSeedBase ? this.registry.idMap.get(initialSeedBase)! : null;
+        const initialSeedRank = initialSeed ? RomanUtils.getRomanValue(initialSeed.split(' ').pop()!, romanMap) : null;
         const initialSeedFull = initialSeedId !== null && initialSeedRank !== null ? (initialSeedId << 8 | initialSeedRank) : null;
 
         const queue = new BinaryHeap<{ chosen: number[], bitset: bigint, level: number, prob: number }>();
@@ -357,17 +203,17 @@ export class EnchantEngine {
 
             const eligible = this.getEligibleListNumeric(cat, current.level, mat, current.bitset);
 
-            if (cat === "book" && current.chosen.length >= 1 && !this.multiEnchantBooks) {
+            if (cat === "book" && current.chosen.length >= 1 && !this.registry.multiEnchantBooks) {
                 results[currentKey] = (results[currentKey] || 0) + current.prob;
                 cumulativeAccountedMass += current.prob;
                 continue;
             }
 
-            const probContinue = (cat === "book" && !this.multiEnchantBooks) ? 0 : Math.min((current.level + 1) / 50, 1.0);
+            const probContinue = (cat === "book" && !this.registry.multiEnchantBooks) ? 0 : Math.min((current.level + 1) / 50, 1.0);
 
             if (current.chosen.length === 0) {
                 let totalWeight = 0;
-                for (let i = 0; i < eligible.length; i++) totalWeight += this.weightMap[eligible[i] >> 8];
+                for (let i = 0; i < eligible.length; i++) totalWeight += this.registry.weightMap[eligible[i] >> 8];
                 
                 if (totalWeight === 0) {
                     uncertainty += current.prob;
@@ -379,7 +225,7 @@ export class EnchantEngine {
                         chosen: [e], 
                         bitset: 1n << BigInt(e >> 8),
                         level: current.level, 
-                        prob: current.prob * (this.weightMap[e >> 8] / totalWeight) 
+                        prob: current.prob * (this.registry.weightMap[e >> 8] / totalWeight) 
                     });
                 }
             } else {
@@ -389,7 +235,7 @@ export class EnchantEngine {
                     cumulativeAccountedMass += probStop;
 
                     let totalWeight = 0;
-                    for (let i = 0; i < eligible.length; i++) totalWeight += this.weightMap[eligible[i] >> 8];
+                    for (let i = 0; i < eligible.length; i++) totalWeight += this.registry.weightMap[eligible[i] >> 8];
                     const nextLevel = current.chosen.length >= 2 ? Math.floor(current.level / 2) : current.level;
                     
                     for (let i = 0; i < eligible.length; i++) {
@@ -398,7 +244,7 @@ export class EnchantEngine {
                             chosen: [...current.chosen, e],
                             bitset: current.bitset | (1n << BigInt(e >> 8)),
                             level: nextLevel,
-                            prob: current.prob * probContinue * (this.weightMap[e >> 8] / totalWeight)
+                            prob: current.prob * probContinue * (this.registry.weightMap[e >> 8] / totalWeight)
                         });
                     }
                 } else {
@@ -424,9 +270,6 @@ export class EnchantEngine {
         return out;
     }
 
-
-
-
     /**
      * Aggregates all statistics for a given enchantment attempt.
      */
@@ -436,7 +279,7 @@ export class EnchantEngine {
 
         // Seed validity check: If seed is provided, verify it is possible at ANY possible modified level
         if (initialSeed) {
-            const ench = this.getEnchantability(mat, cat);
+            const ench = this.registry.getEnchantability(mat, cat);
             const dist = this.getModifiedLevelDist(xp, ench);
             let possible = false;
             for (const ml of Object.keys(dist)) {
@@ -451,7 +294,7 @@ export class EnchantEngine {
             }
         }
 
-        const enchantability = this.getEnchantability(mat, cat);
+        const enchantability = this.registry.getEnchantability(mat, cat);
         const modDist = this.getModifiedLevelDist(xp, enchantability);
         const finalCombos: { [combo: string]: number } = {};
 
@@ -487,16 +330,16 @@ export class EnchantEngine {
             stats.count[comboIds.length] = (stats.count[comboIds.length] || 0) + p;
             
             const seenBases = new Set<string>();
-            const romanMap = this.data.constants.ROMAN_MAP;
+            const romanMap = this.registry.data.constants.ROMAN_MAP;
             const revRomanMap = Object.entries(romanMap).reduce((acc, [k, v]) => { acc[v] = k; return acc; }, {} as any);
 
             for (const n of comboIds) {
                 const id = n >> 8;
                 const rank = n & 0xFF;
-                const entry = `${this.revIdMap[id]} ${revRomanMap[rank]}`;
+                const entry = `${this.registry.revIdMap[id]} ${revRomanMap[rank]}`;
                 stats.ranks[entry] = (stats.ranks[entry] || 0) + p;
                 
-                const base = this.revIdMap[id];
+                const base = this.registry.revIdMap[id];
                 if (!seenBases.has(base)) {
                     stats.any[base] = (stats.any[base] || 0) + p;
                     seenBases.add(base);
