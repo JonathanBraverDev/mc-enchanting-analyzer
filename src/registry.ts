@@ -111,7 +111,7 @@ export class Registry {
             return !itemCats.includes(m) || m === cat;
         });
 
-        if (itemCats.includes(cat) && mats[cat] && cat !== "turtle_shell") {
+        if (itemCats.includes(cat) && mats[cat] && cat !== "turtle_shell" && this.mergedMaterials.has(cat)) {
             eligibleKeys = [cat];
         }
 
