@@ -113,19 +113,7 @@ const UIController = {
         const currentMat = matSelect.value;
         
         matSelect.innerHTML = "";
-        const isArmor = DATA.constants.ARMOR_CATS.includes(cat);
-        const mats = isArmor ? DATA.material_values.armor : DATA.material_values.tools;
-        const itemCats = DATA.constants.ITEM_SPECIFIC_CATS;
-        
-        let eligibleKeys = Object.keys(mats);
-        if (itemCats.includes(cat) && mats[cat]) {
-            eligibleKeys = [cat];
-        } else {
-            eligibleKeys = eligibleKeys.filter(m => {
-                if (!engine.mergedMaterials.has(m)) return false;
-                return !itemCats.includes(m) || m === cat;
-            });
-        }
+        const eligibleKeys = engine.getEligibleMaterials(cat);
 
         // Determine best selection
         let bestMat = currentMat;
@@ -133,16 +121,7 @@ const UIController = {
             bestMat = eligibleKeys.includes("diamond") ? "diamond" : (eligibleKeys[0] || "");
         }
 
-        const sortedKeys = eligibleKeys.sort((a, b) => {
-            const priors = DATA.constants.MATERIAL_PRIORITY;
-            const ai = priors.indexOf(a), bi = priors.indexOf(b);
-            if (ai !== -1 && bi !== -1) return ai - bi;
-            if (ai !== -1) return -1;
-            if (bi !== -1) return 1;
-            return a.localeCompare(b);
-        });
-
-        sortedKeys.forEach(m => {
+        eligibleKeys.forEach(m => {
             const o = document.createElement("option");
             o.value = m;
             o.textContent = m.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
