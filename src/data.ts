@@ -1,4 +1,4 @@
-import { EnchantmentData } from './types';
+import { EnchantmentData } from './types.js';
 
 export const DATA: EnchantmentData = {
   "global_enchantments": {
