@@ -256,10 +256,11 @@ const UIController = {
         const activeThreshold = threshold || (cat === "book" ? this.BOOK_THRESHOLD : this.DEFAULT_THRESHOLD);
         const sweep: { l: number, s: CalculationStats }[] = [];
         
-        // Redraw steps to balance UI updates with computation speed
-        const redrawStep = cat === "book" ? 3 : 8;
+        // One level redraws for smooth animation
+        const redrawStep = 1;
 
         for (const l of labels) {
+
             if (currentId !== this.activeRefinementId) return;
             
             const stats = await engine.getFullStats(cat, l, mat, seed, activeThreshold);

@@ -111,9 +111,15 @@ export class ChartManager {
             responsive: true, maintainAspectRatio: false,
             interaction: { mode: 'index', intersect: false },
             scales: {
-                y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' } },
+                y: { 
+                    beginAtZero: true, 
+                    min: 0,
+                    max: 100,
+                    grid: { color: 'rgba(255,255,255,0.05)' } 
+                },
                 x: { grid: { color: 'rgba(255,255,255,0.05)' } }
             },
+
             plugins: { 
                 legend: { 
                     position: 'bottom', 
