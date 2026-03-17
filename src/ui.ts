@@ -19,6 +19,7 @@ const UIController = {
     BOOK_THRESHOLD: 0.001,
     runTimeout: 0,
     activeRefinementId: 0,
+    currentSweep: [] as { l: number, s: CalculationStats }[],
 
     init(): void {
         const ids = ["v-select", "cat-select", "mat-select", "seed-select", "lvl-range", "lvl-val", "chart-metric", "refinement-status"];
@@ -148,6 +149,7 @@ const UIController = {
 
         const currentId = ++this.chartUpdateId;
         this.activeRefinementId = currentId;
+        this.currentSweep = []; // Fresh start for new run
 
         // Pass 1: Coarse Refinement (Instant)
         this.setRefinementStatus("Searching...", "coarse");
@@ -254,21 +256,23 @@ const UIController = {
         const labels = Array.from({length: 30}, (_, i) => i + 1);
         
         const activeThreshold = threshold || (cat === "book" ? this.BOOK_THRESHOLD : this.DEFAULT_THRESHOLD);
-        const sweep: { l: number, s: CalculationStats }[] = [];
         
         // One level redraws for smooth animation
         const redrawStep = 1;
 
-        for (const l of labels) {
-
+        for (let i = 0; i < labels.length; i++) {
+            const l = labels[i];
             if (currentId !== this.activeRefinementId) return;
             
             const stats = await engine.getFullStats(cat, l, mat, seed, activeThreshold);
-            sweep.push({ l, s: stats });
+            
+            // Incremental update of the central sweep cache
+            this.currentSweep[i] = { l, s: stats };
 
             if (l % redrawStep === 0 || l === 30) {
                 if (this.chartManager) {
-                    const tempDatasets = this.chartManager.generateDatasets(sweep, metric, engine.registry);
+                    // Always render using the current state of currentSweep
+                    const tempDatasets = this.chartManager.generateDatasets(this.currentSweep, metric, engine.registry);
                     this.chartManager.update(labels, tempDatasets);
                 }
                 // Yield to browser to paint the update
