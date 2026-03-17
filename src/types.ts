@@ -2,6 +2,8 @@ export interface RomanMap {
   [key: string]: number;
 }
 
+export type NumericEnchant = number & { readonly __brand: unique symbol };
+
 export interface EnchantmentLevels {
   [rank: string]: [number, number];
 }
@@ -64,7 +66,7 @@ export interface CalculationStats {
   ranks: { [entry: string]: number };
   any: { [base: string]: number };
   count: { [count: number]: number };
-  combos: { [ids: string]: number }; // Keys are comma-separated numeric IDs
-  residual?: number;
+  combos: { [ids: string]: number }; // Keys are comma-separated NumericEnchant IDs
+  residual: number;
 }
 
