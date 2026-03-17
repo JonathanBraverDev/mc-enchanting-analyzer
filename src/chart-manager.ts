@@ -60,32 +60,35 @@ export class ChartManager {
         const romanMap = registry.data.constants.ROMAN_MAP;
 
         if (metric === "any") {
-            const allEnchants = new Set<string>();
-            sweep.forEach(x => { if(x && x.s) Object.keys(x.s.any).forEach(k => allEnchants.add(k)); });
+            const allEnchants = new Set<number>();
+            sweep.forEach(x => { if(x && x.s) Object.keys(x.s.any).forEach(idStr => allEnchants.add(parseInt(idStr))); });
 
-            Array.from(allEnchants).sort().forEach(k => {
-                const color = ThemeManager.getEnchantColor(k, registry);
+            Array.from(allEnchants).sort((a,b) => registry.getEnchantName(a).localeCompare(registry.getEnchantName(b))).forEach(id => {
+                const name = registry.getEnchantName(id);
+                const color = ThemeManager.getEnchantColor(name, registry);
                 datasets.push({
-                    label: k,
-                    data: sweep.map(x => (x && x.s && x.s.any[k] || 0) * 100),
+                    label: name,
+                    data: sweep.map(x => (x && x.s && x.s.any[id] || 0) * 100),
                     borderColor: color,
                     backgroundColor: color.replace(')', ', 0.1)'),
                     borderWidth: 2, tension: 0.3, pointRadius: 0
                 });
             });
         } else if (metric === "ranks") {
-            const allRanks = new Set<string>();
-            sweep.forEach(e => { if(e && e.s) Object.entries(e.s.ranks).forEach(([r, p]) => { if (p > 0.01) allRanks.add(r); }); });
+            const allRanks = new Set<number>();
+            sweep.forEach(e => { if(e && e.s) Object.entries(e.s.ranks).forEach(([idAndRankStr, p]) => { if (p > 0.01) allRanks.add(parseInt(idAndRankStr)); }); });
             
             Array.from(allRanks).sort((a, b) => {
-                const ba = RomanUtils.getBaseName(a, romanMap), bb = RomanUtils.getBaseName(b, romanMap);
+                const na = registry.getFullEnchantName(a), nb = registry.getFullEnchantName(b);
+                const ba = RomanUtils.getBaseName(na, romanMap), bb = RomanUtils.getBaseName(nb, romanMap);
                 if (ba !== bb) return ba.localeCompare(bb);
-                return RomanUtils.getRomanValue(a.split(' ').pop() || "", romanMap) - RomanUtils.getRomanValue(b.split(' ').pop() || "", romanMap);
-            }).slice(0, 32).forEach(r => {
-                const color = ThemeManager.getEnchantColor(r, registry);
+                return (a & 0xFF) - (b & 0xFF);
+            }).slice(0, 32).forEach(idAndRank => {
+                const fullName = registry.getFullEnchantName(idAndRank);
+                const color = ThemeManager.getEnchantColor(idAndRank, registry);
                 datasets.push({
-                    label: r,
-                    data: sweep.map(x => (x && x.s && x.s.ranks[r] || 0) * 100),
+                    label: fullName,
+                    data: sweep.map(x => (x && x.s && x.s.ranks[idAndRank] || 0) * 100),
                     borderColor: color,
                     backgroundColor: color.replace(')', ', 0.1)'),
                     borderWidth: 2, tension: 0.35, pointRadius: 0

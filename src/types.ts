@@ -63,10 +63,10 @@ export interface EnchantmentData {
 }
 
 export interface CalculationStats {
-  ranks: { [entry: string]: number };
-  any: { [base: string]: number };
+  ranks: { [idAndRank: number]: number }; // (id << 8 | rank)
+  any: { [id: number]: number };          // base id
   count: { [count: number]: number };
-  combos: { [ids: string]: number }; // Keys are comma-separated NumericEnchant IDs
+  combos: { [packed: string]: number };    // Hex string of bit-packed BigInt
   residual: number;
 }
 
