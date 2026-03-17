@@ -3,13 +3,25 @@ import { VersionUtils, BinaryHeap, RomanUtils } from './utils.js';
 import { Registry } from './registry.js';
 
 /**
+ * Represents the state of a search for enchantment combinations.
+ * Can be used to resume calculations at a higher resolution.
+ */
+export interface SearchFrontier {
+    queue: BinaryHeap<{ chosen: number[], bitset: bigint, level: number, prob: number }>;
+    results: { [ids: string]: number };
+    uncertainty: number;
+    cumulativeAccountedMass: number;
+    threshold: number;
+}
+
+/**
  * Core math and logic engine for Minecraft Enchanting.
  */
 export class EnchantEngine {
     static distCache = new Map<string, { [level: number]: number }>();
     
     public registry: Registry;
-    public comboCache = new Map<string, { results: { [ids: string]: number }, uncertainty: number }>();
+    public comboCache = new Map<string, SearchFrontier>();
     public eligiblePoolCache = new Map<string, number[]>();
     public statsCache = new Map<string, CalculationStats>();
     
@@ -141,50 +153,73 @@ export class EnchantEngine {
     }
 
     /**
-     * Iteratively calculates enchantment combinations using a Best-First approach 
-     * to preserve accuracy in high-branching scenarios like Books.
+     * Iteratively calculates enchantment combinations using a Best-First approach.
+     * Supports resuming from a previous SearchFrontier if higher accuracy is needed.
      */
-    public calculateCombinations(cat: string, modLevel: number, mat: string, initialSeed: string | null = null, threshold: number = 0.0001): { results: { [ids: string]: number }, uncertainty: number } {
-        const cacheKey = `${cat}|${modLevel}|${mat}|${initialSeed || "none"}|${threshold}`;
-        if (this.comboCache.has(cacheKey)) return this.comboCache.get(cacheKey)!;
-
-        const results: { [ids: string]: number } = {};
-        let uncertainty = 0;
+    public calculateCombinations(
+        cat: string, 
+        modLevel: number, 
+        mat: string, 
+        initialSeed: string | null = null, 
+        threshold: number = 0.0001,
+        existingFrontier?: SearchFrontier
+    ): SearchFrontier {
+        const cacheKey = `${cat}|${modLevel}|${mat}|${initialSeed || "none"}`;
         
-        const romanMap = this.registry.data.constants.ROMAN_MAP;
-        const initialSeedBase = initialSeed ? RomanUtils.getBaseName(initialSeed, romanMap) : null;
-        const initialSeedId = initialSeedBase ? this.registry.idMap.get(initialSeedBase)! : null;
-        const initialSeedRank = initialSeed ? RomanUtils.getRomanValue(initialSeed.split(' ').pop()!, romanMap) : null;
-        const initialSeedFull = initialSeedId !== null && initialSeedRank !== null ? (initialSeedId << 8 | initialSeedRank) : null;
+        // If we have a cached frontier that already met this threshold, return it
+        const cached = this.comboCache.get(cacheKey);
+        if (cached && cached.threshold <= threshold && !existingFrontier) return cached;
 
-        const queue = new BinaryHeap<{ chosen: number[], bitset: bigint, level: number, prob: number }>();
-        queue.push({ 
-            chosen: initialSeedFull !== null ? [initialSeedFull] : [], 
-            bitset: initialSeedId !== null ? (1n << BigInt(initialSeedId)) : 0n,
-            level: modLevel, 
-            prob: 1.0 
-        });
+        let results: { [ids: string]: number };
+        let uncertainty: number;
+        let cumulativeAccountedMass: number;
+        let queue: BinaryHeap<{ chosen: number[], bitset: bigint, level: number, prob: number }>;
+
+        const initialSeedBase = initialSeed ? RomanUtils.getBaseName(initialSeed, this.registry.data.constants.ROMAN_MAP) : null;
+        const initialSeedId = initialSeedBase ? this.registry.idMap.get(initialSeedBase)! : null;
+
+        if (existingFrontier) {
+            results = { ...existingFrontier.results };
+            uncertainty = existingFrontier.uncertainty;
+            cumulativeAccountedMass = existingFrontier.cumulativeAccountedMass;
+            queue = existingFrontier.queue.clone();
+        } else if (cached && cached.threshold > threshold) {
+            // Resume from cache if we're asking for MORE accuracy
+            results = { ...cached.results };
+            uncertainty = cached.uncertainty;
+            cumulativeAccountedMass = cached.cumulativeAccountedMass;
+            queue = cached.queue.clone();
+        } else {
+            // Start fresh
+            results = {};
+            uncertainty = 1.0;
+            cumulativeAccountedMass = 0;
+            
+            const romanMap = this.registry.data.constants.ROMAN_MAP;
+            const initialSeedRank = initialSeed ? RomanUtils.getRomanValue(initialSeed.split(' ').pop()!, romanMap) : null;
+            const initialSeedFull = initialSeedId !== null && initialSeedRank !== null ? (initialSeedId << 8 | initialSeedRank) : null;
+
+            queue = new BinaryHeap<{ chosen: number[], bitset: bigint, level: number, prob: number }>();
+            queue.push({ 
+                chosen: initialSeedFull !== null ? [initialSeedFull] : [], 
+                bitset: initialSeedId !== null ? (1n << BigInt(initialSeedId)) : 0n,
+                level: modLevel, 
+                prob: 1.0 
+            });
+        }
 
         let iterations = 0;
-        let cumulativeAccountedMass = 0;
         const MAX_ITERATIONS = initialSeed ? 8000 : 5000;
 
-        while (queue.size() > 0 && iterations < MAX_ITERATIONS) {
+        while (queue.size() > 0 && iterations < MAX_ITERATIONS && cumulativeAccountedMass < 0.9999) {
+            const next = queue.peek()!;
+            if (next.prob < threshold) break;
+
             iterations++;
             const current = queue.pop()!;
-            const currentKey = current.chosen.length > 0 ? this.getComboKeyNumeric(current.chosen, initialSeedId) : "";
-
-            if (current.prob < threshold || cumulativeAccountedMass > 0.999) {
-                if (currentKey) {
-                    results[currentKey] = (results[currentKey] || 0) + current.prob;
-                    uncertainty += current.prob;
-                } else {
-                    uncertainty += current.prob;
-                }
-                continue;
-            }
-
+            
             const eligible = this.getEligibleListNumeric(cat, current.level, mat, current.bitset);
+            const currentKey = current.chosen.length > 0 ? this.getComboKeyNumeric(current.chosen, initialSeedId) : "";
 
             if (cat === "book" && current.chosen.length >= 1 && !this.registry.multiEnchantBooks) {
                 results[currentKey] = (results[currentKey] || 0) + current.prob;
@@ -199,7 +234,8 @@ export class EnchantEngine {
                 for (let i = 0; i < eligible.length; i++) totalWeight += this.registry.weightMap[eligible[i] >> 8];
                 
                 if (totalWeight === 0) {
-                    uncertainty += current.prob;
+                    // This probability mass is lost (no enchants possible at this ML)
+                    cumulativeAccountedMass += current.prob;
                     continue;
                 }
                 for (let i = 0; i < eligible.length; i++) {
@@ -237,21 +273,28 @@ export class EnchantEngine {
             }
         }
 
-        while (queue.size() > 0) {
-            const current = queue.pop()!;
-            uncertainty += current.prob;
-            const key = current.chosen.length > 0 ? this.getComboKeyNumeric(current.chosen, initialSeedId) : "";
-            if (key) results[key] = (results[key] || 0) + current.prob;
+        // Calculate uncertainty and final result for this resolution
+        let finalUncertainty = 0;
+        const outResults = { ...results };
+        for (const item of queue.items) {
+            finalUncertainty += item.prob;
+            const key = item.chosen.length > 0 ? this.getComboKeyNumeric(item.chosen, initialSeedId) : "";
+            if (key) outResults[key] = (outResults[key] || 0) + item.prob;
         }
 
-        const out = { results, uncertainty };
+        const out = { queue, results, uncertainty: finalUncertainty, cumulativeAccountedMass, threshold };
+        // We override uncertainty in the frontier to the real one, but return collapsed results for getFullStats
+        const frontier = { ...out, results: outResults }; 
+        
         if (this.comboCache.size >= this.MAX_CACHE_SIZE) {
             const firstKey = this.comboCache.keys().next().value;
             if (firstKey !== undefined) this.comboCache.delete(firstKey);
         }
         this.comboCache.set(cacheKey, out);
-        return out;
+
+        return frontier;
     }
+
 
     /**
      * Aggregates all statistics for a given enchantment attempt.

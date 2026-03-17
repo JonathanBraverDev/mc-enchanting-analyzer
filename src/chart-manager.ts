@@ -34,8 +34,14 @@ export class ChartManager {
     }
 
     public update(labels: number[], datasets: ChartDataset[]): void {
-        this.destroy();
         if (!this.canvas || typeof Chart === 'undefined') return;
+
+        if (this.chart) {
+            this.chart.data.labels = labels;
+            this.chart.data.datasets = datasets;
+            this.chart.update('none'); // 'none' for performance during rapid updates
+            return;
+        }
 
         try {
             this.chart = new Chart(this.canvas.getContext("2d"), {
@@ -47,6 +53,7 @@ export class ChartManager {
             console.error("Failed to render chart:", e);
         }
     }
+
 
     public generateDatasets(sweep: { l: number, s: CalculationStats }[], metric: string, registry: Registry): ChartDataset[] {
         const datasets: ChartDataset[] = [];

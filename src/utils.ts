@@ -62,6 +62,14 @@ export class BinaryHeap<T extends { prob: number }> {
         return this.heap.length;
     }
 
+    peek(): T | undefined {
+        return this.heap[0];
+    }
+
+    get items(): T[] {
+        return this.heap;
+    }
+
     private bubbleUp() {
         let idx = this.heap.length - 1;
         const element = this.heap[idx];
@@ -108,7 +116,14 @@ export class BinaryHeap<T extends { prob: number }> {
             idx = swap;
         }
     }
+
+    clone(): BinaryHeap<T> {
+        const newHeap = new BinaryHeap<T>();
+        newHeap.heap = [...this.heap];
+        return newHeap;
+    }
 }
+
 
 /**
  * Utilities for handling Roman numerals and enchantment names.
