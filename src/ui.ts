@@ -210,7 +210,7 @@ const UIController = {
         const comboListHtml = topCombos.map(([name, prob]) => `
             <div class="combo-item">
                 <div style="display: flex; justify-content: space-between;">
-                    <span class="combo-names">${engine.translateComboKey(name).replace(/\+/g, ' + ')}</span>
+                    <span class="combo-names">${name.replace(/\+/g, ' + ')}</span>
                     <span class="combo-prob">${(prob * 100).toFixed(1)}%</span>
                 </div>
             </div>

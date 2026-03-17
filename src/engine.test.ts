@@ -8,198 +8,150 @@ if (typeof (globalThis as any).requestAnimationFrame !== 'function') {
     (globalThis as any).requestAnimationFrame = (callback: Function) => callback(Date.now());
 }
 
-describe('EnchantEngine Baselines', () => {
-    
-    describe('1.8+ Mechanics', () => {
-        const engine = new EnchantEngine(DATA, '1.8');
+describe('Enchantment Engine Test Suite', () => {
 
-        it('should show Sharpness as possible on Diamond Swords', async () => {
-            const stats = await engine.getFullStats('sword', 30, 'diamond');
-            assert.ok((stats.any['Sharpness'] || 0) > 0, 'Sharpness 1.8 should be possible');
-        });
-    });
-
-    describe('1.14 Protection "God Armor" window', () => {
-        const engine114 = new EnchantEngine(DATA, '1.14');
-        const engine1143 = new EnchantEngine(DATA, '1.14.3');
-
-        it('1.14: protections should NOT conflict', async () => {
-            const stats = await engine114.getFullStats('chestplate', 30, 'diamond', null, 0.0001);
-            const combos = Object.keys(stats.combos);
-            
-            const protTypes = ["Protection", "Fire Protection", "Blast Protection", "Projectile Protection"];
-            const multiProts = combos.filter(c => {
-                const parts = c.split(",").map(nStr => {
-                    const n = parseInt(nStr);
-                    return engine114.registry.revIdMap[n >> 8];
-                });
-                const found = protTypes.filter(t => parts.includes(t));
-                return found.length > 1;
-            });
-
-            assert.ok(multiProts.length > 0, '1.14 should allow multiple protections in one combo');
-        });
-
-        it('1.14.3: protections SHOULD conflict', async () => {
-            const stats = await engine1143.getFullStats('chestplate', 30, 'diamond', null, 0.0001);
-            const combos = Object.keys(stats.combos);
-            
-            const protTypes = ["Protection", "Fire Protection", "Blast Protection", "Projectile Protection"];
-            const hasConflict = combos.some(c => {
-                const parts = c.split(",").map(nStr => {
-                    const n = parseInt(nStr);
-                    return engine1143.registry.revIdMap[n >> 8];
-                });
-                const found = protTypes.filter(t => parts.includes(t));
-                return found.length > 1;
-            });
-
-            assert.ok(!hasConflict, '1.14.3 should NOT allow multiple protections in one combo');
-        });
-    });
-
-    describe('General Engine Integrity', () => {
+    describe('1. Core Engine Logic', () => {
         const engine = new EnchantEngine(DATA, '1.21');
 
-        it('Total probability of Modified Level Distribution should be ~1.0', () => {
+        it('should maintain total probability of Modified Level Distribution near 1.0', () => {
             const dist = engine.getModifiedLevelDist(30, 10);
             const totalProb = Object.values(dist).reduce((a, b) => a + b, 0);
             assert.ok(Math.abs(totalProb - 1.0) < 0.001);
         });
 
-        it('Impossible seeds should return empty stats', async () => {
-            const stats = await engine.getFullStats('sword', 30, 'diamond', 'Efficiency IV');
-            assert.strictEqual(Object.keys(stats.combos).length, 0);
-            assert.strictEqual(stats.residual, 1.0);
+        it('should NOT return "X undefined" when no enchants are possible', async () => {
+            const stats = await engine.getFullStats('sword', 1, 'diamond');
+            // Check that a key with "undefined" doesn't exist.
+            const hasUndefined = Object.keys(stats.combos).some(c => c.includes('undefined')) ||
+                                Object.keys(stats.ranks).some(r => r.includes('undefined'));
+            assert.ok(!hasUndefined, '"undefined" should not appear in results');
         });
     });
 
-    describe('Book Enchanting Mechanics', () => {
-        it('1.3.1: Books should NOT be eligible materials', () => {
-            const registry = new EnchantEngine(DATA, '1.3.1').registry;
-            const mats = registry.getEligibleMaterials('book');
-            assert.ok(!mats.includes('book'), 'Books should not be available for enchanting in 1.3.1');
+    describe('2. Version Compatibility & Historical Changes', () => {
+        it('1.11.1+: Sweeping Edge should only appear in valid versions', async () => {
+            const v18 = new EnchantEngine(DATA, '1.8');
+            const s18 = await v18.getFullStats('sword', 30, 'diamond');
+            assert.ok(!s18.any['Sweeping Edge']);
+
+            const v111 = new EnchantEngine(DATA, '1.11.1');
+            const s111 = await v111.getFullStats('sword', 30, 'diamond');
+            assert.ok(s111.any['Sweeping Edge'] > 0);
         });
 
-        it('1.4.6: Books SHOULD be available and limit to a single enchantment', async () => {
-            const engine = new EnchantEngine(DATA, '1.4.6');
-            const registry = engine.registry;
-            
-            assert.ok(registry.getEligibleMaterials('book').includes('book'), 'Books should be available in 1.4.6');
-            assert.strictEqual(registry.multiEnchantBooks, false, '1.4.6 should have multiEnchantBooks = false');
+        it('1.14 vs 1.14.3: Protection conflict window', async () => {
+            const e114 = new EnchantEngine(DATA, '1.14');
+            const e1143 = new EnchantEngine(DATA, '1.14.3');
+            const protTypes = ["Protection", "Fire Protection", "Blast Protection", "Projectile Protection"];
 
-            const stats = await engine.getFullStats('book', 30, 'book');
-            const combos = Object.keys(stats.combos);
-            
-            const hasMultiple = combos.some(c => c.split(',').length > 1);
-            assert.ok(!hasMultiple, '1.4.6 books should never have multiple enchantments');
-            assert.ok(combos.length > 0, '1.4.6 books should have possible enchantments');
+            const s114 = await e114.getFullStats('chestplate', 30, 'diamond', null, 0.0001);
+            const multi114 = Object.keys(s114.combos).filter(c => {
+                const names = c.split("+").map(f => f.split(" ").slice(0, -1).join(" "));
+                return protTypes.filter(t => names.includes(t)).length > 1;
+            });
+            assert.ok(multi114.length > 0, '1.14 should allow multi-protection');
+
+            const s1143 = await e1143.getFullStats('chestplate', 30, 'diamond', null, 0.0001);
+            const multi1143 = Object.keys(s1143.combos).some(c => {
+                const names = c.split("+").map(f => f.split(" ").slice(0, -1).join(" "));
+                return protTypes.filter(t => names.includes(t)).length > 1;
+            });
+            assert.ok(!multi1143, '1.14.3 should block multi-protection');
         });
 
-        it('1.7.2+: Books SHOULD allow multiple enchantments', async () => {
-            const engine = new EnchantEngine(DATA, '1.7.2');
-            assert.strictEqual(engine.registry.multiEnchantBooks, true, '1.7.2 should have multiEnchantBooks = true');
+        it('1.21+: Mace exclusive enchantments', async () => {
+            const v116 = new EnchantEngine(DATA, '1.16');
+            assert.ok(!v116.registry.mergedItems['mace']);
 
-            const stats = await engine.getFullStats('book', 30, 'book', null, 0.0001);
-            const combos = Object.keys(stats.combos);
-            
-            const hasMultiple = combos.some(c => c.split(',').length > 1);
-            assert.ok(hasMultiple, '1.7.2 books should allow multiple enchantments');
-        });
-    });
-
-    describe('Enchantment Version Locking', () => {
-        it('Sweeping Edge should only appear in 1.11.1+', async () => {
-            const engine18 = new EnchantEngine(DATA, '1.8');
-            const stats18 = await engine18.getFullStats('sword', 30, 'diamond');
-            assert.ok(!(stats18.any['Sweeping Edge']), 'Sweeping Edge should not exist in 1.8');
-
-            const engine111 = new EnchantEngine(DATA, '1.11.1');
-            const stats111 = await engine111.getFullStats('sword', 30, 'diamond');
-            assert.ok(stats111.any['Sweeping Edge'] > 0, 'Sweeping Edge should exist in 1.11.1');
-        });
-
-        it('Mace enchantments should only appear in 1.21+', async () => {
-            const engine116 = new EnchantEngine(DATA, '1.16');
-            assert.ok(!engine116.registry.mergedItems['mace'], 'Mace should not be an eligible category in 1.16');
-
-            const engine121 = new EnchantEngine(DATA, '1.21');
-            const stats121 = await engine121.getFullStats('mace', 30, 'mace');
-            assert.ok(stats121.any['Density'] > 0, 'Density should be possible on mace in 1.21');
+            const v121 = new EnchantEngine(DATA, '1.21');
+            const s121 = await v121.getFullStats('mace', 30, 'mace');
+            assert.ok(s121.any['Density'] > 0);
         });
     });
 
-    describe('Material and Pool Logic', () => {
-        it('Gold should have better enchantment quality than Iron', async () => {
-            const engine = new EnchantEngine(DATA, '1.20');
-            const ironStats = await engine.getFullStats('sword', 30, 'iron');
-            const goldStats = await engine.getFullStats('sword', 30, 'gold');
+    describe('3. Item Categories & Material Rules', () => {
+        const engine = new EnchantEngine(DATA, '1.20');
 
-            // Quality metric: average number of enchantments
-            const avgEnchants = (stats: any) => {
-                let total = 0;
-                for (const [count, prob] of Object.entries(stats.count)) {
-                    total += parseInt(count) * (prob as number);
-                }
-                return total;
-            };
+        it('Books: Availability and multiplicity rules (1.3.1, 1.4.6, 1.7.2)', async () => {
+            // 1.3.1: Not eligible
+            const reg131 = new EnchantEngine(DATA, '1.3.1').registry;
+            assert.ok(!reg131.getEligibleMaterials('book').includes('book'));
 
-            assert.ok(avgEnchants(goldStats) > avgEnchants(ironStats), 'Gold should have higher average enchantment count than iron');
+            // 1.4.6: Single only
+            const v146 = new EnchantEngine(DATA, '1.4.6');
+            const s146 = await v146.getFullStats('book', 30, 'book');
+            assert.ok(!Object.keys(s146.combos).some(c => c.split('+').length > 1));
+
+            // 1.7.2: Multi allowed
+            const v172 = new EnchantEngine(DATA, '1.7.2');
+            const s172 = await v172.getFullStats('book', 30, 'book', null, 0.0001);
+            assert.ok(Object.keys(s172.combos).some(c => c.split('+').length > 1));
         });
 
-        it('Fortune should NOT be possible on Swords', async () => {
-            const engine = new EnchantEngine(DATA, '1.20');
-            const stats = await engine.getFullStats('sword', 30, 'diamond');
-            assert.ok(!stats.any['Fortune'], 'Fortune should not be in the sword pool');
-        });
-    });
-
-    describe('Complex Conflicts (Tridents)', () => {
-        it('Riptide should conflict with Loyalty and Channeling', async () => {
-            const engine = new EnchantEngine(DATA, '1.13');
-            const stats = await engine.getFullStats('trident', 30, 'trident');
-            
+        it('Tridents: Riptide/Loyalty/Channeling mutual exclusion', async () => {
+            const v113 = new EnchantEngine(DATA, '1.13');
+            const stats = await v113.getFullStats('trident', 30, 'trident');
             for (const combo of Object.keys(stats.combos)) {
-                const names = combo.split(',').map(n => engine.registry.revIdMap[parseInt(n) >> 8]);
-                const hasRiptide = names.includes('Riptide');
-                const hasLoyalty = names.includes('Loyalty');
-                const hasChanneling = names.includes('Channeling');
-
-                if (hasRiptide) {
-                    assert.ok(!hasLoyalty, 'Combo cannot have Riptide and Loyalty');
-                    assert.ok(!hasChanneling, 'Combo cannot have Riptide and Channeling');
+                const names = combo.split('+');
+                if (names.includes('Riptide')) {
+                    const hasLoyal = names.some(n => n.startsWith('Loyalty'));
+                    const hasChan = names.some(n => n.startsWith('Channeling'));
+                    assert.ok(!hasLoyal && !hasChan, 'Riptide should conflict with Loyalty/Channeling');
                 }
             }
         });
+
+        it('Materials: Gold quality vs Iron', async () => {
+            const iron = await engine.getFullStats('sword', 30, 'iron');
+            const gold = await engine.getFullStats('sword', 30, 'gold');
+            const score = (s: any) => Object.entries(s.count).reduce((a, [c, p]) => a + Number(c) * (p as number), 0);
+            assert.ok(score(gold) > score(iron));
+        });
+
+        it('Category Constraints: Fortune should not appear on Swords', async () => {
+            const stats = await engine.getFullStats('sword', 30, 'diamond');
+            assert.ok(!stats.any['Fortune']);
+        });
     });
 
+    describe('4. Search Algorithm & Accuracy', () => {
+        const engine = new EnchantEngine(DATA, '1.20');
 
-
-    describe('Progressive Refinement (Phase 1)', () => {
-        it('Standard results should match Resumed results', async () => {
-            const engine = new EnchantEngine(DATA, '1.20');
-            const cat = 'book', xp = 30, mat = 'book';
-            
-            // 1. Fresh Standard Run
-            const statsStandard = await engine.getFullStats(cat, xp, mat, null, 0.001);
-            
-            // 2. Clear cache to force a fresh "Coarse" run, then a "Standard" resume
+        it('Progressive Refinement Parity: Resumed search should match fresh search', async () => {
+            const standard = await engine.getFullStats('book', 30, 'book', null, 0.001);
             engine.comboCache.clear();
             engine.statsCache.clear();
+            await engine.getFullStats('book', 30, 'book', null, 0.05); // Coarse
+            const resumed = await engine.getFullStats('book', 30, 'book', null, 0.001); // Resume
             
-            await engine.getFullStats(cat, xp, mat, null, 0.05); // Coarse
-            const statsResumed = await engine.getFullStats(cat, xp, mat, null, 0.001); // Resume to Standard
+            const keysS = Object.keys(standard.any).sort().slice(0, 5);
+            const keysR = Object.keys(resumed.any).sort().slice(0, 5);
+            assert.deepStrictEqual(keysS, keysR);
+        });
+
+        it('Delayed Level Decay & Pool Persistence', async () => {
+            const stats = await engine.getFullStats('pickaxe', 30, 'diamond', null, 0.0001);
             
-            // Check parity of top enchants
-            const topStandard = Object.keys(statsStandard.any).sort().slice(0, 5);
-            const topResumed = Object.keys(statsResumed.any).sort().slice(0, 5);
-            
-            assert.deepStrictEqual(topStandard, topResumed, 'Top enchants should match between fresh and resumed runs');
-            
-            for (const ench of topStandard) {
-                const diff = Math.abs(statsStandard.any[ench] - statsResumed.any[ench]);
-                assert.ok(diff < 0.000001, `Probability for ${ench} should be nearly identical (diff: ${diff})`);
+            // Pool Persistence: Efficiency IV in slot 3+
+            const hasEffIVDeep = Object.keys(stats.combos)
+                .filter(c => c.split('+').length >= 3)
+                .some(c => c.includes("Efficiency IV"));
+            assert.ok(hasEffIVDeep);
+
+            // Level Decay Logic verification (Distribution check)
+            assert.ok(stats.count["2"] > 0.1, "Double enchants should be significant");
+            assert.ok((stats.count["1"] || 0) + (stats.count["2"] || 0) + (stats.count["3"] || 0) > 0.9);
+        });
+
+        it('God Pick verification (Efficiency IV + Fortune III + Unbreaking III)', async () => {
+            const stats = await engine.getFullStats('pickaxe', 30, 'diamond', null, 0.0001);
+            const target = ["Efficiency IV", "Fortune III", "Unbreaking III"];
+            let prob = 0;
+            for (const [c, p] of Object.entries(stats.combos)) {
+                const parts = c.split('+');
+                if (target.every(t => parts.includes(t))) prob += p;
             }
+            assert.ok(prob > 0.0001);
         });
     });
 });

@@ -142,10 +142,16 @@ export class EnchantEngine {
      * Translates a numeric combo key to a human-readable string.
      */
     public translateComboKey(key: string): string {
-        if (!key) return "";
+        if (!key || typeof key !== 'string') return "";
         
+        // Guard: If it doesn't look like a numeric key (e.g. "Sharpness I"), return as is
+        if (!key.includes(",") && !/^\d+$/.test(key)) {
+            return key;
+        }
+
         return key.split(",").map(nStr => {
             const n = parseInt(nStr);
+            if (isNaN(n)) return nStr; // Fail-safe
             const id = n >> 8;
             const rank = n & 0xFF;
             return `${this.registry.revIdMap[id]} ${this.revRomanMap[rank]}`;
@@ -209,67 +215,95 @@ export class EnchantEngine {
         }
 
         let iterations = 0;
-        const MAX_ITERATIONS = initialSeed ? 8000 : 5000;
+        const MAX_ITERATIONS = cat === "book" ? 40000 : (threshold < 0.0001 ? 25000 : 10000);
+
+        // Pre-calculate the initial pool for this root modLevel
+        const initialPool = this.getEligibleListNumeric(cat, modLevel, mat, 0n);
+        const poolWeights = initialPool.map(e => this.registry.weightMap[e >> 8]);
+        const initialTotalWeight = poolWeights.reduce((a, b) => a + b, 0);
+
+        if (initialTotalWeight === 0) {
+            return { queue: new BinaryHeap(), results: {}, uncertainty: 0, cumulativeAccountedMass: 1.0, threshold };
+        }
 
         while (queue.size() > 0 && iterations < MAX_ITERATIONS && cumulativeAccountedMass < 0.9999) {
             const next = queue.peek()!;
-            if (next.prob < threshold) break;
+            if (next.prob < threshold * 0.1) break;
 
             iterations++;
             const current = queue.pop()!;
             
-            const eligible = this.getEligibleListNumeric(cat, current.level, mat, current.bitset);
-            const currentKey = current.chosen.length > 0 ? this.getComboKeyNumeric(current.chosen, initialSeedId) : "";
+            // 1. Initial Selection Slot (Slot 1)
+            if (current.chosen.length === 0) {
+                const pBase = current.prob / initialTotalWeight;
+                for (let i = 0; i < initialPool.length; i++) {
+                    const e = initialPool[i];
+                    queue.push({ 
+                        chosen: [e], 
+                        bitset: 1n << BigInt(e >> 8),
+                        level: modLevel, // Full level passed for 1st continuation check
+                        prob: poolWeights[i] * pBase 
+                    });
+                }
+                continue;
+            }
 
-            if (cat === "book" && current.chosen.length >= 1 && !this.registry.multiEnchantBooks) {
+            // 2. Subsequent Selection Processing
+            const currentKey = this.getComboKeyNumeric(current.chosen, initialSeedId);
+            const probContinue = (cat === "book" && !this.registry.multiEnchantBooks) ? 0 : Math.min((current.level + 1) / 50, 1.0);
+
+            if (probContinue <= 0) {
                 results[currentKey] = (results[currentKey] || 0) + current.prob;
                 cumulativeAccountedMass += current.prob;
                 continue;
             }
 
-            const probContinue = (cat === "book" && !this.registry.multiEnchantBooks) ? 0 : Math.min((current.level + 1) / 50, 1.0);
+            // Stop mass
+            const probStop = current.prob * (1 - probContinue);
+            results[currentKey] = (results[currentKey] || 0) + probStop;
+            cumulativeAccountedMass += probStop;
 
-            if (current.chosen.length === 0) {
-                let totalWeight = 0;
-                for (let i = 0; i < eligible.length; i++) totalWeight += this.registry.weightMap[eligible[i] >> 8];
-                
-                if (totalWeight === 0) {
-                    // This probability mass is lost (no enchants possible at this ML)
-                    cumulativeAccountedMass += current.prob;
-                    continue;
-                }
-                for (let i = 0; i < eligible.length; i++) {
-                    const e = eligible[i];
-                    queue.push({ 
-                        chosen: [e], 
-                        bitset: 1n << BigInt(e >> 8),
-                        level: current.level, 
-                        prob: current.prob * (this.registry.weightMap[e >> 8] / totalWeight) 
-                    });
-                }
-            } else {
-                if (probContinue > 0 && eligible.length > 0) {
-                    const probStop = current.prob * (1 - probContinue);
-                    results[currentKey] = (results[currentKey] || 0) + probStop;
-                    cumulativeAccountedMass += probStop;
+            // Continue mass
+            const probMovingForward = current.prob * probContinue;
+            if (probMovingForward < threshold * 0.01) {
+                uncertainty += probMovingForward;
+                continue;
+            }
 
-                    let totalWeight = 0;
-                    for (let i = 0; i < eligible.length; i++) totalWeight += this.registry.weightMap[eligible[i] >> 8];
-                    const nextLevel = current.chosen.length >= 2 ? Math.floor(current.level / 2) : current.level;
-                    
-                    for (let i = 0; i < eligible.length; i++) {
-                        const e = eligible[i];
-                        queue.push({
-                            chosen: [...current.chosen, e],
-                            bitset: current.bitset | (1n << BigInt(e >> 8)),
-                            level: nextLevel,
-                            prob: current.prob * probContinue * (this.registry.weightMap[e >> 8] / totalWeight)
-                        });
-                    }
-                } else {
-                    results[currentKey] = (results[currentKey] || 0) + current.prob;
-                    cumulativeAccountedMass += current.prob;
-                }
+            // Filter initialPool for conflicts with bitset
+            let currentTotalWeight = 0;
+            const currentEligible: number[] = [];
+            const currentWeights: number[] = [];
+
+            for (let i = 0; i < initialPool.length; i++) {
+                const e = initialPool[i];
+                const id = e >> 8;
+                // Conflict Check (Fast Bitwise)
+                if ((current.bitset & (1n << BigInt(id))) !== 0n) continue;
+                if ((current.bitset & this.registry.conflictBitsets[id]) !== 0n) continue;
+
+                currentEligible.push(e);
+                currentWeights.push(poolWeights[i]);
+                currentTotalWeight += poolWeights[i];
+            }
+
+            if (currentTotalWeight === 0) {
+                uncertainty += probMovingForward;
+                continue;
+            }
+
+            // halving only happens AFTER the first additional pick (second pick total)
+            const nextLevel = current.chosen.length >= 1 ? Math.floor(current.level / 2) : current.level;
+            
+            const pNextBase = probMovingForward / currentTotalWeight;
+            for (let i = 0; i < currentEligible.length; i++) {
+                const e = currentEligible[i];
+                queue.push({
+                    chosen: [...current.chosen, e],
+                    bitset: current.bitset | (1n << BigInt(e >> 8)),
+                    level: nextLevel,
+                    prob: currentWeights[i] * pNextBase
+                });
             }
         }
 
@@ -333,11 +367,12 @@ export class EnchantEngine {
         for (const [mlStr, mProb] of Object.entries(modDist)) {
             if (mProb < activeThreshold) continue; 
             processedMProb += mProb;
-            const { results, uncertainty } = this.calculateCombinations(cat, Number(mlStr), mat, initialSeed, activeThreshold);
-            for (const [c, p] of Object.entries(results)) {
+            const res = this.calculateCombinations(cat, Number(mlStr), mat, initialSeed, activeThreshold);
+            for (const [c, p] of Object.entries(res.results)) {
+                if (!c) continue; // Skip empty keys
                 finalCombos[c] = (finalCombos[c] || 0) + p * mProb;
             }
-            totalUncertainty += uncertainty * mProb;
+            totalUncertainty += res.uncertainty * mProb;
 
             // Yield every few levels to keep UI responsive
             if (++iterCount % 5 === 0) await new Promise(r => requestAnimationFrame(r));
@@ -345,12 +380,9 @@ export class EnchantEngine {
 
         const stats: CalculationStats = { ranks: {}, any: {}, count: {}, combos: {}, residual: totalUncertainty };
         
-        // Normalization DISABLED for auditing purposes
-        const normFactor = 1.0; 
-
-        for (const [ids, rawP] of Object.entries(finalCombos)) {
-            const p = rawP * normFactor;
-            stats.combos[ids] = p;
+        for (const [ids, p] of Object.entries(finalCombos)) {
+            const translatedKey = this.translateComboKey(ids);
+            stats.combos[translatedKey] = p;
             
             const comboIds = ids.split(",").map(Number);
             stats.count[comboIds.length] = (stats.count[comboIds.length] || 0) + p;
@@ -370,7 +402,7 @@ export class EnchantEngine {
             }
         }
 
-        stats.residual = totalUncertainty * normFactor;
+        stats.residual = totalUncertainty;
 
         if (this.statsCache.size >= this.MAX_CACHE_SIZE) {
             const firstKey = this.statsCache.keys().next().value;
