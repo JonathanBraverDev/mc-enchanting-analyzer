@@ -5,12 +5,22 @@ import { RomanUtils } from './utils.js';
 
 declare const Chart: any;
 
+interface ChartDataset {
+    label: string;
+    data: number[];
+    borderColor: string;
+    backgroundColor: string;
+    borderWidth: number;
+    tension: number;
+    pointRadius: number;
+}
+
 /**
  * Encapsulates Chart.js lifecycle and data mapping.
  */
 export class ChartManager {
     private chart: any = null;
-    private canvas: HTMLCanvasElement;
+    private canvas: HTMLCanvasElement | null = null;
 
     constructor(canvasId: string) {
         this.canvas = document.getElementById(canvasId) as HTMLCanvasElement;
@@ -18,24 +28,28 @@ export class ChartManager {
 
     public destroy(): void {
         if (this.chart) {
-            this.chart.destroy();
+            try { this.chart.destroy(); } catch(e) {}
             this.chart = null;
         }
     }
 
-    public update(labels: number[], datasets: any[]): void {
+    public update(labels: number[], datasets: ChartDataset[]): void {
         this.destroy();
-        if (!this.canvas) return;
+        if (!this.canvas || typeof Chart === 'undefined') return;
 
-        this.chart = new Chart(this.canvas.getContext("2d"), {
-            type: 'line',
-            data: { labels, datasets },
-            options: this.getChartOptions()
-        });
+        try {
+            this.chart = new Chart(this.canvas.getContext("2d"), {
+                type: 'line',
+                data: { labels, datasets },
+                options: this.getChartOptions()
+            });
+        } catch (e) {
+            console.error("Failed to render chart:", e);
+        }
     }
 
-    public generateDatasets(sweep: { l: number, s: CalculationStats }[], metric: string, registry: Registry): any[] {
-        const datasets: any[] = [];
+    public generateDatasets(sweep: { l: number, s: CalculationStats }[], metric: string, registry: Registry): ChartDataset[] {
+        const datasets: ChartDataset[] = [];
         const romanMap = registry.data.constants.ROMAN_MAP;
 
         if (metric === "any") {

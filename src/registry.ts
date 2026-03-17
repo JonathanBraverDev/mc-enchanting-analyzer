@@ -1,4 +1,4 @@
-import { EnchantmentData, VersionManifest, VersionMechanics } from './types.js';
+import { EnchantmentData, VersionManifest, VersionMechanics, Enchantment } from './types.js';
 import { VersionUtils } from './utils.js';
 
 /**
@@ -9,8 +9,8 @@ export class Registry {
     public data: EnchantmentData;
     public mechanics: VersionMechanics = {};
     public mergedItems: { [category: string]: string[] } = {};
-    public mergedOverrides: { [enchantment: string]: any } = {};
-    public resolvedRegistry: { [enchantment: string]: any } = {};
+    public mergedOverrides: { [enchantment: string]: Partial<Enchantment> } = {};
+    public resolvedRegistry: { [enchantment: string]: Enchantment } = {};
     public mergedMaterials = new Set<string>();
     public multiEnchantBooks: boolean = true;
     
@@ -18,6 +18,7 @@ export class Registry {
     public revIdMap: string[] = [];
     public conflictBitsets: BigUint64Array = new BigUint64Array(0);
     public weightMap: Uint32Array = new Uint32Array(0);
+    public sortedRanks: [string, number][] = [];
 
     constructor(data: EnchantmentData, version: string) {
         this.data = data;
@@ -82,7 +83,7 @@ export class Registry {
 
         for (let i = 0; i < allEnchNames.length; i++) {
             const name = allEnchNames[i];
-            const props = Object.assign({}, this.data.global_enchantments[name], this.mergedOverrides[name] || {});
+            const props = Object.assign({}, this.data.global_enchantments[name], this.mergedOverrides[name] || {}) as Enchantment;
             this.resolvedRegistry[name] = props;
             this.weightMap[i] = props.weight;
             
@@ -95,6 +96,9 @@ export class Registry {
             }
             this.conflictBitsets[i] = bitset;
         }
+
+        const romanMap = this.data.constants.ROMAN_MAP;
+        this.sortedRanks = Object.entries(romanMap).sort((a, b) => b[1] - a[1]);
     }
 
     public getEligibleMaterials(cat: string): string[] {

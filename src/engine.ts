@@ -80,8 +80,7 @@ export class EnchantEngine {
         const pool = this.registry.mergedItems[cat] || [];
         const out: number[] = [];
         
-        const romanMap = this.registry.data.constants.ROMAN_MAP;
-        const rEntries = Object.entries(romanMap).sort((a, b) => b[1] - a[1]); // Descending ranks
+        const rEntries = this.registry.sortedRanks;
 
         for (const name of pool) {
             const id = this.registry.idMap.get(name)!;
