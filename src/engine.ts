@@ -8,7 +8,7 @@ import { Registry } from './registry.js';
  */
 export interface SearchFrontier {
     queue: BinaryHeap<{ chosen: number[], bitset: bigint, level: number, prob: number }>;
-    results: { [ids: string]: number };
+    results: Map<bigint, number>;
     uncertainty: number;
     cumulativeAccountedMass: number;
     threshold: number;
@@ -26,12 +26,9 @@ export class EnchantEngine {
     public statsCache = new Map<string, CalculationStats>();
     
     private readonly MAX_CACHE_SIZE = 500;
-    public revRomanMap: { [val: number]: string } = {};
 
     constructor(data: EnchantmentData, version: string) {
         this.registry = new Registry(data, version);
-        const romanMap = this.registry.data.constants.ROMAN_MAP;
-        this.revRomanMap = Object.entries(romanMap).reduce((acc, [k, v]) => { acc[v] = k; return acc; }, {} as any);
     }
 
     /**
@@ -121,41 +118,80 @@ export class EnchantEngine {
 
 
     /**
-     * Generates a unique key for a set of enchantments (numeric version).
+     * Packs a set of enchantments into a bigint.
+     * Each enchantment is (id << 4 | rank), 12 bits total.
      */
-    public getComboKeyNumeric(chosen: number[], initialSeedId: number | null): string {
-        // chosen is already (id << 8 | rank)
-        // We need to sort them consistently, except the seed if present
-        const sorted = [...chosen].sort((a, b) => {
-            const idA = a >> 8, idB = b >> 8;
-            if (initialSeedId !== null) {
-                if (idA === initialSeedId) return -1;
-                if (idB === initialSeedId) return 1;
+    public packComboBigInt(chosen: number[], initialSeedId: number | null): bigint {
+        if (chosen.length === 0) return 0n;
+        
+        // Separate seed from others
+        let seed: number | null = null;
+        const others: number[] = [];
+        
+        for (const c of chosen) {
+            const id = c >> 8;
+            const rank = c & 0xFF;
+            const val = (id << 4) | (rank & 0x0F);
+            if (initialSeedId !== null && id === initialSeedId && seed === null) {
+                seed = val;
+            } else {
+                others.push(val);
             }
-            if (idA !== idB) return idA - idB;
-            return (b & 0xFF) - (a & 0xFF);
-        });
-        return sorted.join(",");
+        }
+        
+        others.sort((a, b) => b - a);
+        if (seed !== null) others.unshift(seed);
+        
+        // Pack up to 5 enchantments into a single 64-bit integer.
+        // Format: [4 bits: count] [5 slots x 12 bits: (id << 4 | rank)]
+        let packed = 0n;
+        for (let i = 0; i < others.length; i++) {
+            // Shift each 12-bit entry into its designated slot
+            packed |= BigInt(others[i]) << BigInt(i * 12);
+        }
+        // Store the number of enchantments in the highest 4 bits (60-63)
+        // This makes keys unique even if one is a prefix of another
+        packed |= BigInt(others.length) << 60n;
+        
+        return packed;
     }
 
     /**
-     * Translates a numeric combo key to a human-readable string.
+     * Unpacks a bigint back into numeric enchantment IDs (id << 8 | rank).
      */
-    public translateComboKey(key: string): string {
-        if (!key || typeof key !== 'string') return "";
+    public unpackComboBigInt(packed: bigint): number[] {
+        if (packed === 0n) return [];
+        // Extract count from top 4 bits
+        const count = Number(packed >> 60n);
+        // Clear count bits to get the raw enchantment data
+        const core = packed & ((1n << 60n) - 1n);
         
-        // Guard: If it doesn't look like a numeric key (e.g. "Sharpness I"), return as is
-        if (!key.includes(",") && !/^\d+$/.test(key)) {
-            return key;
+        const out: number[] = [];
+        for (let i = 0; i < count; i++) {
+            // Extract the i-th 12-bit slot
+            const val = Number((core >> BigInt(i * 12)) & 0xFFFn);
+            // Reconstruct (id << 8 | rank)
+            const id = val >> 4;
+            const rank = val & 0x0F;
+            out.push((id << 8) | rank);
+        }
+        return out;
+    }
+
+    /**
+     * Translates a packed combo key to a human-readable string.
+     */
+    public translateComboKey(key: string | bigint): string {
+        if (!key) return "";
+        
+        if (typeof key === 'string') {
+            // Check if it's already translated
+            if (key.includes(" ") && !/^[0-9a-fA-F]+$/.test(key)) return key;
+            return this.translateComboKey(BigInt("0x" + key));
         }
 
-        return key.split(",").map(nStr => {
-            const n = parseInt(nStr);
-            if (isNaN(n)) return nStr; // Fail-safe
-            const id = n >> 8;
-            const rank = n & 0xFF;
-            return `${this.registry.revIdMap[id]} ${this.revRomanMap[rank]}`;
-        }).join("+");
+        const ids = this.unpackComboBigInt(key);
+        return ids.map(n => this.registry.getFullEnchantName(n)).join("+");
     }
 
     /**
@@ -176,7 +212,7 @@ export class EnchantEngine {
         const cached = this.comboCache.get(cacheKey);
         if (cached && cached.threshold <= threshold && !existingFrontier) return cached;
 
-        let results: { [ids: string]: number };
+        let results: Map<bigint, number>;
         let uncertainty: number;
         let cumulativeAccountedMass: number;
         let queue: BinaryHeap<{ chosen: number[], bitset: bigint, level: number, prob: number }>;
@@ -185,19 +221,19 @@ export class EnchantEngine {
         const initialSeedId = initialSeedBase ? this.registry.idMap.get(initialSeedBase)! : null;
 
         if (existingFrontier) {
-            results = { ...existingFrontier.results };
+            results = new Map(existingFrontier.results);
             uncertainty = existingFrontier.uncertainty;
             cumulativeAccountedMass = existingFrontier.cumulativeAccountedMass;
             queue = existingFrontier.queue.clone();
         } else if (cached && cached.threshold > threshold) {
             // Resume from cache if we're asking for MORE accuracy
-            results = { ...cached.results };
+            results = new Map(cached.results);
             uncertainty = cached.uncertainty;
             cumulativeAccountedMass = cached.cumulativeAccountedMass;
             queue = cached.queue.clone();
         } else {
             // Start fresh
-            results = {};
+            results = new Map();
             uncertainty = 1.0;
             cumulativeAccountedMass = 0;
             
@@ -223,7 +259,7 @@ export class EnchantEngine {
         const initialTotalWeight = poolWeights.reduce((a, b) => a + b, 0);
 
         if (initialTotalWeight === 0) {
-            return { queue: new BinaryHeap(), results: {}, uncertainty: 0, cumulativeAccountedMass: 1.0, threshold };
+            return { queue: new BinaryHeap(), results: new Map(), uncertainty: 0, cumulativeAccountedMass: 1.0, threshold };
         }
 
         while (queue.size() > 0 && iterations < MAX_ITERATIONS && cumulativeAccountedMass < 0.9999) {
@@ -249,18 +285,18 @@ export class EnchantEngine {
             }
 
             // 2. Subsequent Selection Processing
-            const currentKey = this.getComboKeyNumeric(current.chosen, initialSeedId);
+            const currentKey = this.packComboBigInt(current.chosen, initialSeedId);
             const probContinue = (cat === "book" && !this.registry.multiEnchantBooks) ? 0 : Math.min((current.level + 1) / 50, 1.0);
 
             if (probContinue <= 0) {
-                results[currentKey] = (results[currentKey] || 0) + current.prob;
+                results.set(currentKey, (results.get(currentKey) || 0) + current.prob);
                 cumulativeAccountedMass += current.prob;
                 continue;
             }
 
             // Stop mass
             const probStop = current.prob * (1 - probContinue);
-            results[currentKey] = (results[currentKey] || 0) + probStop;
+            results.set(currentKey, (results.get(currentKey) || 0) + probStop);
             cumulativeAccountedMass += probStop;
 
             // Continue mass
@@ -309,11 +345,11 @@ export class EnchantEngine {
 
         // Calculate uncertainty and final result for this resolution
         let finalUncertainty = 0;
-        const outResults = { ...results };
+        const outResults = new Map(results);
         for (const item of queue.items) {
             finalUncertainty += item.prob;
-            const key = item.chosen.length > 0 ? this.getComboKeyNumeric(item.chosen, initialSeedId) : "";
-            if (key) outResults[key] = (outResults[key] || 0) + item.prob;
+            const key = item.chosen.length > 0 ? this.packComboBigInt(item.chosen, initialSeedId) : 0n;
+            if (key !== 0n) outResults.set(key, (outResults.get(key) || 0) + item.prob);
         }
 
         const out = { queue, results, uncertainty: finalUncertainty, cumulativeAccountedMass, threshold };
@@ -344,7 +380,7 @@ export class EnchantEngine {
             let possible = false;
             for (const ml of Object.keys(dist)) {
                 const numeric = this.getEligibleListNumeric(cat, parseInt(ml), mat, 0n);
-                if (numeric.some(n => `${this.registry.revIdMap[n >> 8]} ${this.revRomanMap[n & 0xFF]}` === initialSeed)) {
+                if (numeric.some(n => this.registry.getFullEnchantName(n) === initialSeed)) {
                     possible = true;
                     break;
                 }
@@ -356,7 +392,7 @@ export class EnchantEngine {
 
         const enchantability = this.registry.getEnchantability(mat, cat);
         const modDist = this.getModifiedLevelDist(xp, enchantability);
-        const finalCombos: { [combo: string]: number } = {};
+        const finalCombos = new Map<bigint, number>();
 
         const activeThreshold = initialSeed ? threshold / 10 : threshold;
 
@@ -368,9 +404,8 @@ export class EnchantEngine {
             if (mProb < activeThreshold) continue; 
             processedMProb += mProb;
             const res = this.calculateCombinations(cat, Number(mlStr), mat, initialSeed, activeThreshold);
-            for (const [c, p] of Object.entries(res.results)) {
-                if (!c) continue; // Skip empty keys
-                finalCombos[c] = (finalCombos[c] || 0) + p * mProb;
+            for (const [c, p] of res.results) {
+                finalCombos.set(c, (finalCombos.get(c) || 0) + p * mProb);
             }
             totalUncertainty += res.uncertainty * mProb;
 
@@ -380,24 +415,23 @@ export class EnchantEngine {
 
         const stats: CalculationStats = { ranks: {}, any: {}, count: {}, combos: {}, residual: totalUncertainty };
         
-        for (const [ids, p] of Object.entries(finalCombos)) {
-            const translatedKey = this.translateComboKey(ids);
-            stats.combos[translatedKey] = p;
+        for (const [packed, p] of finalCombos) {
+            stats.combos[packed.toString(16)] = p;
             
-            const comboIds = ids.split(",").map(Number);
+            const comboIds = this.unpackComboBigInt(packed);
             stats.count[comboIds.length] = (stats.count[comboIds.length] || 0) + p;
             
-            const seenBases = new Set<string>();
+            let seenBasesBitmask = 0n;
             for (const n of comboIds) {
-                const id = n >> 8;
-                const rank = n & 0xFF;
-                const entry = `${this.registry.revIdMap[id]} ${this.revRomanMap[rank]}`;
-                stats.ranks[entry] = (stats.ranks[entry] || 0) + p;
+                stats.ranks[n] = (stats.ranks[n] || 0) + p;
                 
-                const base = this.registry.revIdMap[id];
-                if (!seenBases.has(base)) {
-                    stats.any[base] = (stats.any[base] || 0) + p;
-                    seenBases.add(base);
+                const id = n >> 8;
+                // Efficiency replacement for Set.has(id):
+                // Check if the id-th bit is set in the bitmask
+                if (!((seenBasesBitmask >> BigInt(id)) & 1n)) {
+                    stats.any[id] = (stats.any[id] || 0) + p;
+                    // Mark this enchantment base as seen using its ID as the bit index
+                    seenBasesBitmask |= (1n << BigInt(id));
                 }
             }
         }

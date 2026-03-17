@@ -129,6 +129,24 @@ export class Registry {
         });
     }
 
+    public getEnchantName(id: number): string {
+        return this.revIdMap[id] || "Unknown";
+    }
+
+    public getRankRoman(rank: number): string {
+        const romanMap = this.data.constants.ROMAN_MAP;
+        for (const [k, v] of Object.entries(romanMap)) {
+            if (v === rank) return k;
+        }
+        return rank.toString();
+    }
+
+    public getFullEnchantName(idAndRank: number): string {
+        const id = idAndRank >> 8;
+        const rank = idAndRank & 0xFF;
+        return `${this.getEnchantName(id)} ${this.getRankRoman(rank)}`;
+    }
+
     public getEnchantability(mat: string, cat: string): number {
         if (cat === "book") return 1;
         const { armor, tools } = this.data.material_values;

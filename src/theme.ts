@@ -9,8 +9,9 @@ export const ThemeManager = {
     /**
      * Calculates a color for an enchantment based on its base name and rank.
      */
-    getEnchantColor: (name: string, registry: Registry): string => {
-        const base = RomanUtils.getBaseName(name, registry.data.constants.ROMAN_MAP);
+    getEnchantColor: (idOrName: string | number, registry: Registry): string => {
+        let fullName = typeof idOrName === 'number' ? registry.getFullEnchantName(idOrName) : idOrName;
+        const base = RomanUtils.getBaseName(fullName, registry.data.constants.ROMAN_MAP);
         let color = DATA.cosmetics.ENCHANT_COLORS[base];
         
         if (!color) {
@@ -19,7 +20,7 @@ export const ThemeManager = {
             color = `hsl(${Math.abs(hash) % 360}, 65%, 60%)`;
         }
 
-        const rankPart = name.split(' ').pop() || "";
+        const rankPart = fullName.split(' ').pop() || "";
         const boost = DATA.cosmetics.RANK_LIGHTNESS_BOOST[rankPart] || 0;
         
         if (color.startsWith('hsl')) {

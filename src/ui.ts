@@ -121,9 +121,7 @@ const UIController = {
         Object.keys(dist).forEach(ml => {
             const numeric = engine.getEligibleListNumeric(cat, parseInt(ml), mat, 0n);
             numeric.forEach(n => {
-                const name = engine.registry.revIdMap[n >> 8];
-                const rank = engine.revRomanMap[n & 0xFF];
-                allPossible.add(`${name} ${rank}`);
+                allPossible.add(engine.registry.getFullEnchantName(n));
             });
         });
 
@@ -207,10 +205,10 @@ const UIController = {
         const engine = this.getEngine();
         const topCombos = Object.entries(stats.combos).sort((a,b) => b[1] - a[1]).slice(0, 10);
         
-        const comboListHtml = topCombos.map(([name, prob]) => `
+        const comboListHtml = topCombos.map(([packed, prob]) => `
             <div class="combo-item">
                 <div style="display: flex; justify-content: space-between;">
-                    <span class="combo-names">${name.replace(/\+/g, ' + ')}</span>
+                    <span class="combo-names">${engine.translateComboKey(packed).replace(/\+/g, ' + ')}</span>
                     <span class="combo-prob">${(prob * 100).toFixed(1)}%</span>
                 </div>
             </div>
@@ -231,8 +229,10 @@ const UIController = {
         const rankSection = document.getElementById("rank-section");
         if (!rankSection) return;
 
-        rankSection.innerHTML = Object.entries(stats.any).sort((a,b) => b[1] - a[1]).map(([name, prob]) => {
-            const props = DATA.global_enchantments[name];
+        rankSection.innerHTML = Object.entries(stats.any).sort((a,b) => b[1] - a[1]).map(([idStr, prob]) => {
+            const id = parseInt(idStr);
+            const name = engine.registry.getEnchantName(id);
+            const props = engine.registry.resolvedRegistry[name];
             const levelsCount = props ? Object.keys(props.levels).length : 2;
             const label = levelsCount > 1 ? `Any ${name}` : name;
             
