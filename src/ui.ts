@@ -117,8 +117,12 @@ const UIController = {
         
         const allPossible = new Set<string>();
         Object.keys(dist).forEach(ml => {
-            const eligible = engine.getEligibleList(cat, parseInt(ml), mat);
-            eligible.forEach(e => allPossible.add(`${e.name} ${e.rank}`));
+            const numeric = engine.getEligibleListNumeric(cat, parseInt(ml), mat, 0n);
+            numeric.forEach(n => {
+                const name = engine.registry.revIdMap[n >> 8];
+                const rank = engine.revRomanMap[n & 0xFF];
+                allPossible.add(`${name} ${rank}`);
+            });
         });
 
         Array.from(allPossible).sort().forEach(s => {
