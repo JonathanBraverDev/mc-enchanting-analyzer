@@ -14,9 +14,12 @@ export class EnchantEngine {
     public statsCache = new Map<string, CalculationStats>();
     
     private readonly MAX_CACHE_SIZE = 500;
+    public revRomanMap: { [val: number]: string } = {};
 
     constructor(data: EnchantmentData, version: string) {
         this.registry = new Registry(data, version);
+        const romanMap = this.registry.data.constants.ROMAN_MAP;
+        this.revRomanMap = Object.entries(romanMap).reduce((acc, [k, v]) => { acc[v] = k; return acc; }, {} as any);
     }
 
     /**
@@ -105,23 +108,6 @@ export class EnchantEngine {
         return out;
     }
 
-    // Deprecated string-based version for legacy/UI code if needed
-    public getEligibleList(cat: string, level: number, mat: string, chosenNames: Set<string> = new Set()): { name: string, weight: number, rank: string }[] {
-        let bitset = 0n;
-        for (const name of chosenNames) {
-            const id = this.registry.idMap.get(name);
-            if (id !== undefined) bitset |= (1n << BigInt(id));
-        }
-        const numeric = this.getEligibleListNumeric(cat, level, mat, bitset);
-        const romanMap = this.registry.data.constants.ROMAN_MAP;
-        const revRomanMap = Object.entries(romanMap).reduce((acc, [k, v]) => { acc[v] = k; return acc; }, {} as any);
-        
-        return numeric.map(n => ({
-            name: this.registry.revIdMap[n >> 8],
-            weight: this.registry.weightMap[n >> 8],
-            rank: revRomanMap[n & 0xFF]
-        }));
-    }
 
     /**
      * Generates a unique key for a set of enchantments (numeric version).
@@ -146,14 +132,12 @@ export class EnchantEngine {
      */
     public translateComboKey(key: string): string {
         if (!key) return "";
-        const romanMap = this.registry.data.constants.ROMAN_MAP;
-        const revRomanMap = Object.entries(romanMap).reduce((acc, [k, v]) => { acc[v] = k; return acc; }, {} as any);
         
         return key.split(",").map(nStr => {
             const n = parseInt(nStr);
             const id = n >> 8;
             const rank = n & 0xFF;
-            return `${this.registry.revIdMap[id]} ${revRomanMap[rank]}`;
+            return `${this.registry.revIdMap[id]} ${this.revRomanMap[rank]}`;
         }).join("+");
     }
 
@@ -283,8 +267,8 @@ export class EnchantEngine {
             const dist = this.getModifiedLevelDist(xp, ench);
             let possible = false;
             for (const ml of Object.keys(dist)) {
-                const eligible = this.getEligibleList(cat, parseInt(ml), mat);
-                if (eligible.some(e => `${e.name} ${e.rank}` === initialSeed)) {
+                const numeric = this.getEligibleListNumeric(cat, parseInt(ml), mat, 0n);
+                if (numeric.some(n => `${this.registry.revIdMap[n >> 8]} ${this.revRomanMap[n & 0xFF]}` === initialSeed)) {
                     possible = true;
                     break;
                 }
@@ -330,13 +314,10 @@ export class EnchantEngine {
             stats.count[comboIds.length] = (stats.count[comboIds.length] || 0) + p;
             
             const seenBases = new Set<string>();
-            const romanMap = this.registry.data.constants.ROMAN_MAP;
-            const revRomanMap = Object.entries(romanMap).reduce((acc, [k, v]) => { acc[v] = k; return acc; }, {} as any);
-
             for (const n of comboIds) {
                 const id = n >> 8;
                 const rank = n & 0xFF;
-                const entry = `${this.registry.revIdMap[id]} ${revRomanMap[rank]}`;
+                const entry = `${this.registry.revIdMap[id]} ${this.revRomanMap[rank]}`;
                 stats.ranks[entry] = (stats.ranks[entry] || 0) + p;
                 
                 const base = this.registry.revIdMap[id];
