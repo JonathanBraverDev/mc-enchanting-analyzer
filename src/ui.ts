@@ -5,13 +5,56 @@ import { ThemeManager } from './theme.js';
 import { ChartManager } from './chart-manager.js';
 import { RomanUtils } from './utils.js';
 
+const WorkerClient = {
+    worker: null as Worker | null,
+    pendingRequests: new Map<number, (data: any) => void>(),
+    requestId: 0,
+
+    init(version: string): Promise<void> {
+        return new Promise((resolve) => {
+            if (this.worker) this.worker.terminate();
+            
+            // For production/main analyzer.html, worker.js is in dist/
+            // Inline-assets.js will replace this with a Blob URL for standalone
+            this.worker = new Worker('dist/worker.js');
+            
+            this.worker.onmessage = (e) => {
+                const { type, id, payload } = e.data;
+                if (type === 'ready' || type === 'result') {
+                    const cb = this.pendingRequests.get(id);
+                    if (cb) {
+                        cb(payload);
+                        this.pendingRequests.delete(id);
+                    }
+                    if (type === 'ready') resolve();
+                } else if (type === 'error') {
+                    console.error("Worker Error:", payload);
+                }
+            };
+
+            const id = ++this.requestId;
+            this.pendingRequests.set(id, () => {}); // No-op for init ready
+            this.worker.postMessage({ type: 'init', id, payload: { version } });
+        });
+    },
+
+    request(type: string, payload: any): Promise<any> {
+        return new Promise((resolve) => {
+            if (!this.worker) return resolve(null);
+            const id = ++this.requestId;
+            this.pendingRequests.set(id, resolve);
+            this.worker.postMessage({ type, id, payload });
+        });
+    }
+};
+
 /**
  * Main UI Controller for the Enchantment Analyzer.
  */
 const UIController = {
     elements: {} as { [id: string]: HTMLElement },
     chartManager: null as ChartManager | null,
-    engine: null as EnchantEngine | null,
+    engine: null as EnchantEngine | null, // Still keep for small sync tasks if needed (e.g. translation)
     chartUpdateId: 0,
     lastChartParams: "",
     savedSeed: "",
@@ -20,8 +63,9 @@ const UIController = {
     runTimeout: 0,
     activeRefinementId: 0,
     currentSweep: [] as { l: number, s: CalculationStats }[],
+    isWorkerReady: false,
 
-    init(): void {
+    async init(): Promise<void> {
         const ids = ["v-select", "cat-select", "mat-select", "seed-select", "lvl-range", "lvl-val", "chart-metric", "refinement-status"];
         ids.forEach(id => {
             const el = document.getElementById(id);
@@ -32,6 +76,10 @@ const UIController = {
         this.populateVersions();
         this.setupEventListeners();
         
+        const v = (this.elements["v-select"] as HTMLSelectElement).value;
+        await WorkerClient.init(v);
+        this.isWorkerReady = true;
+
         this.updateMaterials();
         this.run();
     },
@@ -53,7 +101,14 @@ const UIController = {
         const lvl = this.elements["lvl-range"] as HTMLInputElement;
         const metric = this.elements["chart-metric"] as HTMLSelectElement;
 
-        v.onchange = () => { this.updateMaterials(); this.updateSeed(); this.run(); };
+        v.onchange = async () => { 
+            this.isWorkerReady = false;
+            await WorkerClient.init(v.value);
+            this.isWorkerReady = true;
+            this.updateMaterials(); 
+            this.updateSeed(); 
+            this.run(); 
+        };
         cat.onchange = () => { this.updateMaterials(); this.updateSeed(); this.run(); };
         mat.onchange = () => { this.updateSeed(); this.run(); };
         
@@ -134,6 +189,8 @@ const UIController = {
     },
 
     async run(): Promise<void> {
+        if (!this.isWorkerReady) return;
+
         const engine = this.getEngine();
         const cat = (this.elements["cat-select"] as HTMLSelectElement).value;
         const mat = (this.elements["mat-select"] as HTMLSelectElement).value;
@@ -151,11 +208,11 @@ const UIController = {
 
         // Pass 1: Coarse Refinement (Instant)
         this.setRefinementStatus("Searching...", "coarse");
-        let stats = await engine.getFullStats(cat, xp, mat, seed, 0.05);
+        let stats = await WorkerClient.request('getFullStats', { cat, xp, mat, seed, threshold: 0.05 });
         if (currentId !== this.activeRefinementId) return;
         this.updateInsights(stats);
         
-        // Start chart sweep in background but wait for coarse pass for responsiveness
+        // Start chart sweep in background
         const chartPromise = this.updateChart(cat, mat, 0.05);
         await chartPromise;
         if (currentId !== this.activeRefinementId) return;
@@ -163,7 +220,7 @@ const UIController = {
         // Pass 2: Standard Refinement
         this.setRefinementStatus("Refining...", "standard");
         const standardThreshold = cat === "book" ? this.BOOK_THRESHOLD : this.DEFAULT_THRESHOLD;
-        stats = await engine.getFullStats(cat, xp, mat, seed, standardThreshold);
+        stats = await WorkerClient.request('getFullStats', { cat, xp, mat, seed, threshold: standardThreshold });
         if (currentId !== this.activeRefinementId) return;
         this.updateInsights(stats);
         await this.updateChart(cat, mat, standardThreshold);
@@ -171,12 +228,11 @@ const UIController = {
 
         // Pass 3: Fine Refinement (Deep Analysis)
         this.setRefinementStatus("Finalizing...", "fine");
-        stats = await engine.getFullStats(cat, xp, mat, seed, 0.00001);
+        stats = await WorkerClient.request('getFullStats', { cat, xp, mat, seed, threshold: 0.00001 });
         if (currentId !== this.activeRefinementId) return;
         this.updateInsights(stats);
         this.setRefinementStatus("Complete", "done");
         
-        // Re-calculate last chart params to avoid unnecessary redraws
         const metric = (this.elements["chart-metric"] as HTMLSelectElement).value;
         this.lastChartParams = `${engine.registry.version}|${cat}|${mat}|${seed}|${metric}|fine`;
     },
@@ -257,25 +313,22 @@ const UIController = {
         
         const activeThreshold = threshold || (cat === "book" ? this.BOOK_THRESHOLD : this.DEFAULT_THRESHOLD);
         
-        // One level redraws for smooth animation
         const redrawStep = 1;
 
         for (let i = 0; i < labels.length; i++) {
             const l = labels[i];
             if (currentId !== this.activeRefinementId) return;
             
-            const stats = await engine.getFullStats(cat, l, mat, seed, activeThreshold);
-            
-            // Incremental update of the central sweep cache
+            const stats = await WorkerClient.request('getFullStats', { cat, xp: l, mat, seed, threshold: activeThreshold });
+            if (currentId !== this.activeRefinementId) return;
+
             this.currentSweep[i] = { l, s: stats };
 
             if (l % redrawStep === 0 || l === 30) {
                 if (this.chartManager) {
-                    // Always render using the current state of currentSweep
                     const tempDatasets = this.chartManager.generateDatasets(this.currentSweep, metric, engine.registry);
                     this.chartManager.update(labels, tempDatasets);
                 }
-                // Yield to browser to paint the update
                 await new Promise(r => requestAnimationFrame(r));
             }
         }
