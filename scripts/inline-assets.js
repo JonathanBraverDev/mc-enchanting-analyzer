@@ -12,7 +12,7 @@ console.log('Building standalone analyzer...');
 try {
     let html = fs.readFileSync(htmlPath, 'utf8');
     const css = fs.readFileSync(cssPath, 'utf8');
-    const js = fs.readFileSync(jsPath, 'utf8');
+    let js = fs.readFileSync(jsPath, 'utf8');
 
     // Remove existing link and script tags
     html = html.replace(/<link rel="stylesheet" href="style\.css">/, `<style>\n${css}\n</style>`);
