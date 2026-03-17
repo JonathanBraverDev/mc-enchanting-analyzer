@@ -172,4 +172,35 @@ describe('EnchantEngine Baselines', () => {
             }
         });
     });
+
+
+
+    describe('Progressive Refinement (Phase 1)', () => {
+        it('Standard results should match Resumed results', async () => {
+            const engine = new EnchantEngine(DATA, '1.20');
+            const cat = 'book', xp = 30, mat = 'book';
+            
+            // 1. Fresh Standard Run
+            const statsStandard = await engine.getFullStats(cat, xp, mat, null, 0.001);
+            
+            // 2. Clear cache to force a fresh "Coarse" run, then a "Standard" resume
+            engine.comboCache.clear();
+            engine.statsCache.clear();
+            
+            await engine.getFullStats(cat, xp, mat, null, 0.05); // Coarse
+            const statsResumed = await engine.getFullStats(cat, xp, mat, null, 0.001); // Resume to Standard
+            
+            // Check parity of top enchants
+            const topStandard = Object.keys(statsStandard.any).sort().slice(0, 5);
+            const topResumed = Object.keys(statsResumed.any).sort().slice(0, 5);
+            
+            assert.deepStrictEqual(topStandard, topResumed, 'Top enchants should match between fresh and resumed runs');
+            
+            for (const ench of topStandard) {
+                const diff = Math.abs(statsStandard.any[ench] - statsResumed.any[ench]);
+                assert.ok(diff < 0.000001, `Probability for ${ench} should be nearly identical (diff: ${diff})`);
+            }
+        });
+    });
 });
+

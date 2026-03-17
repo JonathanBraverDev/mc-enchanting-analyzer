@@ -18,9 +18,10 @@ const UIController = {
     DEFAULT_THRESHOLD: 0.0001,
     BOOK_THRESHOLD: 0.001,
     runTimeout: 0,
+    activeRefinementId: 0,
 
     init(): void {
-        const ids = ["v-select", "cat-select", "mat-select", "seed-select", "lvl-range", "lvl-val", "chart-metric"];
+        const ids = ["v-select", "cat-select", "mat-select", "seed-select", "lvl-range", "lvl-val", "chart-metric", "refinement-status"];
         ids.forEach(id => {
             const el = document.getElementById(id);
             if (el) this.elements[id] = el;
@@ -146,21 +147,55 @@ const UIController = {
         if (enchValEl) enchValEl.textContent = engine.registry.getEnchantability(mat, cat).toString();
 
         const currentId = ++this.chartUpdateId;
-        await new Promise(r => requestAnimationFrame(r));
-        if (currentId !== this.chartUpdateId) return;
+        this.activeRefinementId = currentId;
 
-        const threshold = cat === "book" ? this.BOOK_THRESHOLD : this.DEFAULT_THRESHOLD;
-        const stats = await engine.getFullStats(cat, xp, mat, seed, threshold);
-        
+        // Pass 1: Coarse Refinement (Instant)
+        this.setRefinementStatus("Searching...", "coarse");
+        let stats = await engine.getFullStats(cat, xp, mat, seed, 0.05);
+        if (currentId !== this.activeRefinementId) return;
         this.updateInsights(stats);
-
-        const metric = (this.elements["chart-metric"] as HTMLSelectElement).value;
-        const chartParams = `${engine.registry.version}|${cat}|${mat}|${seed}|${metric}`;
         
-        if (chartParams !== this.lastChartParams) {
-            this.lastChartParams = chartParams;
-            this.updateChart(cat, mat);
-        }
+        // Start chart sweep in background but wait for coarse pass for responsiveness
+        const chartPromise = this.updateChart(cat, mat, 0.05);
+        await chartPromise;
+        if (currentId !== this.activeRefinementId) return;
+
+        // Pass 2: Standard Refinement
+        this.setRefinementStatus("Refining...", "standard");
+        const standardThreshold = cat === "book" ? this.BOOK_THRESHOLD : this.DEFAULT_THRESHOLD;
+        stats = await engine.getFullStats(cat, xp, mat, seed, standardThreshold);
+        if (currentId !== this.activeRefinementId) return;
+        this.updateInsights(stats);
+        await this.updateChart(cat, mat, standardThreshold);
+        if (currentId !== this.activeRefinementId) return;
+
+        // Pass 3: Fine Refinement (Deep Analysis)
+        this.setRefinementStatus("Finalizing...", "fine");
+        stats = await engine.getFullStats(cat, xp, mat, seed, 0.00001);
+        if (currentId !== this.activeRefinementId) return;
+        this.updateInsights(stats);
+        this.setRefinementStatus("Complete", "done");
+        
+        // Re-calculate last chart params to avoid unnecessary redraws
+        const metric = (this.elements["chart-metric"] as HTMLSelectElement).value;
+        this.lastChartParams = `${engine.registry.version}|${cat}|${mat}|${seed}|${metric}|fine`;
+    },
+
+    setRefinementStatus(text: string, level: 'coarse' | 'standard' | 'fine' | 'done'): void {
+        const el = this.elements["refinement-status"];
+        if (!el) return;
+
+        const colors = {
+            coarse: { bg: 'rgba(255, 193, 7, 0.15)', text: '#ffca28' },
+            standard: { bg: 'rgba(76, 175, 80, 0.15)', text: '#66bb6a' },
+            fine: { bg: 'rgba(33, 150, 243, 0.15)', text: '#42a5f5' },
+            done: { bg: 'rgba(255, 255, 255, 0.05)', text: 'var(--text-muted)' }
+        };
+
+        el.textContent = text;
+        el.style.backgroundColor = colors[level].bg;
+        el.style.color = colors[level].text;
+        el.style.opacity = level === 'done' ? '0.6' : '1';
     },
 
     updateInsights(stats: CalculationStats): void {
@@ -211,27 +246,36 @@ const UIController = {
         }).join("");
     },
 
-    async updateChart(cat: string, mat: string): Promise<void> {
-        const currentId = ++this.chartUpdateId;
+    async updateChart(cat: string, mat: string, threshold?: number): Promise<void> {
+        const currentId = this.activeRefinementId;
         const engine = this.getEngine();
         const metric = (this.elements["chart-metric"] as HTMLSelectElement).value;
         const seed = (this.elements["seed-select"] as HTMLSelectElement).value;
         const labels = Array.from({length: 30}, (_, i) => i + 1);
         
-        const threshold = cat === "book" ? this.BOOK_THRESHOLD : this.DEFAULT_THRESHOLD;
+        const activeThreshold = threshold || (cat === "book" ? this.BOOK_THRESHOLD : this.DEFAULT_THRESHOLD);
         const sweep: { l: number, s: CalculationStats }[] = [];
         
-        for (const l of labels) {
-            if (currentId !== this.chartUpdateId) return;
-            sweep.push({ l, s: await engine.getFullStats(cat, l, mat, seed, threshold) });
-            if (l % (cat === "book" ? 2 : 10) === 0) await new Promise(r => requestAnimationFrame(r));
-        }
+        // Redraw steps to balance UI updates with computation speed
+        const redrawStep = cat === "book" ? 3 : 8;
 
-        if (this.chartManager) {
-            const datasets = this.chartManager.generateDatasets(sweep, metric, engine.registry);
-            this.chartManager.update(labels, datasets);
+        for (const l of labels) {
+            if (currentId !== this.activeRefinementId) return;
+            
+            const stats = await engine.getFullStats(cat, l, mat, seed, activeThreshold);
+            sweep.push({ l, s: stats });
+
+            if (l % redrawStep === 0 || l === 30) {
+                if (this.chartManager) {
+                    const tempDatasets = this.chartManager.generateDatasets(sweep, metric, engine.registry);
+                    this.chartManager.update(labels, tempDatasets);
+                }
+                // Yield to browser to paint the update
+                await new Promise(r => requestAnimationFrame(r));
+            }
         }
     }
+
 };
 
 window.onload = () => UIController.init();
