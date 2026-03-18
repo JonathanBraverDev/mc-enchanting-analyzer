@@ -121,26 +121,26 @@ export class EnchantEngine {
      * Packs a set of enchantments into a bigint.
      * Each enchantment is (id << 4 | rank), 12 bits total.
      */
-    public packComboBigInt(chosen: number[], initialSeedId: number | null): bigint {
+    public packComboBigInt(chosen: number[], guaranteedFirstId: number | null): bigint {
         if (chosen.length === 0) return 0n;
         
-        // Separate seed from others
-        let seed: number | null = null;
+        // Separate guaranteedFirst from others
+        let firstPicked: number | null = null;
         const others: number[] = [];
         
         for (const c of chosen) {
             const id = c >> 8;
             const rank = c & 0xFF;
             const val = (id << 4) | (rank & 0x0F);
-            if (initialSeedId !== null && id === initialSeedId && seed === null) {
-                seed = val;
+            if (guaranteedFirstId !== null && id === guaranteedFirstId && firstPicked === null) {
+                firstPicked = val;
             } else {
                 others.push(val);
             }
         }
         
         others.sort((a, b) => b - a);
-        if (seed !== null) others.unshift(seed);
+        if (firstPicked !== null) others.unshift(firstPicked);
         
         // Pack up to 5 enchantments into a single 64-bit integer.
         // Format: [4 bits: count] [5 slots x 12 bits: (id << 4 | rank)]
@@ -202,11 +202,11 @@ export class EnchantEngine {
         cat: string, 
         modLevel: number, 
         mat: string, 
-        initialSeed: string | null = null, 
+        guaranteedFirst: string | null = null, 
         threshold: number = 0.0001,
         existingFrontier?: SearchFrontier
     ): SearchFrontier {
-        const cacheKey = `${cat}|${modLevel}|${mat}|${initialSeed || "none"}`;
+        const cacheKey = `${cat}|${modLevel}|${mat}|${guaranteedFirst || "none"}`;
         
         // If we have a cached frontier that already met this threshold, return it
         const cached = this.comboCache.get(cacheKey);
@@ -217,8 +217,9 @@ export class EnchantEngine {
         let cumulativeAccountedMass: number;
         let queue: BinaryHeap<{ chosen: number[], bitset: bigint, level: number, prob: number }>;
 
-        const initialSeedBase = initialSeed ? RomanUtils.getBaseName(initialSeed, this.registry.data.constants.ROMAN_MAP) : null;
-        const initialSeedId = initialSeedBase ? this.registry.idMap.get(initialSeedBase)! : null;
+        const romanMap = this.registry.data.constants.ROMAN_MAP;
+        const guaranteedFirstBase = guaranteedFirst ? RomanUtils.getBaseName(guaranteedFirst, romanMap) : null;
+        const guaranteedFirstId = guaranteedFirstBase ? this.registry.idMap.get(guaranteedFirstBase)! : null;
 
         if (existingFrontier) {
             results = new Map(existingFrontier.results);
@@ -238,13 +239,13 @@ export class EnchantEngine {
             cumulativeAccountedMass = 0;
             
             const romanMap = this.registry.data.constants.ROMAN_MAP;
-            const initialSeedRank = initialSeed ? RomanUtils.getRomanValue(initialSeed.split(' ').pop()!, romanMap) : null;
-            const initialSeedFull = initialSeedId !== null && initialSeedRank !== null ? (initialSeedId << 8 | initialSeedRank) : null;
+            const guaranteedFirstRank = guaranteedFirst ? RomanUtils.getRomanValue(guaranteedFirst.split(' ').pop()!, romanMap) : null;
+            const guaranteedFirstFull = guaranteedFirstId !== null && guaranteedFirstRank !== null ? (guaranteedFirstId << 8 | guaranteedFirstRank) : null;
 
             queue = new BinaryHeap<{ chosen: number[], bitset: bigint, level: number, prob: number }>();
             queue.push({ 
-                chosen: initialSeedFull !== null ? [initialSeedFull] : [], 
-                bitset: initialSeedId !== null ? (1n << BigInt(initialSeedId)) : 0n,
+                chosen: guaranteedFirstFull !== null ? [guaranteedFirstFull] : [], 
+                bitset: guaranteedFirstId !== null ? (1n << BigInt(guaranteedFirstId)) : 0n,
                 level: modLevel, 
                 prob: 1.0 
             });
@@ -285,7 +286,7 @@ export class EnchantEngine {
             }
 
             // 2. Subsequent Selection Processing
-            const currentKey = this.packComboBigInt(current.chosen, initialSeedId);
+            const currentKey = this.packComboBigInt(current.chosen, guaranteedFirstId);
             const probContinue = (cat === "book" && !this.registry.multiEnchantBooks) ? 0 : Math.min((current.level + 1) / 50, 1.0);
 
             if (probContinue <= 0) {
@@ -324,7 +325,9 @@ export class EnchantEngine {
             }
 
             if (currentTotalWeight === 0) {
-                uncertainty += probMovingForward;
+                // If we can't find anything to add, the probability remains with the current combo
+                results.set(currentKey, (results.get(currentKey) || 0) + probMovingForward);
+                cumulativeAccountedMass += probMovingForward;
                 continue;
             }
 
@@ -348,7 +351,7 @@ export class EnchantEngine {
         const outResults = new Map(results);
         for (const item of queue.items) {
             finalUncertainty += item.prob;
-            const key = item.chosen.length > 0 ? this.packComboBigInt(item.chosen, initialSeedId) : 0n;
+            const key = item.chosen.length > 0 ? this.packComboBigInt(item.chosen, guaranteedFirstId) : 0n;
             if (key !== 0n) outResults.set(key, (outResults.get(key) || 0) + item.prob);
         }
 
@@ -369,18 +372,18 @@ export class EnchantEngine {
     /**
      * Aggregates all statistics for a given enchantment attempt.
      */
-    public async getFullStats(cat: string, xp: number, mat: string, initialSeed: string | null = null, threshold: number = 0.0001): Promise<CalculationStats> {
-        const cacheKey = `${cat}|${xp}|${mat}|${initialSeed || 'none'}|${threshold}`;
+    public async getFullStats(cat: string, xp: number, mat: string, guaranteedFirst: string | null = null, threshold: number = 0.0001): Promise<CalculationStats> {
+        const cacheKey = `${cat}|${xp}|${mat}|${guaranteedFirst || 'none'}|${threshold}`;
         if (this.statsCache.has(cacheKey)) return this.statsCache.get(cacheKey)!;
 
-        // Seed validity check: If seed is provided, verify it is possible at ANY possible modified level
-        if (initialSeed) {
+        // Guaranteed First validity check: If guaranteedFirst is provided, verify it is possible at ANY possible modified level
+        if (guaranteedFirst) {
             const ench = this.registry.getEnchantability(mat, cat);
             const dist = this.getModifiedLevelDist(xp, ench);
             let possible = false;
             for (const ml of Object.keys(dist)) {
                 const numeric = this.getEligibleListNumeric(cat, parseInt(ml), mat, 0n);
-                if (numeric.some(n => this.registry.getFullEnchantName(n) === initialSeed)) {
+                if (numeric.some(n => this.registry.getFullEnchantName(n) === guaranteedFirst)) {
                     possible = true;
                     break;
                 }
@@ -394,7 +397,7 @@ export class EnchantEngine {
         const modDist = this.getModifiedLevelDist(xp, enchantability);
         const finalCombos = new Map<bigint, number>();
 
-        const activeThreshold = initialSeed ? threshold / 10 : threshold;
+        const activeThreshold = guaranteedFirst ? threshold / 10 : threshold;
 
         let processedMProb = 0;
         let totalUncertainty = 0;
@@ -403,7 +406,7 @@ export class EnchantEngine {
         for (const [mlStr, mProb] of Object.entries(modDist)) {
             if (mProb < activeThreshold) continue; 
             processedMProb += mProb;
-            const res = this.calculateCombinations(cat, Number(mlStr), mat, initialSeed, activeThreshold);
+            const res = this.calculateCombinations(cat, Number(mlStr), mat, guaranteedFirst, activeThreshold);
             for (const [c, p] of res.results) {
                 finalCombos.set(c, (finalCombos.get(c) || 0) + p * mProb);
             }
