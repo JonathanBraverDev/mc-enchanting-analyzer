@@ -23,7 +23,7 @@ self.onmessage = async (e: MessageEvent) => {
                     payload.cat,
                     payload.xp,
                     payload.mat,
-                    payload.seed,
+                    payload.guaranteedFirst,
                     payload.threshold
                 );
                 self.postMessage({ type: 'result', id, payload: stats });

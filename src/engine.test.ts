@@ -159,6 +159,24 @@ describe('Enchantment Engine Test Suite', () => {
             }
             assert.ok(prob > 0.0001);
         });
+
+        it('Guaranteed First should yield 100% total probability', async () => {
+            const guaranteedFirst = "Efficiency IV";
+            const stats = await engine.getFullStats('pickaxe', 30, 'diamond', guaranteedFirst, 0.0001);
+            
+            const effId = engine.registry.idMap.get('Efficiency')!;
+            const probAnyEff = stats.any[effId];
+            
+            let totalComboProb = 0;
+            for (const p of Object.values(stats.combos)) {
+                totalComboProb += p;
+            }
+
+            console.log(`Guaranteed First: ${guaranteedFirst}, Prob Any Eff: ${probAnyEff}, Total Combo Prob: ${totalComboProb}`);
+            
+            assert.ok(probAnyEff > 0.999, `Probability of Efficiency should be near 1.0, got ${probAnyEff}`);
+            assert.ok(totalComboProb > 0.999, `Total combo probability should be near 1.0, got ${totalComboProb}`);
+        });
     });
 });
 

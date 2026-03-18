@@ -57,7 +57,7 @@ const UIController = {
     engine: null as EnchantEngine | null, // Still keep for small sync tasks if needed (e.g. translation)
     chartUpdateId: 0,
     lastChartParams: "",
-    savedSeed: "",
+    savedGuaranteedFirst: "",
     DEFAULT_THRESHOLD: 0.0001,
     BOOK_THRESHOLD: 0.001,
     runTimeout: 0,
@@ -66,7 +66,7 @@ const UIController = {
     isWorkerReady: false,
 
     async init(): Promise<void> {
-        const ids = ["v-select", "cat-select", "mat-select", "seed-select", "lvl-range", "lvl-val", "chart-metric", "refinement-status"];
+        const ids = ["v-select", "cat-select", "mat-select", "guaranteed-first-select", "lvl-range", "lvl-val", "chart-metric", "refinement-status"];
         ids.forEach(id => {
             const el = document.getElementById(id);
             if (el) this.elements[id] = el;
@@ -97,7 +97,7 @@ const UIController = {
         const v = this.elements["v-select"] as HTMLSelectElement;
         const cat = this.elements["cat-select"] as HTMLSelectElement;
         const mat = this.elements["mat-select"] as HTMLSelectElement;
-        const seed = this.elements["seed-select"] as HTMLSelectElement;
+        const guaranteedFirst = this.elements["guaranteed-first-select"] as HTMLSelectElement;
         const lvl = this.elements["lvl-range"] as HTMLInputElement;
         const metric = this.elements["chart-metric"] as HTMLSelectElement;
 
@@ -106,14 +106,14 @@ const UIController = {
             await WorkerClient.init(v.value);
             this.isWorkerReady = true;
             this.updateMaterials(); 
-            this.updateSeed(); 
+            this.updateGuaranteedFirst(); 
             this.run(); 
         };
-        cat.onchange = () => { this.updateMaterials(); this.updateSeed(); this.run(); };
-        mat.onchange = () => { this.updateSeed(); this.run(); };
+        cat.onchange = () => { this.updateMaterials(); this.updateGuaranteedFirst(); this.run(); };
+        mat.onchange = () => { this.updateGuaranteedFirst(); this.run(); };
         
-        seed.onchange = () => {
-            this.savedSeed = seed.value;
+        guaranteedFirst.onchange = () => {
+            this.savedGuaranteedFirst = guaranteedFirst.value;
             this.run();
         };
         
@@ -156,17 +156,17 @@ const UIController = {
             matSelect.appendChild(o);
         });
 
-        this.updateSeed();
+        this.updateGuaranteedFirst();
     },
 
-    updateSeed(): void {
+    updateGuaranteedFirst(): void {
         const engine = this.getEngine();
         const cat = (this.elements["cat-select"] as HTMLSelectElement).value;
         const mat = (this.elements["mat-select"] as HTMLSelectElement).value;
         const lvl = parseInt((this.elements["lvl-range"] as HTMLInputElement).value);
-        const seedSelect = this.elements["seed-select"] as HTMLSelectElement;
+        const guaranteedFirstSelect = this.elements["guaranteed-first-select"] as HTMLSelectElement;
         
-        seedSelect.innerHTML = '<option value="">None (Random First)</option>';
+        guaranteedFirstSelect.innerHTML = '<option value="">None (Random First)</option>';
         if (!mat) return;
         
         const ench = engine.registry.getEnchantability(mat, cat);
@@ -183,8 +183,8 @@ const UIController = {
         Array.from(allPossible).sort().forEach(s => {
             const o = document.createElement("option");
             o.value = s; o.textContent = s;
-            if (s === this.savedSeed) o.selected = true;
-            seedSelect.appendChild(o);
+            if (s === this.savedGuaranteedFirst) o.selected = true;
+            guaranteedFirstSelect.appendChild(o);
         });
     },
 
@@ -196,8 +196,8 @@ const UIController = {
         const mat = (this.elements["mat-select"] as HTMLSelectElement).value;
         const xp = parseInt((this.elements["lvl-range"] as HTMLInputElement).value);
         
-        this.updateSeed();
-        const seed = (this.elements["seed-select"] as HTMLSelectElement).value;
+        this.updateGuaranteedFirst();
+        const guaranteedFirst = (this.elements["guaranteed-first-select"] as HTMLSelectElement).value;
 
         const enchValEl = document.getElementById("ench-val");
         if (enchValEl) enchValEl.textContent = engine.registry.getEnchantability(mat, cat).toString();
@@ -208,7 +208,7 @@ const UIController = {
 
         // Pass 1: Coarse Refinement (Instant)
         this.setRefinementStatus("Searching...", "coarse");
-        let stats = await WorkerClient.request('getFullStats', { cat, xp, mat, seed, threshold: 0.05 });
+        let stats = await WorkerClient.request('getFullStats', { cat, xp, mat, guaranteedFirst, threshold: 0.05 });
         if (currentId !== this.activeRefinementId) return;
         this.updateInsights(stats);
         
@@ -220,7 +220,7 @@ const UIController = {
         // Pass 2: Standard Refinement
         this.setRefinementStatus("Refining...", "standard");
         const standardThreshold = cat === "book" ? this.BOOK_THRESHOLD : this.DEFAULT_THRESHOLD;
-        stats = await WorkerClient.request('getFullStats', { cat, xp, mat, seed, threshold: standardThreshold });
+        stats = await WorkerClient.request('getFullStats', { cat, xp, mat, guaranteedFirst, threshold: standardThreshold });
         if (currentId !== this.activeRefinementId) return;
         this.updateInsights(stats);
         await this.updateChart(cat, mat, standardThreshold);
@@ -228,13 +228,13 @@ const UIController = {
 
         // Pass 3: Fine Refinement (Deep Analysis)
         this.setRefinementStatus("Finalizing...", "fine");
-        stats = await WorkerClient.request('getFullStats', { cat, xp, mat, seed, threshold: 0.00001 });
+        stats = await WorkerClient.request('getFullStats', { cat, xp, mat, guaranteedFirst, threshold: 0.00001 });
         if (currentId !== this.activeRefinementId) return;
         this.updateInsights(stats);
         this.setRefinementStatus("Complete", "done");
         
         const metric = (this.elements["chart-metric"] as HTMLSelectElement).value;
-        this.lastChartParams = `${engine.registry.version}|${cat}|${mat}|${seed}|${metric}|fine`;
+        this.lastChartParams = `${engine.registry.version}|${cat}|${mat}|${guaranteedFirst}|${metric}|fine`;
     },
 
     setRefinementStatus(text: string, level: 'coarse' | 'standard' | 'fine' | 'done'): void {
@@ -308,7 +308,7 @@ const UIController = {
         const currentId = this.activeRefinementId;
         const engine = this.getEngine();
         const metric = (this.elements["chart-metric"] as HTMLSelectElement).value;
-        const seed = (this.elements["seed-select"] as HTMLSelectElement).value;
+        const guaranteedFirst = (this.elements["guaranteed-first-select"] as HTMLSelectElement).value;
         const labels = Array.from({length: 30}, (_, i) => i + 1);
         
         const activeThreshold = threshold || (cat === "book" ? this.BOOK_THRESHOLD : this.DEFAULT_THRESHOLD);
@@ -319,7 +319,7 @@ const UIController = {
             const l = labels[i];
             if (currentId !== this.activeRefinementId) return;
             
-            const stats = await WorkerClient.request('getFullStats', { cat, xp: l, mat, seed, threshold: activeThreshold });
+            const stats = await WorkerClient.request('getFullStats', { cat, xp: l, mat, guaranteedFirst, threshold: activeThreshold });
             if (currentId !== this.activeRefinementId) return;
 
             this.currentSweep[i] = { l, s: stats };
