@@ -1,4 +1,6 @@
 {
+  "name": "mc-enchanting-analyzer",
+  "version": "1.0.0-rc",
   "devDependencies": {
     "@types/chart.js": "^2.9.41",
     "@types/node": "^25.5.0",

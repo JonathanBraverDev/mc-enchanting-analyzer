@@ -24,6 +24,7 @@ export class EnchantEngine {
     public comboCache = new Map<string, SearchFrontier>();
     public eligiblePoolCache = new Map<string, number[]>();
     public statsCache = new Map<string, CalculationStats>();
+    public bestStatsCache = new Map<string, { threshold: number, stats: CalculationStats }>();
     
     private readonly MAX_CACHE_SIZE = 500;
 
@@ -372,9 +373,29 @@ export class EnchantEngine {
     /**
      * Aggregates all statistics for a given enchantment attempt.
      */
-    public async getFullStats(cat: string, xp: number, mat: string, guaranteedFirst: string | null = null, threshold: number = 0.0001): Promise<CalculationStats> {
-        const cacheKey = `${cat}|${xp}|${mat}|${guaranteedFirst || 'none'}|${threshold}`;
-        if (this.statsCache.has(cacheKey)) return this.statsCache.get(cacheKey)!;
+    public async getFullStats(
+        cat: string, 
+        xp: number, 
+        mat: string, 
+        guaranteedFirst: string | null = null, 
+        threshold: number = 0.0001,
+        signal?: AbortSignal,
+        onProgress?: (stats: CalculationStats) => void,
+        useBestCache: boolean = false
+    ): Promise<CalculationStats> {
+        const baseKey = `${cat}|${xp}|${mat}|${guaranteedFirst || 'none'}`;
+        const exactKey = `${baseKey}|${threshold}`;
+
+        // 1. Check exact match cache first
+        if (this.statsCache.has(exactKey)) return this.statsCache.get(exactKey)!;
+
+        // 2. If allowed, check for better precision in bestStatsCache
+        if (useBestCache) {
+            const best = this.bestStatsCache.get(baseKey);
+            if (best && best.threshold <= threshold) {
+                return best.stats;
+            }
+        }
 
         // Guaranteed First validity check: If guaranteedFirst is provided, verify it is possible at ANY possible modified level
         if (guaranteedFirst) {
@@ -404,7 +425,9 @@ export class EnchantEngine {
         
         let iterCount = 0;
         for (const [mlStr, mProb] of Object.entries(modDist)) {
+            if (signal?.aborted) throw new Error("Aborted");
             if (mProb < activeThreshold) continue; 
+            
             processedMProb += mProb;
             const res = this.calculateCombinations(cat, Number(mlStr), mat, guaranteedFirst, activeThreshold);
             for (const [c, p] of res.results) {
@@ -412,13 +435,40 @@ export class EnchantEngine {
             }
             totalUncertainty += res.uncertainty * mProb;
 
-            // Yield every few levels to keep UI responsive
-            if (++iterCount % 5 === 0) await new Promise(r => requestAnimationFrame(r));
+            // Yield and report progress every few levels
+            if (++iterCount % 3 === 0) {
+                if (onProgress) {
+                    onProgress(this.summarizeStats(finalCombos, totalUncertainty));
+                }
+                // Yield to worker event loop
+                await new Promise(r => setTimeout(r, 0));
+            }
         }
 
-        const stats: CalculationStats = { ranks: {}, any: {}, count: {}, combos: {}, residual: totalUncertainty };
+        const stats = this.summarizeStats(finalCombos, totalUncertainty);
+
+        if (this.statsCache.size >= this.MAX_CACHE_SIZE) {
+            const firstKey = this.statsCache.keys().next().value;
+            if (firstKey !== undefined) this.statsCache.delete(firstKey);
+        }
+        this.statsCache.set(exactKey, stats);
+
+        // Update bestStatsCache if this is potentially the most precise yet
+        const existingBest = this.bestStatsCache.get(baseKey);
+        if (!existingBest || threshold <= existingBest.threshold) {
+            this.bestStatsCache.set(baseKey, { threshold, stats });
+        }
+
+        return stats;
+    }
+
+    /**
+     * Helper to collapse raw combo results into a stats object.
+     */
+    private summarizeStats(combos: Map<bigint, number>, residual: number): CalculationStats {
+        const stats: CalculationStats = { ranks: {}, any: {}, count: {}, combos: {}, residual };
         
-        for (const [packed, p] of finalCombos) {
+        for (const [packed, p] of combos) {
             stats.combos[packed.toString(16)] = p;
             
             const comboIds = this.unpackComboBigInt(packed);
@@ -429,23 +479,12 @@ export class EnchantEngine {
                 stats.ranks[n] = (stats.ranks[n] || 0) + p;
                 
                 const id = n >> 8;
-                // Efficiency replacement for Set.has(id):
-                // Check if the id-th bit is set in the bitmask
                 if (!((seenBasesBitmask >> BigInt(id)) & 1n)) {
                     stats.any[id] = (stats.any[id] || 0) + p;
-                    // Mark this enchantment base as seen using its ID as the bit index
                     seenBasesBitmask |= (1n << BigInt(id));
                 }
             }
         }
-
-        stats.residual = totalUncertainty;
-
-        if (this.statsCache.size >= this.MAX_CACHE_SIZE) {
-            const firstKey = this.statsCache.keys().next().value;
-            if (firstKey !== undefined) this.statsCache.delete(firstKey);
-        }
-        this.statsCache.set(cacheKey, stats);
         return stats;
     }
 
