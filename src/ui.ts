@@ -20,13 +20,19 @@ const WorkerClient = {
             
             this.worker.onmessage = (e) => {
                 const { type, id, payload } = e.data;
+                const cb = this.pendingRequests.get(id);
+                
                 if (type === 'ready' || type === 'result') {
-                    const cb = this.pendingRequests.get(id);
                     if (cb) {
                         cb(payload);
                         this.pendingRequests.delete(id);
                     }
                     if (type === 'ready') resolve();
+                } else if (type === 'progress') {
+                    // For progress, we don't delete the request, but we need a way to find the progress callback.
+                    // We'll store progress callbacks in a separate map or pass them in request.
+                    const progCb = (this.pendingRequests as any).get(`${id}_progress`);
+                    if (progCb) progCb(payload);
                 } else if (type === 'error') {
                     console.error("Worker Error:", payload);
                 }
@@ -38,12 +44,15 @@ const WorkerClient = {
         });
     },
 
-    request(type: string, payload: any): Promise<any> {
+    request(type: string, payload: any, onProgress?: (data: any) => void): Promise<any> {
         return new Promise((resolve) => {
             if (!this.worker) return resolve(null);
             const id = ++this.requestId;
             this.pendingRequests.set(id, resolve);
-            this.worker.postMessage({ type, id, payload });
+            if (onProgress) {
+                (this.pendingRequests as any).set(`${id}_progress`, onProgress);
+            }
+            this.worker.postMessage({ type, id, payload: { ...payload, source: payload.source || 'main' } });
         });
     }
 };
@@ -64,6 +73,7 @@ const UIController = {
     activeRefinementId: 0,
     currentSweep: [] as { l: number, s: CalculationStats }[],
     isWorkerReady: false,
+    lastRunParams: { cat: "", mat: "", guaranteedFirst: "" },
 
     async init(): Promise<void> {
         const ids = ["v-select", "cat-select", "mat-select", "guaranteed-first-select", "lvl-range", "lvl-val", "chart-metric", "refinement-status"];
@@ -122,7 +132,14 @@ const UIController = {
             if (this.runTimeout) clearTimeout(this.runTimeout);
             this.runTimeout = window.setTimeout(() => this.run(), 50);
         };
-        metric.onchange = () => this.run();
+        metric.onchange = () => {
+            if (this.currentSweep.length > 0 && this.chartManager) {
+                const engine = this.getEngine();
+                const datasets = this.chartManager.generateDatasets(this.currentSweep, metric.value, engine.registry);
+                const labels = Array.from({length: 30}, (_, i) => i + 1);
+                this.chartManager.update(labels, datasets);
+            }
+        };
     },
 
     getEngine(): EnchantEngine {
@@ -204,31 +221,73 @@ const UIController = {
 
         const currentId = ++this.chartUpdateId;
         this.activeRefinementId = currentId;
-        this.currentSweep = []; // Fresh start for new run
+
+        // Check if global parameters changed (restart chart if so)
+        const paramsChanged = this.lastRunParams.cat !== cat || 
+                              this.lastRunParams.mat !== mat || 
+                              this.lastRunParams.guaranteedFirst !== guaranteedFirst;
+
+        if (paramsChanged) {
+            this.currentSweep = []; // Fresh start for new run if cat/mat changed
+            this.lastRunParams = { cat, mat, guaranteedFirst };
+        }
 
         // Pass 1: Coarse Refinement (Instant)
         this.setRefinementStatus("Searching...", "coarse");
-        let stats = await WorkerClient.request('getFullStats', { cat, xp, mat, guaranteedFirst, threshold: 0.05 });
+        let stats = await WorkerClient.request('getFullStats', { cat, xp, mat, guaranteedFirst, threshold: 0.05, source: 'main', useBestCache: true });
         if (currentId !== this.activeRefinementId) return;
         this.updateInsights(stats);
         
-        // Start chart sweep in background
-        const chartPromise = this.updateChart(cat, mat, 0.05);
-        await chartPromise;
+        // Start chart sweep in background ONLY if parameters changed
+        if (paramsChanged) {
+            await this.updateChart(cat, mat, 0.05); // Await coarse to show initial graph instantly
+        }
+        
         if (currentId !== this.activeRefinementId) return;
 
-        // Pass 2: Standard Refinement
+        // Early Exit if Coarse is already 100% accurate (residual is 0)
+        if (stats.residual === 0) {
+            this.setRefinementStatus("Complete", "done");
+            return;
+        }
+
+        // Pass 2: Standard Refinement with Progress Reporting
         this.setRefinementStatus("Refining...", "standard");
         const standardThreshold = cat === "book" ? this.BOOK_THRESHOLD : this.DEFAULT_THRESHOLD;
-        stats = await WorkerClient.request('getFullStats', { cat, xp, mat, guaranteedFirst, threshold: standardThreshold });
+        
+        stats = await WorkerClient.request('getFullStats', 
+            { cat, xp, mat, guaranteedFirst, threshold: standardThreshold, source: 'main', useBestCache: true },
+            (partial) => {
+                if (currentId === this.activeRefinementId) this.updateInsights(partial);
+            }
+        );
+        
         if (currentId !== this.activeRefinementId) return;
         this.updateInsights(stats);
-        await this.updateChart(cat, mat, standardThreshold);
+        
+        if (paramsChanged) {
+            this.updateChart(cat, mat, standardThreshold);
+        }
+
         if (currentId !== this.activeRefinementId) return;
 
+        if (stats.residual === 0) {
+            this.setRefinementStatus("Complete", "done");
+            return;
+        }
+
         // Pass 3: Fine Refinement (Deep Analysis)
+        // For books, we use a slightly looser deep threshold to avoid 40s freezes
+        const deepThreshold = cat === "book" ? 0.0001 : 0.00001; 
+        
         this.setRefinementStatus("Finalizing...", "fine");
-        stats = await WorkerClient.request('getFullStats', { cat, xp, mat, guaranteedFirst, threshold: 0.00001 });
+        stats = await WorkerClient.request('getFullStats', 
+            { cat, xp, mat, guaranteedFirst, threshold: deepThreshold, source: 'main', useBestCache: true },
+            (partial) => {
+                if (currentId === this.activeRefinementId) this.updateInsights(partial);
+            }
+        );
+        
         if (currentId !== this.activeRefinementId) return;
         this.updateInsights(stats);
         this.setRefinementStatus("Complete", "done");
@@ -306,30 +365,39 @@ const UIController = {
 
     async updateChart(cat: string, mat: string, threshold?: number): Promise<void> {
         const currentId = this.activeRefinementId;
-        const engine = this.getEngine();
+        const engine = (this as any).engine; // Ensure we have the engine for registry
+        if (!engine) return;
+
         const metric = (this.elements["chart-metric"] as HTMLSelectElement).value;
         const guaranteedFirst = (this.elements["guaranteed-first-select"] as HTMLSelectElement).value;
         const labels = Array.from({length: 30}, (_, i) => i + 1);
         
         const activeThreshold = threshold || (cat === "book" ? this.BOOK_THRESHOLD : this.DEFAULT_THRESHOLD);
         
-        const redrawStep = 1;
-
         for (let i = 0; i < labels.length; i++) {
             const l = labels[i];
             if (currentId !== this.activeRefinementId) return;
             
-            const stats = await WorkerClient.request('getFullStats', { cat, xp: l, mat, guaranteedFirst, threshold: activeThreshold });
+            const stats = await WorkerClient.request(
+                'getFullStats', 
+                { cat, xp: l, mat, guaranteedFirst, threshold: activeThreshold, source: 'chart' },
+                (partial) => {
+                    if (currentId !== this.activeRefinementId) return;
+                    this.currentSweep[i] = { l, s: partial };
+                    if (this.chartManager) {
+                        const datasets = this.chartManager.generateDatasets(this.currentSweep, metric, engine.registry);
+                        this.chartManager.update(labels, datasets);
+                    }
+                }
+            );
             if (currentId !== this.activeRefinementId) return;
 
             this.currentSweep[i] = { l, s: stats };
 
-            if (l % redrawStep === 0 || l === 30) {
-                if (this.chartManager) {
-                    const tempDatasets = this.chartManager.generateDatasets(this.currentSweep, metric, engine.registry);
-                    this.chartManager.update(labels, tempDatasets);
-                }
-                await new Promise(r => requestAnimationFrame(r));
+            // Redraw every level for a smooth fill
+            if (this.chartManager) {
+                const datasets = this.chartManager.generateDatasets(this.currentSweep, metric, engine.registry);
+                this.chartManager.update(labels, datasets);
             }
         }
     }
