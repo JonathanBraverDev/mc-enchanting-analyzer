@@ -43,7 +43,8 @@ self.onmessage = async (e: MessageEvent) => {
                         (partialStats) => {
                             self.postMessage({ type: 'progress', id, payload: partialStats });
                         },
-                        payload.useBestCache || false
+                        payload.useBestCache || false,
+                        payload.maxIterations
                     );
                     self.postMessage({ type: 'result', id, payload: stats });
                 } catch (err: any) {

@@ -4,6 +4,7 @@ import { CalculationStats } from './types.js';
 import { ThemeManager } from './theme.js';
 import { ChartManager } from './chart-manager.js';
 import { RomanUtils } from './utils.js';
+import { getParamsForMode, SearchLevel } from './config.js';
 
 const WorkerClient = {
     worker: null as Worker | null,
@@ -233,14 +234,22 @@ const UIController = {
         }
 
         // Pass 1: Coarse Refinement (Instant)
-        this.setRefinementStatus("Searching...", "coarse");
-        let stats = await WorkerClient.request('getFullStats', { cat, xp, mat, guaranteedFirst, threshold: 0.05, source: 'main', useBestCache: true });
+        const coarse = getParamsForMode('coarse', cat === "book");
+        this.setRefinementStatus(coarse.status, "coarse");
+        
+        let stats = await WorkerClient.request('getFullStats', { 
+            cat, xp, mat, guaranteedFirst, 
+            threshold: coarse.threshold, 
+            source: 'main', 
+            useBestCache: true,
+            maxIterations: coarse.limit
+        });
         if (currentId !== this.activeRefinementId) return;
         this.updateInsights(stats);
         
         // Start chart sweep in background ONLY if parameters changed
         if (paramsChanged) {
-            await this.updateChart(cat, mat, 0.05); // Await coarse to show initial graph instantly
+            await this.updateChart(cat, mat, coarse.threshold); 
         }
         
         if (currentId !== this.activeRefinementId) return;
@@ -251,12 +260,12 @@ const UIController = {
             return;
         }
 
-        // Pass 2: Standard Refinement with Progress Reporting
-        this.setRefinementStatus("Refining...", "standard");
-        const standardThreshold = cat === "book" ? this.BOOK_THRESHOLD : this.DEFAULT_THRESHOLD;
+        // Pass 2: Standard Refinement
+        const standard = getParamsForMode('standard', cat === "book");
+        this.setRefinementStatus(standard.status, "standard");
         
         stats = await WorkerClient.request('getFullStats', 
-            { cat, xp, mat, guaranteedFirst, threshold: standardThreshold, source: 'main', useBestCache: true },
+            { cat, xp, mat, guaranteedFirst, threshold: standard.threshold, source: 'main', useBestCache: true, maxIterations: standard.limit },
             (partial) => {
                 if (currentId === this.activeRefinementId) this.updateInsights(partial);
             }
@@ -266,7 +275,7 @@ const UIController = {
         this.updateInsights(stats);
         
         if (paramsChanged) {
-            this.updateChart(cat, mat, standardThreshold);
+            this.updateChart(cat, mat, standard.threshold);
         }
 
         if (currentId !== this.activeRefinementId) return;
@@ -276,13 +285,12 @@ const UIController = {
             return;
         }
 
-        // Pass 3: Fine Refinement (Deep Analysis)
-        // For books, we use a slightly looser deep threshold to avoid 40s freezes
-        const deepThreshold = cat === "book" ? 0.0001 : 0.00001; 
+        // Pass 3: Deep Refinement
+        const deep = getParamsForMode('deep', cat === "book");
+        this.setRefinementStatus(deep.status, "deep");
         
-        this.setRefinementStatus("Finalizing...", "fine");
         stats = await WorkerClient.request('getFullStats', 
-            { cat, xp, mat, guaranteedFirst, threshold: deepThreshold, source: 'main', useBestCache: true },
+            { cat, xp, mat, guaranteedFirst, threshold: deep.threshold, source: 'main', useBestCache: true, maxIterations: deep.limit },
             (partial) => {
                 if (currentId === this.activeRefinementId) this.updateInsights(partial);
             }
@@ -290,26 +298,47 @@ const UIController = {
         
         if (currentId !== this.activeRefinementId) return;
         this.updateInsights(stats);
+        
+        if (stats.uncertainty === 0) {
+            this.setRefinementStatus("Complete", "done");
+            return;
+        }
+
+        // Pass 4: Ultra Refinement (Exhaustive)
+        const ultra = getParamsForMode('ultra', cat === "book");
+        this.setRefinementStatus(ultra.status, "ultra");
+
+        stats = await WorkerClient.request('getFullStats', 
+            { cat, xp, mat, guaranteedFirst, threshold: ultra.threshold, source: 'main', useBestCache: true, maxIterations: ultra.limit },
+            (partial) => {
+                if (currentId === this.activeRefinementId) this.updateInsights(partial);
+            }
+        );
+
+        if (currentId !== this.activeRefinementId) return;
+        this.updateInsights(stats);
         this.setRefinementStatus("Complete", "done");
         
         const metric = (this.elements["chart-metric"] as HTMLSelectElement).value;
-        this.lastChartParams = `${engine.registry.version}|${cat}|${mat}|${guaranteedFirst}|${metric}|fine`;
+        this.lastChartParams = `${engine.registry.version}|${cat}|${mat}|${guaranteedFirst}|${metric}|ultra`;
     },
 
-    setRefinementStatus(text: string, level: 'coarse' | 'standard' | 'fine' | 'done'): void {
+    setRefinementStatus(text: string, level: SearchLevel): void {
         const el = this.elements["refinement-status"];
         if (!el) return;
 
         const colors = {
             coarse: { bg: 'rgba(255, 193, 7, 0.15)', text: '#ffca28' },
             standard: { bg: 'rgba(76, 175, 80, 0.15)', text: '#66bb6a' },
-            fine: { bg: 'rgba(33, 150, 243, 0.15)', text: '#42a5f5' },
+            deep: { bg: 'rgba(33, 150, 243, 0.15)', text: '#42a5f5' },
+            ultra: { bg: 'rgba(156, 39, 176, 0.15)', text: '#ab47bc' },
             done: { bg: 'rgba(255, 255, 255, 0.05)', text: 'var(--text-muted)' }
         };
 
         el.textContent = text;
-        el.style.backgroundColor = colors[level].bg;
-        el.style.color = colors[level].text;
+        const c = (colors as any)[level];
+        el.style.backgroundColor = c.bg;
+        el.style.color = c.text;
         el.style.opacity = level === 'done' ? '0.6' : '1';
     },
 
