@@ -1,5 +1,5 @@
 import { EnchantmentData, VersionManifest, VersionMechanics, Enchantment } from './types.js';
-import { VersionUtils } from './utils.js';
+import { VersionUtils, LRUCache, PackedEnchant } from './utils.js';
 
 /**
  * Handles version-specific data, enchantment registry, and material eligibility.
@@ -13,6 +13,8 @@ export class Registry {
     public resolvedRegistry: { [enchantment: string]: Enchantment } = {};
     public mergedMaterials = new Set<string>();
     public multiEnchantBooks: boolean = true;
+    
+    private poolCache = new LRUCache<string, PackedEnchant[]>(200);
     
     public idMap = new Map<string, number>();
     public revIdMap: string[] = [];
@@ -145,6 +147,37 @@ export class Registry {
         const id = idAndRank >> 8;
         const rank = idAndRank & 0xFF;
         return `${this.getEnchantName(id)} ${this.getRankRoman(rank)}`;
+    }
+
+    /**
+     * Gets a list of enchants eligible for a specific modified level, filtered by material logic.
+     * Returns array of PackedEnchant (id << 8 | rank).
+     */
+    public getEligiblePool(cat: string, level: number, mat: string): PackedEnchant[] {
+        const cacheKey = `${cat}|${level}|${mat}`;
+        const cached = this.poolCache.get(cacheKey);
+        if (cached) return cached;
+
+        const pool = this.mergedItems[cat] || [];
+        const out: PackedEnchant[] = [];
+        
+        for (const name of pool) {
+            const id = this.idMap.get(name)!;
+            const props = this.resolvedRegistry[name];
+            
+            if (!VersionUtils.isInRange(this.version, props.valid_from, props.valid_to)) continue;
+            
+            for (const [r, rankVal] of this.sortedRanks) {
+                const range = props.levels[r];
+                if (range && level >= range[0] && level <= range[1]) {
+                    out.push((id << 8) | rankVal);
+                    break;
+                }
+            }
+        }
+
+        this.poolCache.set(cacheKey, out);
+        return out;
     }
 
     public getEnchantability(mat: string, cat: string): number {

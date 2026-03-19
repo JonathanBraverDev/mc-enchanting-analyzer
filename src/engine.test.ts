@@ -2,7 +2,7 @@ import { test, describe, it } from 'node:test';
 import assert from 'node:assert';
 import { EnchantEngine } from './engine.js';
 import { DATA } from './data.js';
-import { PRECISION, ProbUtils } from './utils.js';
+import { PRECISION, ProbUtils, ComboUtils } from './utils.js';
 
 // Polyfill for requestAnimationFrame in Node (Sync version for tests)
 if (typeof (globalThis as any).requestAnimationFrame !== 'function') {
@@ -47,20 +47,20 @@ describe('Enchantment Engine Test Suite', () => {
         it('1.14 vs 1.14.3: Protection conflict window', async () => {
             const e114 = new EnchantEngine(DATA, '1.14');
             const e1143 = new EnchantEngine(DATA, '1.14.3');
-            const protIds = ["Protection", "Fire Protection", "Blast Protection", "Projectile Protection"]
-                .map(n => e114.registry.idMap.get(n)!);
+            const protNames = ["Protection", "Fire Protection", "Blast Protection", "Projectile Protection"];
+            const getBases = (c: string) => c.split("+").map(e => e.split(" ").slice(0, -1).join(" "));
 
             const s114 = await e114.getFullStats('chestplate', 30, 'diamond', null, 0.0001);
-            const multi114 = Object.keys(s114.combos).filter(c => {
-                const ids = e114.unpackComboBigInt(BigInt("0x" + c)).map(n => n >> 8);
-                return protIds.filter(id => ids.includes(id)).length > 1;
+            const h114 = e114.humanizeStats(s114);
+            const multi114 = Object.keys(h114.combos).filter(c => {
+                return getBases(c).filter(b => protNames.includes(b)).length > 1;
             });
             assert.ok(multi114.length > 0, '1.14 should allow multi-protection');
 
             const s1143 = await e1143.getFullStats('chestplate', 30, 'diamond', null, 0.0001);
-            const multi1143 = Object.keys(s1143.combos).some(c => {
-                const ids = e1143.unpackComboBigInt(BigInt("0x" + c)).map(n => n >> 8);
-                return protIds.filter(id => ids.includes(id)).length > 1;
+            const h1143 = e1143.humanizeStats(s1143);
+            const multi1143 = Object.keys(h1143.combos).some(c => {
+                return getBases(c).filter(b => protNames.includes(b)).length > 1;
             });
             assert.ok(!multi1143, '1.14.3 should block multi-protection');
         });
@@ -87,25 +87,24 @@ describe('Enchantment Engine Test Suite', () => {
             // 1.4.6: Single only
             const v146 = new EnchantEngine(DATA, '1.4.6');
             const s146 = await v146.getFullStats('book', 30, 'book');
-            assert.ok(!Object.keys(s146.combos).some(c => v146.unpackComboBigInt(BigInt("0x" + c)).length > 1));
+            const h146 = v146.humanizeStats(s146);
+            assert.ok(!Object.keys(h146.combos).some(c => c.split('+').length > 1));
 
             // 1.7.2: Multi allowed
             const v172 = new EnchantEngine(DATA, '1.7.2');
             const s172 = await v172.getFullStats('book', 30, 'book', null, 0.0001);
-            assert.ok(Object.keys(s172.combos).some(c => v172.unpackComboBigInt(BigInt("0x" + c)).length > 1));
+            const h172 = v172.humanizeStats(s172);
+            assert.ok(Object.keys(h172.combos).some(c => c.split('+').length > 1));
         });
 
         it('Tridents: Riptide/Loyalty/Channeling mutual exclusion', async () => {
             const v113 = new EnchantEngine(DATA, '1.13');
-            const riptideId = v113.registry.idMap.get('Riptide')!;
-            const loyaltyId = v113.registry.idMap.get('Loyalty')!;
-            const channelingId = v113.registry.idMap.get('Channeling')!;
-            
             const stats = await v113.getFullStats('trident', 30, 'trident');
-            for (const packed of Object.keys(stats.combos)) {
-                const ids = v113.unpackComboBigInt(BigInt("0x" + packed)).map(n => n >> 8);
-                if (ids.includes(riptideId)) {
-                    assert.ok(!ids.includes(loyaltyId) && !ids.includes(channelingId), 'Riptide should conflict with Loyalty/Channeling');
+            const human = v113.humanizeStats(stats);
+            
+            for (const combo of Object.keys(human.combos)) {
+                if (combo.includes('Riptide')) {
+                    assert.ok(!combo.includes('Loyalty') && !combo.includes('Channeling'), 'Riptide should conflict with Loyalty/Channeling');
                 }
             }
         });
@@ -141,25 +140,26 @@ describe('Enchantment Engine Test Suite', () => {
 
         it('Delayed Level Decay & Pool Persistence', async () => {
             const stats = await engine.getFullStats('pickaxe', 30, 'diamond', null, 0.0001);
+            const human = engine.humanizeStats(stats);
             
             // Pool Persistence: Efficiency IV in slot 3+
-            const hasEffIVDeep = Object.keys(stats.combos)
-                .filter(c => engine.unpackComboBigInt(BigInt("0x" + c)).length >= 3)
-                .some(c => engine.translateComboKey(c).includes("Efficiency IV"));
+            const hasEffIVDeep = Object.keys(human.combos)
+                .filter(c => c.split("+").length >= 3)
+                .some(c => c.includes("Efficiency IV"));
             assert.ok(hasEffIVDeep);
 
             // Level Decay Logic verification (Distribution check)
-            assert.ok(stats.count["2"] > 0.1, "Double enchants should be significant");
-            assert.ok((stats.count["1"] || 0) + (stats.count["2"] || 0) + (stats.count["3"] || 0) > 0.9);
+            assert.ok(human.count[2] > 0.1, "Double enchants should be significant");
+            assert.ok((human.count[1] || 0) + (human.count[2] || 0) + (human.count[3] || 0) > 0.9);
         });
 
         it('God Pick verification (Efficiency IV + Fortune III + Unbreaking III)', async () => {
             const stats = await engine.getFullStats('pickaxe', 30, 'diamond', null, 0.0001);
+            const human = engine.humanizeStats(stats);
             const targets = ["Efficiency IV", "Fortune III", "Unbreaking III"];
             let prob = 0;
-            for (const [packed, p] of Object.entries(stats.combos)) {
-                const translated = engine.translateComboKey(packed);
-                if (targets.every(t => translated.includes(t))) prob += p;
+            for (const [combo, p] of Object.entries(human.combos)) {
+                if (targets.every(t => combo.includes(t))) prob += p;
             }
             assert.ok(prob > 0.0001);
         });
