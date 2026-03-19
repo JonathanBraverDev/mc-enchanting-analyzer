@@ -1,4 +1,9 @@
 /**
+ * High-precision constant for BigInt fixed-point arithmetic (2^60)
+ */
+export const PRECISION = 1n << 60n;
+
+/**
  * Utility functions for version parsing and comparison.
  */
 export const VersionUtils = {
@@ -36,10 +41,25 @@ export const VersionUtils = {
 };
 
 /**
- * Lightweight Binary Heap for priority queue operations.
- * Optimized for objects with a numeric 'prob' property and unique IDs.
+ * Probability conversion helpers for BigInt fixed-point arithmetic.
  */
-export class BinaryHeap<T extends { prob: number }> {
+export const ProbUtils = {
+    /**
+     * Converts a floating-point probability to a BigInt fixed-point value.
+     */
+    toBigInt: (p: number): bigint => BigInt(Math.floor(p * Number(PRECISION))),
+
+    /**
+     * Converts a BigInt fixed-point value back to a floating-point probability.
+     */
+    toNumber: (b: bigint): number => Number(b) / Number(PRECISION)
+};
+
+/**
+ * Lightweight Binary Heap for priority queue operations.
+ * Optimized for objects with a BigInt 'prob' property and unique IDs.
+ */
+export class BinaryHeap<T extends { prob: bigint }> {
     private heap: T[] = [];
     private indexMap: Map<any, number> = new Map();
     private idSelector: ((item: T) => any) | null = null;
