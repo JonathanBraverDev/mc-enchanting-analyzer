@@ -182,6 +182,58 @@ export class BinaryHeap<T extends { prob: bigint }> {
     }
 }
 
+/**
+ * Simple LRU Cache implementation using Map's insertion order.
+ */
+export class LRUCache<K, V> {
+    private cache = new Map<K, V>();
+    private maxEntries: number;
+
+    constructor(maxEntries: number = 500) {
+        this.maxEntries = maxEntries;
+    }
+
+    get(key: K): V | undefined {
+        const item = this.cache.get(key);
+        if (item !== undefined) {
+            // Refresh order
+            this.cache.delete(key);
+            this.cache.set(key, item);
+        }
+        return item;
+    }
+
+    set(key: K, value: V): void {
+        if (this.cache.has(key)) {
+            this.cache.delete(key);
+        } else if (this.cache.size >= this.maxEntries) {
+            const firstKey = this.cache.keys().next().value;
+            if (firstKey !== undefined) this.cache.delete(firstKey);
+        }
+        this.cache.set(key, value);
+    }
+
+    has(key: K): boolean {
+        return this.cache.has(key);
+    }
+
+    clear(): void {
+        this.cache.clear();
+    }
+
+    get size(): number {
+        return this.cache.size;
+    }
+}
+
+/**
+ * Type aliases for clarify in enchantment engine logic.
+ * PackedEnchant: (id << 8 | rank)
+ * PackedCombo: (count << 60 | slot0 << 0 | slot1 << 12 | ...)
+ */
+export type PackedEnchant = number;
+export type PackedCombo = bigint;
+
 
 /**
  * Utilities for handling Roman numerals and enchantment names.
@@ -208,5 +260,105 @@ export class RomanUtils {
         const parts = fullName.split(" ");
         const last = parts[parts.length - 1];
         return Object.keys(romanMap).includes(last) ? parts.slice(0, -1).join(" ") : fullName;
+    }
+}
+
+/**
+ * Interface for resolving enchantment names from IDs.
+ */
+export interface NameResolver {
+    getFullEnchantName(n: number): string;
+    getEnchantName(id: number): string;
+}
+
+/**
+ * Utility for packing and unpacking enchantment combinations into BigInts.
+ */
+export class ComboUtils {
+    /**
+     * Packs a set of enchantments into a bigint.
+     * Each enchantment is (id << 4 | rank), 12 bits total.
+     */
+    static pack(chosen: PackedEnchant[], guaranteedFirstId: number | null): PackedCombo {
+        if (chosen.length === 0) return 0n;
+        
+        let firstPicked: number | null = null;
+        const others: number[] = [];
+        
+        for (const c of chosen) {
+            const id = c >> 8;
+            const rank = c & 0xFF;
+            const val = (id << 4) | (rank & 0x0F);
+            if (guaranteedFirstId !== null && id === guaranteedFirstId && firstPicked === null) {
+                firstPicked = val;
+            } else {
+                others.push(val);
+            }
+        }
+        
+        others.sort((a, b) => b - a);
+        if (firstPicked !== null) others.unshift(firstPicked);
+        
+        let packed = 0n;
+        for (let i = 0; i < others.length; i++) {
+            packed |= BigInt(others[i]) << BigInt(i * 12);
+        }
+        packed |= BigInt(others.length) << 60n;
+        
+        return packed;
+    }
+
+    /**
+     * Unpacks a bigint back into numeric enchantment IDs (id << 8 | rank).
+     */
+    static unpack(packed: PackedCombo): PackedEnchant[] {
+        if (packed === 0n) return [];
+        const count = Number(packed >> 60n);
+        const core = packed & ((1n << 60n) - 1n);
+        
+        const out: PackedEnchant[] = [];
+        for (let i = 0; i < count; i++) {
+            const val = Number((core >> BigInt(i * 12)) & 0xFFFn);
+            const id = val >> 4;
+            const rank = val & 0x0F;
+            out.push((id << 8) | rank);
+        }
+        return out;
+    }
+}
+
+/**
+ * Utility for converting internal statistics into human-readable formats.
+ */
+export class StatsUtils {
+    /**
+     * Converts a raw CalculationStats object into a human-readable HumanStats object.
+     */
+    static humanize(stats: any, resolver: NameResolver): any {
+        const human: any = {
+            ranks: {},
+            any: {},
+            count: { ...stats.count },
+            combos: {},
+            uncertainty: stats.uncertainty
+        };
+
+        for (const [idAndRank, prob] of Object.entries(stats.ranks)) {
+            const name = resolver.getFullEnchantName(Number(idAndRank));
+            human.ranks[name] = prob;
+        }
+
+        for (const [id, prob] of Object.entries(stats.any)) {
+            const name = resolver.getEnchantName(Number(id));
+            human.any[name] = prob;
+        }
+
+        for (const [packed, prob] of Object.entries(stats.combos)) {
+            const ids = ComboUtils.unpack(BigInt("0x" + packed));
+            const comboKey = ids.map(n => resolver.getFullEnchantName(n)).join("+");
+            human.combos[comboKey] = prob;
+        }
+
+        return human;
     }
 }
