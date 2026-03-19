@@ -71,7 +71,7 @@ export class ChartManager {
                     data: sweep.map(x => (x && x.s && x.s.any[id] || 0) * 100),
                     borderColor: color,
                     backgroundColor: color.replace(')', ', 0.1)'),
-                    borderWidth: 2, tension: 0.3, pointRadius: 0
+                    borderWidth: 2, tension: 0.1, pointRadius: 0
                 });
             });
         } else if (metric === "ranks") {
@@ -91,7 +91,7 @@ export class ChartManager {
                     data: sweep.map(x => (x && x.s && x.s.ranks[idAndRank] || 0) * 100),
                     borderColor: color,
                     backgroundColor: color.replace(')', ', 0.1)'),
-                    borderWidth: 2, tension: 0.35, pointRadius: 0
+                    borderWidth: 2, tension: 0.1, pointRadius: 0
                 });
             });
         } else {
@@ -102,7 +102,7 @@ export class ChartManager {
                     data: sweep.map(x => (x && x.s && x.s.count[c] || 0) * 100),
                     borderColor: colors[c],
                     backgroundColor: colors[c].replace(')', ', 0.1)'),
-                    borderWidth: 2, tension: 0.3, pointRadius: 0
+                    borderWidth: 2, tension: 0.1, pointRadius: 0
                 });
             });
         }
@@ -113,6 +113,8 @@ export class ChartManager {
     private getChartOptions(): any {
         return {
             responsive: true, maintainAspectRatio: false,
+            animation: false, // Performance: Disable animations to enable Path2D caching
+            spanGaps: true,   // Performance: Avoid line segmentation
             interaction: { mode: 'index', intersect: false },
             scales: {
                 y: { 
@@ -121,7 +123,10 @@ export class ChartManager {
                     max: 100,
                     grid: { color: 'rgba(255,255,255,0.05)' } 
                 },
-                x: { grid: { color: 'rgba(255,255,255,0.05)' } }
+                x: { 
+                    grid: { color: 'rgba(255,255,255,0.05)' },
+                    ticks: { maxTicksLimit: 30 } // Show all 30 levels if space permits
+                }
             },
 
             plugins: { 
