@@ -67,6 +67,6 @@ export interface CalculationStats {
   any: { [id: number]: number };          // base id
   count: { [count: number]: number };
   combos: { [packed: string]: number };    // Hex string of bit-packed BigInt
-  residual: number;
+  uncertainty: number;
 }
 
