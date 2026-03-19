@@ -245,8 +245,8 @@ const UIController = {
         
         if (currentId !== this.activeRefinementId) return;
 
-        // Early Exit if Coarse is already 100% accurate (residual is 0)
-        if (stats.residual === 0) {
+        // Early Exit if Coarse is already 100% accurate (uncertainty is 0)
+        if (stats.uncertainty === 0) {
             this.setRefinementStatus("Complete", "done");
             return;
         }
@@ -271,7 +271,7 @@ const UIController = {
 
         if (currentId !== this.activeRefinementId) return;
 
-        if (stats.residual === 0) {
+        if (stats.uncertainty === 0) {
             this.setRefinementStatus("Complete", "done");
             return;
         }
@@ -329,13 +329,13 @@ const UIController = {
             </div>
         `).join("");
 
-        const uncertaintyHtml = stats.residual && stats.residual > 0.005 ? `
+        const uncertaintyHtml = stats.uncertainty && stats.uncertainty > 0.005 ? `
             <div class="combo-item" style="border-top: 1px solid rgba(255,255,255,0.05); margin-top: 10px; padding-top: 10px; opacity: 0.8;">
                 <div style="display: flex; justify-content: space-between; font-size: 0.85rem;">
                     <span>Calculation Confidence</span>
-                    <span style="color: ${stats.residual > 0.1 ? '#ffca28' : '#66bb6a'}">${((1 - stats.residual) * 100).toFixed(1)}%</span>
+                    <span style="color: ${stats.uncertainty > 0.1 ? '#ffca28' : '#66bb6a'}">${((1 - stats.uncertainty) * 100).toFixed(1)}%</span>
                 </div>
-                ${stats.residual > 0.1 ? `<div style="font-size: 0.7rem; color: #ffca28; margin-top: 3px;">⚠️ High branching complexity - some combinations were collapsed into their parents for speed.</div>` : ''}
+                ${stats.uncertainty > 0.1 ? `<div style="font-size: 0.7rem; color: #ffca28; margin-top: 3px;">⚠️ High branching complexity - some combinations were collapsed into their parents for speed.</div>` : ''}
             </div>
         ` : '';
 

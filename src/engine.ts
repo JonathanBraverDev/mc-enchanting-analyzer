@@ -236,7 +236,7 @@ export class EnchantEngine {
         } else {
             // Start fresh
             results = new Map();
-            uncertainty = 1.0;
+            uncertainty = 0; // Initialize to 0, will track pruned mass
             cumulativeAccountedMass = 0;
             
             const romanMap = this.registry.data.constants.ROMAN_MAP;
@@ -348,17 +348,17 @@ export class EnchantEngine {
         }
 
         // Calculate uncertainty and final result for this resolution
-        let finalUncertainty = 0;
+        let frontierUncertainty = 0;
         const outResults = new Map(results);
         for (const item of queue.items) {
-            finalUncertainty += item.prob;
+            frontierUncertainty += item.prob;
             const key = item.chosen.length > 0 ? this.packComboBigInt(item.chosen, guaranteedFirstId) : 0n;
             if (key !== 0n) outResults.set(key, (outResults.get(key) || 0) + item.prob);
         }
 
-        const out = { queue, results, uncertainty: finalUncertainty, cumulativeAccountedMass, threshold };
-        // We override uncertainty in the frontier to the real one, but return collapsed results for getFullStats
-        const frontier = { ...out, results: outResults }; 
+        const totalUncertainty = uncertainty + frontierUncertainty;
+        // The frontier object stored in cache should keep 'uncertainty' as the pruned mass only
+        const out = { queue, results, uncertainty, cumulativeAccountedMass, threshold };
         
         if (this.comboCache.size >= this.MAX_CACHE_SIZE) {
             const firstKey = this.comboCache.keys().next().value;
@@ -366,7 +366,8 @@ export class EnchantEngine {
         }
         this.comboCache.set(cacheKey, out);
 
-        return frontier;
+        // Return the merged result set for the UI, with total uncertainty
+        return { ...out, results: outResults, uncertainty: totalUncertainty }; 
     }
 
 
@@ -410,7 +411,7 @@ export class EnchantEngine {
                 }
             }
             if (!possible) {
-                return { ranks: {}, any: {}, count: {}, combos: {}, residual: 1.0 }; // Impossible combination
+                return { ranks: {}, any: {}, count: {}, combos: {}, uncertainty: 1.0 }; // Impossible combination
             }
         }
 
@@ -426,7 +427,10 @@ export class EnchantEngine {
         let iterCount = 0;
         for (const [mlStr, mProb] of Object.entries(modDist)) {
             if (signal?.aborted) throw new Error("Aborted");
-            if (mProb < activeThreshold) continue; 
+            if (mProb < activeThreshold) {
+                totalUncertainty += mProb;
+                continue; 
+            }
             
             processedMProb += mProb;
             const res = this.calculateCombinations(cat, Number(mlStr), mat, guaranteedFirst, activeThreshold);
@@ -465,8 +469,8 @@ export class EnchantEngine {
     /**
      * Helper to collapse raw combo results into a stats object.
      */
-    private summarizeStats(combos: Map<bigint, number>, residual: number): CalculationStats {
-        const stats: CalculationStats = { ranks: {}, any: {}, count: {}, combos: {}, residual };
+    private summarizeStats(combos: Map<bigint, number>, uncertainty: number): CalculationStats {
+        const stats: CalculationStats = { ranks: {}, any: {}, count: {}, combos: {}, uncertainty };
         
         for (const [packed, p] of combos) {
             stats.combos[packed.toString(16)] = p;
