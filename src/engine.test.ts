@@ -2,6 +2,7 @@ import { test, describe, it } from 'node:test';
 import assert from 'node:assert';
 import { EnchantEngine } from './engine.js';
 import { DATA } from './data.js';
+import { PRECISION, ProbUtils } from './utils.js';
 
 // Polyfill for requestAnimationFrame in Node (Sync version for tests)
 if (typeof (globalThis as any).requestAnimationFrame !== 'function') {
@@ -13,10 +14,13 @@ describe('Enchantment Engine Test Suite', () => {
     describe('1. Core Engine Logic', () => {
         const engine = new EnchantEngine(DATA, '1.21');
 
-        it('should maintain total probability of Modified Level Distribution near 1.0', () => {
+        it('should maintain total probability of Modified Level Distribution near 1.0 (Exact BigInt)', () => {
             const dist = engine.getModifiedLevelDist(30, 10);
-            const totalProb = Object.values(dist).reduce((a, b) => a + b, 0);
-            assert.ok(Math.abs(totalProb - 1.0) < 0.001);
+            const totalProb = Object.values(dist).reduce((a, b) => a + b, 0n);
+            // With PRECISION = 2^60, it should be extremely close to PRECISION.
+            // Integer division may lose a few units of PRECISION.
+            const totalProbNum = ProbUtils.toNumber(totalProb);
+            assert.ok(Math.abs(totalProbNum - 1.0) < 0.000001, `Total probability ${totalProbNum} is not close enough to 1.0`);
         });
 
         it('should NOT return "X undefined" when no enchants are possible', async () => {
@@ -176,6 +180,16 @@ describe('Enchantment Engine Test Suite', () => {
             
             assert.ok(probAnyEff > 0.999, `Probability of Efficiency should be near 1.0, got ${probAnyEff}`);
             assert.ok(totalComboProb > 0.999, `Total combo probability should be near 1.0, got ${totalComboProb}`);
+        });
+
+        it('should maintain high precision for complex enchantment results', async () => {
+            const stats = await engine.getFullStats('pickaxe', 30, 'diamond', null, 0.00001);
+            let totalProb = stats.uncertainty;
+            for (const p of Object.values(stats.combos)) {
+                totalProb += p;
+            }
+            // Due to the way summarizeStats converts back to float, we expect totalProb to be very close to 1.0
+            assert.ok(Math.abs(totalProb - 1.0) < 1e-12, `Total probability ${totalProb} should be extremely close to 1.0`);
         });
     });
 });
