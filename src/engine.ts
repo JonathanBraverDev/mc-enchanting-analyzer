@@ -205,9 +205,10 @@ export class EnchantEngine {
         mat: string, 
         guaranteedFirst: string | null = null, 
         threshold: number = 0.0001,
-        existingFrontier?: SearchFrontier
+        existingFrontier?: SearchFrontier,
+        maxIterations?: number
     ): SearchFrontier {
-        const cacheKey = `${cat}|${modLevel}|${mat}|${guaranteedFirst || "none"}`;
+        const cacheKey = `${cat}|${modLevel}|${mat}|${guaranteedFirst || "none"}|limit:${maxIterations ?? 'default'}`;
         
         // If we have a cached frontier that already met this threshold, return it
         const cached = this.comboCache.get(cacheKey);
@@ -253,7 +254,7 @@ export class EnchantEngine {
         }
 
         let iterations = 0;
-        const MAX_ITERATIONS = cat === "book" ? 40000 : (threshold < 0.0001 ? 25000 : 10000);
+        const limit = maxIterations ?? (cat === "book" ? 40000 : (threshold < 0.0001 ? 25000 : 10000));
 
         // Pre-calculate the initial pool for this root modLevel
         const initialPool = this.getEligibleListNumeric(cat, modLevel, mat, 0n);
@@ -264,7 +265,7 @@ export class EnchantEngine {
             return { queue: new BinaryHeap(), results: new Map(), uncertainty: 0, cumulativeAccountedMass: 1.0, threshold };
         }
 
-        while (queue.size() > 0 && iterations < MAX_ITERATIONS && cumulativeAccountedMass < 0.9999) {
+        while (queue.size() > 0 && iterations < limit && cumulativeAccountedMass < 0.9999) {
             const next = queue.peek()!;
             if (next.prob < threshold * 0.1) break;
 
@@ -382,9 +383,10 @@ export class EnchantEngine {
         threshold: number = 0.0001,
         signal?: AbortSignal,
         onProgress?: (stats: CalculationStats) => void,
-        useBestCache: boolean = false
+        useBestCache: boolean = false,
+        maxIterations?: number
     ): Promise<CalculationStats> {
-        const baseKey = `${cat}|${xp}|${mat}|${guaranteedFirst || 'none'}`;
+        const baseKey = `${cat}|${xp}|${mat}|${guaranteedFirst || 'none'}|limit:${maxIterations ?? 'default'}`;
         const exactKey = `${baseKey}|${threshold}`;
 
         // 1. Check exact match cache first
@@ -433,7 +435,7 @@ export class EnchantEngine {
             }
             
             processedMProb += mProb;
-            const res = this.calculateCombinations(cat, Number(mlStr), mat, guaranteedFirst, activeThreshold);
+            const res = this.calculateCombinations(cat, Number(mlStr), mat, guaranteedFirst, activeThreshold, undefined, maxIterations);
             for (const [c, p] of res.results) {
                 finalCombos.set(c, (finalCombos.get(c) || 0) + p * mProb);
             }
