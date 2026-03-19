@@ -328,11 +328,59 @@ export class ComboUtils {
 }
 
 /**
- * Utility for converting internal statistics into human-readable formats.
+ * Compact representation of calculation statistics for efficient transfer.
  */
-export class StatsUtils {
+export interface CompactStats {
+    comboKeys: BigUint64Array;
+    comboProbs: Float64Array;
+    rankKeys: Uint32Array;
+    rankProbs: Float64Array;
+    anyKeys: Uint32Array;
+    anyProbs: Float64Array;
+    counts: Float64Array;
+    uncertainty: number;
+}
+
+/**
+ * Handles statistical transformations, humanization, and compact serialization.
+ */
+export class ResultProcessor {
     /**
-     * Converts a raw CalculationStats object into a human-readable HumanStats object.
+     * Summarizes raw engine results into a CalculationStats-like object.
+     * combos: Map<PackedCombo, bigint>
+     */
+    static summarize(combos: Map<PackedCombo, bigint>, uncertainty: bigint): any {
+        const stats: any = {
+            ranks: {},
+            any: {},
+            count: {},
+            combos: {},
+            uncertainty: ProbUtils.toNumber(uncertainty)
+        };
+
+        for (const [packed, probBig] of combos) {
+            const prob = ProbUtils.toNumber(probBig);
+            stats.combos[packed.toString(16)] = prob;
+            
+            const ids = ComboUtils.unpack(packed);
+            stats.count[ids.length] = (stats.count[ids.length] || 0) + prob;
+
+            let seenBasesBitmask = 0n;
+            for (const n of ids) {
+                stats.ranks[n] = (stats.ranks[n] || 0) + prob;
+                
+                const baseId = n >> 8;
+                if (!((seenBasesBitmask >> BigInt(baseId)) & 1n)) {
+                    stats.any[baseId] = (stats.any[baseId] || 0) + prob;
+                    seenBasesBitmask |= (1n << BigInt(baseId));
+                }
+            }
+        }
+        return stats;
+    }
+
+    /**
+     * Converts raw statistics into a human-readable format.
      */
     static humanize(stats: any, resolver: NameResolver): any {
         const human: any = {
@@ -360,5 +408,76 @@ export class StatsUtils {
         }
 
         return human;
+    }
+
+    /**
+     * Serializes CalculationStats into a CompactStats object for zero-copy transfer.
+     */
+    static serialize(stats: any): { compact: CompactStats, transferables: ArrayBuffer[] } {
+        const comboEntries = Object.entries(stats.combos);
+        const comboKeys = new BigUint64Array(comboEntries.length);
+        const comboProbs = new Float64Array(comboEntries.length);
+        for (let i = 0; i < comboEntries.length; i++) {
+            comboKeys[i] = BigInt("0x" + comboEntries[i][0]);
+            comboProbs[i] = comboEntries[i][1] as number;
+        }
+
+        const rankEntries = Object.entries(stats.ranks);
+        const rankKeys = new Uint32Array(rankEntries.length);
+        const rankProbs = new Float64Array(rankEntries.length);
+        for (let i = 0; i < rankEntries.length; i++) {
+            rankKeys[i] = Number(rankEntries[i][0]);
+            rankProbs[i] = rankEntries[i][1] as number;
+        }
+
+        const anyEntries = Object.entries(stats.any);
+        const anyKeys = new Uint32Array(anyEntries.length);
+        const anyProbs = new Float64Array(anyEntries.length);
+        for (let i = 0; i < anyEntries.length; i++) {
+            anyKeys[i] = Number(anyEntries[i][0]);
+            anyProbs[i] = anyEntries[i][1] as number;
+        }
+
+        const counts = new Float64Array(8);
+        for (let i = 0; i < 8; i++) counts[i] = (stats.count[i] || 0);
+
+        const compact: CompactStats = {
+            comboKeys, comboProbs,
+            rankKeys, rankProbs,
+            anyKeys, anyProbs,
+            counts, uncertainty: stats.uncertainty
+        };
+
+        return {
+            compact,
+            transferables: [
+                comboKeys.buffer, comboProbs.buffer,
+                rankKeys.buffer, rankProbs.buffer,
+                anyKeys.buffer, anyProbs.buffer,
+                counts.buffer
+            ]
+        };
+    }
+
+    /**
+     * Reconstructs CalculationStats from a CompactStats object.
+     */
+    static deserialize(compact: CompactStats): any {
+        const stats: any = { ranks: {}, any: {}, count: {}, combos: {}, uncertainty: compact.uncertainty };
+        
+        for (let i = 0; i < compact.comboKeys.length; i++) {
+            stats.combos[compact.comboKeys[i].toString(16)] = compact.comboProbs[i];
+        }
+        for (let i = 0; i < compact.rankKeys.length; i++) {
+            stats.ranks[compact.rankKeys[i]] = compact.rankProbs[i];
+        }
+        for (let i = 0; i < compact.anyKeys.length; i++) {
+            stats.any[compact.anyKeys[i]] = compact.anyProbs[i];
+        }
+        for (let i = 0; i < compact.counts.length; i++) {
+            if (compact.counts[i] > 0) stats.count[i] = compact.counts[i];
+        }
+        
+        return stats;
     }
 }

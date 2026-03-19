@@ -1,62 +1,10 @@
 import { DATA } from './data.js';
 import { EnchantEngine } from './engine.js';
 import { CalculationStats } from './types.js';
-import { ThemeManager } from './theme.js';
 import { ChartManager } from './chart-manager.js';
-import { RomanUtils } from './utils.js';
-import { getParamsForMode, SearchLevel } from './config.js';
-
-const WorkerClient = {
-    worker: null as Worker | null,
-    pendingRequests: new Map<number, (data: any) => void>(),
-    requestId: 0,
-
-    init(version: string): Promise<void> {
-        return new Promise((resolve) => {
-            if (this.worker) this.worker.terminate();
-            
-            // For production/main analyzer.html, worker.js is in dist/
-            // Inline-assets.js will replace this with a Blob URL for standalone
-            this.worker = new Worker('dist/worker.js');
-            
-            this.worker.onmessage = (e) => {
-                const { type, id, payload } = e.data;
-                const cb = this.pendingRequests.get(id);
-                
-                if (type === 'ready' || type === 'result') {
-                    if (cb) {
-                        cb(payload);
-                        this.pendingRequests.delete(id);
-                    }
-                    if (type === 'ready') resolve();
-                } else if (type === 'progress') {
-                    // For progress, we don't delete the request, but we need a way to find the progress callback.
-                    // We'll store progress callbacks in a separate map or pass them in request.
-                    const progCb = (this.pendingRequests as any).get(`${id}_progress`);
-                    if (progCb) progCb(payload);
-                } else if (type === 'error') {
-                    console.error("Worker Error:", payload);
-                }
-            };
-
-            const id = ++this.requestId;
-            this.pendingRequests.set(id, () => {}); // No-op for init ready
-            this.worker.postMessage({ type: 'init', id, payload: { version } });
-        });
-    },
-
-    request(type: string, payload: any, onProgress?: (data: any) => void): Promise<any> {
-        return new Promise((resolve) => {
-            if (!this.worker) return resolve(null);
-            const id = ++this.requestId;
-            this.pendingRequests.set(id, resolve);
-            if (onProgress) {
-                (this.pendingRequests as any).set(`${id}_progress`, onProgress);
-            }
-            this.worker.postMessage({ type, id, payload: { ...payload, source: payload.source || 'main' } });
-        });
-    }
-};
+import { ResultProcessor } from './utils.js';
+import { getParamsForMode, SEARCH_LEVEL_COLORS, SearchLevel } from './config.js';
+import { WorkerClient } from './worker-client.js';
 
 /**
  * Main UI Controller for the Enchantment Analyzer.
@@ -64,17 +12,14 @@ const WorkerClient = {
 const UIController = {
     elements: {} as { [id: string]: HTMLElement },
     chartManager: null as ChartManager | null,
-    engine: null as EnchantEngine | null, // Still keep for small sync tasks if needed (e.g. translation)
+    engine: null as EnchantEngine | null, // Sync engine for local queries (eligible list, enchantability, etc.)
     chartUpdateId: 0,
-    lastChartParams: "",
-    savedGuaranteedFirst: "",
-    DEFAULT_THRESHOLD: 0.0001,
-    BOOK_THRESHOLD: 0.001,
     runTimeout: 0,
     activeRefinementId: 0,
+    savedGuaranteedFirst: "",
     currentSweep: [] as { l: number, s: CalculationStats }[],
     isWorkerReady: false,
-    lastRunParams: { cat: "", mat: "", guaranteedFirst: "" },
+    lastRunParams: { version: "", cat: "", mat: "", guaranteedFirst: "" },
 
     async init(): Promise<void> {
         const ids = ["v-select", "cat-select", "mat-select", "guaranteed-first-select", "lvl-range", "lvl-val", "chart-metric", "refinement-status"];
@@ -206,6 +151,36 @@ const UIController = {
         });
     },
 
+    isStillActive(id: number): boolean {
+        return id === this.activeRefinementId;
+    },
+
+    async runPass(
+        level: Exclude<SearchLevel, 'done'>,
+        basePayload: { cat: string; xp: number; mat: string; guaranteedFirst: string },
+        currentId: number
+    ): Promise<{ stats: any; done: boolean }> {
+        const isBook = basePayload.cat === "book";
+        const params = getParamsForMode(level, isBook);
+        this.setRefinementStatus(params.status, level);
+
+        const stats = await WorkerClient.request(
+            'getFullStats',
+            { ...basePayload, threshold: params.threshold, source: 'main', useBestCache: true, maxIterations: params.limit },
+            (partial) => { if (this.isStillActive(currentId)) this.updateInsights(partial.human); }
+        );
+
+        if (!this.isStillActive(currentId)) return { stats, done: true };
+        this.updateInsights(stats.human);
+
+        if (stats.stats && stats.stats.uncertainty === 0) {
+            this.setRefinementStatus("Complete", "done");
+            return { stats, done: true };
+        }
+
+        return { stats, done: false };
+    },
+
     async run(): Promise<void> {
         if (!this.isWorkerReady) return;
 
@@ -223,215 +198,164 @@ const UIController = {
         const currentId = ++this.chartUpdateId;
         this.activeRefinementId = currentId;
 
-        // Check if global parameters changed (restart chart if so)
-        const paramsChanged = this.lastRunParams.cat !== cat || 
+        const version = (this.elements["v-select"] as HTMLSelectElement).value;
+        const paramsChanged = this.lastRunParams.version !== version ||
+                              this.lastRunParams.cat !== cat || 
                               this.lastRunParams.mat !== mat || 
                               this.lastRunParams.guaranteedFirst !== guaranteedFirst;
 
         if (paramsChanged) {
-            this.currentSweep = []; // Fresh start for new run if cat/mat changed
-            this.lastRunParams = { cat, mat, guaranteedFirst };
+            this.currentSweep = [];
+            this.lastRunParams = { version, cat, mat, guaranteedFirst };
         }
 
-        // Pass 1: Coarse Refinement (Instant)
-        const coarse = getParamsForMode('coarse', cat === "book");
-        this.setRefinementStatus(coarse.status, "coarse");
-        
-        let stats = await WorkerClient.request('getFullStats', { 
-            cat, xp, mat, guaranteedFirst, 
-            threshold: coarse.threshold, 
-            source: 'main', 
-            useBestCache: true,
-            maxIterations: coarse.limit
+        const basePayload = { cat, xp, mat, guaranteedFirst };
+        const isBook = cat === "book";
+
+        // Pass 1: Coarse (instant, no progress callback)
+        const coarse = getParamsForMode('coarse', isBook);
+        this.setRefinementStatus(coarse.status, 'coarse');
+
+        let stats = await WorkerClient.request('getFullStats', {
+            ...basePayload, threshold: coarse.threshold, source: 'main', useBestCache: true, maxIterations: coarse.limit
         });
-        if (currentId !== this.activeRefinementId) return;
-        this.updateInsights(stats);
-        
-        // Start chart sweep in background ONLY if parameters changed
+        if (!this.isStillActive(currentId)) return;
+        this.updateInsights(stats.human);
+
         if (paramsChanged) {
-            await this.updateChart(cat, mat, coarse.threshold); 
+            await this.updateChart(cat, mat, coarse.threshold);
         }
-        
-        if (currentId !== this.activeRefinementId) return;
+        if (!this.isStillActive(currentId)) return;
 
-        // Early Exit if Coarse is already 100% accurate (uncertainty is 0)
-        if (stats.uncertainty === 0) {
+        if (stats.stats && stats.stats.uncertainty === 0) {
             this.setRefinementStatus("Complete", "done");
             return;
         }
 
-        // Pass 2: Standard Refinement
-        const standard = getParamsForMode('standard', cat === "book");
-        this.setRefinementStatus(standard.status, "standard");
-        
-        stats = await WorkerClient.request('getFullStats', 
-            { cat, xp, mat, guaranteedFirst, threshold: standard.threshold, source: 'main', useBestCache: true, maxIterations: standard.limit },
-            (partial) => {
-                if (currentId === this.activeRefinementId) this.updateInsights(partial);
+        // Passes 2-4: Standard → Deep → Ultra
+        for (const level of ['standard', 'deep', 'ultra'] as Exclude<SearchLevel, 'done'>[]) {
+            const result = await this.runPass(level, basePayload, currentId);
+            if (!this.isStillActive(currentId)) return;
+            if (result.done) {
+                if (paramsChanged && level === 'standard') {
+                    this.updateChart(cat, mat, getParamsForMode('standard', isBook).threshold);
+                }
+                return;
             }
-        );
-        
-        if (currentId !== this.activeRefinementId) return;
-        this.updateInsights(stats);
-        
+        }
+
         if (paramsChanged) {
-            this.updateChart(cat, mat, standard.threshold);
+            this.updateChart(cat, mat, getParamsForMode('ultra', isBook).threshold);
         }
-
-        if (currentId !== this.activeRefinementId) return;
-
-        if (stats.uncertainty === 0) {
-            this.setRefinementStatus("Complete", "done");
-            return;
-        }
-
-        // Pass 3: Deep Refinement
-        const deep = getParamsForMode('deep', cat === "book");
-        this.setRefinementStatus(deep.status, "deep");
-        
-        stats = await WorkerClient.request('getFullStats', 
-            { cat, xp, mat, guaranteedFirst, threshold: deep.threshold, source: 'main', useBestCache: true, maxIterations: deep.limit },
-            (partial) => {
-                if (currentId === this.activeRefinementId) this.updateInsights(partial);
-            }
-        );
-        
-        if (currentId !== this.activeRefinementId) return;
-        this.updateInsights(stats);
-        
-        if (stats.uncertainty === 0) {
-            this.setRefinementStatus("Complete", "done");
-            return;
-        }
-
-        // Pass 4: Ultra Refinement (Exhaustive)
-        const ultra = getParamsForMode('ultra', cat === "book");
-        this.setRefinementStatus(ultra.status, "ultra");
-
-        stats = await WorkerClient.request('getFullStats', 
-            { cat, xp, mat, guaranteedFirst, threshold: ultra.threshold, source: 'main', useBestCache: true, maxIterations: ultra.limit },
-            (partial) => {
-                if (currentId === this.activeRefinementId) this.updateInsights(partial);
-            }
-        );
-
-        if (currentId !== this.activeRefinementId) return;
-        this.updateInsights(stats);
         this.setRefinementStatus("Complete", "done");
-        
-        const metric = (this.elements["chart-metric"] as HTMLSelectElement).value;
-        this.lastChartParams = `${engine.registry.version}|${cat}|${mat}|${guaranteedFirst}|${metric}|ultra`;
     },
 
     setRefinementStatus(text: string, level: SearchLevel): void {
         const el = this.elements["refinement-status"];
         if (!el) return;
 
-        const colors = {
-            coarse: { bg: 'rgba(255, 193, 7, 0.15)', text: '#ffca28' },
-            standard: { bg: 'rgba(76, 175, 80, 0.15)', text: '#66bb6a' },
-            deep: { bg: 'rgba(33, 150, 243, 0.15)', text: '#42a5f5' },
-            ultra: { bg: 'rgba(156, 39, 176, 0.15)', text: '#ab47bc' },
-            done: { bg: 'rgba(255, 255, 255, 0.05)', text: 'var(--text-muted)' }
-        };
-
+        const c = SEARCH_LEVEL_COLORS[level];
         el.textContent = text;
-        const c = (colors as any)[level];
         el.style.backgroundColor = c.bg;
         el.style.color = c.text;
         el.style.opacity = level === 'done' ? '0.6' : '1';
     },
 
-    updateInsights(stats: CalculationStats): void {
+    updateInsights(human: any): void {
+        if (!human || !human.combos) return;
         const comboEl = document.getElementById("combo-list");
         if (!comboEl) return;
 
-        const engine = this.getEngine();
-        const topCombos = Object.entries(stats.combos).sort((a,b) => b[1] - a[1]).slice(0, 10);
-        
-        const comboListHtml = topCombos.map(([packed, prob]) => `
-            <div class="combo-item">
-                <div style="display: flex; justify-content: space-between;">
-                    <span class="combo-names">${engine.translateComboKey(packed).replace(/\+/g, ' + ')}</span>
-                    <span class="combo-prob">${(prob * 100).toFixed(1)}%</span>
-                </div>
-            </div>
-        `).join("");
-
-        const uncertaintyHtml = stats.uncertainty && stats.uncertainty > 0.005 ? `
-            <div class="combo-item" style="border-top: 1px solid rgba(255,255,255,0.05); margin-top: 10px; padding-top: 10px; opacity: 0.8;">
-                <div style="display: flex; justify-content: space-between; font-size: 0.85rem;">
-                    <span>Calculation Confidence</span>
-                    <span style="color: ${stats.uncertainty > 0.1 ? '#ffca28' : '#66bb6a'}">${((1 - stats.uncertainty) * 100).toFixed(1)}%</span>
-                </div>
-                ${stats.uncertainty > 0.1 ? `<div style="font-size: 0.7rem; color: #ffca28; margin-top: 3px;">⚠️ High branching complexity - some combinations were collapsed into their parents for speed.</div>` : ''}
-            </div>
-        ` : '';
-
-        comboEl.innerHTML = comboListHtml + uncertaintyHtml;
-
-        const rankSection = document.getElementById("rank-section");
-        if (!rankSection) return;
-
-        rankSection.innerHTML = Object.entries(stats.any).sort((a,b) => b[1] - a[1]).map(([idStr, prob]) => {
-            const id = parseInt(idStr);
-            const name = engine.registry.getEnchantName(id);
-            const props = engine.registry.resolvedRegistry[name];
-            const levelsCount = props ? Object.keys(props.levels).length : 2;
-            const label = levelsCount > 1 ? `Any ${name}` : name;
+        try {
+            const topCombos = Object.entries(human.combos).sort((a: any, b: any) => (b[1] as number) - (a[1] as number)).slice(0, 10);
             
-            return `
-                <div class="rank-item">
-                    <div style="display: flex; justify-content: space-between; font-size: 0.8rem;">
-                        <span>${label}</span>
-                        <span style="font-weight:700;">${(prob*100).toFixed(1)}%</span>
+            const comboListHtml = topCombos.map(([combo, prob]) => `
+                <div class="combo-item">
+                    <div style="display: flex; justify-content: space-between;">
+                        <span class="combo-names">${(combo as string).replace(/\+/g, ' + ')}</span>
+                        <span class="combo-prob">${((prob as number) * 100).toFixed(1)}%</span>
                     </div>
-                    <div class="progress-bg"><div class="progress-fill" style="width: ${prob*100}%"></div></div>
                 </div>
-            `;
-        }).join("");
+            `).join("");
+
+            const uncertaintyHtml = human.uncertainty && human.uncertainty > 0.005 ? `
+                <div class="combo-item" style="border-top: 1px solid rgba(255,255,255,0.05); margin-top: 10px; padding-top: 10px; opacity: 0.8;">
+                    <div style="display: flex; justify-content: space-between; font-size: 0.85rem;">
+                        <span>Calculation Confidence</span>
+                        <span style="color: ${human.uncertainty > 0.1 ? '#ffca28' : '#66bb6a'}">${((1 - human.uncertainty) * 100).toFixed(1)}%</span>
+                    </div>
+                    ${human.uncertainty > 0.1 ? `<div style="font-size: 0.7rem; color: #ffca28; margin-top: 3px;">⚠️ High branching complexity - some combinations were collapsed into their parents for speed.</div>` : ''}
+                </div>
+            ` : '';
+
+            comboEl.innerHTML = comboListHtml + uncertaintyHtml;
+
+            const rankSection = document.getElementById("rank-section");
+            if (!rankSection) return;
+
+            rankSection.innerHTML = Object.entries(human.any).sort((a: any, b: any) => (b[1] as number) - (a[1] as number)).map(([name, prob]) => {
+                const props = (this.getEngine().registry.resolvedRegistry as any)[name];
+                const levelsCount = props ? Object.keys(props.levels).length : 2;
+                const label = levelsCount > 1 ? `Any ${name}` : name;
+                
+                return `
+                    <div class="rank-item">
+                        <div style="display: flex; justify-content: space-between; font-size: 0.8rem;">
+                            <span>${label}</span>
+                            <span style="font-weight:700;">${((prob as number)*100).toFixed(1)}%</span>
+                        </div>
+                        <div class="progress-bg"><div class="progress-fill" style="width: ${(prob as number)*100}%"></div></div>
+                    </div>
+                `;
+            }).join("");
+        } catch (e) {
+            console.warn("UI Insights Error:", e);
+        }
     },
 
     async updateChart(cat: string, mat: string, threshold?: number): Promise<void> {
         const currentId = this.activeRefinementId;
-        const engine = (this as any).engine; // Ensure we have the engine for registry
+        const engine = this.getEngine();
         if (!engine) return;
 
         const metric = (this.elements["chart-metric"] as HTMLSelectElement).value;
         const guaranteedFirst = (this.elements["guaranteed-first-select"] as HTMLSelectElement).value;
         const labels = Array.from({length: 30}, (_, i) => i + 1);
         
-        const activeThreshold = threshold || (cat === "book" ? this.BOOK_THRESHOLD : this.DEFAULT_THRESHOLD);
+        const isBook = cat === "book";
+        const activeThreshold = threshold ?? getParamsForMode('ultra', isBook).threshold;
         
-        for (let i = 0; i < labels.length; i++) {
-            const l = labels[i];
-            if (currentId !== this.activeRefinementId) return;
-            
-            const stats = await WorkerClient.request(
-                'getFullStats', 
-                { cat, xp: l, mat, guaranteedFirst, threshold: activeThreshold, source: 'chart' },
-                (partial) => {
-                    if (currentId !== this.activeRefinementId) return;
-                    this.currentSweep[i] = { l, s: partial };
-                    if (this.chartManager) {
-                        const datasets = this.chartManager.generateDatasets(this.currentSweep, metric, engine.registry);
-                        this.chartManager.update(labels, datasets);
+        try {
+            for (let i = 0; i < labels.length; i++) {
+                const l = labels[i];
+                if (!this.isStillActive(currentId)) return;
+                
+                const stats = await WorkerClient.request(
+                    'getFullStats', 
+                    { cat, xp: l, mat, guaranteedFirst, threshold: activeThreshold, source: 'chart' },
+                    (result) => {
+                        if (!this.isStillActive(currentId)) return;
+                        this.currentSweep[i] = { l, s: result.stats };
+                        if (this.chartManager) {
+                            const datasets = this.chartManager.generateDatasets(this.currentSweep, metric, engine.registry);
+                            this.chartManager.update(labels, datasets);
+                        }
                     }
+                );
+                if (!this.isStillActive(currentId)) return;
+
+                this.currentSweep[i] = { l, s: stats.stats };
+
+                if (this.chartManager) {
+                    const datasets = this.chartManager.generateDatasets(this.currentSweep, metric, engine.registry);
+                    this.chartManager.update(labels, datasets);
                 }
-            );
-            if (currentId !== this.activeRefinementId) return;
-
-            this.currentSweep[i] = { l, s: stats };
-
-            // Redraw every level for a smooth fill
-            if (this.chartManager) {
-                const datasets = this.chartManager.generateDatasets(this.currentSweep, metric, engine.registry);
-                this.chartManager.update(labels, datasets);
             }
+        } catch (e) {
+            console.warn("UI Chart Error:", e);
         }
     }
 
 };
 
 window.onload = () => UIController.init();
-

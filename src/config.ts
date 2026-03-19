@@ -40,6 +40,14 @@ export const SEARCH_MODES: Record<Exclude<SearchLevel, 'done'>, SearchMode> = {
     }
 };
 
+export const SEARCH_LEVEL_COLORS: Record<SearchLevel, { bg: string; text: string }> = {
+    coarse:   { bg: 'rgba(255, 193, 7, 0.15)',   text: '#ffca28' },
+    standard: { bg: 'rgba(76, 175, 80, 0.15)',   text: '#66bb6a' },
+    deep:     { bg: 'rgba(33, 150, 243, 0.15)',  text: '#42a5f5' },
+    ultra:    { bg: 'rgba(156, 39, 176, 0.15)',  text: '#ab47bc' },
+    done:     { bg: 'rgba(255, 255, 255, 0.05)', text: 'var(--text-muted)' }
+};
+
 export function getParamsForMode(level: Exclude<SearchLevel, 'done'>, isBook: boolean) {
     const mode = SEARCH_MODES[level];
     return {
