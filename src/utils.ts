@@ -37,23 +37,43 @@ export const VersionUtils = {
 
 /**
  * Lightweight Binary Heap for priority queue operations.
- * Optimized for objects with a numeric 'prob' property.
+ * Optimized for objects with a numeric 'prob' property and unique IDs.
  */
 export class BinaryHeap<T extends { prob: number }> {
     private heap: T[] = [];
+    private indexMap: Map<any, number> = new Map();
+    private idSelector: ((item: T) => any) | null = null;
+
+    constructor(idSelector: ((item: T) => any) | null = null) {
+        this.idSelector = idSelector;
+    }
 
     push(item: T) {
+        if (this.idSelector) {
+            const id = this.idSelector(item);
+            if (this.indexMap.has(id)) {
+                const idx = this.indexMap.get(id)!;
+                this.heap[idx].prob += item.prob;
+                this.bubbleUp(idx);
+                this.sinkDown(idx);
+                return;
+            }
+            this.indexMap.set(id, this.heap.length);
+        }
         this.heap.push(item);
-        this.bubbleUp();
+        this.bubbleUp(this.heap.length - 1);
     }
 
     pop(): T | undefined {
         if (this.size() === 0) return undefined;
         const top = this.heap[0];
+        if (this.idSelector) this.indexMap.delete(this.idSelector(top));
+
         const bottom = this.heap.pop();
         if (this.size() > 0 && bottom !== undefined) {
             this.heap[0] = bottom;
-            this.sinkDown();
+            if (this.idSelector) this.indexMap.set(this.idSelector(bottom), 0);
+            this.sinkDown(0);
         }
         return top;
     }
@@ -70,23 +90,32 @@ export class BinaryHeap<T extends { prob: number }> {
         return this.heap;
     }
 
-    private bubbleUp() {
-        let idx = this.heap.length - 1;
+    private bubbleUp(idx: number) {
         const element = this.heap[idx];
+        const id = this.idSelector ? this.idSelector(element) : null;
+
         while (idx > 0) {
             let parentIdx = Math.floor((idx - 1) / 2);
             let parent = this.heap[parentIdx];
             if (element.prob <= parent.prob) break;
+            
             this.heap[parentIdx] = element;
             this.heap[idx] = parent;
+            
+            if (this.idSelector) {
+                this.indexMap.set(id, parentIdx);
+                this.indexMap.set(this.idSelector(parent), idx);
+            }
+            
             idx = parentIdx;
         }
     }
 
-    private sinkDown() {
-        let idx = 0;
+    private sinkDown(idx: number) {
         const length = this.heap.length;
-        const element = this.heap[0];
+        const element = this.heap[idx];
+        const id = this.idSelector ? this.idSelector(element) : null;
+
         while (true) {
             let leftChildIdx = 2 * idx + 1;
             let rightChildIdx = 2 * idx + 2;
@@ -111,15 +140,24 @@ export class BinaryHeap<T extends { prob: number }> {
             }
 
             if (swap === null) break;
-            this.heap[idx] = this.heap[swap];
+            
+            const swapElement = this.heap[swap];
+            this.heap[idx] = swapElement;
             this.heap[swap] = element;
+            
+            if (this.idSelector) {
+                this.indexMap.set(this.idSelector(swapElement), idx);
+                this.indexMap.set(id, swap);
+            }
+            
             idx = swap;
         }
     }
 
     clone(): BinaryHeap<T> {
-        const newHeap = new BinaryHeap<T>();
+        const newHeap = new BinaryHeap<T>(this.idSelector);
         newHeap.heap = [...this.heap];
+        newHeap.indexMap = new Map(this.indexMap);
         return newHeap;
     }
 }
