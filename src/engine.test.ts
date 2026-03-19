@@ -2,6 +2,7 @@ import { test, describe, it } from 'node:test';
 import assert from 'node:assert';
 import { EnchantEngine } from './engine.js';
 import { DATA } from './data.js';
+import { ResultProcessor } from './utils.js';
 import { PRECISION, ProbUtils, ComboUtils } from './utils.js';
 
 // Polyfill for requestAnimationFrame in Node (Sync version for tests)
@@ -17,15 +18,12 @@ describe('Enchantment Engine Test Suite', () => {
         it('should maintain total probability of Modified Level Distribution near 1.0 (Exact BigInt)', () => {
             const dist = engine.getModifiedLevelDist(30, 10);
             const totalProb = Object.values(dist).reduce((a, b) => a + b, 0n);
-            // With PRECISION = 2^60, it should be extremely close to PRECISION.
-            // Integer division may lose a few units of PRECISION.
             const totalProbNum = ProbUtils.toNumber(totalProb);
             assert.ok(Math.abs(totalProbNum - 1.0) < 0.000001, `Total probability ${totalProbNum} is not close enough to 1.0`);
         });
 
         it('should NOT return "X undefined" when no enchants are possible', async () => {
             const stats = await engine.getFullStats('sword', 1, 'diamond');
-            // Check that a key with "undefined" doesn't exist.
             const hasUndefined = Object.keys(stats.combos).some(c => c.includes('undefined')) ||
                                 Object.keys(stats.ranks).some(r => r.includes('undefined'));
             assert.ok(!hasUndefined, '"undefined" should not appear in results');
@@ -51,14 +49,14 @@ describe('Enchantment Engine Test Suite', () => {
             const getBases = (c: string) => c.split("+").map(e => e.split(" ").slice(0, -1).join(" "));
 
             const s114 = await e114.getFullStats('chestplate', 30, 'diamond', null, 0.0001);
-            const h114 = e114.humanizeStats(s114);
+            const h114 = ResultProcessor.humanize(s114, e114.registry);
             const multi114 = Object.keys(h114.combos).filter(c => {
                 return getBases(c).filter(b => protNames.includes(b)).length > 1;
             });
             assert.ok(multi114.length > 0, '1.14 should allow multi-protection');
 
             const s1143 = await e1143.getFullStats('chestplate', 30, 'diamond', null, 0.0001);
-            const h1143 = e1143.humanizeStats(s1143);
+            const h1143 = ResultProcessor.humanize(s1143, e1143.registry);
             const multi1143 = Object.keys(h1143.combos).some(c => {
                 return getBases(c).filter(b => protNames.includes(b)).length > 1;
             });
@@ -87,20 +85,20 @@ describe('Enchantment Engine Test Suite', () => {
             // 1.4.6: Single only
             const v146 = new EnchantEngine(DATA, '1.4.6');
             const s146 = await v146.getFullStats('book', 30, 'book');
-            const h146 = v146.humanizeStats(s146);
+            const h146 = ResultProcessor.humanize(s146, v146.registry);
             assert.ok(!Object.keys(h146.combos).some(c => c.split('+').length > 1));
 
             // 1.7.2: Multi allowed
             const v172 = new EnchantEngine(DATA, '1.7.2');
             const s172 = await v172.getFullStats('book', 30, 'book', null, 0.0001);
-            const h172 = v172.humanizeStats(s172);
+            const h172 = ResultProcessor.humanize(s172, v172.registry);
             assert.ok(Object.keys(h172.combos).some(c => c.split('+').length > 1));
         });
 
         it('Tridents: Riptide/Loyalty/Channeling mutual exclusion', async () => {
             const v113 = new EnchantEngine(DATA, '1.13');
             const stats = await v113.getFullStats('trident', 30, 'trident');
-            const human = v113.humanizeStats(stats);
+            const human = ResultProcessor.humanize(stats, v113.registry);
             
             for (const combo of Object.keys(human.combos)) {
                 if (combo.includes('Riptide')) {
@@ -140,26 +138,24 @@ describe('Enchantment Engine Test Suite', () => {
 
         it('Delayed Level Decay & Pool Persistence', async () => {
             const stats = await engine.getFullStats('pickaxe', 30, 'diamond', null, 0.0001);
-            const human = engine.humanizeStats(stats);
+            const human = ResultProcessor.humanize(stats, engine.registry);
             
-            // Pool Persistence: Efficiency IV in slot 3+
             const hasEffIVDeep = Object.keys(human.combos)
                 .filter(c => c.split("+").length >= 3)
                 .some(c => c.includes("Efficiency IV"));
             assert.ok(hasEffIVDeep);
 
-            // Level Decay Logic verification (Distribution check)
             assert.ok(human.count[2] > 0.1, "Double enchants should be significant");
             assert.ok((human.count[1] || 0) + (human.count[2] || 0) + (human.count[3] || 0) > 0.9);
         });
 
         it('God Pick verification (Efficiency IV + Fortune III + Unbreaking III)', async () => {
             const stats = await engine.getFullStats('pickaxe', 30, 'diamond', null, 0.0001);
-            const human = engine.humanizeStats(stats);
+            const human = ResultProcessor.humanize(stats, engine.registry);
             const targets = ["Efficiency IV", "Fortune III", "Unbreaking III"];
             let prob = 0;
-            for (const [combo, p] of Object.entries(human.combos)) {
-                if (targets.every(t => combo.includes(t))) prob += p;
+            for (const [combo, pVal] of Object.entries(human.combos)) {
+                if (targets.every(t => (combo as string).includes(t))) prob += (pVal as number);
             }
             assert.ok(prob > 0.0001);
         });
@@ -167,29 +163,24 @@ describe('Enchantment Engine Test Suite', () => {
         it('Guaranteed First should yield 100% total probability', async () => {
             const guaranteedFirst = "Efficiency IV";
             const stats = await engine.getFullStats('pickaxe', 30, 'diamond', guaranteedFirst, 0.0001);
-            
             const effId = engine.registry.idMap.get('Efficiency')!;
             const probAnyEff = stats.any[effId];
             
             let totalComboProb = 0;
             for (const p of Object.values(stats.combos)) {
-                totalComboProb += p;
+                totalComboProb += Number(p);
             }
-
-            console.log(`Guaranteed First: ${guaranteedFirst}, Prob Any Eff: ${probAnyEff}, Total Combo Prob: ${totalComboProb}`);
-            
-            assert.ok(probAnyEff > 0.999, `Probability of Efficiency should be near 1.0, got ${probAnyEff}`);
-            assert.ok(totalComboProb > 0.999, `Total combo probability should be near 1.0, got ${totalComboProb}`);
+            assert.ok(probAnyEff > 0.999);
+            assert.ok(totalComboProb > 0.999);
         });
 
         it('should maintain high precision for complex enchantment results', async () => {
             const stats = await engine.getFullStats('pickaxe', 30, 'diamond', null, 0.00001);
             let totalProb = stats.uncertainty;
             for (const p of Object.values(stats.combos)) {
-                totalProb += p;
+                totalProb += Number(p);
             }
-            // Due to the way summarizeStats converts back to float, we expect totalProb to be very close to 1.0
-            assert.ok(Math.abs(totalProb - 1.0) < 1e-12, `Total probability ${totalProb} should be extremely close to 1.0`);
+            assert.ok(Math.abs(totalProb - 1.0) < 1e-12);
         });
     });
 });

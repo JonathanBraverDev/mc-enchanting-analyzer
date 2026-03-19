@@ -1,5 +1,5 @@
 import { EnchantmentData, CalculationStats, HumanStats } from './types.js';
-import { VersionUtils, BinaryHeap, RomanUtils, PRECISION, ProbUtils, LRUCache, PackedEnchant, PackedCombo, ComboUtils, StatsUtils } from './utils.js';
+import { VersionUtils, BinaryHeap, RomanUtils, PRECISION, ProbUtils, LRUCache, PackedEnchant, PackedCombo, ComboUtils, ResultProcessor } from './utils.js';
 import { Registry } from './registry.js';
 
 /**
@@ -329,13 +329,13 @@ export class EnchantEngine {
             processedMProb += mProb;
             if (++iterCount % 3 === 0) {
                 if (onProgress) {
-                    onProgress(this.summarizeStats(finalCombos, totalUncertainty + (PRECISION - processedMProb)));
+                    onProgress(ResultProcessor.summarize(finalCombos, totalUncertainty + (PRECISION - processedMProb)));
                 }
                 await new Promise(r => setTimeout(r, 0));
             }
         }
 
-        const finalStats = this.summarizeStats(finalCombos, totalUncertainty);
+        const finalStats = ResultProcessor.summarize(finalCombos, totalUncertainty);
         this.statsCache.set(exactKey, finalStats);
         
         const best = this.bestStatsCache.get(baseKey);
@@ -344,46 +344,5 @@ export class EnchantEngine {
         }
 
         return finalStats;
-    }
-
-    /**
-     * Converts raw BigInt results into a human-readable CalculationStats object.
-     */
-    private summarizeStats(combos: Map<PackedCombo, bigint>, uncertainty: bigint): CalculationStats {
-        const stats: CalculationStats = {
-            ranks: {},
-            any: {},
-            count: {},
-            combos: {},
-            uncertainty: ProbUtils.toNumber(uncertainty)
-        };
-
-        for (const [packed, probBig] of combos) {
-            const prob = ProbUtils.toNumber(probBig);
-            stats.combos[packed.toString(16)] = prob;
-            
-            const ids = ComboUtils.unpack(packed);
-            stats.count[ids.length] = (stats.count[ids.length] || 0) + prob;
-
-            let seenBasesBitmask = 0n;
-            for (const n of ids) {
-                stats.ranks[n] = (stats.ranks[n] || 0) + prob;
-                
-                const baseId = n >> 8;
-                if (!((seenBasesBitmask >> BigInt(baseId)) & 1n)) {
-                    stats.any[baseId] = (stats.any[baseId] || 0) + prob;
-                    seenBasesBitmask |= (1n << BigInt(baseId));
-                }
-            }
-        }
-
-        return stats;
-    }
-
-    /**
-     * Converts a raw CalculationStats object into a human-readable HumanStats object.
-     */
-    public humanizeStats(stats: CalculationStats): HumanStats {
-        return StatsUtils.humanize(stats, this.registry);
     }
 }
