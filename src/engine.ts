@@ -112,6 +112,12 @@ export class EnchantEngine {
         }
 
         if (!hasChosen) {
+            if (this.eligiblePoolCache.has(cacheKey)) {
+                this.eligiblePoolCache.delete(cacheKey);
+            } else if (this.eligiblePoolCache.size >= this.MAX_CACHE_SIZE) {
+                const firstKey = this.eligiblePoolCache.keys().next().value;
+                if (firstKey !== undefined) this.eligiblePoolCache.delete(firstKey);
+            }
             this.eligiblePoolCache.set(cacheKey, out);
         }
         return out;
@@ -244,7 +250,11 @@ export class EnchantEngine {
             const guaranteedFirstRank = guaranteedFirst ? RomanUtils.getRomanValue(guaranteedFirst.split(' ').pop()!, romanMap) : null;
             const guaranteedFirstFull = guaranteedFirstId !== null && guaranteedFirstRank !== null ? (guaranteedFirstId << 8 | guaranteedFirstRank) : null;
 
-            queue = new BinaryHeap<{ chosen: number[], bitset: bigint, level: number, prob: number }>();
+            // Use state hash for deduplication: (bitset << 8) | level
+            queue = new BinaryHeap<{ chosen: number[], bitset: bigint, level: number, prob: number }>(
+                (item) => (item.bitset << 8n) | BigInt(item.level)
+            );
+            
             queue.push({ 
                 chosen: guaranteedFirstFull !== null ? [guaranteedFirstFull] : [], 
                 bitset: guaranteedFirstId !== null ? (1n << BigInt(guaranteedFirstId)) : 0n,
@@ -361,7 +371,10 @@ export class EnchantEngine {
         // The frontier object stored in cache should keep 'uncertainty' as the pruned mass only
         const out = { queue, results, uncertainty, cumulativeAccountedMass, threshold };
         
-        if (this.comboCache.size >= this.MAX_CACHE_SIZE) {
+        // LRU Cache Management
+        if (this.comboCache.has(cacheKey)) {
+            this.comboCache.delete(cacheKey); // Move to end
+        } else if (this.comboCache.size >= this.MAX_CACHE_SIZE) {
             const firstKey = this.comboCache.keys().next().value;
             if (firstKey !== undefined) this.comboCache.delete(firstKey);
         }
@@ -453,7 +466,10 @@ export class EnchantEngine {
 
         const stats = this.summarizeStats(finalCombos, totalUncertainty);
 
-        if (this.statsCache.size >= this.MAX_CACHE_SIZE) {
+        // LRU Cache Management
+        if (this.statsCache.has(exactKey)) {
+            this.statsCache.delete(exactKey);
+        } else if (this.statsCache.size >= this.MAX_CACHE_SIZE) {
             const firstKey = this.statsCache.keys().next().value;
             if (firstKey !== undefined) this.statsCache.delete(firstKey);
         }
