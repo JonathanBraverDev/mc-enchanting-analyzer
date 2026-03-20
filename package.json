@@ -2,12 +2,13 @@
   "name": "mc-enchanting-analyzer",
   "version": "1.0.0-rc",
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@types/chart.js": "^2.9.41",
     "@types/node": "^25.5.0",
     "assemblyscript": "^0.28.10",
     "esbuild": "^0.27.4",
-    "typescript": "^5.9.3",
-    "tsx": "^4.19.2"
+    "tsx": "^4.19.2",
+    "typescript": "^5.9.3"
   },
   "type": "module",
   "exports": {
@@ -22,7 +23,11 @@
     "build:bundle": "node scripts/bundle-worker.js",
     "build": "npm run build:js && npm run build:bundle",
     "build:standalone": "npm run build && node scripts/inline-assets.js",
-    "test": "tsx --test src/engine.test.ts",
+    "test:engine": "tsx --test src/engine.test.ts",
+    "test:ui": "playwright test src/ui.test.ts",
+    "test": "npm run test:engine",
+    "test:all": "npm run test:engine && npm run test:ui",
+    "update-snapshots": "tsx scripts/update-snapshots.ts",
     "start": "npx serve ."
   }
 }
