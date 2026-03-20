@@ -19,6 +19,25 @@ test.describe('Enchantment Analyzer UI', () => {
         await expect(comboList.locator('.combo-item').first()).toBeVisible({ timeout: 15000 });
     });
 
+    test('should update calculations when item category changes', async ({ page }) => {
+        const catSelect = page.locator('#cat-select');
+        const comboList = page.locator('#combo-list');
+
+        // 1. Start with Sword
+        await catSelect.selectOption('sword');
+        await expect(comboList.locator('.combo-item').first()).toBeVisible({ timeout: 15000 });
+        const swordAtFirst = await comboList.innerText();
+        expect(swordAtFirst).toContain('Sharpness');
+
+        // 2. Switch to Pickaxe
+        await catSelect.selectOption('pickaxe');
+        
+        // Wait for the change (it should eventually show Efficiency)
+        await expect(comboList).toContainText('Efficiency', { timeout: 15000 });
+        const pickaxeAtFirst = await comboList.innerText();
+        expect(pickaxeAtFirst).not.toContain('Sharpness');
+    });
+
     test('should update calculations when level slider changes', async ({ page }) => {
         const slider = page.locator('#lvl-range');
         const lvlVal = page.locator('#lvl-val');
