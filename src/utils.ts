@@ -56,15 +56,24 @@ export const ProbUtils = {
 };
 
 /**
+ * Packed representation of a search node to minimize object and array overhead.
+ */
+export interface PackedNode {
+    packedChosen: bigint;
+    meta: bigint; // (bitset << 8 | level)
+    prob: bigint;
+}
+
+/**
  * Lightweight Binary Heap for priority queue operations.
- * Optimized for objects with a BigInt 'prob' property and unique IDs.
+ * Optimized for PackedNode-like objects with a BigInt 'prob' property.
  */
 export class BinaryHeap<T extends { prob: bigint }> {
     private heap: T[] = [];
-    private indexMap: Map<any, number> = new Map();
-    private idSelector: ((item: T) => any) | null = null;
+    private indexMap: Map<bigint, number> = new Map();
+    private idSelector: ((item: T) => bigint) | null = null;
 
-    constructor(idSelector: ((item: T) => any) | null = null) {
+    constructor(idSelector: ((item: T) => bigint) | null = null) {
         this.idSelector = idSelector;
     }
 
@@ -122,7 +131,7 @@ export class BinaryHeap<T extends { prob: bigint }> {
             this.heap[parentIdx] = element;
             this.heap[idx] = parent;
             
-            if (this.idSelector) {
+            if (this.idSelector && id !== null) {
                 this.indexMap.set(id, parentIdx);
                 this.indexMap.set(this.idSelector(parent), idx);
             }
@@ -153,7 +162,7 @@ export class BinaryHeap<T extends { prob: bigint }> {
                 rightChild = this.heap[rightChildIdx];
                 if (
                     (swap === null && rightChild.prob > element.prob) ||
-                    (swap !== null && rightChild.prob > leftChild!.prob)
+                    (swap !== null && rightChild.prob > (leftChild as T).prob)
                 ) {
                     swap = rightChildIdx;
                 }
@@ -165,7 +174,7 @@ export class BinaryHeap<T extends { prob: bigint }> {
             this.heap[idx] = swapElement;
             this.heap[swap] = element;
             
-            if (this.idSelector) {
+            if (this.idSelector && id !== null) {
                 this.indexMap.set(this.idSelector(swapElement), idx);
                 this.indexMap.set(id, swap);
             }

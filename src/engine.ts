@@ -1,5 +1,5 @@
 import { EnchantmentData, CalculationStats, HumanStats } from './types.js';
-import { VersionUtils, BinaryHeap, RomanUtils, PRECISION, ProbUtils, LRUCache, PackedEnchant, PackedCombo, ComboUtils, ResultProcessor } from './utils.js';
+import { VersionUtils, BinaryHeap, RomanUtils, PRECISION, ProbUtils, LRUCache, PackedEnchant, PackedCombo, ComboUtils, ResultProcessor, PackedNode } from './utils.js';
 import { Registry } from './registry.js';
 
 /**
@@ -7,7 +7,7 @@ import { Registry } from './registry.js';
  * Can be used to resume calculations at a higher resolution.
  */
 export interface SearchFrontier {
-    queue: BinaryHeap<{ chosen: PackedEnchant[], bitset: bigint, level: number, prob: bigint }>;
+    queue: BinaryHeap<PackedNode>;
     results: Map<PackedCombo, bigint>;
     uncertainty: bigint;
     cumulativeAccountedMass: bigint;
@@ -19,14 +19,49 @@ export interface SearchFrontier {
  */
 export class EnchantEngine {
     static distCache = new Map<string, { [level: number]: bigint }>();
+    static allEngines: Set<EnchantEngine> = new Set();
     
     public registry: Registry;
-    public comboCache = new LRUCache<string, SearchFrontier>(500);
-    public statsCache = new LRUCache<string, CalculationStats>(500);
-    public bestStatsCache = new LRUCache<string, { threshold: number, stats: CalculationStats }>(500);
+    public comboCache = new LRUCache<bigint, SearchFrontier>(128);
+    public bookComboCache = new LRUCache<bigint, SearchFrontier>(64);
+    public statsCache = new LRUCache<bigint, CalculationStats>(8);
+    public bestStatsCache = new LRUCache<bigint, { threshold: number, stats: CalculationStats }>(8);
     
     constructor(data: EnchantmentData, version: string) {
         this.registry = new Registry(data, version);
+        EnchantEngine.allEngines.add(this);
+    }
+
+    private getPackedKey(cat: string, modLevel: number, mat: string, guaranteedFirst: string | null, limit: number, threshold?: number): bigint {
+        const catId = BigInt(this.registry.catIdMap.get(cat) ?? 63);
+        const matId = BigInt(this.registry.matIdMap.get(mat) ?? 63);
+        const guaranteedId = guaranteedFirst ? BigInt(this.registry.idMap.get(RomanUtils.getBaseName(guaranteedFirst, this.registry.data.constants.ROMAN_MAP)) ?? 255) : 255n;
+        
+        let key = catId;
+        key |= matId << 6n;
+        key |= BigInt(modLevel) << 12n;
+        key |= guaranteedId << 20n;
+        key |= BigInt(limit) << 28n;
+        
+        if (threshold !== undefined) {
+            const tIdx = BigInt(Math.max(0, Math.min(255, Math.round(-Math.log10(threshold)))));
+            key |= tIdx << 44n;
+        }
+        
+        return key;
+    }
+
+    /**
+     * Clears all caches across all active engine instances.
+     */
+    public static clearAllCaches(): void {
+        this.distCache.clear();
+        for (const engine of this.allEngines) {
+            engine.comboCache.clear();
+            engine.bookComboCache.clear();
+            engine.statsCache.clear();
+            engine.bestStatsCache.clear();
+        }
     }
 
     /**
@@ -113,15 +148,17 @@ export class EnchantEngine {
         existingFrontier?: SearchFrontier,
         maxIterations?: number
     ): SearchFrontier {
-        const cacheKey = `${cat}|${modLevel}|${mat}|${guaranteedFirst || "none"}|limit:${maxIterations ?? 'default'}`;
+        const limit = maxIterations ?? (cat === "book" ? 40000 : (ProbUtils.toNumber(threshold) < 0.0001 ? 25000 : 10000));
+        const cacheKey = this.getPackedKey(cat, modLevel, mat, guaranteedFirst, limit);
+        const activeCache = cat === "book" ? this.bookComboCache : this.comboCache;
         
-        const cached = this.comboCache.get(cacheKey);
+        const cached = activeCache.get(cacheKey);
         if (cached && cached.threshold <= threshold && !existingFrontier) return cached;
 
         let results: Map<PackedCombo, bigint>;
         let uncertainty: bigint;
         let cumulativeAccountedMass: bigint;
-        let queue: BinaryHeap<{ chosen: PackedEnchant[], bitset: bigint, level: number, prob: bigint }>;
+        let queue: BinaryHeap<PackedNode>;
 
         const romanMap = this.registry.data.constants.ROMAN_MAP;
         const guaranteedFirstBase = guaranteedFirst ? RomanUtils.getBaseName(guaranteedFirst, romanMap) : null;
@@ -145,20 +182,19 @@ export class EnchantEngine {
             const guaranteedFirstRank = guaranteedFirst ? RomanUtils.getRomanValue(guaranteedFirst.split(' ').pop()!, romanMap) : null;
             const guaranteedFirstFull = guaranteedFirstId !== null && guaranteedFirstRank !== null ? (guaranteedFirstId << 8 | guaranteedFirstRank) : null;
 
-            queue = new BinaryHeap<{ chosen: PackedEnchant[], bitset: bigint, level: number, prob: bigint }>(
-                (item) => (item.bitset << 8n) | BigInt(item.level)
-            );
+            queue = new BinaryHeap<PackedNode>((item) => item.meta);
             
+            const initialPacked = guaranteedFirstFull !== null ? ComboUtils.pack([guaranteedFirstFull], guaranteedFirstId) : 0n;
+            const initialBitset = guaranteedFirstId !== null ? (1n << BigInt(guaranteedFirstId)) : 0n;
+
             queue.push({ 
-                chosen: guaranteedFirstFull !== null ? [guaranteedFirstFull] : [], 
-                bitset: guaranteedFirstId !== null ? (1n << BigInt(guaranteedFirstId)) : 0n,
-                level: modLevel, 
+                packedChosen: initialPacked,
+                meta: (initialBitset << 8n) | BigInt(modLevel),
                 prob: PRECISION 
             });
         }
 
         let iterations = 0;
-        const limit = maxIterations ?? (cat === "book" ? 40000 : (ProbUtils.toNumber(threshold) < 0.0001 ? 25000 : 10000));
 
         const initialPool = this.registry.getEligiblePool(cat, modLevel, mat);
         if (initialPool.length === 0) {
@@ -174,37 +210,38 @@ export class EnchantEngine {
 
             iterations++;
             const current = queue.pop()!;
+            const currentBitset = current.meta >> 8n;
+            const currentLevel = Number(current.meta & 0xFFn);
+            const currentCount = Number(current.packedChosen >> 60n);
             
-            if (current.chosen.length === 0) {
+            if (currentCount === 0) {
                 const pBase = current.prob / BigInt(initialTotalWeight);
                 for (let i = 0; i < initialPool.length; i++) {
                     const e = initialPool[i];
                     queue.push({ 
-                        chosen: [e], 
-                        bitset: 1n << BigInt(e >> 8),
-                        level: modLevel,
+                        packedChosen: ComboUtils.pack([e], guaranteedFirstId), 
+                        meta: ((1n << BigInt(e >> 8)) << 8n) | BigInt(modLevel),
                         prob: BigInt(poolWeights[i]) * pBase 
                     });
                 }
                 continue;
             }
 
-            const currentKey = ComboUtils.pack(current.chosen, guaranteedFirstId);
-            const probContinueNum = (cat === "book" && !this.registry.multiEnchantBooks) ? 0 : Math.min((current.level + 1) / 50, 1.0);
+            const probContinueNum = (cat === "book" && !this.registry.multiEnchantBooks) ? 0 : Math.min((currentLevel + 1) / 50, 1.0);
             const probContinue = ProbUtils.toBigInt(probContinueNum);
 
             if (probContinue <= 0n) {
-                results.set(currentKey, (results.get(currentKey) || 0n) + current.prob);
+                results.set(current.packedChosen, (results.get(current.packedChosen) || 0n) + current.prob);
                 cumulativeAccountedMass += current.prob;
                 continue;
             }
 
             const probStop = (current.prob * (PRECISION - probContinue)) / PRECISION;
-            results.set(currentKey, (results.get(currentKey) || 0n) + probStop);
+            results.set(current.packedChosen, (results.get(current.packedChosen) || 0n) + probStop);
             cumulativeAccountedMass += probStop;
 
             const probMovingForward = (current.prob * probContinue) / PRECISION;
-            if (probMovingForward < threshold / 100n) {
+            if (probMovingForward < threshold / 100n || currentCount >= 5) {
                 uncertainty += probMovingForward;
                 continue;
             }
@@ -216,8 +253,8 @@ export class EnchantEngine {
             for (let i = 0; i < initialPool.length; i++) {
                 const e = initialPool[i];
                 const id = e >> 8;
-                if ((current.bitset & (1n << BigInt(id))) !== 0n) continue;
-                if ((current.bitset & this.registry.conflictBitsets[id]) !== 0n) continue;
+                if ((currentBitset & (1n << BigInt(id))) !== 0n) continue;
+                if ((currentBitset & this.registry.conflictBitsets[id]) !== 0n) continue;
 
                 currentEligible.push(e);
                 currentWeights.push(poolWeights[i]);
@@ -225,19 +262,20 @@ export class EnchantEngine {
             }
 
             if (currentTotalWeight === 0) {
-                results.set(currentKey, (results.get(currentKey) || 0n) + probMovingForward);
+                results.set(current.packedChosen, (results.get(current.packedChosen) || 0n) + probMovingForward);
                 cumulativeAccountedMass += probMovingForward;
                 continue;
             }
 
-            const nextLevel = current.chosen.length >= 1 ? Math.floor(current.level / 2) : current.level;
+            const nextLevel = currentCount >= 1 ? Math.floor(currentLevel / 2) : currentLevel;
             const pNextBase = probMovingForward / BigInt(currentTotalWeight);
+            const currentChosen = ComboUtils.unpack(current.packedChosen);
+
             for (let i = 0; i < currentEligible.length; i++) {
                 const e = currentEligible[i];
                 queue.push({
-                    chosen: [...current.chosen, e],
-                    bitset: current.bitset | (1n << BigInt(e >> 8)),
-                    level: nextLevel,
+                    packedChosen: ComboUtils.pack([...currentChosen, e], guaranteedFirstId),
+                    meta: ((currentBitset | (1n << BigInt(e >> 8))) << 8n) | BigInt(nextLevel),
                     prob: BigInt(currentWeights[i]) * pNextBase
                 });
             }
@@ -247,14 +285,13 @@ export class EnchantEngine {
         const outResults = new Map(results);
         for (const item of queue.items) {
             frontierUncertainty += item.prob;
-            const key = item.chosen.length > 0 ? ComboUtils.pack(item.chosen, guaranteedFirstId) : 0n;
-            if (key !== 0n) outResults.set(key, (outResults.get(key) || 0n) + item.prob);
+            if (item.packedChosen !== 0n) outResults.set(item.packedChosen, (outResults.get(item.packedChosen) || 0n) + item.prob);
         }
 
         const totalUncertainty = uncertainty + frontierUncertainty;
         const out = { queue, results, uncertainty, cumulativeAccountedMass, threshold };
         
-        this.comboCache.set(cacheKey, out);
+        activeCache.set(cacheKey, out);
         return { ...out, results: outResults, uncertainty: totalUncertainty }; 
     }
 
@@ -272,8 +309,9 @@ export class EnchantEngine {
         useBestCache: boolean = false,
         maxIterations?: number
     ): Promise<CalculationStats> {
-        const baseKey = `${cat}|${xp}|${mat}|${guaranteedFirst || 'none'}|limit:${maxIterations ?? 'default'}`;
-        const exactKey = `${baseKey}|${threshold}`;
+        const limit = maxIterations ?? (cat === "book" ? 40000 : (threshold < 0.0001 ? 25000 : 10000));
+        const baseKey = this.getPackedKey(cat, xp, mat, guaranteedFirst, limit);
+        const exactKey = this.getPackedKey(cat, xp, mat, guaranteedFirst, limit, threshold);
 
         if (this.statsCache.has(exactKey)) return this.statsCache.get(exactKey)!;
 

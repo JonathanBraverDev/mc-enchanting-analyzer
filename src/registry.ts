@@ -18,6 +18,8 @@ export class Registry {
     
     public idMap = new Map<string, number>();
     public revIdMap: string[] = [];
+    public catIdMap = new Map<string, number>();
+    public matIdMap = new Map<string, number>();
     public conflictBitsets: BigUint64Array = new BigUint64Array(0);
     public weightMap: Uint32Array = new Uint32Array(0);
     public sortedRanks: [string, number][] = [];
@@ -101,6 +103,18 @@ export class Registry {
 
         const romanMap = this.data.constants.ROMAN_MAP;
         this.sortedRanks = Object.entries(romanMap).sort((a, b) => b[1] - a[1]);
+
+        // Initialize Cat/Mat ID maps
+        Object.keys(this.data.enchantment_groups).forEach((cat, i) => this.catIdMap.set(cat, i));
+        Object.keys(this.data.material_values.tools).forEach((mat, i) => this.matIdMap.set(mat, i));
+        Object.keys(this.data.material_values.armor).forEach((mat, i) => {
+            if (!this.matIdMap.has(mat)) this.matIdMap.set(mat, this.matIdMap.size);
+        });
+        // Add specific categories not in groups if any
+        this.data.constants.ITEM_SPECIFIC_CATS.forEach(cat => {
+            if (!this.catIdMap.has(cat)) this.catIdMap.set(cat, this.catIdMap.size);
+            if (!this.matIdMap.has(cat)) this.matIdMap.set(cat, this.matIdMap.size);
+        });
     }
 
     public getEligibleMaterials(cat: string): string[] {
