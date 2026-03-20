@@ -4,6 +4,7 @@ import { EnchantEngine } from './engine.js';
 import { DATA } from './data.js';
 import { ResultProcessor } from './utils.js';
 import { PRECISION, ProbUtils, ComboUtils } from './utils.js';
+import { SnapshotUtils } from './test-utils.js';
 
 // Polyfill for requestAnimationFrame in Node (Sync version for tests)
 if (typeof (globalThis as any).requestAnimationFrame !== 'function') {
@@ -11,6 +12,9 @@ if (typeof (globalThis as any).requestAnimationFrame !== 'function') {
 }
 
 describe('Enchantment Engine Test Suite', () => {
+    test.afterEach(() => {
+        EnchantEngine.clearAllCaches();
+    });
 
     describe('1. Core Engine Logic', () => {
         const engine = new EnchantEngine(DATA, '1.21');
@@ -181,6 +185,27 @@ describe('Enchantment Engine Test Suite', () => {
                 totalProb += Number(p);
             }
             assert.ok(Math.abs(totalProb - 1.0) < 1e-12);
+        });
+    });
+
+    describe('5. Regression Snapshots (Golden Results)', () => {
+
+        it('Snapshot: 1.8 Diamond Sword @ Level 30', async () => {
+            const engine = new EnchantEngine(DATA, '1.8');
+            const stats = await engine.getFullStats('sword', 30, 'diamond', null, 0.0001);
+            await SnapshotUtils.assertSnapshot('1.8_sword_30_diamond', stats);
+        });
+
+        it('Snapshot: 1.21 Mace @ Level 30', async () => {
+            const engine = new EnchantEngine(DATA, '1.21');
+            const stats = await engine.getFullStats('mace', 30, 'mace', null, 0.0001);
+            await SnapshotUtils.assertSnapshot('1.21_mace_30_mace', stats);
+        });
+
+        it('Snapshot: 1.7.2 Multi-Enchant Book @ Level 30', async () => {
+            const engine = new EnchantEngine(DATA, '1.7.2');
+            const stats = await engine.getFullStats('book', 30, 'book', null, 0.0001);
+            await SnapshotUtils.assertSnapshot('1.7.2_book_30_book', stats);
         });
     });
 });
