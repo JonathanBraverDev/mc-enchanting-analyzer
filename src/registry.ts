@@ -105,16 +105,36 @@ export class Registry {
         this.sortedRanks = Object.entries(romanMap).sort((a, b) => b[1] - a[1]);
 
         // Initialize Cat/Mat ID maps
-        Object.keys(this.data.enchantment_groups).forEach((cat, i) => this.catIdMap.set(cat, i));
-        Object.keys(this.data.material_values.tools).forEach((mat, i) => this.matIdMap.set(mat, i));
-        Object.keys(this.data.material_values.armor).forEach((mat, i) => {
+        Object.keys(this.data.enchantment_groups).forEach((cat) => {
+            if (!this.catIdMap.has(cat)) this.catIdMap.set(cat, this.catIdMap.size);
+        });
+        Object.keys(this.data.material_values.tools).concat(Object.keys(this.data.material_values.armor)).forEach((mat) => {
             if (!this.matIdMap.has(mat)) this.matIdMap.set(mat, this.matIdMap.size);
         });
-        // Add specific categories not in groups if any
+
+        // Ensure all item categories used in item_enchantments are also in the ID maps
+        Object.values(this.data.versions).forEach(v => {
+            if (v.item_enchantments) {
+                Object.keys(v.item_enchantments).forEach(cat => {
+                    if (!this.catIdMap.has(cat)) this.catIdMap.set(cat, this.catIdMap.size);
+                    if (!this.matIdMap.has(cat)) this.matIdMap.set(cat, this.matIdMap.size);
+                });
+            }
+        });
+
+        // Add additional specific categories (brush, shield, etc.)
         this.data.constants.ITEM_SPECIFIC_CATS.forEach(cat => {
             if (!this.catIdMap.has(cat)) this.catIdMap.set(cat, this.catIdMap.size);
             if (!this.matIdMap.has(cat)) this.matIdMap.set(cat, this.matIdMap.size);
         });
+
+        // Filter merged pools by version validity
+        for (const cat of Object.keys(this.mergedItems)) {
+            this.mergedItems[cat] = this.mergedItems[cat].filter(name => {
+                const props = Object.assign({}, this.data.global_enchantments[name], this.mergedOverrides[name] || {}) as Enchantment;
+                return VersionUtils.isInRange(this.version, props.valid_from, props.valid_to);
+            });
+        }
     }
 
     public getEligibleMaterials(cat: string): string[] {
@@ -155,6 +175,23 @@ export class Registry {
             if (v === rank) return k;
         }
         return rank.toString();
+    }
+
+    public getEnchantId(name: string): number | undefined {
+        return this.idMap.get(name);
+    }
+
+    public hasConflict(idA: number, idB: number): boolean {
+        return (this.conflictBitsets[idA] & (1n << BigInt(idB))) !== 0n;
+    }
+
+    public isCategoryAvailable(cat: string): boolean {
+        const pool = this.mergedItems[cat];
+        return !!(pool && pool.length > 0);
+    }
+
+    public getCategoryPool(cat: string): string[] {
+        return this.mergedItems[cat] || [];
     }
 
     public getFullEnchantName(idAndRank: number): string {
