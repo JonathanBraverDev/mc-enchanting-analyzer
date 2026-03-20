@@ -1,43 +1,35 @@
 # Minecraft Enchantment Analyzer
 
-A high-performance, real-time simulation tool for Minecraft enchanting mechanics. This analyzer uses a progressive refinement algorithm to provide instant rough estimates that settle into mathematically precise probabilities.
+A high-performance, real-time simulation tool for Minecraft's enchanting mechanics. This analyzer provides instant, mathematically precise probabilities for any item, material, and version combination.
 
 ![Analyzer Screenshot](file:///d:/Projects/mc-enchanting-analyzer/media/Screenshot.png)
 
-## ✨ Key Features
+## ✨ Why use this Analyzer?
 
-- **Progressive Refinement**: Get instant feedback with coarse searches (0.05 threshold) that refine in the background to deep precision (0.0001).
-- **Real-Time Visualization**: Dynamic charts that update point-by-point as the engine settles on exact values.
-- **Multithreaded Search**: Powered by Web Workers to keep the UI buttery smooth even during complex "Book" calculations.
-- **Differentiated Caching**: 
-  - **Slider**: Instant results by reusing the most precise data in the cache.
-  - **Chart**: Consistent visual updates by matching exact refinement thresholds.
-- **Cooperative Multitasking**: Interleaved execution of background chart updates and foreground slider interactions.
-- **Zero-Dependency Frontend**: Pure Vanilla JS/TS for maximum performance and portability.
+- **🚀 Instant Insights**: Get immediate estimates that refine into exact percentages in seconds. No more waiting for deep-dive calculations to finish before you see data.
+- **📈 Real-Time Convergence**: Watch the probability charts update live as the engine explores millions of possible outcomes.
+- **💎 Version Perfect**: Supports all major mechanics changes from **Beta 1.9 up to 1.21**, including historical quirks like the 1.14 Protection conflict window.
+- **📚 Complex Support**: Accurate handling of "Multi-Enchanment" books and secondary enchantment decays that other tools often overlook.
 
 ## 🚀 Getting Started
 
-### Development
-1. Clone the repository.
-2. Install dependencies: `npm install`.
-3. Start the dev server: `npm start`.
-4. Build the project: `npm run build`.
+### 📥 Standalone HTML (Zero Install)
+The easiest way to use the analyzer is to download the **Standalone HTML** file from our [Releases Page](https://github.com/JonathanBraverDev/mc-enchanting-analyzer/releases). 
+- **No install needed**: Just open the file in any modern web browser.
+- **Portable**: Everything (logic, styles, data) is contained in a single file.
 
-### Standalone Usage
-The project includes a `bundle.js` that contains all engine and worker logic. Simply open `analyzer.html` in any modern browser.
+### 🛠️ Developer Setup
+If you want to contribute to the engine or run from source:
+1. **Clone** the repository.
+2. **Install**: `npm install`
+3. **Run**: `npm start` (opens the dev server)
+4. **Test**: `npm test` (runs the engine and registry validation suite)
 
-## 🛠️ Technical Overview
+To build your own standalone version, use: `npm run build:standalone`. The result will appear at `dist/analyzer-standalone.html`.
 
-### The Engine
-The core `EnchantEngine` simulates the Minecraft random bonus and modified level distribution. It uses a **Search Frontier** approach to navigate the massive combination space of multi-enchantment outcomes.
+## 🧠 The Engine
 
-### The Worker
-A dedicated Web Worker manages the heavy lifting. It includes a custom cancellation system that distinguishes between various UI interaction sources, allowing the chart to refine in the background while you move the level slider.
-
-### Performance Optimizations
-- **Early Exit**: Calculations stop once the "residual" (unexplored) math reaches 0.
-- **Yielding**: Long-running loops use `setTimeout(0)` to keep the worker responsive to new cancellation signals.
-- **Memory Management**: Automatic LRU cache cleanup for large statistical sets.
+This tool uses a specialized "Progressive Refinement" search. It prioritizes the most statistically significant paths first, allowing the UI to remain incredibly responsive even when calculating deep probability trees for high-level enchantments.
 
 ---
-Created by **Jonathan Braver**
+Created by **Jonathan Braver** | **Version 1.0.0**
