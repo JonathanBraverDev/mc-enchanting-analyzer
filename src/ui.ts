@@ -2,9 +2,9 @@ import { DATA } from './data.js';
 import { EnchantEngine } from './engine.js';
 import { CalculationStats } from './types.js';
 import { ChartManager } from './chart-manager.js';
-import { ResultProcessor } from './utils.js';
-import { getParamsForMode, SEARCH_LEVEL_COLORS, SearchLevel } from './config.js';
+import { UI_DEFAULTS, getParamsForMode, SEARCH_LEVEL_COLORS, SearchLevel } from './config.js';
 import { WorkerClient } from './worker-client.js';
+import { StringUtils, UIUtils, DOMUtils } from './utils/index.js';
 
 /**
  * Main UI Controller for the Enchantment Analyzer.
@@ -43,9 +43,7 @@ const UIController = {
     populateVersions(): void {
         const vSelect = this.elements["v-select"] as HTMLSelectElement;
         Object.keys(DATA.versions).reverse().forEach(v => {
-            const o = document.createElement("option");
-            o.value = v; o.textContent = v;
-            vSelect.appendChild(o);
+            DOMUtils.addOption(vSelect, v, v);
         });
     },
 
@@ -76,13 +74,13 @@ const UIController = {
         lvl.oninput = () => {
             this.elements["lvl-val"].textContent = lvl.value;
             if (this.runTimeout) clearTimeout(this.runTimeout);
-            this.runTimeout = window.setTimeout(() => this.run(), 50);
+            this.runTimeout = window.setTimeout(() => this.run(), UI_DEFAULTS.INPUT_DEBOUNCE_MS);
         };
         metric.onchange = () => {
             if (this.currentSweep.length > 0 && this.chartManager) {
                 const engine = this.getEngine();
                 const datasets = this.chartManager.generateDatasets(this.currentSweep, metric.value, engine.registry);
-                const labels = Array.from({length: 30}, (_, i) => i + 1);
+                const labels = Array.from({length: UI_DEFAULTS.MAX_XP_LEVEL}, (_, i) => i + 1);
                 this.chartManager.update(labels, datasets);
             }
         };
@@ -112,11 +110,7 @@ const UIController = {
         }
 
         eligibleKeys.forEach(m => {
-            const o = document.createElement("option");
-            o.value = m;
-            o.textContent = m.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-            if (m === bestMat) o.selected = true;
-            matSelect.appendChild(o);
+            DOMUtils.addOption(matSelect, m, StringUtils.toTitleCase(m), m === bestMat);
         });
 
         this.updateGuaranteedFirst();
@@ -144,10 +138,7 @@ const UIController = {
         });
 
         Array.from(allPossible).sort().forEach(s => {
-            const o = document.createElement("option");
-            o.value = s; o.textContent = s;
-            if (s === this.savedGuaranteedFirst) o.selected = true;
-            guaranteedFirstSelect.appendChild(o);
+            DOMUtils.addOption(guaranteedFirstSelect, s, s, s === this.savedGuaranteedFirst);
         });
     },
 
@@ -267,13 +258,13 @@ const UIController = {
         if (!comboEl) return;
 
         try {
-            const topCombos = Object.entries(human.combos).sort((a: any, b: any) => (b[1] as number) - (a[1] as number)).slice(0, 10);
+            const topCombos = Object.entries(human.combos).sort((a: any, b: any) => (b[1] as number) - (a[1] as number)).slice(0, UI_DEFAULTS.MAX_TOP_COMBOS_DISPLAY);
             
             const comboListHtml = topCombos.map(([combo, prob]) => `
                 <div class="combo-item">
                     <div style="display: flex; justify-content: space-between;">
                         <span class="combo-names">${(combo as string).replace(/\+/g, ' + ')}</span>
-                        <span class="combo-prob">${((prob as number) * 100).toFixed(1)}%</span>
+                        <span class="combo-prob">${UIUtils.formatPercent(prob as number)}</span>
                     </div>
                 </div>
             `).join("");
@@ -282,7 +273,7 @@ const UIController = {
                 <div class="combo-item" style="border-top: 1px solid rgba(255,255,255,0.05); margin-top: 10px; padding-top: 10px; opacity: 0.8;">
                     <div style="display: flex; justify-content: space-between; font-size: 0.85rem;">
                         <span>Calculation Confidence</span>
-                        <span style="color: ${human.uncertainty > 0.1 ? '#ffca28' : '#66bb6a'}">${((1 - human.uncertainty) * 100).toFixed(1)}%</span>
+                        <span style="color: ${human.uncertainty > 0.1 ? '#ffca28' : '#66bb6a'}">${UIUtils.formatPercent(1 - human.uncertainty)}</span>
                     </div>
                     ${human.uncertainty > 0.1 ? `<div style="font-size: 0.7rem; color: #ffca28; margin-top: 3px;">⚠️ High branching complexity - some combinations were collapsed into their parents for speed.</div>` : ''}
                 </div>
@@ -302,7 +293,7 @@ const UIController = {
                     <div class="rank-item">
                         <div style="display: flex; justify-content: space-between; font-size: 0.8rem;">
                             <span>${label}</span>
-                            <span style="font-weight:700;">${((prob as number)*100).toFixed(1)}%</span>
+                            <span style="font-weight:700;">${UIUtils.formatPercent(prob as number)}</span>
                         </div>
                         <div class="progress-bg"><div class="progress-fill" style="width: ${(prob as number)*100}%"></div></div>
                     </div>
@@ -320,7 +311,7 @@ const UIController = {
 
         const metric = (this.elements["chart-metric"] as HTMLSelectElement).value;
         const guaranteedFirst = (this.elements["guaranteed-first-select"] as HTMLSelectElement).value;
-        const labels = Array.from({length: 30}, (_, i) => i + 1);
+        const labels = Array.from({length: UI_DEFAULTS.MAX_XP_LEVEL}, (_, i) => i + 1);
         
         const isBook = cat === "book";
         const activeThreshold = threshold ?? getParamsForMode('ultra', isBook).threshold;

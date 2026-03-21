@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import assert from 'node:assert';
-import { CalculationStats } from './types.js';
+
 
 /**
  * Utility for snapshot-based regression testing of engine results.

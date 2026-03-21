@@ -1,5 +1,6 @@
-import { EnchantmentData, VersionManifest, VersionMechanics, Enchantment } from './types.js';
-import { VersionUtils, LRUCache, PackedEnchant } from './utils.js';
+import { EnchantmentData, VersionManifest, VersionMechanics, Enchantment, ResolvedRegistry, MergedItems, MergedOverrides } from './types.js';
+import { VersionUtils, LRUCache, PackedEnchant } from './utils/index.js';
+import { ENGINE_DEFAULTS } from './config.js';
 
 /**
  * Handles version-specific data, enchantment registry, and material eligibility.
@@ -8,9 +9,9 @@ export class Registry {
     public version: string;
     public data: EnchantmentData;
     public mechanics: VersionMechanics = {};
-    public mergedItems: { [category: string]: string[] } = {};
-    public mergedOverrides: { [enchantment: string]: Partial<Enchantment> } = {};
-    public resolvedRegistry: { [enchantment: string]: Enchantment } = {};
+    public mergedItems: MergedItems = {};
+    public mergedOverrides: MergedOverrides = {};
+    public resolvedRegistry: ResolvedRegistry = {};
     public mergedMaterials = new Set<string>();
     public multiEnchantBooks: boolean = true;
     
@@ -177,8 +178,16 @@ export class Registry {
         return rank.toString();
     }
 
-    public getEnchantId(name: string): number | undefined {
-        return this.idMap.get(name);
+    public getCategoryId(cat: string): number {
+        return this.catIdMap.get(cat) ?? ENGINE_DEFAULTS.UNKNOWN_CATEGORY_ID;
+    }
+
+    public getMaterialId(mat: string): number {
+        return this.matIdMap.get(mat) ?? ENGINE_DEFAULTS.UNKNOWN_MATERIAL_ID;
+    }
+
+    public getEnchantId(name: string): number {
+        return this.idMap.get(name) ?? ENGINE_DEFAULTS.UNKNOWN_ENCHANT_ID;
     }
 
     public hasConflict(idA: number, idB: number): boolean {

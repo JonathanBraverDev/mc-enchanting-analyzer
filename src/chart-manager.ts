@@ -1,7 +1,7 @@
 import { ThemeManager } from './theme.js';
 import { Registry } from './registry.js';
 import { CalculationStats } from './types.js';
-import { RomanUtils } from './utils.js';
+import { RomanUtils } from './utils/index.js';
 
 declare const Chart: any;
 
