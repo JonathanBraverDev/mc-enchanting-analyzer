@@ -1,6 +1,6 @@
 {
   "name": "mc-enchanting-analyzer",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "devDependencies": {
     "@playwright/test": "^1.58.2",
     "@types/chart.js": "^2.9.41",
@@ -19,13 +19,14 @@
   },
   "scripts": {
     "start": "npx serve .",
-    "build": "npm run build:js && npm run build:bundle",
+    "clean": "node -e \"const fs = require('fs'); if (fs.existsSync('dist')) fs.rmSync('dist', { recursive: true });\"",
+    "build": "npm run clean && npm run build:js && npm run build:bundle",
     "build:ts": "tsc",
     "build:js": "esbuild src/ui.ts src/worker.ts --bundle --outdir=dist --minify --sourcemap --platform=browser",
     "build:bundle": "node scripts/bundle-worker.js",
     "build:standalone": "npm run build && node scripts/inline-assets.js",
     "test": "npm run test:all",
-    "test:all": "npm run test:unit && npm run test:ui",
+    "test:all": "npm run clean && npm run build && npm run test:unit && npm run test:ui",
     "test:unit": "npm run test:registry && npm run test:engine",
     "test:engine": "tsx --test src/engine.test.ts",
     "test:registry": "tsx --test src/registry.test.ts",
