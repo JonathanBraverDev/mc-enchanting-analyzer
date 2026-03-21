@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.1.2] - 2026-03-21
+
+### Changed
+- **Build Hygiene**: Added a `clean` script to safely remove the `dist` directory and updated the test workflow to ensure a clean state before building and testing.
+
 ## [1.1.1] - 2026-03-21
 
 ### Fixed
