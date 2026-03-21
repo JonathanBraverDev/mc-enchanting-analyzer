@@ -323,15 +323,7 @@ const UIController = {
                 
                 const stats = await WorkerClient.request(
                     'getFullStats', 
-                    { cat, xp: l, mat, guaranteedFirst, threshold: activeThreshold, source: 'chart' },
-                    (result) => {
-                        if (!this.isStillActive(currentId)) return;
-                        this.currentSweep[i] = { l, s: result.stats };
-                        if (this.chartManager) {
-                            const datasets = this.chartManager.generateDatasets(this.currentSweep, metric, engine.registry);
-                            this.chartManager.update(labels, datasets);
-                        }
-                    }
+                    { cat, xp: l, mat, guaranteedFirst, threshold: activeThreshold, source: 'chart' }
                 );
                 if (!this.isStillActive(currentId)) return;
 
