@@ -23,7 +23,10 @@ If you want to contribute to the engine or run from source:
 1. **Clone** the repository.
 2. **Install**: `npm install`
 3. **Run**: `npm start` (opens the dev server)
-4. **Test**: `npm test` (runs the engine and registry validation suite)
+4. **Build**: `npm run build` (bundles the modular engine)
+5. **Test**: `npm test` (runs the engine, registry, and UI validation suite)
+
+The project follows a **modular architecture** (v1.1+) where utilities and core logic are isolated for better performance and maintainability.
 
 To build your own standalone version, use: `npm run build:standalone`. The result will appear at `dist/analyzer-standalone.html`.
 
@@ -32,4 +35,4 @@ To build your own standalone version, use: `npm run build:standalone`. The resul
 This tool uses a specialized "Progressive Refinement" search. It prioritizes the most statistically significant paths first, allowing the UI to remain incredibly responsive even when calculating deep probability trees for high-level enchantments.
 
 ---
-Created by **Jonathan Braver** | **Version 1.0.0**
+Created by **Jonathan Braver** | **Version 1.1.0**
