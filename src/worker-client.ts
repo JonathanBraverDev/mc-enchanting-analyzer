@@ -1,4 +1,4 @@
-import { ResultProcessor } from './utils.js';
+import { ResultProcessor } from './utils/index.js';
 
 /**
  * Client wrapper around the Enchant Engine Web Worker.

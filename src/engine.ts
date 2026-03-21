@@ -1,6 +1,7 @@
-import { EnchantmentData, CalculationStats, HumanStats } from './types.js';
-import { VersionUtils, BinaryHeap, RomanUtils, PRECISION, ProbUtils, LRUCache, PackedEnchant, PackedCombo, ComboUtils, ResultProcessor, PackedNode } from './utils.js';
+import { EnchantmentData, CalculationStats } from './types.js';
+import { BinaryHeap, RomanUtils, PRECISION, ProbUtils, LRUCache, PackedEnchant, PackedCombo, ComboUtils, ResultProcessor, PackedNode, AsyncUtils, BitwiseUtils } from './utils/index.js';
 import { Registry } from './registry.js';
+import { ENGINE_DEFAULTS } from './config.js';
 
 /**
  * Represents the state of a search for enchantment combinations.
@@ -22,10 +23,10 @@ export class EnchantEngine {
     static allEngines: Set<EnchantEngine> = new Set();
     
     public registry: Registry;
-    public comboCache = new LRUCache<bigint, SearchFrontier>(128);
-    public bookComboCache = new LRUCache<bigint, SearchFrontier>(64);
-    public statsCache = new LRUCache<bigint, CalculationStats>(8);
-    public bestStatsCache = new LRUCache<bigint, { threshold: number, stats: CalculationStats }>(8);
+    public comboCache = new LRUCache<bigint, SearchFrontier>(ENGINE_DEFAULTS.CACHE_SIZE_COMBO_OTHER);
+    public bookComboCache = new LRUCache<bigint, SearchFrontier>(ENGINE_DEFAULTS.CACHE_SIZE_COMBO_BOOK);
+    public statsCache = new LRUCache<bigint, CalculationStats>(ENGINE_DEFAULTS.CACHE_SIZE_STATS);
+    public bestStatsCache = new LRUCache<bigint, { threshold: number, stats: CalculationStats }>(ENGINE_DEFAULTS.CACHE_SIZE_STATS);
     
     constructor(data: EnchantmentData, version: string) {
         this.registry = new Registry(data, version);
@@ -33,9 +34,9 @@ export class EnchantEngine {
     }
 
     private getPackedKey(cat: string, modLevel: number, mat: string, guaranteedFirst: string | null, limit: number, threshold?: number): bigint {
-        const catId = BigInt(this.registry.catIdMap.get(cat) ?? 63);
-        const matId = BigInt(this.registry.matIdMap.get(mat) ?? 63);
-        const guaranteedId = guaranteedFirst ? BigInt(this.registry.idMap.get(RomanUtils.getBaseName(guaranteedFirst, this.registry.data.constants.ROMAN_MAP)) ?? 255) : 255n;
+        const catId = BigInt(this.registry.getCategoryId(cat));
+        const matId = BigInt(this.registry.getMaterialId(mat));
+        const guaranteedId = guaranteedFirst ? BigInt(this.registry.getEnchantId(RomanUtils.getBaseName(guaranteedFirst, this.registry.data.constants.ROMAN_MAP))) : BigInt(ENGINE_DEFAULTS.UNKNOWN_ENCHANT_ID);
         
         let key = catId;
         key |= matId << 6n;
@@ -90,7 +91,7 @@ export class EnchantEngine {
         }
 
         const finalDist: { [modVal: number]: bigint } = {};
-        const steps = 100;
+        const steps = ENGINE_DEFAULTS.RNG_STEPS_FOR_DISTRIBUTION;
         const stepSize = rngRange / (steps - 1);
         const stepsSq = BigInt(steps * steps);
         
@@ -110,28 +111,15 @@ export class EnchantEngine {
         return finalDist;
     }
 
-    /**
-     * Translates a packed combo key to a human-readable string.
-     */
-    public translateComboKey(key: string | PackedCombo): string {
-        if (!key) return "";
-        
-        if (typeof key === 'string') {
-            if (key.includes(" ") && !/^[0-9a-fA-F]+$/.test(key)) return key;
-            return this.translateComboKey(BigInt("0x" + key));
-        }
 
-        const ids = ComboUtils.unpack(key);
-        return ids.map(n => this.registry.getFullEnchantName(n)).join("+");
-    }
 
     /**
      * Gets a list of enchants eligible for a specific modified level, filtered by a bitset.
      */
     public getEligibleListNumeric(cat: string, level: number, mat: string, bitset: bigint = 0n): number[] {
         return this.registry.getEligiblePool(cat, level, mat).filter(n => {
-            const id = n >> 8;
-            return (bitset & (1n << BigInt(id))) === 0n && (bitset & this.registry.conflictBitsets[id]) === 0n;
+            const id = ComboUtils.getEnchantId(n);
+            return (bitset & BitwiseUtils.getBitset(id)) === 0n && (bitset & this.registry.conflictBitsets[id]) === 0n;
         });
     }
 
@@ -148,7 +136,7 @@ export class EnchantEngine {
         existingFrontier?: SearchFrontier,
         maxIterations?: number
     ): SearchFrontier {
-        const limit = maxIterations ?? (cat === "book" ? 40000 : (ProbUtils.toNumber(threshold) < 0.0001 ? 25000 : 10000));
+        const limit = maxIterations ?? (cat === "book" ? ENGINE_DEFAULTS.FALLBACK_LIMIT_BOOK : (ProbUtils.toNumber(threshold) < 0.0001 ? ENGINE_DEFAULTS.FALLBACK_LIMIT_HIGH_RES : ENGINE_DEFAULTS.FALLBACK_LIMIT_LOW_RES));
         const cacheKey = this.getPackedKey(cat, modLevel, mat, guaranteedFirst, limit);
         const activeCache = cat === "book" ? this.bookComboCache : this.comboCache;
         
@@ -162,7 +150,11 @@ export class EnchantEngine {
 
         const romanMap = this.registry.data.constants.ROMAN_MAP;
         const guaranteedFirstBase = guaranteedFirst ? RomanUtils.getBaseName(guaranteedFirst, romanMap) : null;
-        const guaranteedFirstId = guaranteedFirstBase ? this.registry.idMap.get(guaranteedFirstBase)! : null;
+        let guaranteedFirstId: number | null = null;
+        if (guaranteedFirstBase) {
+            const tempId = this.registry.getEnchantId(guaranteedFirstBase);
+            if (tempId !== ENGINE_DEFAULTS.UNKNOWN_ENCHANT_ID) guaranteedFirstId = tempId;
+        }
 
         if (existingFrontier) {
             results = new Map(existingFrontier.results);
@@ -204,7 +196,7 @@ export class EnchantEngine {
         const poolWeights = initialPool.map(e => this.registry.weightMap[e >> 8]);
         const initialTotalWeight = poolWeights.reduce((a, b) => a + b, 0);
 
-        while (queue.size() > 0 && iterations < limit && cumulativeAccountedMass < (PRECISION - (PRECISION / 10000n))) {
+        while (queue.size() > 0 && iterations < limit && cumulativeAccountedMass < (PRECISION - (PRECISION / ENGINE_DEFAULTS.MASS_ACCOUNTED_THRESHOLD_DENOMINATOR))) {
             const next = queue.peek()!;
             if (next.prob < threshold / 10n) break;
 
@@ -212,7 +204,7 @@ export class EnchantEngine {
             const current = queue.pop()!;
             const currentBitset = current.meta >> 8n;
             const currentLevel = Number(current.meta & 0xFFn);
-            const currentCount = Number(current.packedChosen >> 60n);
+            const currentCount = ComboUtils.getCount(current.packedChosen);
             
             if (currentCount === 0) {
                 const pBase = current.prob / BigInt(initialTotalWeight);
@@ -220,14 +212,14 @@ export class EnchantEngine {
                     const e = initialPool[i];
                     queue.push({ 
                         packedChosen: ComboUtils.pack([e], guaranteedFirstId), 
-                        meta: ((1n << BigInt(e >> 8)) << 8n) | BigInt(modLevel),
+                        meta: (BitwiseUtils.getBitset(ComboUtils.getEnchantId(e)) << 8n) | BigInt(modLevel),
                         prob: BigInt(poolWeights[i]) * pBase 
                     });
                 }
                 continue;
             }
 
-            const probContinueNum = (cat === "book" && !this.registry.multiEnchantBooks) ? 0 : Math.min((currentLevel + 1) / 50, 1.0);
+            const probContinueNum = (cat === "book" && !this.registry.multiEnchantBooks) ? 0 : Math.min((currentLevel + 1) / ENGINE_DEFAULTS.MAX_MODIFIED_LEVEL_FOR_CONTINUING, 1.0);
             const probContinue = ProbUtils.toBigInt(probContinueNum);
 
             if (probContinue <= 0n) {
@@ -236,12 +228,12 @@ export class EnchantEngine {
                 continue;
             }
 
-            const probStop = (current.prob * (PRECISION - probContinue)) / PRECISION;
+            const probStop = ProbUtils.scale(current.prob, (PRECISION - probContinue));
             results.set(current.packedChosen, (results.get(current.packedChosen) || 0n) + probStop);
             cumulativeAccountedMass += probStop;
 
-            const probMovingForward = (current.prob * probContinue) / PRECISION;
-            if (probMovingForward < threshold / 100n || currentCount >= 5) {
+            const probMovingForward = ProbUtils.scale(current.prob, probContinue);
+            if (probMovingForward < threshold / ENGINE_DEFAULTS.PRUNE_THRESHOLD_DENOMINATOR || currentCount >= ENGINE_DEFAULTS.MAX_ENCHANTS_PER_ITEM) {
                 uncertainty += probMovingForward;
                 continue;
             }
@@ -252,7 +244,7 @@ export class EnchantEngine {
 
             for (let i = 0; i < initialPool.length; i++) {
                 const e = initialPool[i];
-                const id = e >> 8;
+                const id = ComboUtils.getEnchantId(e);
                 if ((currentBitset & (1n << BigInt(id))) !== 0n) continue;
                 if ((currentBitset & this.registry.conflictBitsets[id]) !== 0n) continue;
 
@@ -275,7 +267,7 @@ export class EnchantEngine {
                 const e = currentEligible[i];
                 queue.push({
                     packedChosen: ComboUtils.pack([...currentChosen, e], guaranteedFirstId),
-                    meta: ((currentBitset | (1n << BigInt(e >> 8))) << 8n) | BigInt(nextLevel),
+                    meta: ((currentBitset | BitwiseUtils.getBitset(ComboUtils.getEnchantId(e))) << 8n) | BigInt(nextLevel),
                     prob: BigInt(currentWeights[i]) * pNextBase
                 });
             }
@@ -309,7 +301,7 @@ export class EnchantEngine {
         useBestCache: boolean = false,
         maxIterations?: number
     ): Promise<CalculationStats> {
-        const limit = maxIterations ?? (cat === "book" ? 40000 : (threshold < 0.0001 ? 25000 : 10000));
+        const limit = maxIterations ?? (cat === "book" ? ENGINE_DEFAULTS.FALLBACK_LIMIT_BOOK : (threshold < 0.0001 ? ENGINE_DEFAULTS.FALLBACK_LIMIT_HIGH_RES : ENGINE_DEFAULTS.FALLBACK_LIMIT_LOW_RES));
         const baseKey = this.getPackedKey(cat, xp, mat, guaranteedFirst, limit);
         const exactKey = this.getPackedKey(cat, xp, mat, guaranteedFirst, limit, threshold);
 
@@ -359,17 +351,17 @@ export class EnchantEngine {
             const result = this.calculateCombinations(cat, ml, mat, guaranteedFirst, activeThreshold, undefined, maxIterations);
             
             for (const [key, prob] of result.results) {
-                const totalProb = (prob * mProb) / PRECISION;
+                const totalProb = ProbUtils.scale(prob, mProb);
                 finalCombos.set(key, (finalCombos.get(key) || 0n) + totalProb);
             }
-            totalUncertainty += (result.uncertainty * mProb) / PRECISION;
+            totalUncertainty += ProbUtils.scale(result.uncertainty, mProb);
 
             processedMProb += mProb;
             if (++iterCount % 3 === 0) {
                 if (onProgress) {
                     onProgress(ResultProcessor.summarize(finalCombos, totalUncertainty + (PRECISION - processedMProb)));
                 }
-                await new Promise(r => setTimeout(r, 0));
+                await AsyncUtils.yield();
             }
         }
 

@@ -76,3 +76,15 @@ export interface HumanStats {
   combos: { [combo: string]: number };
   uncertainty: number;
 }
+
+export interface ResolvedRegistry {
+  [enchantment: string]: Enchantment;
+}
+
+export interface MergedItems {
+  [category: string]: string[];
+}
+
+export interface MergedOverrides {
+  [enchantment: string]: Partial<Enchantment>;
+}

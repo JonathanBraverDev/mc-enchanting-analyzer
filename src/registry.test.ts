@@ -1,4 +1,4 @@
-import { test, describe, it } from 'node:test';
+import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { EnchantEngine } from './engine.js';
 import { DATA } from './data.js';
@@ -97,7 +97,7 @@ describe('Registry & Data Rules Test Suite', () => {
             const ids = new Set<number>();
             
             categories.forEach(cat => {
-                const id = reg.catIdMap.get(cat) ?? 63
+                const id = reg.getCategoryId(cat);
                 assert.notStrictEqual(id, 63, `Category "${cat}" should not have the default unknown ID (63)`);
                 assert.ok(!ids.has(id), `Category "${cat}" should have a unique ID, but ${id} is already taken`);
                 ids.add(id);
@@ -109,7 +109,7 @@ describe('Registry & Data Rules Test Suite', () => {
             const ids = new Set<number>();
 
             materials.forEach(mat => {
-                const id = reg.matIdMap.get(mat) ?? 63
+                const id = reg.getMaterialId(mat);
                 assert.notStrictEqual(id, 63, `Material "${mat}" should not have the default unknown ID (63)`);
                 assert.ok(!ids.has(id), `Material "${mat}" should have a unique ID, but ${id} is already taken`);
                 ids.add(id);
