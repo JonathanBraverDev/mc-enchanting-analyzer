@@ -1,4 +1,6 @@
-﻿## v1.1.0
+# Changelog
+
+## [1.1.0] - 2026-03-21
 
 ### Added
 - **Modularized Utility Library**: Refactored the monolithic `utils.ts` into specialized modules (`math`, `domain`, `ui`, `collections`, `results`) for better maintainability.
