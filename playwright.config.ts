@@ -2,7 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './src',
-  testMatch: 'ui.test.ts',
+  testMatch: '**/*.test.ts',
   fullyParallel: false, // UI tests might interfere if hitting same serve
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,

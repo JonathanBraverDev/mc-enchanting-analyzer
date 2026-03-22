@@ -12,7 +12,7 @@ if (typeof (globalThis as any).requestAnimationFrame !== 'function') {
 
 describe('Enchantment Engine Test Suite', () => {
     test.afterEach(() => {
-        EnchantEngine.clearAllCaches();
+        EnchantEngine.clearAllEngines();
     });
 
     describe('1. Core Engine Logic', () => {
@@ -128,6 +128,25 @@ describe('Enchantment Engine Test Suite', () => {
             }
             assert.ok(Math.abs(totalProb - 1.0) < 1e-12);
         });
+
+        it('Frontier Mass Tracking: Guaranteed enchantment must be 100% even with high uncertainty', async () => {
+             const engine = new EnchantEngine(DATA, '1.21');
+             
+             // Force a high-uncertainty search by setting extremely low maxIterations (e.g., 5)
+             const stats = await engine.getFullStats(
+                 'sword', 30, 'diamond', 'Sharpness IV', 0.000001, 
+                 undefined, undefined, false, 5 
+             );
+     
+             const sharpnessId = engine.registry.getEnchantId('Sharpness');
+             const anySharpness = stats.any[sharpnessId];
+             
+             assert.ok(stats.uncertainty > 0.1, `Expected high uncertainty, got ${stats.uncertainty}`);
+             assert.ok(Math.abs(anySharpness - 1.0) < 0.0001, `Guaranteed enchantment should be ~100%, got ${anySharpness}`);
+             
+             const totalCounted = Object.values(stats.count).reduce((a: any, b: any) => a + b, 0) as number;
+             assert.ok(Math.abs(totalCounted + stats.uncertainty - 1.0) < 0.0001, 'Total probability including uncertainty must be 1.0');
+         });
     });
 
     describe('5. Regression Snapshots (Golden Results)', () => {
@@ -148,6 +167,18 @@ describe('Enchantment Engine Test Suite', () => {
             const engine = new EnchantEngine(DATA, '1.7.2');
             const stats = await engine.getFullStats('book', 30, 'book', null, 0.0001);
             await SnapshotUtils.assertSnapshot('1.7.2_book_30_book', stats);
+        });
+
+        it('Snapshot: 1.21.11 Spear @ Level 30', async () => {
+            const engine = new EnchantEngine(DATA, '1.21.11');
+            const stats = await engine.getFullStats('spear', 30, 'diamond', null, 0.0001);
+            await SnapshotUtils.assertSnapshot('1.21.11_spear_30_diamond', stats);
+        });
+
+        it('Snapshot: 1.21.11 Book @ Level 30', async () => {
+            const engine = new EnchantEngine(DATA, '1.21.11');
+            const stats = await engine.getFullStats('book', 30, 'book', null, 0.0001);
+            await SnapshotUtils.assertSnapshot('1.21.11_book_30_book', stats);
         });
     });
 
