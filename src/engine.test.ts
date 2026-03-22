@@ -3,7 +3,7 @@ import assert from 'node:assert';
 import { EnchantEngine } from './engine.js';
 import { DATA } from './data.js';
 import { ResultProcessor, ProbUtils } from './utils/index.js';
-import { SnapshotUtils } from './test-utils.js';
+import { SnapshotUtils, EngineTestUtils } from './test-utils.js';
 
 // Polyfill for requestAnimationFrame in Node (Sync version for tests)
 if (typeof (globalThis as any).requestAnimationFrame !== 'function') {
@@ -27,8 +27,9 @@ describe('Enchantment Engine Test Suite', () => {
 
         it('should NOT return "X undefined" when no enchants are possible', async () => {
             const stats = await engine.getFullStats('sword', 1, 'diamond');
-            const hasUndefined = Object.keys(stats.combos).some(c => c.includes('undefined')) ||
-                                Object.keys(stats.ranks).some(r => r.includes('undefined'));
+            const h = ResultProcessor.humanize(stats, engine.registry);
+            const hasUndefined = Object.keys(h.combos).some(c => c.includes('undefined')) ||
+                                Object.keys(h.ranks).some(r => r.includes('undefined'));
             assert.ok(!hasUndefined, '"undefined" should not appear in results');
         });
     });
@@ -51,15 +52,13 @@ describe('Enchantment Engine Test Suite', () => {
             const protNames = ["Protection", "Fire Protection", "Blast Protection", "Projectile Protection"];
             const getBases = (c: string) => c.split("+").map(e => e.split(" ").slice(0, -1).join(" "));
 
-            const s114 = await e114.getFullStats('chestplate', 30, 'diamond', null, 0.0001);
-            const h114 = ResultProcessor.humanize(s114, e114.registry);
+            const h114 = await EngineTestUtils.getHumanStats(e114, 'chestplate', 30, 'diamond');
             const multi114 = Object.keys(h114.combos).filter(c => {
                 return getBases(c).filter(b => protNames.includes(b)).length > 1;
             });
             assert.ok(multi114.length > 0, '1.14 should allow multi-protection');
 
-            const s1143 = await e1143.getFullStats('chestplate', 30, 'diamond', null, 0.0001);
-            const h1143 = ResultProcessor.humanize(s1143, e1143.registry);
+            const h1143 = await EngineTestUtils.getHumanStats(e1143, 'chestplate', 30, 'diamond');
             const multi1143 = Object.keys(h1143.combos).some(c => {
                 return getBases(c).filter(b => protNames.includes(b)).length > 1;
             });
@@ -83,8 +82,7 @@ describe('Enchantment Engine Test Suite', () => {
         });
 
         it('Delayed Level Decay & Pool Persistence', async () => {
-            const stats = await engine.getFullStats('pickaxe', 30, 'diamond', null, 0.0001);
-            const human = ResultProcessor.humanize(stats, engine.registry);
+            const human = await EngineTestUtils.getHumanStats(engine, 'pickaxe', 30, 'diamond');
             
             const hasEffIVDeep = Object.keys(human.combos)
                 .filter(c => c.split("+").length >= 3)
@@ -96,8 +94,7 @@ describe('Enchantment Engine Test Suite', () => {
         });
 
         it('God Pick verification (Efficiency IV + Fortune III + Unbreaking III)', async () => {
-            const stats = await engine.getFullStats('pickaxe', 30, 'diamond', null, 0.0001);
-            const human = ResultProcessor.humanize(stats, engine.registry);
+            const human = await EngineTestUtils.getHumanStats(engine, 'pickaxe', 30, 'diamond');
             const targets = ["Efficiency IV", "Fortune III", "Unbreaking III"];
             let prob = 0;
             for (const [combo, pVal] of Object.entries(human.combos)) {

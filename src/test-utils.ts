@@ -1,6 +1,9 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import assert from 'node:assert';
+import { UI_TEXTS } from './config.js';
+import { ResultProcessor } from './utils/index.js';
+import { EnchantEngine } from './engine.js';
 
 
 /**
@@ -42,7 +45,6 @@ export const SnapshotUtils = {
         }
 
         const cleanStats = this.sanitize(stats);
-        fs.writeFileSync(snapshotPath, JSON.stringify(cleanStats, null, 0)); // No formatting to save space? No, let's keep it readable.
         fs.writeFileSync(snapshotPath, JSON.stringify(cleanStats, null, 2));
         console.log(`Snapshot saved: ${name}`);
     },
@@ -74,5 +76,46 @@ export const SnapshotUtils = {
             for (const k in stats.count) out.count[k] = round(stats.count[k]);
         }
         return out;
+    }
+};
+
+/**
+ * Utilities for Playwright-based UI tests.
+ */
+export const UITestUtils = {
+    /**
+     * Generates a regex that matches any of the provided status levels or "Complete".
+     */
+    getRefinementRegex(levels: string[]): RegExp {
+        const parts = levels.map(level => (UI_TEXTS as any)[`STATUS_${level.toUpperCase()}`] || level);
+        if (!parts.includes(UI_TEXTS.STATUS_COMPLETE)) parts.push(UI_TEXTS.STATUS_COMPLETE);
+        return new RegExp(parts.join('|'));
+    },
+
+    /**
+     * Waits for the first enchantment combination to appear in the UI.
+     */
+    async waitForResults(page: any, timeout = 15000): Promise<void> {
+        await page.locator('#combo-list .combo-item').first().waitFor({ state: 'visible', timeout });
+    },
+
+    /**
+     * Accesses the internal UIController state from the browser context.
+     */
+    async getInternalState(page: any): Promise<any> {
+        return await page.evaluate(() => (window as any).UIController);
+    }
+};
+
+/**
+ * Utilities for Node-based engine tests.
+ */
+export const EngineTestUtils = {
+    /**
+     * Performs a full enchantment simulation and returns human-readable results.
+     */
+    async getHumanStats(engine: EnchantEngine, cat: string, xp: number, mat: string, guaranteedFirst: string | null = null, threshold = 0.0001): Promise<any> {
+        const stats = await engine.getFullStats(cat, xp, mat, guaranteedFirst, threshold);
+        return ResultProcessor.humanize(stats, engine.registry);
     }
 };

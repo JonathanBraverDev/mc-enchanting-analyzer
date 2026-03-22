@@ -32,53 +32,65 @@ export class Registry {
     }
 
     private setupContext(): void {
-        const { versions, enchantment_groups } = this.data;
-        let curr = this.version;
-
-        // Resolve version if it's a sub-version not explicitly in the data
-        if (!versions[curr]) {
-            const sorted = Object.keys(versions).sort(VersionUtils.compare);
-            for (const v of sorted) {
-                if (VersionUtils.compare(this.version, v) >= 0) curr = v;
-            }
-        }
-
-        const chain: string[] = [];
-        let temp: string | undefined = curr;
-        while (temp) {
-            chain.unshift(temp);
-            temp = versions[temp]?.extends;
-        }
+        const curr = this.resolveVersion(this.version);
+        const chain = this.getInheritanceChain(curr);
 
         // Apply inheritance chain
         for (const vName of chain) {
-            const manifest = versions[vName] as VersionManifest;
-            if (!manifest) continue;
+            const manifest = this.data.versions[vName] as VersionManifest;
+            if (manifest) this.applyVersionManifest(manifest);
+        }
 
-            if (manifest.item_enchantments) {
-                for (const [cat, content] of Object.entries(manifest.item_enchantments)) {
-                    const resolved = content.flatMap(item => enchantment_groups[item] || [item]);
-                    this.mergedItems[cat] = [...new Set(resolved)];
-                }
-            }
+        this.finalizeEnchantmentRegistry();
+        this.initializeIdMaps();
+        this.filterMergedPools();
+    }
 
-            Object.assign(this.mechanics, manifest.mechanics || {});
-            if (manifest.multi_enchant_books !== undefined) {
-                this.multiEnchantBooks = manifest.multi_enchant_books;
-            }
-            
-            if (manifest.overrides) {
-                for (const [ench, props] of Object.entries(manifest.overrides)) {
-                    this.mergedOverrides[ench] = Object.assign(this.mergedOverrides[ench] || {}, props);
-                }
-            }
+    private resolveVersion(v: string): string {
+        if (this.data.versions[v]) return v;
+        const sorted = Object.keys(this.data.versions).sort(VersionUtils.compare);
+        let resolved = sorted[0];
+        for (const ver of sorted) {
+            if (VersionUtils.compare(v, ver) >= 0) resolved = ver;
+        }
+        return resolved;
+    }
 
-            if (manifest.materials) {
-                manifest.materials.forEach(m => this.mergedMaterials.add(m));
+    private getInheritanceChain(v: string): string[] {
+        const chain: string[] = [];
+        let temp: string | undefined = v;
+        while (temp) {
+            chain.unshift(temp);
+            temp = this.data.versions[temp]?.extends;
+        }
+        return chain;
+    }
+
+    private applyVersionManifest(manifest: VersionManifest): void {
+        if (manifest.item_enchantments) {
+            for (const [cat, content] of Object.entries(manifest.item_enchantments)) {
+                const resolved = content.flatMap(item => this.data.enchantment_groups[item] || [item]);
+                this.mergedItems[cat] = [...new Set(resolved)];
             }
         }
 
-        // Finalize Registry
+        Object.assign(this.mechanics, manifest.mechanics || {});
+        if (manifest.multi_enchant_books !== undefined) {
+            this.multiEnchantBooks = manifest.multi_enchant_books;
+        }
+        
+        if (manifest.overrides) {
+            for (const [ench, props] of Object.entries(manifest.overrides)) {
+                this.mergedOverrides[ench] = Object.assign(this.mergedOverrides[ench] || {}, props);
+            }
+        }
+
+        if (manifest.materials) {
+            manifest.materials.forEach(m => this.mergedMaterials.add(m));
+        }
+    }
+
+    private finalizeEnchantmentRegistry(): void {
         const allEnchNames = Object.keys(this.data.global_enchantments);
         this.revIdMap = allEnchNames;
         allEnchNames.forEach((name, i) => this.idMap.set(name, i));
@@ -104,35 +116,37 @@ export class Registry {
 
         const romanMap = this.data.constants.ROMAN_MAP;
         this.sortedRanks = Object.entries(romanMap).sort((a, b) => b[1] - a[1]);
+    }
 
-        // Initialize Cat/Mat ID maps
-        Object.keys(this.data.enchantment_groups).forEach((cat) => {
-            if (!this.catIdMap.has(cat)) this.catIdMap.set(cat, this.catIdMap.size);
-        });
-        Object.keys(this.data.material_values.tools).concat(Object.keys(this.data.material_values.armor)).forEach((mat) => {
-            if (!this.matIdMap.has(mat)) this.matIdMap.set(mat, this.matIdMap.size);
-        });
+    private initializeIdMaps(): void {
+        const addId = (map: Map<string, number>, key: string) => {
+            if (!map.has(key)) map.set(key, map.size);
+        };
 
-        // Ensure all item categories used in item_enchantments are also in the ID maps
+        Object.keys(this.data.enchantment_groups).forEach(cat => addId(this.catIdMap, cat));
+        
+        const matValues = this.data.material_values;
+        [...Object.keys(matValues.tools), ...Object.keys(matValues.armor)].forEach(mat => addId(this.matIdMap, mat));
+
         Object.values(this.data.versions).forEach(v => {
             if (v.item_enchantments) {
                 Object.keys(v.item_enchantments).forEach(cat => {
-                    if (!this.catIdMap.has(cat)) this.catIdMap.set(cat, this.catIdMap.size);
-                    if (!this.matIdMap.has(cat)) this.matIdMap.set(cat, this.matIdMap.size);
+                    addId(this.catIdMap, cat);
+                    addId(this.matIdMap, cat);
                 });
             }
         });
 
-        // Add additional specific categories (brush, shield, etc.)
         this.data.constants.ITEM_SPECIFIC_CATS.forEach(cat => {
-            if (!this.catIdMap.has(cat)) this.catIdMap.set(cat, this.catIdMap.size);
-            if (!this.matIdMap.has(cat)) this.matIdMap.set(cat, this.matIdMap.size);
+            addId(this.catIdMap, cat);
+            addId(this.matIdMap, cat);
         });
+    }
 
-        // Filter merged pools by version validity
+    private filterMergedPools(): void {
         for (const cat of Object.keys(this.mergedItems)) {
             this.mergedItems[cat] = this.mergedItems[cat].filter(name => {
-                const props = Object.assign({}, this.data.global_enchantments[name], this.mergedOverrides[name] || {}) as Enchantment;
+                const props = this.resolvedRegistry[name];
                 return VersionUtils.isInRange(this.version, props.valid_from, props.valid_to);
             });
         }
@@ -143,21 +157,30 @@ export class Registry {
         const mats = isArmor ? this.data.material_values.armor : this.data.material_values.tools;
         const itemCats = this.data.constants.ITEM_SPECIFIC_CATS;
         
-        let eligibleKeys = Object.keys(mats).filter(m => {
-            if (!this.mergedMaterials.has(m)) return false;
-            
-            // Fix turtle_shell restriction: It's only for helmets.
-            if (m === "turtle_shell") return cat === "helmet";
-            
-            return !itemCats.includes(m) || m === cat;
-        });
+        let eligibleKeys = Object.keys(mats).filter(m => this.isMaterialCompatible(m, cat, itemCats));
 
         if (itemCats.includes(cat) && mats[cat] && cat !== "turtle_shell" && this.mergedMaterials.has(cat)) {
             eligibleKeys = [cat];
         }
 
-        return eligibleKeys.sort((a, b) => {
-            const priors = this.data.constants.MATERIAL_PRIORITY;
+        return this.sortMaterials(eligibleKeys);
+    }
+
+    private isMaterialCompatible(mat: string, cat: string, itemCats: string[]): boolean {
+        if (!this.mergedMaterials.has(mat)) return false;
+        
+        // Turtle shell is a special case: only for helmets
+        if (mat === "turtle_shell") return cat === "helmet";
+        
+        // Item-specific categories (like 'brush') only allow their own material
+        if (itemCats.includes(mat)) return mat === cat;
+        
+        return true;
+    }
+
+    private sortMaterials(mats: string[]): string[] {
+        const priors = this.data.constants.MATERIAL_PRIORITY;
+        return mats.sort((a, b) => {
             const ai = priors.indexOf(a), bi = priors.indexOf(b);
             if (ai !== -1 && bi !== -1) return ai - bi;
             if (ai !== -1) return -1;
