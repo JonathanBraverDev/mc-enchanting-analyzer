@@ -58,7 +58,7 @@ export function getParamsForMode(level: Exclude<SearchLevel, 'done'>, isBook: bo
 }
 
 export const ENGINE_DEFAULTS = {
-    MAX_ENCHANTS_PER_ITEM: 5,
+    MAX_ENCHANTS_PER_ITEM: 6,
     MAX_MODIFIED_LEVEL_FOR_CONTINUING: 50,
     RNG_STEPS_FOR_DISTRIBUTION: 100,
     PRUNE_THRESHOLD_DENOMINATOR: 100n,
