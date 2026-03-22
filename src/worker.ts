@@ -44,7 +44,8 @@ self.onmessage = async (e: MessageEvent) => {
                         signal,
                         (partialStats) => {
                             const human = ResultProcessor.humanize(partialStats, engine!.registry);
-                            (self as any).postMessage({ type: 'progress', id, payload: { stats: partialStats, human } });
+                            const { compact, transferables } = ResultProcessor.serialize(partialStats);
+                            (self as any).postMessage({ type: 'progress', id, payload: { stats: compact, human } }, transferables);
                         },
                         payload.useBestCache || false,
                         payload.maxIterations

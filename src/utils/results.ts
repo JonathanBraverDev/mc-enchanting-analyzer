@@ -10,7 +10,7 @@ export class ResultProcessor {
     /**
      * Summarizes raw engine results into a CalculationStats-like object.
      */
-    static summarize(combos: Map<bigint, bigint>, uncertainty: bigint, anyMass?: Map<number, bigint>, rankMass?: Map<number, bigint>, countMass?: Map<number, bigint>, comboLimit: number = 100): any {
+    static summarize(combos: Map<bigint, bigint>, uncertainty: bigint, anyMass?: Map<number, bigint>, rankMass?: Map<number, bigint>, countMass?: Map<number, bigint>, comboLimit: number = ENGINE_DEFAULTS.MAX_RESULTS_SUMMARY): any {
         const stats: any = {
             ranks: {},
             any: {},
@@ -35,8 +35,7 @@ export class ResultProcessor {
             }
         }
 
-        // Only include the most significant combinations to avoid memory explosion
-        // when serializing to the worker/UI. The charts use any/ranks/count which are already summarized.
+        // Serialize limited combinations for the UI/Worker transfer
         let comboSource: Iterable<[bigint, bigint]> = combos;
         if (combos.size > comboLimit) {
             comboSource = [...combos.entries()]
@@ -45,31 +44,9 @@ export class ResultProcessor {
         }
 
         for (const [packed, probBig] of comboSource) {
-            const prob = ProbUtils.toNumber(probBig);
-            stats.combos[packed.toString(16)] = prob;
+            stats.combos[packed.toString(16)] = ProbUtils.toNumber(probBig);
         }
 
-        // We still need to iterate ALL combos for any/rank/count if they weren't provided
-        if (!anyMass || !countMass) {
-            for (const [packed, probBig] of combos) {
-                const prob = ProbUtils.toNumber(probBig);
-                const ids = ComboUtils.unpack(packed);
-                if (!countMass) stats.count[ids.length] = (stats.count[ids.length] || 0) + prob;
-
-                if (!anyMass) {
-                    let seenBasesBitmask = 0n;
-                    for (const n of ids) {
-                        if (!rankMass) stats.ranks[n] = (stats.ranks[n] || 0) + prob;
-                        
-                        const baseId = n >> 8;
-                        if (!((seenBasesBitmask >> BigInt(baseId)) & 1n)) {
-                            stats.any[baseId] = (stats.any[baseId] || 0) + prob;
-                            seenBasesBitmask |= (1n << BigInt(baseId));
-                        }
-                    }
-                }
-            }
-        }
         return stats;
     }
 
