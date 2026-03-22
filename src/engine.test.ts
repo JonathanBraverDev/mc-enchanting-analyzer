@@ -4,6 +4,7 @@ import { EnchantEngine } from './engine.js';
 import { DATA } from './data.js';
 import { ResultProcessor, ProbUtils } from './utils/index.js';
 import { SnapshotUtils, EngineTestUtils } from './test-utils.js';
+import { ENGINE_DEFAULTS } from './config.js';
 
 // Polyfill for requestAnimationFrame in Node (Sync version for tests)
 if (typeof (globalThis as any).requestAnimationFrame !== 'function') {
@@ -147,34 +148,35 @@ describe('Enchantment Engine Test Suite', () => {
     });
 
     describe('5. Regression Snapshots (Golden Results)', () => {
+        const SNAPSHOT_LIMIT = ENGINE_DEFAULTS.MAX_RESULTS_SNAPSHOT;
 
         it('Snapshot: 1.8 Diamond Sword @ Level 30', async () => {
             const engine = new EnchantEngine(DATA, '1.8');
-            const stats = await engine.getFullStats('sword', 30, 'diamond', null, 0.0001);
+            const stats = await engine.getFullStats('sword', 30, 'diamond', null, 0.0001, undefined, undefined, false, undefined, SNAPSHOT_LIMIT);
             await SnapshotUtils.assertSnapshot('1.8_sword_30_diamond', stats);
         });
 
         it('Snapshot: 1.21 Mace @ Level 30', async () => {
             const engine = new EnchantEngine(DATA, '1.21');
-            const stats = await engine.getFullStats('mace', 30, 'mace', null, 0.0001);
+            const stats = await engine.getFullStats('mace', 30, 'mace', null, 0.0001, undefined, undefined, false, undefined, SNAPSHOT_LIMIT);
             await SnapshotUtils.assertSnapshot('1.21_mace_30_mace', stats);
         });
 
         it('Snapshot: 1.7.2 Multi-Enchant Book @ Level 30', async () => {
             const engine = new EnchantEngine(DATA, '1.7.2');
-            const stats = await engine.getFullStats('book', 30, 'book', null, 0.0001);
+            const stats = await engine.getFullStats('book', 30, 'book', null, 0.0001, undefined, undefined, false, undefined, SNAPSHOT_LIMIT);
             await SnapshotUtils.assertSnapshot('1.7.2_book_30_book', stats);
         });
 
         it('Snapshot: 1.21.11 Spear @ Level 30', async () => {
             const engine = new EnchantEngine(DATA, '1.21.11');
-            const stats = await engine.getFullStats('spear', 30, 'diamond', null, 0.0001);
+            const stats = await engine.getFullStats('spear', 30, 'diamond', null, 0.0001, undefined, undefined, false, undefined, SNAPSHOT_LIMIT);
             await SnapshotUtils.assertSnapshot('1.21.11_spear_30_diamond', stats);
         });
 
         it('Snapshot: 1.21.11 Book @ Level 30', async () => {
             const engine = new EnchantEngine(DATA, '1.21.11');
-            const stats = await engine.getFullStats('book', 30, 'book', null, 0.0001);
+            const stats = await engine.getFullStats('book', 30, 'book', null, 0.0001, undefined, undefined, false, undefined, SNAPSHOT_LIMIT);
             await SnapshotUtils.assertSnapshot('1.21.11_book_30_book', stats);
         });
     });

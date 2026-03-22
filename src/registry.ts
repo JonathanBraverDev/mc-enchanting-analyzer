@@ -15,6 +15,8 @@ export class Registry {
     public mergedMaterials = new Set<string>();
     public multiEnchantBooks: boolean = true;
     
+    private versionPool: Map<string, string[]> = new Map();
+    
     private poolCache = new LRUCache<string, PackedEnchant[]>(200);
     
     public idMap = new Map<string, number>();
@@ -44,6 +46,17 @@ export class Registry {
         this.finalizeEnchantmentRegistry();
         this.initializeIdMaps();
         this.filterMergedPools();
+        this.initializeVersionPool();
+    }
+
+    private initializeVersionPool(): void {
+        for (const [cat, pool] of Object.entries(this.mergedItems)) {
+            const filtered = pool.filter(name => {
+                const props = this.resolvedRegistry[name];
+                return VersionUtils.isInRange(this.version, props.valid_from, props.valid_to);
+            });
+            this.versionPool.set(cat, filtered);
+        }
     }
 
     private resolveVersion(v: string): string {
@@ -153,17 +166,17 @@ export class Registry {
     }
 
     public getEligibleMaterials(cat: string): string[] {
+        const itemSpecific = this.data.constants.ITEM_SPECIFIC_CATS;
         const isArmor = this.data.constants.ARMOR_CATS.includes(cat);
         const mats = isArmor ? this.data.material_values.armor : this.data.material_values.tools;
-        const itemCats = this.data.constants.ITEM_SPECIFIC_CATS;
         
-        let eligibleKeys = Object.keys(mats).filter(m => this.isMaterialCompatible(m, cat, itemCats));
-
-        if (itemCats.includes(cat) && mats[cat] && cat !== "turtle_shell" && this.mergedMaterials.has(cat)) {
-            eligibleKeys = [cat];
+        // Items with their own material (like 'mace', 'brush') are locked to that material
+        if (itemSpecific.includes(cat) && mats[cat] && this.mergedMaterials.has(cat)) {
+            return [cat];
         }
 
-        return this.sortMaterials(eligibleKeys);
+        const eligible = Object.keys(mats).filter(m => this.isMaterialCompatible(m, cat, itemSpecific));
+        return this.sortMaterials(eligible);
     }
 
     private isMaterialCompatible(mat: string, cat: string, itemCats: string[]): boolean {
@@ -241,14 +254,12 @@ export class Registry {
         const cached = this.poolCache.get(cacheKey);
         if (cached) return cached;
 
-        const pool = this.mergedItems[cat] || [];
+        const pool = this.versionPool.get(cat) || [];
         const out: PackedEnchant[] = [];
         
         for (const name of pool) {
-            const id = this.idMap.get(name)!;
             const props = this.resolvedRegistry[name];
-            
-            if (!VersionUtils.isInRange(this.version, props.valid_from, props.valid_to)) continue;
+            const id = this.idMap.get(name)!;
             
             for (const [r, rankVal] of this.sortedRanks) {
                 const range = props.levels[r];
@@ -261,6 +272,18 @@ export class Registry {
 
         this.poolCache.set(cacheKey, out);
         return out;
+    }
+
+    /**
+     * Checks if a specific enchantment (full name with rank) can be achieved 
+     * in any of the modified levels within a given range.
+     */
+    public isEnchantmentAchievable(fullName: string, cat: string, mat: string, levels: number[]): boolean {
+        for (const ml of levels) {
+            const pool = this.getEligiblePool(cat, ml, mat);
+            if (pool.some(p => this.getFullEnchantName(p) === fullName)) return true;
+        }
+        return false;
     }
 
     public getEnchantability(mat: string, cat: string): number {

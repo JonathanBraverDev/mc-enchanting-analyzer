@@ -4,7 +4,7 @@ import { CalculationStats } from './types.js';
 import { ChartManager } from './chart-manager.js';
 import { UI_DEFAULTS, getParamsForMode, SEARCH_LEVEL_COLORS, SearchLevel, UI_TEXTS } from './config.js';
 import { WorkerClient } from './worker-client.js';
-import { StringUtils, UIUtils, DOMUtils } from './utils/index.js';
+import { StringUtils, UIUtils, DOMUtils, RomanUtils } from './utils/index.js';
 
 /**
  * Main UI Controller for the Enchantment Analyzer.
@@ -24,7 +24,7 @@ const UIController = {
     lastRunParams: { version: "", cat: "", mat: "", guaranteedFirst: "" },
 
     async init(): Promise<void> {
-        const ids = ["v-select", "cat-select", "mat-select", "guaranteed-first-select", "lvl-range", "lvl-val", "chart-metric", "refinement-status", "combo-list"];
+        const ids = ["v-select", "cat-select", "mat-select", "guaranteed-first-select", "lvl-range", "lvl-val", "chart-metric", "combo-sort", "refinement-status", "combo-list"];
         ids.forEach(id => {
             const el = document.getElementById(id);
             if (el) this.elements[id] = el;
@@ -62,8 +62,21 @@ const UIController = {
         const guaranteedFirst = this.elements["guaranteed-first-select"] as HTMLSelectElement;
         const lvl = this.elements["lvl-range"] as HTMLInputElement;
         const metric = this.elements["chart-metric"] as HTMLSelectElement;
+        const comboSort = this.elements["combo-sort"] as HTMLSelectElement;
 
         metric.onchange = () => this.refreshChartDatasets();
+        comboSort.onchange = () => {
+            if (this.currentSweep.length > 0) {
+                // Find the result for the currently selected level if possible, or use the latest
+                const lvl = parseInt((this.elements["lvl-range"] as HTMLInputElement).value);
+                const match = this.currentSweep.find(i => i.l === lvl);
+                if (match) {
+                     // Since updateInsights uses humanized stats, we might need to re-humanize or cache human stats
+                     // But for now, we just re-run the insights update if we have the data
+                     this.updateInsights(this.bestInsights, true);
+                }
+            }
+        };
         v.onchange = () => this.onParamsChange('version');
         cat.onchange = () => this.onParamsChange('category');
         mat.onchange = () => this.onParamsChange('material');
@@ -300,10 +313,13 @@ const UIController = {
 
         const uncertainty = human.uncertainty ?? 1;
         if (!force && uncertainty > this.bestUncertainty + 0.0001) return;
+        this.bestInsights = human;
         this.bestUncertainty = uncertainty;
-
         const comboEl = document.getElementById("combo-list");
         if (!comboEl) return;
+
+        const sortMode = (this.elements["combo-sort"] as HTMLSelectElement).value;
+        const romanMap = (this.getEngine().registry.data.constants as any).ROMAN_MAP;
 
         try {
             const entries = Object.entries(human.combos);
@@ -311,15 +327,47 @@ const UIController = {
             
             // 1. Update Combinations List (only if we have new results)
             if (hasCombos) {
-                const topCombos = entries.sort((a: any, b: any) => (b[1] as number) - (a[1] as number)).slice(0, UI_DEFAULTS.MAX_TOP_COMBOS_DISPLAY);
-                const comboListHtml = topCombos.map(([combo, prob]) => `
-                    <div class="combo-item">
-                        <div style="display: flex; justify-content: space-between;">
-                            <span class="combo-names">${(combo as string).replace(/\+/g, ' + ')}</span>
-                            <span class="combo-prob">${UIUtils.formatPercent(prob as number)}</span>
+                // Sorting logic
+                const sorted = [...entries];
+                if (sortMode === 'prob') {
+                    sorted.sort((a: any, b: any) => (b[1] as number) - (a[1] as number));
+                } else if (sortMode === 'count') {
+                    sorted.sort((a: any, b: any) => {
+                        const countA = (a[0] as string).split('+').length;
+                        const countB = (b[0] as string).split('+').length;
+                        return countB - countA || (b[1] as number) - (a[1] as number);
+                    });
+                } else if (sortMode === 'rank') {
+                    const getRankSum = (s: string) => {
+                        return s.split('+').reduce((sum, e) => {
+                            const roman = e.trim().split(' ').pop() || "";
+                            return sum + RomanUtils.getRomanValue(roman, romanMap);
+                        }, 0);
+                    };
+                    sorted.sort((a: any, b: any) => {
+                        const rankA = getRankSum(a[0]);
+                        const rankB = getRankSum(b[0]);
+                        return rankB - rankA || (b[1] as number) - (a[1] as number);
+                    });
+                }
+
+                const topCombos = sorted.slice(0, UI_DEFAULTS.MAX_TOP_COMBOS_DISPLAY);
+                const comboListHtml = topCombos.map(([combo, prob]) => {
+                    const tooltip = (combo as string).split('+').map(e => {
+                        const name = RomanUtils.getBaseName(e.trim(), romanMap);
+                        const props = (this.getEngine().registry.resolvedRegistry as any)[name];
+                        return props ? `${name}: Weight ${props.weight}` : name;
+                    }).join('\n');
+
+                    return `
+                        <div class="combo-item" title="${tooltip}">
+                            <div style="display: flex; justify-content: space-between;">
+                                <span class="combo-names">${(combo as string).replace(/\+/g, ' + ')}</span>
+                                <span class="combo-prob">${UIUtils.formatPercent(prob as number)}</span>
+                            </div>
                         </div>
-                    </div>
-                `).join("");
+                    `;
+                }).join("");
 
                 const uncertaintyHtml = human.uncertainty && human.uncertainty > 0.005 ? `
                     <div class="combo-item" style="border-top: 1px solid rgba(255,255,255,0.05); margin-top: 10px; padding-top: 10px; opacity: 0.8;">
@@ -346,8 +394,13 @@ const UIController = {
                 const levelsCount = props ? Object.keys(props.levels).length : 2;
                 const label = levelsCount > 1 ? `Any ${name}` : name;
                 
+                const tooltipEntries = [`Weight: ${props?.weight || '?'}`];
+                if (props?.valid_from) tooltipEntries.push(`From: ${props.valid_from}`);
+                if (props?.valid_to) tooltipEntries.push(`Until: ${props.valid_to}`);
+                const tooltip = tooltipEntries.join('\n');
+
                 return `
-                    <div class="rank-item">
+                    <div class="rank-item" title="${tooltip}">
                         <div style="display: flex; justify-content: space-between; font-size: 0.8rem;">
                             <span>${label}</span>
                             <span style="font-weight:700;">${UIUtils.formatPercent(prob as number)}</span>
