@@ -54,6 +54,15 @@ export class EnchantEngine {
     }
 
     /**
+     * Clears all caches and unregisters all active engine instances.
+     * Important for preventing memory leaks in test suites.
+     */
+    public static clearAllEngines(): void {
+        this.clearAllCaches();
+        this.allEngines.clear();
+    }
+
+    /**
      * Clears all caches across all active engine instances.
      */
     public static clearAllCaches(): void {
@@ -64,6 +73,17 @@ export class EnchantEngine {
             engine.statsCache.clear();
             engine.bestStatsCache.clear();
         }
+    }
+
+    /**
+     * Unregisters this engine instance from the global set and clears its local caches.
+     */
+    public destroy(): void {
+        this.comboCache.clear();
+        this.bookComboCache.clear();
+        this.statsCache.clear();
+        this.bestStatsCache.clear();
+        EnchantEngine.allEngines.delete(this);
     }
 
     /**
@@ -184,11 +204,13 @@ export class EnchantEngine {
             const initialPacked = guaranteedFirstFull !== null ? ComboUtils.pack([guaranteedFirstFull], guaranteedFirstId) : 0n;
             const initialBitset = guaranteedFirstId !== null ? (1n << BigInt(guaranteedFirstId)) : 0n;
 
-            queue.push({ 
+            const initialNode: PackedNode = { 
                 packedChosen: initialPacked,
                 meta: (initialBitset << 8n) | BigInt(modLevel),
                 prob: PRECISION 
-            });
+            };
+            
+            queue.push(initialNode);
         }
 
         let iterations = 0;
@@ -246,6 +268,16 @@ export class EnchantEngine {
                 continue;
             }
 
+            // Results map size safety valve: prevent memory explosion from too many unique combinations
+            if (results.size >= ENGINE_DEFAULTS.MAX_RESULTS_SIZE && !results.has(current.packedChosen)) {
+                uncertainty += probMovingForward;
+                prunedMass += probMovingForward;
+                cumulativeAccountedMass += probMovingForward;
+                // We add it to results ONLY if it's already there, otherwise we treat it as uncertainty
+                // weight the results map doesn't grow indefinitely.
+                continue;
+            }
+
             let currentTotalWeight = 0;
             const currentEligible: PackedEnchant[] = [];
             const currentWeights: number[] = [];
@@ -273,6 +305,15 @@ export class EnchantEngine {
 
             for (let i = 0; i < currentEligible.length; i++) {
                 const e = currentEligible[i];
+                // Safety valve: don't push more if we're at the limit
+                if (queue.size() >= ENGINE_DEFAULTS.MAX_QUEUE_SIZE) {
+                    results.set(current.packedChosen, (results.get(current.packedChosen) || 0n) + probMovingForward);
+                    cumulativeAccountedMass += probMovingForward;
+                    uncertainty += probMovingForward;
+                    prunedMass += probMovingForward;
+                    break; 
+                }
+                
                 queue.push({
                     packedChosen: ComboUtils.pack([...currentChosen, e], guaranteedFirstId),
                     meta: ((currentBitset | BitwiseUtils.getBitset(ComboUtils.getEnchantId(e))) << 8n) | BigInt(nextLevel),
@@ -282,17 +323,15 @@ export class EnchantEngine {
         }
 
         let frontierUncertainty = 0n;
-        const outResults = new Map(results);
         for (const item of queue.items) {
             frontierUncertainty += item.prob;
-            if (item.packedChosen !== 0n) outResults.set(item.packedChosen, (outResults.get(item.packedChosen) || 0n) + item.prob);
         }
 
-        const totalUncertainty = uncertainty + frontierUncertainty;
-        const out = { queue, results, uncertainty, cumulativeAccountedMass, prunedMass, threshold };
+        const out: SearchFrontier = { queue, results, uncertainty, cumulativeAccountedMass, prunedMass, threshold };
         
         activeCache.set(cacheKey, out);
-        return { ...out, results: outResults, uncertainty: totalUncertainty }; 
+        // Return core results (terminal/pruned) and total uncertainty (pruned + queue)
+        return { ...out, results, uncertainty: uncertainty + frontierUncertainty }; 
     }
 
     /**
@@ -343,6 +382,9 @@ export class EnchantEngine {
         const enchantability = this.registry.getEnchantability(mat, cat);
         const modDist = this.getModifiedLevelDist(xp, enchantability);
         const finalCombos = new Map<PackedCombo, bigint>();
+        const totalAnyMass = new Map<number, bigint>();
+        const totalRankMass = new Map<number, bigint>();
+        const totalCountMass = new Map<number, bigint>();
 
         const activeThreshold = guaranteedFirst ? bThreshold / 10n : bThreshold;
 
@@ -363,19 +405,32 @@ export class EnchantEngine {
                 const totalProb = ProbUtils.scale(prob, mProb);
                 finalCombos.set(key, (finalCombos.get(key) || 0n) + totalProb);
             }
+
+            // Accumulate masses from this Modified Level's frontier
+            const mlStats = this.summarizeFrontier(result);
+            for (const [id, mass] of mlStats.anyMass) {
+                totalAnyMass.set(id, (totalAnyMass.get(id) || 0n) + ProbUtils.scale(mass, mProb));
+            }
+            for (const [id, mass] of mlStats.rankMass) {
+                totalRankMass.set(id, (totalRankMass.get(id) || 0n) + ProbUtils.scale(mass, mProb));
+            }
+            for (const [c, mass] of mlStats.countMass) {
+                totalCountMass.set(c, (totalCountMass.get(c) || 0n) + ProbUtils.scale(mass, mProb));
+            }
+
             totalUncertainty += ProbUtils.scale(result.uncertainty, mProb);
             totalPrunedMass += ProbUtils.scale(result.prunedMass, mProb);
 
             processedMProb += mProb;
             if (++iterCount % 3 === 0) {
                 if (onProgress) {
-                    onProgress(ResultProcessor.summarize(finalCombos, totalUncertainty + (PRECISION - processedMProb)));
+                    onProgress(ResultProcessor.summarize(finalCombos, totalUncertainty + (PRECISION - processedMProb), totalAnyMass, totalRankMass, totalCountMass, 0));
                 }
                 await AsyncUtils.yield();
             }
         }
 
-        const finalStats = ResultProcessor.summarize(finalCombos, totalUncertainty);
+        const finalStats = ResultProcessor.summarize(finalCombos, totalUncertainty, totalAnyMass, totalRankMass, totalCountMass, 100);
         finalStats.pruned = ProbUtils.toNumber(totalPrunedMass);
         this.statsCache.set(exactKey, finalStats);
         
@@ -385,5 +440,36 @@ export class EnchantEngine {
         }
 
         return finalStats;
+    }
+
+    private summarizeFrontier(f: SearchFrontier): { anyMass: Map<number, bigint>, rankMass: Map<number, bigint>, countMass: Map<number, bigint> } {
+        const anyMass = new Map<number, bigint>();
+        const rankMass = new Map<number, bigint>();
+        const countMass = new Map<number, bigint>();
+
+        // Results contain finalized or pruned terminal nodes
+        for (const [packed, prob] of f.results) {
+            const enchants = ComboUtils.unpack(packed);
+            countMass.set(enchants.length, (countMass.get(enchants.length) || 0n) + prob);
+            for (const e of enchants) {
+                const anyId = e >> 8;
+                anyMass.set(anyId, (anyMass.get(anyId) || 0n) + prob);
+                rankMass.set(e, (rankMass.get(e) || 0n) + prob);
+            }
+        }
+
+        // Queue contains nodes still in search frontier
+        // For ANY and RANK, we count these paths because we KNOW these enchants are present.
+        // For COUNT, we DON'T count these yet (they stay in uncertainty) to keep charts stacked correctly.
+        for (const item of f.queue.items) {
+            const enchants = ComboUtils.unpack(item.packedChosen);
+            for (const e of enchants) {
+                const anyId = e >> 8;
+                anyMass.set(anyId, (anyMass.get(anyId) || 0n) + item.prob);
+                rankMass.set(e, (rankMass.get(e) || 0n) + item.prob);
+            }
+        }
+
+        return { anyMass, rankMass, countMass };
     }
 }

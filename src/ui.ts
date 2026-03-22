@@ -18,11 +18,13 @@ const UIController = {
     activeRefinementId: 0,
     savedGuaranteedFirst: "",
     currentSweep: [] as { l: number, s: CalculationStats }[],
+    bestUncertainty: 1.1,
+    bestInsights: null as any | null,
     isWorkerReady: false,
     lastRunParams: { version: "", cat: "", mat: "", guaranteedFirst: "" },
 
     async init(): Promise<void> {
-        const ids = ["v-select", "cat-select", "mat-select", "guaranteed-first-select", "lvl-range", "lvl-val", "chart-metric", "refinement-status"];
+        const ids = ["v-select", "cat-select", "mat-select", "guaranteed-first-select", "lvl-range", "lvl-val", "chart-metric", "refinement-status", "combo-list"];
         ids.forEach(id => {
             const el = document.getElementById(id);
             if (el) this.elements[id] = el;
@@ -56,6 +58,8 @@ const UIController = {
         const metric = this.elements["chart-metric"] as HTMLSelectElement;
 
         v.onchange = async () => { 
+            const comboList = document.getElementById("combo-list");
+            if (comboList) comboList.innerHTML = '<div class="combo-placeholder" style="opacity: 0.5; padding: 15px; font-size: 0.85rem;">Loading version...</div>';
             this.isWorkerReady = false;
             await WorkerClient.init(v.value);
             this.isWorkerReady = true;
@@ -63,7 +67,15 @@ const UIController = {
             this.updateGuaranteedFirst(); 
             this.run(); 
         };
-        cat.onchange = () => { this.updateMaterials(); this.updateGuaranteedFirst(); this.run(); };
+        cat.onchange = () => {
+            const comboList = document.getElementById("combo-list");
+            const rankSection = document.getElementById("rank-section");
+            if (comboList) comboList.innerHTML = '<div class="combo-placeholder" style="opacity: 0.5; padding: 15px; font-size: 0.85rem;">Switching category...</div>';
+            if (rankSection) rankSection.innerHTML = '';
+            this.updateMaterials();
+            this.updateGuaranteedFirst();
+            this.run();
+        };
         mat.onchange = () => { this.updateGuaranteedFirst(); this.run(); };
         
         guaranteedFirst.onchange = () => {
@@ -162,7 +174,7 @@ const UIController = {
         );
 
         if (!this.isStillActive(currentId)) return { stats, done: true };
-        this.updateInsights(stats.human);
+        this.updateInsights(stats.human, true);
 
         if (stats.stats && stats.stats.uncertainty === 0) {
             this.setRefinementStatus("Complete", "done");
@@ -197,6 +209,7 @@ const UIController = {
 
         if (paramsChanged) {
             this.currentSweep = [];
+            this.bestUncertainty = 1.1;
             this.lastRunParams = { version, cat, mat, guaranteedFirst };
         }
 
@@ -211,7 +224,7 @@ const UIController = {
             ...basePayload, threshold: coarse.threshold, source: 'main', useBestCache: true, maxIterations: coarse.limit
         });
         if (!this.isStillActive(currentId)) return;
-        this.updateInsights(stats.human);
+        this.updateInsights(stats.human, true);
 
         if (paramsChanged) {
             await this.updateChart(cat, mat, coarse.threshold);
@@ -252,35 +265,49 @@ const UIController = {
         el.style.opacity = level === 'done' ? '0.6' : '1';
     },
 
-    updateInsights(human: any): void {
+    updateInsights(human: any, force: boolean = false): void {
         if (!human || !human.combos) return;
+
+        const uncertainty = human.uncertainty ?? 1;
+        if (!force && uncertainty > this.bestUncertainty + 0.0001) return;
+        this.bestUncertainty = uncertainty;
+
         const comboEl = document.getElementById("combo-list");
         if (!comboEl) return;
 
         try {
-            const topCombos = Object.entries(human.combos).sort((a: any, b: any) => (b[1] as number) - (a[1] as number)).slice(0, UI_DEFAULTS.MAX_TOP_COMBOS_DISPLAY);
+            const entries = Object.entries(human.combos);
+            const hasCombos = entries.length > 0;
             
-            const comboListHtml = topCombos.map(([combo, prob]) => `
-                <div class="combo-item">
-                    <div style="display: flex; justify-content: space-between;">
-                        <span class="combo-names">${(combo as string).replace(/\+/g, ' + ')}</span>
-                        <span class="combo-prob">${UIUtils.formatPercent(prob as number)}</span>
+            // 1. Update Combinations List (only if we have new results)
+            if (hasCombos) {
+                const topCombos = entries.sort((a: any, b: any) => (b[1] as number) - (a[1] as number)).slice(0, UI_DEFAULTS.MAX_TOP_COMBOS_DISPLAY);
+                const comboListHtml = topCombos.map(([combo, prob]) => `
+                    <div class="combo-item">
+                        <div style="display: flex; justify-content: space-between;">
+                            <span class="combo-names">${(combo as string).replace(/\+/g, ' + ')}</span>
+                            <span class="combo-prob">${UIUtils.formatPercent(prob as number)}</span>
+                        </div>
                     </div>
-                </div>
-            `).join("");
+                `).join("");
 
-            const uncertaintyHtml = human.uncertainty && human.uncertainty > 0.005 ? `
-                <div class="combo-item" style="border-top: 1px solid rgba(255,255,255,0.05); margin-top: 10px; padding-top: 10px; opacity: 0.8;">
-                    <div style="display: flex; justify-content: space-between; font-size: 0.85rem;">
-                        <span>Calculation Confidence</span>
-                        <span style="color: ${human.uncertainty > 0.1 ? '#ffca28' : '#66bb6a'}">${UIUtils.formatPercent(1 - human.uncertainty)}</span>
+                const uncertaintyHtml = human.uncertainty && human.uncertainty > 0.005 ? `
+                    <div class="combo-item" style="border-top: 1px solid rgba(255,255,255,0.05); margin-top: 10px; padding-top: 10px; opacity: 0.8;">
+                        <div style="display: flex; justify-content: space-between; font-size: 0.85rem;">
+                            <span>Calculation Confidence</span>
+                            <span style="color: ${human.uncertainty > 0.1 ? '#ffca28' : '#66bb6a'}">${UIUtils.formatPercent(1 - human.uncertainty)}</span>
+                        </div>
+                        ${human.uncertainty > 0.1 ? `<div style="font-size: 0.7rem; color: #ffca28; margin-top: 3px;">⚠️ High branching complexity - some combinations were collapsed into their parents for speed.</div>` : ''}
                     </div>
-                    ${human.uncertainty > 0.1 ? `<div style="font-size: 0.7rem; color: #ffca28; margin-top: 3px;">⚠️ High branching complexity - some combinations were collapsed into their parents for speed.</div>` : ''}
-                </div>
-            ` : '';
+                ` : '';
+                comboEl.innerHTML = comboListHtml + uncertaintyHtml;
+            } else if (force && uncertainty > 0.99) {
+                // Only clear if it's the very first pass (high uncertainty) and we are forcing it (new run)
+                comboEl.innerHTML = '<div class="combo-placeholder" style="opacity: 0.5; padding: 15px; font-size: 0.85rem;">Calculating combinations...</div>';
+            }
 
-            comboEl.innerHTML = comboListHtml + uncertaintyHtml;
-
+            // 2. Always Update Rank Section (Analytical stats like "Any Sharpness")
+            // These are accurate even in partial passes and shouldn't be suppressed
             const rankSection = document.getElementById("rank-section");
             if (!rankSection) return;
 
@@ -309,7 +336,6 @@ const UIController = {
         const engine = this.getEngine();
         if (!engine) return;
 
-        const metric = (this.elements["chart-metric"] as HTMLSelectElement).value;
         const guaranteedFirst = (this.elements["guaranteed-first-select"] as HTMLSelectElement).value;
         const labels = Array.from({length: UI_DEFAULTS.MAX_XP_LEVEL}, (_, i) => i + 1);
         
@@ -330,7 +356,10 @@ const UIController = {
                 this.currentSweep[i] = { l, s: stats.stats };
 
                 if (this.chartManager) {
-                    const datasets = this.chartManager.generateDatasets(this.currentSweep, metric, engine.registry);
+                    // CRITICAL: Always read the CURRENT metric from the UI 
+                    // otherwise it will "snap back" to the metric that was active when updateChart started.
+                    const currentMetric = (this.elements["chart-metric"] as HTMLSelectElement).value;
+                    const datasets = this.chartManager.generateDatasets(this.currentSweep, currentMetric, engine.registry);
                     this.chartManager.update(labels, datasets);
                 }
             }
@@ -342,3 +371,4 @@ const UIController = {
 };
 
 window.onload = () => UIController.init();
+(window as any).UIController = UIController;
