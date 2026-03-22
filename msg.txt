@@ -1,5 +1,6 @@
-﻿## v1.1.2
+﻿## v1.2.0
 
-### Changed
-- **Build Hygiene**: Added a `clean` script to safely remove the `dist` directory and updated the test workflow to ensure a clean state before building and testing.
+### Added
+- **Greater Accuracy**: New probability tracking for partial search results.
+- **Deeper Analysis**: Support for up to 6 concurrent enchantments on a single item.
 

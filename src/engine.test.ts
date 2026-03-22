@@ -122,7 +122,7 @@ describe('Enchantment Engine Test Suite', () => {
 
         it('should maintain high precision for complex enchantment results', async () => {
             const stats = await engine.getFullStats('pickaxe', 30, 'diamond', null, 0.00001);
-            let totalProb = stats.uncertainty;
+            let totalProb = 0; // Uncertainty is now properly tracked within the combos themselves as partial states
             for (const p of Object.values(stats.combos)) {
                 totalProb += Number(p);
             }

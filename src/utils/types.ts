@@ -27,6 +27,7 @@ export interface CompactStats {
     anyProbs: Float64Array;
     counts: Float64Array;
     uncertainty: number;
+    pruned?: number;
 }
 
 /**
