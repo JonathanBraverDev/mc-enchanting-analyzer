@@ -10,7 +10,7 @@ export class ResultProcessor {
     /**
      * Summarizes raw engine results into a CalculationStats-like object.
      */
-    static summarize(combos: Map<bigint, bigint>, uncertainty: bigint): any {
+    static summarize(combos: Map<bigint, bigint>, uncertainty: bigint, anyMass?: Map<number, bigint>, rankMass?: Map<number, bigint>, countMass?: Map<number, bigint>, comboLimit: number = 100): any {
         const stats: any = {
             ranks: {},
             any: {},
@@ -19,21 +19,54 @@ export class ResultProcessor {
             uncertainty: ProbUtils.toNumber(uncertainty)
         };
 
-        for (const [packed, probBig] of combos) {
+        if (anyMass) {
+            for (const [id, mass] of anyMass) {
+                stats.any[id] = ProbUtils.toNumber(mass);
+            }
+        }
+        if (rankMass) {
+            for (const [id, mass] of rankMass) {
+                stats.ranks[id] = ProbUtils.toNumber(mass);
+            }
+        }
+        if (countMass) {
+            for (const [c, mass] of countMass) {
+                stats.count[c] = ProbUtils.toNumber(mass);
+            }
+        }
+
+        // Only include the most significant combinations to avoid memory explosion
+        // when serializing to the worker/UI. The charts use any/ranks/count which are already summarized.
+        let comboSource: Iterable<[bigint, bigint]> = combos;
+        if (combos.size > comboLimit) {
+            comboSource = [...combos.entries()]
+                .sort((a, b) => b[1] < a[1] ? -1 : (b[1] > a[1] ? 1 : 0))
+                .slice(0, comboLimit);
+        }
+
+        for (const [packed, probBig] of comboSource) {
             const prob = ProbUtils.toNumber(probBig);
             stats.combos[packed.toString(16)] = prob;
-            
-            const ids = ComboUtils.unpack(packed);
-            stats.count[ids.length] = (stats.count[ids.length] || 0) + prob;
+        }
 
-            let seenBasesBitmask = 0n;
-            for (const n of ids) {
-                stats.ranks[n] = (stats.ranks[n] || 0) + prob;
-                
-                const baseId = n >> 8;
-                if (!((seenBasesBitmask >> BigInt(baseId)) & 1n)) {
-                    stats.any[baseId] = (stats.any[baseId] || 0) + prob;
-                    seenBasesBitmask |= (1n << BigInt(baseId));
+        // We still need to iterate ALL combos for any/rank/count if they weren't provided
+        if (!anyMass || !countMass) {
+            for (const [packed, probBig] of combos) {
+                const prob = ProbUtils.toNumber(probBig);
+                const ids = ComboUtils.unpack(packed);
+                if (!countMass) stats.count[ids.length] = (stats.count[ids.length] || 0) + prob;
+
+                if (!anyMass) {
+                    let seenBasesBitmask = 0n;
+                    for (const n of ids) {
+                        if (!rankMass) stats.ranks[n] = (stats.ranks[n] || 0) + prob;
+                        
+                        const baseId = n >> 8;
+                        if (!((seenBasesBitmask >> BigInt(baseId)) & 1n)) {
+                            stats.any[baseId] = (stats.any[baseId] || 0) + prob;
+                            seenBasesBitmask |= (1n << BigInt(baseId));
+                        }
+                    }
                 }
             }
         }

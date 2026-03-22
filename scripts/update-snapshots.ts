@@ -24,6 +24,18 @@ async function updateSnapshots() {
     const s172 = await v172.getFullStats('book', 30, 'book', null, 0.0001);
     await SnapshotUtils.saveSnapshot('1.7.2_book_30_book', s172);
 
+    // 1.21.11 Spear @ Level 30
+    console.log('Generating 1.21.11_spear_30_diamond...');
+    const v12111s = new EnchantEngine(DATA, '1.21.11');
+    const s12111s = await v12111s.getFullStats('spear', 30, 'diamond', null, 0.0001);
+    await SnapshotUtils.saveSnapshot('1.21.11_spear_30_diamond', s12111s);
+
+    // 1.21.11 Book @ Level 30
+    console.log('Generating 1.21.11_book_30_book...');
+    const v12111b = new EnchantEngine(DATA, '1.21.11');
+    const s12111b = await v12111b.getFullStats('book', 30, 'book', null, 0.0001);
+    await SnapshotUtils.saveSnapshot('1.21.11_book_30_book', s12111b);
+
     console.log('Snapshots updated successfully.');
 }
 

@@ -49,9 +49,79 @@ test.describe('Enchantment Analyzer UI', () => {
         await slider.fill('15');
         await expect(lvlVal).toHaveText('15');
         
-        // Status should change to "Coarse" and then eventually "Done" or "Complete"
+        // Status should change to "Searching..." and then eventually "Done" or "Complete"
         const status = page.locator('#refinement-status');
-        await expect(status).not.toHaveText('Complete'); // Should at least flicker to a different state
+        await expect(status).toBeVisible();
+        // No longer expecting NOT to be "Complete" as fast runs might finish instantly during debounce
+    });
+
+    test('top combinations should not disappear during refinement (Stability)', async ({ page }) => {
+        const catSelect = page.locator('#cat-select');
+        const comboList = page.locator('#combo-list');
+        const status = page.locator('#refinement-status');
+
+        // 1. Select Book (high complexity)
+        await catSelect.selectOption('book');
+        
+        // 2. Wait for initial results (Coarse)
+        await expect(comboList.locator('.combo-item').first()).toBeVisible({ timeout: 15000 });
+        const initialText = await comboList.locator('.combo-item').first().innerText();
+        expect(initialText.length).toBeGreaterThan(0);
+
+        // 3. Status should be one of the refinement stages or already Complete
+        await expect(status).toHaveText(/Searching|Refining|Finalizing|Optimizing|Complete/, { timeout: 10000 });
+
+        // 4. Wait for it to progress to at least Standard or Deep
+        // We want to ensure it DOES NOT flicker to empty while transitioning.
+        // We'll poll it for a few seconds.
+        for (let i = 0; i < 5; i++) {
+            await page.waitForTimeout(1000);
+            const currentItem = comboList.locator('.combo-item').first();
+            await expect(currentItem).toBeVisible();
+            const currentText = await currentItem.innerText();
+            expect(currentText.length).toBeGreaterThan(0);
+        }
+    });
+
+    test('guaranteed enchantment must be 100% across its valid range (Internal Sweep)', async ({ page }) => {
+        const catSelect = page.locator('#cat-select');
+        const guaranteedSelect = page.locator('#guaranteed-first-select');
+
+        // 1. Select Sword
+        await catSelect.selectOption('sword');
+        
+        // 2. Select Sharpness IV
+        await expect(guaranteedSelect.locator('option[value="Sharpness IV"]')).toBeAttached({ timeout: 15000 });
+        await guaranteedSelect.selectOption('Sharpness IV');
+        
+        // 3. Wait for the chart sweep to at least have level 30 result
+        // We'll check the internal UIController.currentSweep
+        await page.waitForFunction(() => {
+            const ctrl = (window as any).UIController;
+            return ctrl && ctrl.currentSweep && ctrl.currentSweep[29] && ctrl.currentSweep[29].s;
+        }, { timeout: 30000 });
+
+        // 4. Inspect the sweep for Sharpness 100% at level 30
+        const isAccurateAt30 = await page.evaluate(() => {
+            const ctrl = (window as any).UIController;
+            const stats = ctrl.currentSweep[29].s;
+            const engine = ctrl.engine;
+            const sharpnessId = engine.registry.getEnchantId('Sharpness');
+            return stats.any[sharpnessId] >= 0.9999;
+        });
+        expect(isAccurateAt30).toBe(true);
+
+        // 5. Check another level known to have Sharpness IV possible (e.g., Level 25)
+        const isAccurateAt25 = await page.evaluate(() => {
+            const ctrl = (window as any).UIController;
+            const stats = ctrl.currentSweep[24].s;
+            const engine = ctrl.engine;
+            const sharpnessId = engine.registry.getEnchantId('Sharpness');
+            // At level 25, if Sharpness IV is possible (modLevel ~29+), it should be 100%
+            // If it's NOT possible, it will be 0, but if it's there, it MUST be 1.0.
+            return stats.any[sharpnessId] === 0 || stats.any[sharpnessId] >= 0.9999;
+        });
+        expect(isAccurateAt25).toBe(true);
     });
 
     test('should update material list when version changes', async ({ page }) => {
@@ -80,5 +150,33 @@ test.describe('Enchantment Analyzer UI', () => {
         const box = await canvas.boundingBox();
         expect(box?.width).toBeGreaterThan(0);
         expect(box?.height).toBeGreaterThan(0);
+    });
+    test('should maintain chart metric if changed mid-calculation', async ({ page }) => {
+        const catSelect = page.locator('#cat-select');
+        const metricSelect = page.locator('#chart-metric');
+        const status = page.locator('#refinement-status');
+
+        // 1. Start a slow Book calculation
+        await catSelect.selectOption('book');
+        
+        // 2. Wait for it to start or already be in a later stage
+        await expect(status).toHaveText(/Searching|Refining|Finalizing|Optimizing/, { timeout: 10000 });
+
+        // 3. Mid-calculation, switch metric to "Specific Ranks"
+        await metricSelect.selectOption('ranks');
+        
+        // 4. Wait for it to progress or finish
+        await page.waitForTimeout(3000); 
+
+        // 5. Verify that the internal chart state reflects "ranks" 
+        // We'll check the length of datasets (any=1, ranks=many)
+        const datasetCount = await page.evaluate(() => {
+            const chart = (window as any).UIController.chartManager.chart;
+            return chart.data.datasets.length;
+        });
+        
+        // "Ranks" should have multiple datasets (one for each enchantment)
+        // while "Any" or "Count" only have 1 or a few.
+        expect(datasetCount).toBeGreaterThan(5);
     });
 });
