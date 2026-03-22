@@ -9,6 +9,7 @@ A high-performance, real-time simulation tool for Minecraft's enchanting mechani
 - **🚀 Instant Insights**: Get immediate estimates that refine into exact percentages in seconds. No more waiting for deep-dive calculations to finish before you see data.
 - **📈 Real-Time Convergence**: Watch the probability charts update live as the engine explores millions of possible outcomes.
 - **💎 Version Perfect**: Supports all major mechanics changes from **Beta 1.9 up to 1.21**, including historical quirks like the 1.14 Protection conflict window.
+- **📏 Deep Analysis**: Correctly models up to **6 concurrent enchantments** on a single item, providing better coverage for top-tier gear.
 - **📚 Complex Support**: Accurate handling of "Multi-Enchanment" books and secondary enchantment decays that other tools often overlook.
 
 ## 🚀 Getting Started
@@ -26,7 +27,6 @@ If you want to contribute to the engine or run from source:
 4. **Build**: `npm run build` (bundles the modular engine)
 5. **Test**: `npm test` (runs the engine, registry, and UI validation suite)
 
-The project follows a **modular architecture** (v1.1+) where utilities and core logic are isolated for better performance and maintainability.
 
 To build your own standalone version, use: `npm run build:standalone`. The result will appear at `dist/analyzer-standalone.html`.
 
@@ -35,4 +35,4 @@ To build your own standalone version, use: `npm run build:standalone`. The resul
 This tool uses a specialized "Progressive Refinement" search. It prioritizes the most statistically significant paths first, allowing the UI to remain incredibly responsive even when calculating deep probability trees for high-level enchantments.
 
 ---
-Created by **Jonathan Braver** | **Version 1.1.1**
+Created by **Jonathan Braver** | **Version 1.2.0**

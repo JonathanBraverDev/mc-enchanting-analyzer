@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.2.0] - 2026-03-22
+
+### Added
+- **Greater Accuracy**: New probability tracking for partial search results.
+- **Deeper Analysis**: Support for up to 6 concurrent enchantments on a single item.
+
 ## [1.1.2] - 2026-03-21
 
 ### Changed
