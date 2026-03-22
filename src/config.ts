@@ -9,34 +9,58 @@ export interface SearchMode {
 
 export type SearchLevel = 'coarse' | 'standard' | 'deep' | 'ultra' | 'done';
 
+export const UI_TEXTS = {
+    PAGE_TITLE: "Minecraft Enchantment Analyzer",
+    LOGO_TEXT: "Analyzer",
+    STATUS_POSTFIX: "...",
+    STATUS_SEARCHING: "Searching",
+    STATUS_REFINING: "Refining",
+    STATUS_FINALIZING: "Finalizing",
+    STATUS_OPTIMIZING: "Optimizing",
+    STATUS_COMPLETE: "Complete",
+    STATUS_LOADING_VERSION: "Loading version",
+    STATUS_SWITCHING_CATEGORY: "Switching category",
+    STATUS_CALCULATING: "Calculating combinations"
+};
+
+export const UI_DEFAULTS = {
+    MAX_TOP_COMBOS_DISPLAY: 10,
+    MAX_XP_LEVEL: 30,
+    DEFAULT_XP_LEVEL: 30,
+    INPUT_DEBOUNCE_MS: 50,
+    CHART_METRIC_ANY: "any",
+    CHART_METRIC_RANKS: "ranks",
+    CHART_METRIC_COUNT: "count"
+};
+
 export const SEARCH_MODES: Record<Exclude<SearchLevel, 'done'>, SearchMode> = {
     coarse: {
         thresholdBook: 0.05,
         thresholdOther: 0.01,
         limitBook: 5000,
         limitOther: 2000,
-        status: "Searching..."
+        status: UI_TEXTS.STATUS_SEARCHING
     },
     standard: {
         thresholdBook: 0.005,
         thresholdOther: 0.0005,
         limitBook: 20000,
         limitOther: 10000,
-        status: "Refining..."
+        status: UI_TEXTS.STATUS_REFINING
     },
     deep: {
         thresholdBook: 0.0005,
         thresholdOther: 0.00005,
         limitBook: 60000,
         limitOther: 30000,
-        status: "Finalizing..."
+        status: UI_TEXTS.STATUS_FINALIZING
     },
     ultra: {
         thresholdBook: 0.0001,
         thresholdOther: 0.000005,
         limitBook: 150000,
         limitOther: 75000,
-        status: "Optimizing..."
+        status: UI_TEXTS.STATUS_OPTIMIZING
     }
 };
 
@@ -75,10 +99,4 @@ export const ENGINE_DEFAULTS = {
     UNKNOWN_CATEGORY_ID: 63,
     UNKNOWN_MATERIAL_ID: 63,
     UNKNOWN_ENCHANT_ID: 255
-};
-
-export const UI_DEFAULTS = {
-    MAX_TOP_COMBOS_DISPLAY: 10,
-    MAX_XP_LEVEL: 30,
-    INPUT_DEBOUNCE_MS: 50
 };

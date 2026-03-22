@@ -23,6 +23,13 @@ export class EnchantEngine {
     static distCache = new Map<string, { [level: number]: bigint }>();
     static allEngines: Set<EnchantEngine> = new Set();
     
+    private static readonly KEY_SHIFT_CAT = 0n;
+    private static readonly KEY_SHIFT_MAT = 6n;
+    private static readonly KEY_SHIFT_LEVEL = 12n;
+    private static readonly KEY_SHIFT_GUARANTEED = 20n;
+    private static readonly KEY_SHIFT_LIMIT = 28n;
+    private static readonly KEY_SHIFT_THRESHOLD = 44n;
+    
     public registry: Registry;
     public comboCache = new LRUCache<bigint, SearchFrontier>(ENGINE_DEFAULTS.CACHE_SIZE_COMBO_OTHER);
     public bookComboCache = new LRUCache<bigint, SearchFrontier>(ENGINE_DEFAULTS.CACHE_SIZE_COMBO_BOOK);
@@ -39,15 +46,15 @@ export class EnchantEngine {
         const matId = BigInt(this.registry.getMaterialId(mat));
         const guaranteedId = guaranteedFirst ? BigInt(this.registry.getEnchantId(RomanUtils.getBaseName(guaranteedFirst, this.registry.data.constants.ROMAN_MAP))) : BigInt(ENGINE_DEFAULTS.UNKNOWN_ENCHANT_ID);
         
-        let key = catId;
-        key |= matId << 6n;
-        key |= BigInt(modLevel) << 12n;
-        key |= guaranteedId << 20n;
-        key |= BigInt(limit) << 28n;
+        let key = catId << EnchantEngine.KEY_SHIFT_CAT;
+        key |= matId << EnchantEngine.KEY_SHIFT_MAT;
+        key |= BigInt(modLevel) << EnchantEngine.KEY_SHIFT_LEVEL;
+        key |= guaranteedId << EnchantEngine.KEY_SHIFT_GUARANTEED;
+        key |= BigInt(limit) << EnchantEngine.KEY_SHIFT_LIMIT;
         
         if (threshold !== undefined) {
             const tIdx = BigInt(Math.max(0, Math.min(255, Math.round(-Math.log10(threshold)))));
-            key |= tIdx << 44n;
+            key |= tIdx << EnchantEngine.KEY_SHIFT_THRESHOLD;
         }
         
         return key;
@@ -164,54 +171,10 @@ export class EnchantEngine {
         const cached = activeCache.get(cacheKey);
         if (cached && cached.threshold <= threshold && !existingFrontier) return cached;
 
-        let results: Map<PackedCombo, bigint>;
-        let uncertainty: bigint;
-        let cumulativeAccountedMass: bigint;
-        let prunedMass: bigint;
-        let queue: BinaryHeap<PackedNode>;
-
-        const romanMap = this.registry.data.constants.ROMAN_MAP;
-        const guaranteedFirstBase = guaranteedFirst ? RomanUtils.getBaseName(guaranteedFirst, romanMap) : null;
-        let guaranteedFirstId: number | null = null;
-        if (guaranteedFirstBase) {
-            const tempId = this.registry.getEnchantId(guaranteedFirstBase);
-            if (tempId !== ENGINE_DEFAULTS.UNKNOWN_ENCHANT_ID) guaranteedFirstId = tempId;
-        }
-
-        if (existingFrontier) {
-            results = new Map(existingFrontier.results);
-            uncertainty = existingFrontier.uncertainty;
-            cumulativeAccountedMass = existingFrontier.cumulativeAccountedMass;
-            prunedMass = existingFrontier.prunedMass || 0n;
-            queue = existingFrontier.queue.clone();
-        } else if (cached && cached.threshold > threshold) {
-            results = new Map(cached.results);
-            uncertainty = cached.uncertainty;
-            cumulativeAccountedMass = cached.cumulativeAccountedMass;
-            prunedMass = cached.prunedMass || 0n;
-            queue = cached.queue.clone();
-        } else {
-            results = new Map();
-            uncertainty = 0n;
-            cumulativeAccountedMass = 0n;
-            prunedMass = 0n;
-            
-            const guaranteedFirstRank = guaranteedFirst ? RomanUtils.getRomanValue(guaranteedFirst.split(' ').pop()!, romanMap) : null;
-            const guaranteedFirstFull = guaranteedFirstId !== null && guaranteedFirstRank !== null ? (guaranteedFirstId << 8 | guaranteedFirstRank) : null;
-
-            queue = new BinaryHeap<PackedNode>((item) => item.meta);
-            
-            const initialPacked = guaranteedFirstFull !== null ? ComboUtils.pack([guaranteedFirstFull], guaranteedFirstId) : 0n;
-            const initialBitset = guaranteedFirstId !== null ? (1n << BigInt(guaranteedFirstId)) : 0n;
-
-            const initialNode: PackedNode = { 
-                packedChosen: initialPacked,
-                meta: (initialBitset << 8n) | BigInt(modLevel),
-                prob: PRECISION 
-            };
-            
-            queue.push(initialNode);
-        }
+        const frontier = this.initializeSearchFrontier(cat, modLevel, guaranteedFirst, cached, existingFrontier, threshold);
+        let { results, uncertainty, cumulativeAccountedMass, prunedMass, queue } = frontier;
+        
+        const guaranteedFirstId = this.getGuaranteedFirstId(guaranteedFirst);
 
         let iterations = 0;
 
@@ -234,92 +197,20 @@ export class EnchantEngine {
             const currentCount = ComboUtils.getCount(current.packedChosen);
             
             if (currentCount === 0) {
-                const pBase = current.prob / BigInt(initialTotalWeight);
-                for (let i = 0; i < initialPool.length; i++) {
-                    const e = initialPool[i];
-                    queue.push({ 
-                        packedChosen: ComboUtils.pack([e], guaranteedFirstId), 
-                        meta: (BitwiseUtils.getBitset(ComboUtils.getEnchantId(e)) << 8n) | BigInt(modLevel),
-                        prob: BigInt(poolWeights[i]) * pBase 
-                    });
-                }
+                this.processInitialNode(current, modLevel, guaranteedFirstId, initialPool, poolWeights, initialTotalWeight, queue);
                 continue;
             }
 
             const probContinueNum = (cat === "book" && !this.registry.multiEnchantBooks) ? 0 : Math.min((currentLevel + 1) / ENGINE_DEFAULTS.MAX_MODIFIED_LEVEL_FOR_CONTINUING, 1.0);
             const probContinue = ProbUtils.toBigInt(probContinueNum);
 
-            if (probContinue <= 0n) {
-                results.set(current.packedChosen, (results.get(current.packedChosen) || 0n) + current.prob);
-                cumulativeAccountedMass += current.prob;
-                continue;
-            }
-
-            const probStop = ProbUtils.scale(current.prob, (PRECISION - probContinue));
-            results.set(current.packedChosen, (results.get(current.packedChosen) || 0n) + probStop);
-            cumulativeAccountedMass += probStop;
-
-            const probMovingForward = ProbUtils.scale(current.prob, probContinue);
-            if (probMovingForward < threshold / ENGINE_DEFAULTS.PRUNE_THRESHOLD_DENOMINATOR || currentCount >= ENGINE_DEFAULTS.MAX_ENCHANTS_PER_ITEM) {
-                results.set(current.packedChosen, (results.get(current.packedChosen) || 0n) + probMovingForward);
-                cumulativeAccountedMass += probMovingForward;
-                uncertainty += probMovingForward;
-                prunedMass += probMovingForward;
-                continue;
-            }
-
-            // Results map size safety valve: prevent memory explosion from too many unique combinations
-            if (results.size >= ENGINE_DEFAULTS.MAX_RESULTS_SIZE && !results.has(current.packedChosen)) {
-                uncertainty += probMovingForward;
-                prunedMass += probMovingForward;
-                cumulativeAccountedMass += probMovingForward;
-                // We add it to results ONLY if it's already there, otherwise we treat it as uncertainty
-                // weight the results map doesn't grow indefinitely.
-                continue;
-            }
-
-            let currentTotalWeight = 0;
-            const currentEligible: PackedEnchant[] = [];
-            const currentWeights: number[] = [];
-
-            for (let i = 0; i < initialPool.length; i++) {
-                const e = initialPool[i];
-                const id = ComboUtils.getEnchantId(e);
-                if ((currentBitset & (1n << BigInt(id))) !== 0n) continue;
-                if ((currentBitset & this.registry.conflictBitsets[id]) !== 0n) continue;
-
-                currentEligible.push(e);
-                currentWeights.push(poolWeights[i]);
-                currentTotalWeight += poolWeights[i];
-            }
-
-            if (currentTotalWeight === 0) {
-                results.set(current.packedChosen, (results.get(current.packedChosen) || 0n) + probMovingForward);
-                cumulativeAccountedMass += probMovingForward;
-                continue;
-            }
-
-            const nextLevel = currentCount >= 1 ? Math.floor(currentLevel / 2) : currentLevel;
-            const pNextBase = probMovingForward / BigInt(currentTotalWeight);
-            const currentChosen = ComboUtils.unpack(current.packedChosen);
-
-            for (let i = 0; i < currentEligible.length; i++) {
-                const e = currentEligible[i];
-                // Safety valve: don't push more if we're at the limit
-                if (queue.size() >= ENGINE_DEFAULTS.MAX_QUEUE_SIZE) {
-                    results.set(current.packedChosen, (results.get(current.packedChosen) || 0n) + probMovingForward);
-                    cumulativeAccountedMass += probMovingForward;
-                    uncertainty += probMovingForward;
-                    prunedMass += probMovingForward;
-                    break; 
-                }
-                
-                queue.push({
-                    packedChosen: ComboUtils.pack([...currentChosen, e], guaranteedFirstId),
-                    meta: ((currentBitset | BitwiseUtils.getBitset(ComboUtils.getEnchantId(e))) << 8n) | BigInt(nextLevel),
-                    prob: BigInt(currentWeights[i]) * pNextBase
-                });
-            }
+            const deltas = this.processSearchNode(
+                current, cat, guaranteedFirstId, initialPool, poolWeights, threshold, results, queue
+            );
+            
+            uncertainty += deltas.uncertaintyDelta;
+            cumulativeAccountedMass += deltas.massDelta;
+            prunedMass += deltas.prunedDelta;
         }
 
         let frontierUncertainty = 0n;
@@ -332,6 +223,160 @@ export class EnchantEngine {
         activeCache.set(cacheKey, out);
         // Return core results (terminal/pruned) and total uncertainty (pruned + queue)
         return { ...out, results, uncertainty: uncertainty + frontierUncertainty }; 
+    }
+
+    private getGuaranteedFirstId(guaranteedFirst: string | null): number | null {
+        if (!guaranteedFirst) return null;
+        const romanMap = this.registry.data.constants.ROMAN_MAP;
+        const base = RomanUtils.getBaseName(guaranteedFirst, romanMap);
+        const id = this.registry.getEnchantId(base);
+        return id !== ENGINE_DEFAULTS.UNKNOWN_ENCHANT_ID ? id : null;
+    }
+
+    private initializeSearchFrontier(
+        cat: string,
+        modLevel: number,
+        guaranteedFirst: string | null,
+        cached?: SearchFrontier,
+        existing?: SearchFrontier,
+        threshold: bigint = 0n
+    ): SearchFrontier {
+        if (existing) {
+            return {
+                queue: existing.queue.clone(),
+                results: new Map(existing.results),
+                uncertainty: existing.uncertainty,
+                cumulativeAccountedMass: existing.cumulativeAccountedMass,
+                prunedMass: existing.prunedMass || 0n,
+                threshold: existing.threshold
+            };
+        }
+
+        if (cached && cached.threshold > threshold) {
+            return {
+                queue: cached.queue.clone(),
+                results: new Map(cached.results),
+                uncertainty: cached.uncertainty,
+                cumulativeAccountedMass: cached.cumulativeAccountedMass,
+                prunedMass: cached.prunedMass || 0n,
+                threshold: cached.threshold
+            };
+        }
+
+        const results = new Map<PackedCombo, bigint>();
+        const queue = new BinaryHeap<PackedNode>((item) => item.meta);
+        const romanMap = this.registry.data.constants.ROMAN_MAP;
+        const guaranteedId = this.getGuaranteedFirstId(guaranteedFirst);
+        
+        const rankStr = guaranteedFirst?.split(' ').pop();
+        const rank = rankStr ? RomanUtils.getRomanValue(rankStr, romanMap) : null;
+        const full = (guaranteedId !== null && rank !== null) ? (guaranteedId << 8 | rank) : null;
+
+        const initialPacked = full !== null ? ComboUtils.pack([full], guaranteedId) : 0n;
+        const initialBitset = guaranteedId !== null ? (1n << BigInt(guaranteedId)) : 0n;
+
+        queue.push({
+            packedChosen: initialPacked,
+            meta: (initialBitset << 8n) | BigInt(modLevel),
+            prob: PRECISION
+        });
+
+        return { queue, results, uncertainty: 0n, cumulativeAccountedMass: 0n, prunedMass: 0n, threshold };
+    }
+
+    private processSearchNode(
+        current: PackedNode,
+        cat: string,
+        guaranteedFirstId: number | null,
+        pool: PackedEnchant[],
+        poolWeights: number[],
+        threshold: bigint,
+        results: Map<PackedCombo, bigint>,
+        queue: BinaryHeap<PackedNode>
+    ): { uncertaintyDelta: bigint; massDelta: bigint; prunedDelta: bigint } {
+        const currentBitset = current.meta >> 8n;
+        const currentLevel = Number(current.meta & 0xFFn);
+        const currentCount = ComboUtils.getCount(current.packedChosen);
+
+        const probContinueNum = (cat === "book" && !this.registry.multiEnchantBooks) ? 0 : Math.min((currentLevel + 1) / ENGINE_DEFAULTS.MAX_MODIFIED_LEVEL_FOR_CONTINUING, 1.0);
+        const probContinue = ProbUtils.toBigInt(probContinueNum);
+
+        if (probContinue <= 0n) {
+            results.set(current.packedChosen, (results.get(current.packedChosen) || 0n) + current.prob);
+            return { uncertaintyDelta: 0n, massDelta: current.prob, prunedDelta: 0n };
+        }
+
+        const probStop = ProbUtils.scale(current.prob, (PRECISION - probContinue));
+        results.set(current.packedChosen, (results.get(current.packedChosen) || 0n) + probStop);
+        
+        const probForward = ProbUtils.scale(current.prob, probContinue);
+
+        // Safety checks
+        const isLimitReached = currentCount >= ENGINE_DEFAULTS.MAX_ENCHANTS_PER_ITEM;
+        const isTooSmall = probForward < threshold / ENGINE_DEFAULTS.PRUNE_THRESHOLD_DENOMINATOR;
+        const isMapFull = results.size >= ENGINE_DEFAULTS.MAX_RESULTS_SIZE && !results.has(current.packedChosen);
+
+        if (isLimitReached || isTooSmall || isMapFull) {
+            results.set(current.packedChosen, (results.get(current.packedChosen) || 0n) + probForward);
+            return { uncertaintyDelta: probForward, massDelta: probStop + probForward, prunedDelta: probForward };
+        }
+
+        // Branching
+        let totalWeight = 0;
+        const eligible: PackedEnchant[] = [];
+        const weights: number[] = [];
+
+        for (let i = 0; i < pool.length; i++) {
+            const e = pool[i];
+            const id = ComboUtils.getEnchantId(e);
+            if ((currentBitset & (1n << BigInt(id))) !== 0n) continue;
+            if ((currentBitset & this.registry.conflictBitsets[id]) !== 0n) continue;
+            eligible.push(e);
+            weights.push(poolWeights[i]);
+            totalWeight += poolWeights[i];
+        }
+
+        if (totalWeight === 0) {
+            results.set(current.packedChosen, (results.get(current.packedChosen) || 0n) + probForward);
+            return { uncertaintyDelta: 0n, massDelta: probStop + probForward, prunedDelta: 0n };
+        }
+
+        const nextLevel = currentCount >= 1 ? Math.floor(currentLevel / 2) : currentLevel;
+        const pBase = probForward / BigInt(totalWeight);
+        const currentChosen = ComboUtils.unpack(current.packedChosen);
+
+        for (let i = 0; i < eligible.length; i++) {
+            if (queue.size() >= ENGINE_DEFAULTS.MAX_QUEUE_SIZE) {
+                results.set(current.packedChosen, (results.get(current.packedChosen) || 0n) + probForward);
+                return { uncertaintyDelta: probForward, massDelta: probStop + probForward, prunedDelta: probForward };
+            }
+            queue.push({
+                packedChosen: ComboUtils.pack([...currentChosen, eligible[i]], guaranteedFirstId),
+                meta: ((currentBitset | BitwiseUtils.getBitset(ComboUtils.getEnchantId(eligible[i]))) << 8n) | BigInt(nextLevel),
+                prob: BigInt(weights[i]) * pBase
+            });
+        }
+
+        return { uncertaintyDelta: 0n, massDelta: probStop, prunedDelta: 0n };
+    }
+
+    private processInitialNode(
+        current: PackedNode,
+        modLevel: number,
+        guaranteedId: number | null,
+        pool: PackedEnchant[],
+        weights: number[],
+        totalWeight: number,
+        queue: BinaryHeap<PackedNode>
+    ): void {
+        const pBase = current.prob / BigInt(totalWeight);
+        for (let i = 0; i < pool.length; i++) {
+            queue.push({
+                packedChosen: ComboUtils.pack([pool[i]], guaranteedId),
+                meta: (BitwiseUtils.getBitset(ComboUtils.getEnchantId(pool[i])) << 8n) | BigInt(modLevel),
+                prob: BigInt(weights[i]) * pBase
+            });
+        }
     }
 
     /**

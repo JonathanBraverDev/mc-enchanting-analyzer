@@ -1,4 +1,6 @@
 import { test, expect } from '@playwright/test';
+import { UI_TEXTS, UI_DEFAULTS } from './config.js';
+import { UITestUtils } from './test-utils.js';
 
 test.describe('Enchantment Analyzer UI', () => {
     
@@ -7,16 +9,15 @@ test.describe('Enchantment Analyzer UI', () => {
     });
 
     test('should load the page and show initial calculations', async ({ page }) => {
-        await expect(page).toHaveTitle(/Minecraft Enchantment Analyzer/);
-        await expect(page.locator('.logo')).toContainText('Analyzer');
+        await expect(page).toHaveTitle(new RegExp(UI_TEXTS.PAGE_TITLE));
+        await expect(page.locator('.logo')).toContainText(UI_TEXTS.LOGO_TEXT);
         
         // Wait for worker to be ready (UI should show "Coarse" or "Standard" refinement)
         const status = page.locator('#refinement-status');
         await expect(status).toBeVisible();
         
         // Check for top combinations
-        const comboList = page.locator('#combo-list');
-        await expect(comboList.locator('.combo-item').first()).toBeVisible({ timeout: 15000 });
+        await UITestUtils.waitForResults(page);
     });
 
     test('should update calculations when item category changes', async ({ page }) => {
@@ -25,7 +26,7 @@ test.describe('Enchantment Analyzer UI', () => {
 
         // 1. Start with Sword
         await catSelect.selectOption('sword');
-        await expect(comboList.locator('.combo-item').first()).toBeVisible({ timeout: 15000 });
+        await UITestUtils.waitForResults(page);
         const swordAtFirst = await comboList.innerText();
         expect(swordAtFirst).toContain('Sharpness');
 
@@ -42,14 +43,14 @@ test.describe('Enchantment Analyzer UI', () => {
         const slider = page.locator('#lvl-range');
         const lvlVal = page.locator('#lvl-val');
         
-        // Initial value is 30
-        await expect(lvlVal).toHaveText('30');
+        // Initial value is the default
+        await expect(lvlVal).toHaveText(UI_DEFAULTS.DEFAULT_XP_LEVEL.toString());
         
         // Move slider to 15
         await slider.fill('15');
         await expect(lvlVal).toHaveText('15');
         
-        // Status should change to "Searching..." and then eventually "Done" or "Complete"
+        // Status should change and then eventually "Done" or "Complete"
         const status = page.locator('#refinement-status');
         await expect(status).toBeVisible();
         // No longer expecting NOT to be "Complete" as fast runs might finish instantly during debounce
@@ -64,12 +65,13 @@ test.describe('Enchantment Analyzer UI', () => {
         await catSelect.selectOption('book');
         
         // 2. Wait for initial results (Coarse)
-        await expect(comboList.locator('.combo-item').first()).toBeVisible({ timeout: 15000 });
+        await UITestUtils.waitForResults(page);
         const initialText = await comboList.locator('.combo-item').first().innerText();
         expect(initialText.length).toBeGreaterThan(0);
 
         // 3. Status should be one of the refinement stages or already Complete
-        await expect(status).toHaveText(/Searching|Refining|Finalizing|Optimizing|Complete/, { timeout: 10000 });
+        const refinementRegex = UITestUtils.getRefinementRegex(['searching', 'refining', 'finalizing', 'optimizing']);
+        await expect(status).toHaveText(refinementRegex, { timeout: 10000 });
 
         // 4. Wait for it to progress to at least Standard or Deep
         // We want to ensure it DOES NOT flicker to empty while transitioning.
@@ -95,7 +97,6 @@ test.describe('Enchantment Analyzer UI', () => {
         await guaranteedSelect.selectOption('Sharpness IV');
         
         // 3. Wait for the chart sweep to at least have level 30 result
-        // We'll check the internal UIController.currentSweep
         await page.waitForFunction(() => {
             const ctrl = (window as any).UIController;
             return ctrl && ctrl.currentSweep && ctrl.currentSweep[29] && ctrl.currentSweep[29].s;
@@ -159,11 +160,12 @@ test.describe('Enchantment Analyzer UI', () => {
         // 1. Start a slow Book calculation
         await catSelect.selectOption('book');
         
-        // 2. Wait for it to start or already be in a later stage
-        await expect(status).toHaveText(/Searching|Refining|Finalizing|Optimizing/, { timeout: 10000 });
+        // 2. Wait for it to start or already be in a later stage (or Complete if very fast)
+        const midCalcRegex = UITestUtils.getRefinementRegex(['searching', 'refining']);
+        await expect(status).toHaveText(midCalcRegex, { timeout: 10000 });
 
         // 3. Mid-calculation, switch metric to "Specific Ranks"
-        await metricSelect.selectOption('ranks');
+        await metricSelect.selectOption(UI_DEFAULTS.CHART_METRIC_RANKS);
         
         // 4. Wait for it to progress or finish
         await page.waitForTimeout(3000); 

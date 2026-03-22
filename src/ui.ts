@@ -2,7 +2,7 @@ import { DATA } from './data.js';
 import { EnchantEngine } from './engine.js';
 import { CalculationStats } from './types.js';
 import { ChartManager } from './chart-manager.js';
-import { UI_DEFAULTS, getParamsForMode, SEARCH_LEVEL_COLORS, SearchLevel } from './config.js';
+import { UI_DEFAULTS, getParamsForMode, SEARCH_LEVEL_COLORS, SearchLevel, UI_TEXTS } from './config.js';
 import { WorkerClient } from './worker-client.js';
 import { StringUtils, UIUtils, DOMUtils } from './utils/index.js';
 
@@ -31,6 +31,12 @@ const UIController = {
         });
 
         this.chartManager = new ChartManager("mainChart");
+        
+        // Initial text from single source of truth
+        document.title = UI_TEXTS.PAGE_TITLE;
+        const logoSpan = document.querySelector('.logo span');
+        if (logoSpan) logoSpan.textContent = UI_TEXTS.LOGO_TEXT;
+
         this.populateVersions();
         this.setupEventListeners();
         
@@ -57,45 +63,69 @@ const UIController = {
         const lvl = this.elements["lvl-range"] as HTMLInputElement;
         const metric = this.elements["chart-metric"] as HTMLSelectElement;
 
-        v.onchange = async () => { 
-            const comboList = document.getElementById("combo-list");
-            if (comboList) comboList.innerHTML = '<div class="combo-placeholder" style="opacity: 0.5; padding: 15px; font-size: 0.85rem;">Loading version...</div>';
-            this.isWorkerReady = false;
-            await WorkerClient.init(v.value);
-            this.isWorkerReady = true;
-            this.updateMaterials(); 
-            this.updateGuaranteedFirst(); 
-            this.run(); 
-        };
-        cat.onchange = () => {
-            const comboList = document.getElementById("combo-list");
-            const rankSection = document.getElementById("rank-section");
-            if (comboList) comboList.innerHTML = '<div class="combo-placeholder" style="opacity: 0.5; padding: 15px; font-size: 0.85rem;">Switching category...</div>';
-            if (rankSection) rankSection.innerHTML = '';
-            this.updateMaterials();
-            this.updateGuaranteedFirst();
-            this.run();
-        };
-        mat.onchange = () => { this.updateGuaranteedFirst(); this.run(); };
-        
+        metric.onchange = () => this.refreshChartDatasets();
+        v.onchange = () => this.onParamsChange('version');
+        cat.onchange = () => this.onParamsChange('category');
+        mat.onchange = () => this.onParamsChange('material');
         guaranteedFirst.onchange = () => {
             this.savedGuaranteedFirst = guaranteedFirst.value;
-            this.run();
+            this.onParamsChange('guaranteed');
         };
-        
+
         lvl.oninput = () => {
             this.elements["lvl-val"].textContent = lvl.value;
             if (this.runTimeout) clearTimeout(this.runTimeout);
             this.runTimeout = window.setTimeout(() => this.run(), UI_DEFAULTS.INPUT_DEBOUNCE_MS);
         };
-        metric.onchange = () => {
-            if (this.currentSweep.length > 0 && this.chartManager) {
-                const engine = this.getEngine();
-                const datasets = this.chartManager.generateDatasets(this.currentSweep, metric.value, engine.registry);
-                const labels = Array.from({length: UI_DEFAULTS.MAX_XP_LEVEL}, (_, i) => i + 1);
-                this.chartManager.update(labels, datasets);
-            }
-        };
+    },
+
+    onParamsChange(type: 'version' | 'category' | 'material' | 'guaranteed'): void {
+        const comboList = document.getElementById("combo-list");
+        const rankSection = document.getElementById("rank-section");
+
+        if (type === 'version') {
+            this.showPlaceholder(UI_TEXTS.STATUS_LOADING_VERSION);
+            this.isWorkerReady = false;
+            WorkerClient.init((this.elements["v-select"] as HTMLSelectElement).value).then(() => {
+                this.isWorkerReady = true;
+                this.updateMaterials();
+                this.updateGuaranteedFirst();
+                this.run();
+            });
+            return;
+        }
+
+        if (type === 'category') {
+            this.showPlaceholder(UI_TEXTS.STATUS_SWITCHING_CATEGORY);
+            if (rankSection) rankSection.innerHTML = '';
+            this.updateMaterials();
+        }
+
+        if (type === 'material') {
+            this.updateGuaranteedFirst();
+        }
+
+        this.run();
+    },
+
+    showPlaceholder(text: string): void {
+        const comboList = document.getElementById("combo-list");
+        if (comboList) {
+            comboList.innerHTML = `<div class="combo-placeholder" style="opacity: 0.5; padding: 15px; font-size: 0.85rem;">${text}${UI_TEXTS.STATUS_POSTFIX}</div>`;
+        }
+    },
+
+    getLvlLabels(): number[] {
+        return Array.from({length: UI_DEFAULTS.MAX_XP_LEVEL}, (_, i) => i + 1);
+    },
+
+    refreshChartDatasets(): void {
+        if (this.currentSweep.length > 0 && this.chartManager) {
+            const engine = this.getEngine();
+            const metric = (this.elements["chart-metric"] as HTMLSelectElement).value;
+            const datasets = this.chartManager.generateDatasets(this.currentSweep, metric, engine.registry);
+            this.chartManager.update(this.getLvlLabels(), datasets);
+        }
     },
 
     getEngine(): EnchantEngine {
@@ -177,7 +207,7 @@ const UIController = {
         this.updateInsights(stats.human, true);
 
         if (stats.stats && stats.stats.uncertainty === 0) {
-            this.setRefinementStatus("Complete", "done");
+            this.setRefinementStatus(UI_TEXTS.STATUS_COMPLETE, "done");
             return { stats, done: true };
         }
 
@@ -232,7 +262,7 @@ const UIController = {
         if (!this.isStillActive(currentId)) return;
 
         if (stats.stats && stats.stats.uncertainty === 0) {
-            this.setRefinementStatus("Complete", "done");
+            this.setRefinementStatus(UI_TEXTS.STATUS_COMPLETE, "done");
             return;
         }
 
@@ -251,7 +281,7 @@ const UIController = {
         if (paramsChanged) {
             this.updateChart(cat, mat, getParamsForMode('ultra', isBook).threshold);
         }
-        this.setRefinementStatus("Complete", "done");
+        this.setRefinementStatus(UI_TEXTS.STATUS_COMPLETE, "done");
     },
 
     setRefinementStatus(text: string, level: SearchLevel): void {
@@ -259,7 +289,7 @@ const UIController = {
         if (!el) return;
 
         const c = SEARCH_LEVEL_COLORS[level];
-        el.textContent = text;
+        el.textContent = text + (level === 'done' ? '' : UI_TEXTS.STATUS_POSTFIX);
         el.style.backgroundColor = c.bg;
         el.style.color = c.text;
         el.style.opacity = level === 'done' ? '0.6' : '1';
@@ -303,7 +333,7 @@ const UIController = {
                 comboEl.innerHTML = comboListHtml + uncertaintyHtml;
             } else if (force && uncertainty > 0.99) {
                 // Only clear if it's the very first pass (high uncertainty) and we are forcing it (new run)
-                comboEl.innerHTML = '<div class="combo-placeholder" style="opacity: 0.5; padding: 15px; font-size: 0.85rem;">Calculating combinations...</div>';
+                comboEl.innerHTML = `<div class="combo-placeholder" style="opacity: 0.5; padding: 15px; font-size: 0.85rem;">${UI_TEXTS.STATUS_CALCULATING}${UI_TEXTS.STATUS_POSTFIX}</div>`;
             }
 
             // 2. Always Update Rank Section (Analytical stats like "Any Sharpness")
@@ -337,7 +367,7 @@ const UIController = {
         if (!engine) return;
 
         const guaranteedFirst = (this.elements["guaranteed-first-select"] as HTMLSelectElement).value;
-        const labels = Array.from({length: UI_DEFAULTS.MAX_XP_LEVEL}, (_, i) => i + 1);
+        const labels = this.getLvlLabels();
         
         const isBook = cat === "book";
         const activeThreshold = threshold ?? getParamsForMode('ultra', isBook).threshold;
@@ -356,11 +386,7 @@ const UIController = {
                 this.currentSweep[i] = { l, s: stats.stats };
 
                 if (this.chartManager) {
-                    // CRITICAL: Always read the CURRENT metric from the UI 
-                    // otherwise it will "snap back" to the metric that was active when updateChart started.
-                    const currentMetric = (this.elements["chart-metric"] as HTMLSelectElement).value;
-                    const datasets = this.chartManager.generateDatasets(this.currentSweep, currentMetric, engine.registry);
-                    this.chartManager.update(labels, datasets);
+                    this.refreshChartDatasets();
                 }
             }
         } catch (e) {
