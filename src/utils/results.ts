@@ -49,7 +49,8 @@ export class ResultProcessor {
             any: {},
             count: { ...stats.count },
             combos: {},
-            uncertainty: stats.uncertainty
+            uncertainty: stats.uncertainty,
+            pruned: stats.pruned
         };
 
         for (const [idAndRank, prob] of Object.entries(stats.ranks)) {
@@ -106,7 +107,8 @@ export class ResultProcessor {
             comboKeys, comboProbs,
             rankKeys, rankProbs,
             anyKeys, anyProbs,
-            counts, uncertainty: stats.uncertainty
+            counts, uncertainty: stats.uncertainty,
+            pruned: stats.pruned
         };
 
         return {
@@ -124,7 +126,7 @@ export class ResultProcessor {
      * Reconstructs CalculationStats from a CompactStats object.
      */
     static deserialize(compact: CompactStats): any {
-        const stats: any = { ranks: {}, any: {}, count: {}, combos: {}, uncertainty: compact.uncertainty };
+        const stats: any = { ranks: {}, any: {}, count: {}, combos: {}, uncertainty: compact.uncertainty, pruned: compact.pruned };
         
         for (let i = 0; i < compact.comboKeys.length; i++) {
             stats.combos[compact.comboKeys[i].toString(16)] = compact.comboProbs[i];

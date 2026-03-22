@@ -68,6 +68,7 @@ export interface CalculationStats {
   count: { [count: number]: number };
   combos: { [packed: string]: number };    // Hex string of bit-packed BigInt
   uncertainty: number;
+  pruned?: number;
 }
 export interface HumanStats {
   ranks: { [enchantment: string]: number };
@@ -75,6 +76,7 @@ export interface HumanStats {
   count: { [count: number]: number };
   combos: { [combo: string]: number };
   uncertainty: number;
+  pruned?: number;
 }
 
 export interface ResolvedRegistry {
