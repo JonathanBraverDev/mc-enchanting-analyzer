@@ -20,7 +20,9 @@ export const UI_TEXTS = {
     STATUS_COMPLETE: "Complete",
     STATUS_LOADING_VERSION: "Loading version",
     STATUS_SWITCHING_CATEGORY: "Switching category",
-    STATUS_CALCULATING: "Calculating combinations"
+    STATUS_CALCULATING: "Calculating combinations",
+    STATUS_ERROR_LOADING: "Initialization failed",
+    STATUS_ERROR_CALC: "Calculation failed"
 };
 
 export const UI_DEFAULTS = {
