@@ -60,7 +60,10 @@ self.onmessage = async (e: MessageEvent) => {
                         payload: { stats: compact, human } 
                     }, transferables);
                 } catch (err: any) {
-                    if (err.message === "Aborted") return; // Silent discard
+                    if (err.message === "Aborted") {
+                        self.postMessage({ type: 'error', id, payload: 'Aborted' });
+                        return;
+                    }
                     throw err;
                 } finally {
                     if (abortControllers.get(source) === ctrl) {

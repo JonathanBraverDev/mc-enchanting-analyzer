@@ -1,11 +1,13 @@
 import { EnchantmentData, VersionMechanics, ResolvedRegistry, MergedItems, MergedOverrides } from './types.js';
-import { LRUCache, PackedEnchant, RomanUtils } from '../utils/index.js';
+import { PackedEnchant, RomanUtils } from '../utils/index.js';
 import { ENGINE_DEFAULTS } from './config.js';
 import { RegistryState } from './factory.js';
+import { MaterialService } from './RegistryMaterials.js';
+import { PoolService } from './RegistryPools.js';
 
 /**
  * Handles version-specific data lookup and material eligibility.
- * Now a lightweight view over pre-computed RegistryState.
+ * Now a lightweight view over pre-computed RegistryState, delegating complex logic to services.
  */
 export class Registry {
     public version: string;
@@ -25,11 +27,14 @@ export class Registry {
     public weightMap: Uint32Array;
     public sortedRanks: [string, number][];
 
-    private versionPool: Map<string, string[]>;
-    private poolCache = new LRUCache<string, PackedEnchant[]>(200);
+    public versionPool: Map<string, string[]>;
+    
+    private state: RegistryState;
 
     constructor(data: EnchantmentData, state: RegistryState) {
         this.data = data;
+        this.state = state;
+        
         this.version = state.version;
         this.mechanics = state.mechanics;
         this.mergedItems = state.mergedItems;
@@ -48,34 +53,7 @@ export class Registry {
     }
 
     public getEligibleMaterials(cat: string): string[] {
-        const itemSpecific = this.data.constants.ITEM_SPECIFIC_CATS;
-        const isArmor = this.data.constants.ARMOR_CATS.includes(cat);
-        const mats = isArmor ? this.data.material_values.armor : this.data.material_values.tools;
-        
-        if (itemSpecific.includes(cat) && mats[cat] && this.mergedMaterials.has(cat)) {
-            return [cat];
-        }
-
-        const eligible = Object.keys(mats).filter(m => this.isMaterialCompatible(m, cat, itemSpecific));
-        return this.sortMaterials(eligible);
-    }
-
-    private isMaterialCompatible(mat: string, cat: string, itemCats: string[]): boolean {
-        if (!this.mergedMaterials.has(mat)) return false;
-        if (mat === "turtle_shell") return cat === "helmet";
-        if (itemCats.includes(mat)) return mat === cat;
-        return true;
-    }
-
-    private sortMaterials(mats: string[]): string[] {
-        const priors = this.data.constants.MATERIAL_PRIORITY;
-        return mats.sort((a, b) => {
-            const ai = priors.indexOf(a), bi = priors.indexOf(b);
-            if (ai !== -1 && bi !== -1) return ai - bi;
-            if (ai !== -1) return -1;
-            if (bi !== -1) return 1;
-            return a.localeCompare(b);
-        });
+        return MaterialService.getEligibleMaterials(this.data, cat, this.mergedMaterials);
     }
 
     public getEnchantName(id: number): string {
@@ -118,42 +96,14 @@ export class Registry {
     }
 
     public getEligiblePool(cat: string, level: number, mat: string): PackedEnchant[] {
-        const cacheKey = `${cat}|${level}|${mat}`;
-        const cached = this.poolCache.get(cacheKey);
-        if (cached) return cached;
-
-        const pool = this.versionPool.get(cat) || [];
-        const out: PackedEnchant[] = [];
-        
-        for (const name of pool) {
-            const props = this.resolvedRegistry[name];
-            const id = this.idMap.get(name)!;
-            
-            for (const [r, rankVal] of this.sortedRanks) {
-                const range = props.levels[r];
-                if (range && level >= range[0] && level <= range[1]) {
-                    out.push((id << 8) | rankVal);
-                    break;
-                }
-            }
-        }
-
-        this.poolCache.set(cacheKey, out);
-        return out;
+        return PoolService.getEligiblePool(this.state, cat, level, mat);
     }
 
     public isEnchantmentAchievable(fullName: string, cat: string, mat: string, levels: number[]): boolean {
-        for (const ml of levels) {
-            const pool = this.getEligiblePool(cat, ml, mat);
-            if (pool.some(p => this.getFullEnchantName(p) === fullName)) return true;
-        }
-        return false;
+        return PoolService.isEnchantmentAchievable(this.state, fullName, cat, mat, levels, this.data.constants.ROMAN_MAP);
     }
 
     public getEnchantability(mat: string, cat: string): number {
-        if (cat === "book") return 1;
-        const { armor, tools } = this.data.material_values;
-        const isArmor = this.data.constants.ARMOR_CATS.includes(cat);
-        return (isArmor ? armor[mat] : tools[mat]) || 10;
+        return MaterialService.getEnchantability(this.data, mat, cat);
     }
 }

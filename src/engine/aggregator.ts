@@ -4,7 +4,8 @@ import { ENGINE_DEFAULTS } from '../core/config.js';
 import { CalculationStats } from '../core/types.js';
 import { PackedCombo } from '../utils/types.js';
 import { DistributionService } from './distribution.js';
-import { SearchService, SearchFrontier } from './search.js';
+import { SearchService } from './search.js';
+import { SearchFrontier } from './frontier.js';
 
 /**
  * Service for aggregating enchantment statistics across multiple modified levels.
@@ -24,9 +25,9 @@ export class StatAggregator {
         onProgress?: (stats: CalculationStats) => void,
         maxIterations?: number,
         summaryLimit: number = ENGINE_DEFAULTS.MAX_RESULTS_SUMMARY,
-        comboCache?: (key: bigint) => SearchFrontier | undefined,
-        setComboCache?: (key: bigint, frontier: SearchFrontier) => void,
-        getPackedKey?: (threshold: number) => bigint
+        // Optional cache delegates to allow EnchantEngine to manage persistence
+        getExtendedCache?: (ml: number) => SearchFrontier | undefined,
+        setExtendedCache?: (ml: number, frontier: SearchFrontier) => void
     ): Promise<CalculationStats> {
         const bThreshold = ProbUtils.toBigInt(threshold);
         const enchantability = registry.getEnchantability(mat, cat);
@@ -51,16 +52,20 @@ export class StatAggregator {
         let iterCount = 0;
 
         for (const ml of levels) {
-            if (signal?.aborted) throw new Error("Calculation aborted");
+            if (signal?.aborted) throw new Error("Aborted");
 
             const mProb = modDist[ml];
-            
-            // Check cache if provided
-            let result: SearchFrontier | undefined;
             const searchLimit = maxIterations ?? (cat === "book" ? ENGINE_DEFAULTS.FALLBACK_LIMIT_BOOK : (threshold < 0.0001 ? ENGINE_DEFAULTS.FALLBACK_LIMIT_HIGH_RES : ENGINE_DEFAULTS.FALLBACK_LIMIT_LOW_RES));
             
-            // Note: Caching logic is handled by the caller (EnchantEngine) to keep this service pure
-            result = SearchService.calculateCombinations(registry, cat, ml, mat, guaranteedFirst, activeThreshold, searchLimit);
+            // Orchestrate search, using cache if provided by EnchantEngine
+            const cached = getExtendedCache?.(ml);
+            const result = SearchService.calculateCombinations(
+                registry, cat, ml, mat, guaranteedFirst, activeThreshold, searchLimit, cached
+            );
+            
+            if (setExtendedCache) {
+                setExtendedCache(ml, result);
+            }
             
             for (const [key, prob] of result.results) {
                 const totalProb = ProbUtils.scale(prob, mProb);
