@@ -1,10 +1,11 @@
 import { EnchantmentData, CalculationStats } from '../core/types.js';
-import { LRUCache, ProbUtils, PRECISION, ResultProcessor, AsyncUtils } from '../utils/index.js';
+import { LRUCache, ProbUtils } from '../utils/index.js';
 import { Registry } from '../core/registry.js';
 import { RegistryFactory } from '../core/factory.js';
 import { ENGINE_DEFAULTS } from '../core/config.js';
 import { DistributionService } from './distribution.js';
-import { SearchService, SearchFrontier } from './search.js';
+import { SearchService } from './search.js';
+import { SearchFrontier } from './frontier.js';
 import { StatAggregator } from './aggregator.js';
 
 /**
@@ -35,12 +36,12 @@ export class EnchantEngine {
     private getPackedKey(cat: string, modLevel: number, mat: string, guaranteedFirst: string | null, limit: number, threshold?: number): bigint {
         const catId = BigInt(this.registry.getCategoryId(cat));
         const matId = BigInt(this.registry.getMaterialId(mat));
-        const guaranteedId = guaranteedFirst ? BigInt(this.registry.getEnchantId(guaranteedFirst.split(' ').slice(0, -1).join(' '))) : BigInt(ENGINE_DEFAULTS.UNKNOWN_ENCHANT_ID);
+        const guaranteedId = BigInt(this.registry.getEnchantId(guaranteedFirst ? guaranteedFirst.split(' ').slice(0, -1).join(' ') : ''));
         
         let key = catId << EnchantEngine.KEY_SHIFT_CAT;
         key |= matId << EnchantEngine.KEY_SHIFT_MAT;
         key |= BigInt(modLevel) << EnchantEngine.KEY_SHIFT_LEVEL;
-        key |= guaranteedId << EnchantEngine.KEY_SHIFT_GUARANTEED;
+        key |= (guaranteedFirst ? guaranteedId : BigInt(ENGINE_DEFAULTS.UNKNOWN_ENCHANT_ID)) << EnchantEngine.KEY_SHIFT_GUARANTEED;
         key |= BigInt(limit) << EnchantEngine.KEY_SHIFT_LIMIT;
         
         if (threshold !== undefined) {
@@ -79,10 +80,8 @@ export class EnchantEngine {
     }
 
     public getEligibleListNumeric(cat: string, level: number, mat: string, bitset: bigint = 0n): number[] {
-        return this.registry.getEligiblePool(cat, level, mat).filter(n => {
-            const id = n >> 8;
-            return (bitset & (1n << BigInt(id))) === 0n && (bitset & this.registry.conflictBitsets[id]) === 0n;
-        });
+        const pool = this.registry.getEligiblePool(cat, level, mat);
+        return pool.filter(p => (bitset & (1n << BigInt(p >> 8))) === 0n);
     }
 
     /**
@@ -94,19 +93,17 @@ export class EnchantEngine {
         mat: string, 
         guaranteedFirst: string | null = null, 
         threshold: bigint = ProbUtils.toBigInt(0.0001),
-        existingFrontier?: SearchFrontier,
         maxIterations?: number
     ): SearchFrontier {
         const limit = this.getSearchLimit(cat, threshold, maxIterations);
         const cacheKey = this.getPackedKey(cat, modLevel, mat, guaranteedFirst, limit);
         const activeCache = cat === "book" ? this.bookComboCache : this.comboCache;
         
-        // Cache management remains in the engine
         const cached = activeCache.get(cacheKey);
-        if (cached && cached.threshold <= threshold && !existingFrontier) return cached;
+        if (cached && cached.threshold <= threshold) return cached;
 
         const result = SearchService.calculateCombinations(
-            this.registry, cat, modLevel, mat, guaranteedFirst, threshold, limit, existingFrontier || cached
+            this.registry, cat, modLevel, mat, guaranteedFirst, threshold, limit, cached
         );
         
         activeCache.set(cacheKey, result);
@@ -132,77 +129,26 @@ export class EnchantEngine {
         const baseKey = this.getPackedKey(cat, xp, mat, guaranteedFirst, limit);
         const exactKey = this.getPackedKey(cat, xp, mat, guaranteedFirst, limit, threshold);
 
+        // Check exact stats cache
         if (this.statsCache.has(exactKey)) return this.statsCache.get(exactKey)!;
 
+        // Check best-so-far stats cache (lower threshold than requested)
         if (useBestCache) {
             const best = this.bestStatsCache.get(baseKey);
-            if (best && best.threshold <= threshold) {
-                return best.stats;
-            }
+            if (best && best.threshold <= threshold) return best.stats;
         }
 
-        const bThreshold = ProbUtils.toBigInt(threshold);
-        const enchantability = this.registry.getEnchantability(mat, cat);
-        const modDist = this.getModifiedLevelDist(xp, enchantability);
-        const levels = Object.keys(modDist).map(Number).sort((a, b) => b - a);
+        // Delegate aggregation to service
+        const finalStats = await StatAggregator.getFullStats(
+            this.registry, cat, xp, mat, guaranteedFirst, threshold, signal, onProgress, maxIterations, summaryLimit,
+            (ml) => (cat === "book" ? this.bookComboCache : this.comboCache).get(this.getPackedKey(cat, ml, mat, guaranteedFirst, limit)),
+            (ml, frontier) => (cat === "book" ? this.bookComboCache : this.comboCache).set(this.getPackedKey(cat, ml, mat, guaranteedFirst, limit), frontier)
+        );
 
-        if (guaranteedFirst && !this.registry.isEnchantmentAchievable(guaranteedFirst, cat, mat, levels)) {
-            return { ranks: {}, any: {}, count: {}, combos: {}, uncertainty: 1.0 };
-        }
-
-        const finalCombos = new Map<bigint, bigint>();
-        const totalAnyMass = new Map<number, bigint>();
-        const totalRankMass = new Map<number, bigint>();
-        const totalCountMass = new Map<number, bigint>();
-
-        const activeThreshold = guaranteedFirst ? bThreshold / 10n : bThreshold;
-
-        let processedMProb = 0n;
-        let totalUncertainty = 0n;
-        let totalPrunedMass = 0n;
-        
-        let iterCount = 0;
-
-        for (const ml of levels) {
-            if (signal?.aborted) throw new Error("Calculation aborted");
-
-            const mProb = modDist[ml];
-            const result = this.calculateCombinations(cat, ml, mat, guaranteedFirst, activeThreshold, undefined, maxIterations);
-            
-            for (const [key, prob] of result.results) {
-                const totalProb = ProbUtils.scale(prob, mProb);
-                finalCombos.set(key, (finalCombos.get(key) || 0n) + totalProb);
-            }
-
-            const { anyMass, rankMass, countMass } = result;
-            const addMass = (target: Map<number, bigint>, source: Map<number, bigint>) => {
-                for (const [id, mass] of source) {
-                    target.set(id, (target.get(id) || 0n) + ProbUtils.scale(mass, mProb));
-                }
-            };
-
-            addMass(totalAnyMass, anyMass);
-            addMass(totalRankMass, rankMass);
-            addMass(totalCountMass, countMass);
-
-            totalUncertainty += ProbUtils.scale(result.uncertainty, mProb);
-            totalPrunedMass += ProbUtils.scale(result.prunedMass, mProb);
-
-            processedMProb += mProb;
-            if (++iterCount % 3 === 0) {
-                if (onProgress) {
-                    onProgress(ResultProcessor.summarize(finalCombos, totalUncertainty + (PRECISION - processedMProb), totalAnyMass, totalRankMass, totalCountMass, 0));
-                }
-                await AsyncUtils.yield();
-            }
-        }
-
-        const finalStats = ResultProcessor.summarize(finalCombos, totalUncertainty, totalAnyMass, totalRankMass, totalCountMass, summaryLimit);
-        finalStats.pruned = ProbUtils.toNumber(totalPrunedMass);
+        // Persistent Caching
         this.statsCache.set(exactKey, finalStats);
-        
-        const best = this.bestStatsCache.get(baseKey);
-        if (!best || threshold < best.threshold) {
+        const existingBest = this.bestStatsCache.get(baseKey);
+        if (!existingBest || threshold < existingBest.threshold) {
             this.bestStatsCache.set(baseKey, { threshold, stats: finalStats });
         }
 
