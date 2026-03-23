@@ -1,4 +1,5 @@
-import { PRECISION, ProbUtils, AsyncUtils, ResultProcessor } from '../utils/index.js';
+import { PRECISION, ProbUtils, AsyncUtils } from '../utils/index.js';
+import { SummaryService } from '../utils/SummaryService.js';
 import { Registry } from '../core/registry.js';
 import { ENGINE_DEFAULTS } from '../core/config.js';
 import { CalculationStats } from '../core/types.js';
@@ -90,13 +91,13 @@ export class StatAggregator {
             processedMProb += mProb;
             if (++iterCount % 3 === 0) {
                 if (onProgress) {
-                    onProgress(ResultProcessor.summarize(finalCombos, totalUncertainty + (PRECISION - processedMProb), totalAnyMass, totalRankMass, totalCountMass, 0));
+                    onProgress(SummaryService.summarize(finalCombos, totalUncertainty + (PRECISION - processedMProb), totalAnyMass, totalRankMass, totalCountMass, 0));
                 }
                 await AsyncUtils.yield();
             }
         }
 
-        const finalStats = ResultProcessor.summarize(finalCombos, totalUncertainty, totalAnyMass, totalRankMass, totalCountMass, summaryLimit);
+        const finalStats = SummaryService.summarize(finalCombos, totalUncertainty, totalAnyMass, totalRankMass, totalCountMass, summaryLimit);
         finalStats.pruned = ProbUtils.toNumber(totalPrunedMass);
 
         return finalStats;

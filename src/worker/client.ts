@@ -1,4 +1,4 @@
-import { ResultProcessor } from '../utils/index.js';
+import { SerializationService } from '../utils/SerializationService.js';
 
 /**
  * Client wrapper around the Enchant Engine Web Worker.
@@ -32,15 +32,16 @@ export const WorkerClient = {
 
                 if (type === 'result') {
                     const { stats, human } = payload || {};
-                    const finalStats = (stats && stats.comboKeys) ? ResultProcessor.deserialize(stats) : stats;
+                    const finalStats = (stats && stats.comboKeys) ? SerializationService.deserialize(stats) : stats;
                     
                     if (req) {
                         req.resolve({ stats: finalStats, human });
                         this.pendingRequests.delete(id);
+                        (this.pendingRequests as any).delete(`${id}_progress`);
                     }
                 } else if (type === 'progress') {
                     const { stats, human } = payload || {};
-                    const finalStats = (stats && stats.comboKeys) ? ResultProcessor.deserialize(stats) : stats;
+                    const finalStats = (stats && stats.comboKeys) ? SerializationService.deserialize(stats) : stats;
                     
                     const progCb = (this.pendingRequests as any).get(`${id}_progress`);
                     if (progCb) progCb({ stats: finalStats, human });
@@ -48,6 +49,7 @@ export const WorkerClient = {
                     if (req) {
                         req.reject(payload);
                         this.pendingRequests.delete(id);
+                        (this.pendingRequests as any).delete(`${id}_progress`);
                     }
                     console.error("Worker Error:", payload);
                 }

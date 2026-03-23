@@ -6,7 +6,7 @@ import { ParamsView } from './views/ParamsView.js';
 import { ResultsView } from './views/ResultsView.js';
 import { ChartController } from './chart.js';
 import { RefinementService } from './refinement.js';
-import { ResultProcessor } from '../utils/results.js';
+import { HumanizationService } from '../utils/HumanizationService.js';
 import { EnchantInsights } from '../utils/types.js';
 
 /**
@@ -145,7 +145,7 @@ class AppController {
         this.lastRawStats = raw;
 
         const { sortMode } = this.params.getValues();
-        const insights = ResultProcessor.humanize(raw, this.getEngine().registry, sortMode as any, DATA.constants.ROMAN_MAP);
+        const insights = HumanizationService.humanize(raw, this.getEngine().registry, sortMode as any, DATA.constants.ROMAN_MAP);
         
         const uncertainty = insights.uncertainty ?? 1;
         if (isFinal || (this.bestInsights && uncertainty < (this.bestInsights.uncertainty || 1)) || !this.bestInsights) {

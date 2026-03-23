@@ -2,7 +2,7 @@ import { test, describe, it } from 'node:test';
 import assert from 'node:assert';
 import { EnchantEngine } from '../engine/index.js';
 import { DATA } from '../core/data.js';
-import { ResultProcessor, ProbUtils } from '../utils/index.js';
+import { HumanizationService, ProbUtils } from '../utils/index.js';
 import { SnapshotUtils, EngineTestUtils } from './test-utils.js';
 import { ENGINE_DEFAULTS } from '../core/config.js';
 
@@ -28,7 +28,7 @@ describe('Enchantment Engine Test Suite', () => {
 
         it('should NOT return "X undefined" when no enchants are possible', async () => {
             const stats = await engine.getFullStats('sword', 1, 'diamond');
-            const h = ResultProcessor.humanize(stats, engine.registry);
+            const h = HumanizationService.humanize(stats, engine.registry);
             const hasUndefined = Object.keys(h.combos).some(c => c.includes('undefined')) ||
                                 Object.keys(h.ranks).some(r => r.includes('undefined'));
             assert.ok(!hasUndefined, '"undefined" should not appear in results');
