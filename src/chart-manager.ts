@@ -21,7 +21,7 @@ interface ChartDataset {
  * Encapsulates Chart.js lifecycle and data mapping.
  */
 export class ChartManager {
-    private chart: any = null;
+    public chart: any = null;
     private canvas: HTMLCanvasElement | null = null;
 
     constructor(canvasId: string) {
