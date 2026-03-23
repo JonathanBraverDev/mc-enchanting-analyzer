@@ -1,5 +1,5 @@
 import { EnchantmentData, VersionManifest, VersionMechanics, Enchantment, ResolvedRegistry, MergedItems, MergedOverrides } from './types.js';
-import { VersionUtils, LRUCache, PackedEnchant } from './utils/index.js';
+import { VersionUtils, LRUCache, PackedEnchant } from '../utils/index.js';
 import { ENGINE_DEFAULTS } from './config.js';
 
 /**

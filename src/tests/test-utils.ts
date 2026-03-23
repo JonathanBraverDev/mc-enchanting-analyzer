@@ -1,9 +1,9 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import assert from 'node:assert';
-import { UI_TEXTS } from './config.js';
-import { ResultProcessor } from './utils/index.js';
-import { EnchantEngine } from './engine.js';
+import { UI_TEXTS } from '../core/config.js';
+import { ResultProcessor } from '../utils/index.js';
+import { EnchantEngine } from '../engine/index.js';
 
 
 /**

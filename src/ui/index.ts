@@ -1,10 +1,10 @@
-import { DATA } from './data.js';
-import { EnchantEngine } from './engine.js';
-import { UI_DEFAULTS, getParamsForMode, UI_TEXTS, SearchLevel } from './config.js';
-import { WorkerClient } from './worker-client.js';
-import { ParamsManager } from './ui/params.js';
-import { ResultsManager } from './ui/results.js';
-import { ChartController } from './ui/chart.js';
+import { DATA } from '../core/data.js';
+import { EnchantEngine } from '../engine/index.js';
+import { UI_DEFAULTS, getParamsForMode, UI_TEXTS, SearchLevel } from '../core/config.js';
+import { WorkerClient } from '../worker/client.js';
+import { ParamsManager } from './params.js';
+import { ResultsManager } from './results.js';
+import { ChartController } from './chart.js';
 
 /**
  * Main Web Application Controller.

@@ -1,6 +1,6 @@
-import { ChartManager } from '../chart-manager.js';
-import { Registry } from '../registry.js';
-import { UI_DEFAULTS } from '../config.js';
+import { ChartManager } from './chart-manager.js';
+import { Registry } from '../core/registry.js';
+import { UI_DEFAULTS } from '../core/config.js';
 
 export class ChartController {
     public manager: ChartManager | null;

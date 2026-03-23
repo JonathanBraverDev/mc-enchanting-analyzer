@@ -1,7 +1,7 @@
 import { ProbUtils } from './math.js';
 import { ComboUtils } from './domain.js';
 import type { NameResolver, CompactStats } from './types.js';
-import { ENGINE_DEFAULTS } from '../config.js';
+import { ENGINE_DEFAULTS } from '../core/config.js';
 
 /**
  * Handles statistical transformations, humanization, and compact serialization.

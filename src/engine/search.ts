@@ -1,6 +1,6 @@
 import { BinaryHeap, PRECISION, ProbUtils, ComboUtils, RomanUtils } from '../utils/index.js';
-import { Registry } from '../registry.js';
-import { ENGINE_DEFAULTS } from '../config.js';
+import { Registry } from '../core/registry.js';
+import { ENGINE_DEFAULTS } from '../core/config.js';
 import { PackedNode, PackedCombo, PackedEnchant } from '../utils/types.js';
 
 /**

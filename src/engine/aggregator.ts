@@ -1,7 +1,7 @@
 import { PRECISION, ProbUtils, AsyncUtils, ResultProcessor } from '../utils/index.js';
-import { Registry } from '../registry.js';
-import { ENGINE_DEFAULTS } from '../config.js';
-import { CalculationStats } from '../types.js';
+import { Registry } from '../core/registry.js';
+import { ENGINE_DEFAULTS } from '../core/config.js';
+import { CalculationStats } from '../core/types.js';
 import { PackedCombo } from '../utils/types.js';
 import { DistributionService } from './distribution.js';
 import { SearchService, SearchFrontier } from './search.js';
