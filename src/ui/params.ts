@@ -1,6 +1,6 @@
-import { DATA } from '../data.js';
+import { DATA } from '../core/data.js';
 import { DOMUtils, StringUtils } from '../utils/index.js';
-import { EnchantEngine } from '../engine.js';
+import { EnchantEngine } from '../engine/index.js';
 
 export class ParamsManager {
     private elements: { [id: string]: HTMLElement } = {};

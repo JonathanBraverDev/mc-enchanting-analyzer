@@ -1,8 +1,8 @@
 import { ThemeManager } from './theme.js';
-import { Registry } from './registry.js';
-import { CalculationStats } from './types.js';
-import { RomanUtils } from './utils/index.js';
-import { ENGINE_DEFAULTS } from './config.js';
+import { Registry } from '../core/registry.js';
+import { CalculationStats } from '../core/types.js';
+import { RomanUtils } from '../utils/index.js';
+import { ENGINE_DEFAULTS } from '../core/config.js';
 
 declare const Chart: any;
 

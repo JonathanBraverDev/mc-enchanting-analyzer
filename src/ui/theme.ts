@@ -1,6 +1,6 @@
-import { DATA } from './data.js';
-import { Registry } from './registry.js';
-import { RomanUtils } from './utils/index.js';
+import { DATA } from '../core/data.js';
+import { Registry } from '../core/registry.js';
+import { RomanUtils } from '../utils/index.js';
 
 /**
  * Manages UI colors and enchantment-specific styles.

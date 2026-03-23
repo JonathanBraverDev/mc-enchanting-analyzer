@@ -1,6 +1,6 @@
-import { EnchantEngine } from './engine.js';
-import { DATA } from './data.js';
-import { ResultProcessor } from './utils/index.js';
+import { EnchantEngine } from '../engine/index.js';
+import { DATA } from '../core/data.js';
+import { ResultProcessor } from '../utils/index.js';
 
 let engine: EnchantEngine | null = null;
 const abortControllers = new Map<string, AbortController>();

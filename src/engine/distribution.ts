@@ -1,6 +1,6 @@
 import { PRECISION } from '../utils/index.js';
-import { ENGINE_DEFAULTS } from '../config.js';
-import { Registry } from '../registry.js';
+import { ENGINE_DEFAULTS } from '../core/config.js';
+import { Registry } from '../core/registry.js';
 
 /**
  * Service for calculating the probability distribution of Modified Levels.

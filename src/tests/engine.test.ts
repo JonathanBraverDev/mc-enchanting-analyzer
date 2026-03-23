@@ -1,10 +1,10 @@
 import { test, describe, it } from 'node:test';
 import assert from 'node:assert';
-import { EnchantEngine } from './engine.js';
-import { DATA } from './data.js';
-import { ResultProcessor, ProbUtils } from './utils/index.js';
+import { EnchantEngine } from '../engine/index.js';
+import { DATA } from '../core/data.js';
+import { ResultProcessor, ProbUtils } from '../utils/index.js';
 import { SnapshotUtils, EngineTestUtils } from './test-utils.js';
-import { ENGINE_DEFAULTS } from './config.js';
+import { ENGINE_DEFAULTS } from '../core/config.js';
 
 // Polyfill for requestAnimationFrame in Node (Sync version for tests)
 if (typeof (globalThis as any).requestAnimationFrame !== 'function') {

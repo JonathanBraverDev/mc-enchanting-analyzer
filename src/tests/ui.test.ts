@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { UI_TEXTS, UI_DEFAULTS } from './config.js';
+import { UI_TEXTS, UI_DEFAULTS } from '../core/config.js';
 import { UITestUtils } from './test-utils.js';
 
 test.describe('Enchantment Analyzer UI', () => {

@@ -1,10 +1,10 @@
-import { EnchantmentData, CalculationStats } from './types.js';
-import { LRUCache, ProbUtils, PRECISION, ResultProcessor, AsyncUtils } from './utils/index.js';
-import { Registry } from './registry.js';
-import { ENGINE_DEFAULTS } from './config.js';
-import { DistributionService } from './engine/distribution.js';
-import { SearchService, SearchFrontier } from './engine/search.js';
-import { StatAggregator } from './engine/aggregator.js';
+import { EnchantmentData, CalculationStats } from '../core/types.js';
+import { LRUCache, ProbUtils, PRECISION, ResultProcessor, AsyncUtils } from '../utils/index.js';
+import { Registry } from '../core/registry.js';
+import { ENGINE_DEFAULTS } from '../core/config.js';
+import { DistributionService } from './distribution.js';
+import { SearchService, SearchFrontier } from './search.js';
+import { StatAggregator } from './aggregator.js';
 
 /**
  * Core math and logic engine for Minecraft Enchanting.

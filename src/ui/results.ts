@@ -1,6 +1,6 @@
 import { UIUtils, RomanUtils } from '../utils/index.js';
-import { UI_DEFAULTS, UI_TEXTS, SEARCH_LEVEL_COLORS, SearchLevel } from '../config.js';
-import { Registry } from '../registry.js';
+import { UI_DEFAULTS, UI_TEXTS, SEARCH_LEVEL_COLORS, SearchLevel } from '../core/config.js';
+import { Registry } from '../core/registry.js';
 
 export class ResultsManager {
     private comboEl: HTMLElement | null;
