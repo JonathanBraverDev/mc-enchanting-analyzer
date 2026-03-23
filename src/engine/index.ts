@@ -1,6 +1,7 @@
 import { EnchantmentData, CalculationStats } from '../core/types.js';
 import { LRUCache, ProbUtils, PRECISION, ResultProcessor, AsyncUtils } from '../utils/index.js';
 import { Registry } from '../core/registry.js';
+import { RegistryFactory } from '../core/factory.js';
 import { ENGINE_DEFAULTS } from '../core/config.js';
 import { DistributionService } from './distribution.js';
 import { SearchService, SearchFrontier } from './search.js';
@@ -27,7 +28,7 @@ export class EnchantEngine {
     public bestStatsCache = new LRUCache<bigint, { threshold: number, stats: CalculationStats }>(ENGINE_DEFAULTS.CACHE_SIZE_STATS);
     
     constructor(data: EnchantmentData, version: string) {
-        this.registry = new Registry(data, version);
+        this.registry = new Registry(data, RegistryFactory.build(data, version));
         EnchantEngine.allEngines.add(this);
     }
 
