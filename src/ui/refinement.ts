@@ -37,7 +37,7 @@ export class RefinementService {
         callbacks: RefinementCallbacks
     ): Promise<void> {
         const currentId = ++this.activeId;
-        this.sweep = [];
+        this.sweep = new Array(UI_DEFAULTS.MAX_XP_LEVEL).fill(null);
 
         const basePayload = { 
             cat: payload.category, 
@@ -52,7 +52,7 @@ export class RefinementService {
         if (currentId !== this.activeId) return;
 
         // Trigger initial chart refresh after coarse pass
-        await this.refreshChart(basePayload, getParamsForMode('coarse', isBook).threshold, registry, currentId, callbacks);
+        this.refreshChart(basePayload, getParamsForMode('coarse', isBook).threshold, registry, currentId, callbacks);
         if (currentId !== this.activeId) return;
 
         // Pass 2+: Standard -> Deep -> Ultra
@@ -90,14 +90,14 @@ export class RefinementService {
             { ...payload, threshold: config.threshold, source: 'main', useBestCache: true, maxIterations: config.limit },
             (partial) => {
                 if (currentId === this.activeId) {
-                    callbacks.onInsights(partial.human, false);
+                    callbacks.onInsights(partial.stats, false);
                 }
             }
         );
 
         if (currentId !== this.activeId) return true;
 
-        callbacks.onInsights(response.human, true);
+        callbacks.onInsights(response.stats, true);
         return response.stats && response.stats.uncertainty === 0;
     }
 
@@ -109,22 +109,27 @@ export class RefinementService {
         callbacks: RefinementCallbacks
     ): Promise<void> {
         const labels = Array.from({ length: UI_DEFAULTS.MAX_XP_LEVEL }, (_, i) => i + 1);
+        
+        // Prioritize the current XP level
+        const currentXP = payload.xp;
+        const remainingLabels = labels.filter(l => l !== currentXP);
+        const order = [currentXP, ...remainingLabels];
 
-        for (let i = 0; i < labels.length; i++) {
+        for (const l of order) {
             if (currentId !== this.activeId) return;
 
             const stats = await WorkerClient.request(
                 'getFullStats',
-                { ...payload, xp: labels[i], threshold, source: 'chart' }
+                { ...payload, xp: l, threshold, source: 'chart' }
             );
 
             if (currentId !== this.activeId) return;
             
-            this.sweep[i] = { l: labels[i], s: stats.stats };
+            this.sweep[l - 1] = { l, s: stats.stats };
             callbacks.onChart(this.sweep);
             
-            // Allow UI to breathe if this is a long sweep
-            if (i % 5 === 0) await AsyncUtils.yield();
+            // Allow UI to breathe
+            await AsyncUtils.yield();
         }
     }
 }

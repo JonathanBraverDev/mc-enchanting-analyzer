@@ -37,3 +37,28 @@ export interface NameResolver {
     getFullEnchantName(n: number): string;
     getEnchantName(id: number): string;
 }
+
+/**
+ * Human-readable enchantment calculation statistics.
+ */
+export interface EnchantInsights {
+    ranks: Record<string, number>;
+    any: Record<string, number>;
+    count: Record<number, number>;
+    combos: Record<string, number>;
+    uncertainty: number;
+    pruned?: number;
+}
+
+/**
+ * Single data point in a level sweep (e.g., for charting).
+ */
+export interface SweepData {
+    l: number; // XP Level
+    s: any;    // Statistical summary
+}
+
+/**
+ * Supported sorting modes for enchantment combinations.
+ */
+export type ResultSortMode = 'prob' | 'count' | 'rank';
