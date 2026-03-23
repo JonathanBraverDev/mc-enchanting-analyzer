@@ -33,9 +33,12 @@ test.describe('Enchantment Analyzer UI', () => {
         // 2. Switch to Pickaxe
         await catSelect.selectOption('pickaxe');
         
-        // Wait for the change (it should eventually show Efficiency)
+        // Wait for results to update: Efficiency must appear AND Sharpness must disappear
         await expect(comboList).toContainText('Efficiency', { timeout: 15000 });
+        await expect(comboList).not.toContainText('Sharpness', { timeout: 15000 });
+        
         const pickaxeAtFirst = await comboList.innerText();
+        expect(pickaxeAtFirst).toContain('Efficiency');
         expect(pickaxeAtFirst).not.toContain('Sharpness');
     });
 
@@ -180,5 +183,69 @@ test.describe('Enchantment Analyzer UI', () => {
         // "Ranks" should have multiple datasets (one for each enchantment)
         // while "Any" or "Count" only have 1 or a few.
         expect(datasetCount).toBeGreaterThan(5);
+    });
+
+    test('should handle rapid item/material changes without crashing (Stress)', async ({ page }) => {
+        const catSelect = page.locator('#cat-select');
+        const matSelect = page.locator('#mat-select');
+        
+        // Rapidly toggle between Sword (Diamond) and Pickaxe (Gold)
+        for (let i = 0; i < 5; i++) {
+            await catSelect.selectOption('sword');
+            // Materials update asynchronously based on category, but we can try to select 'gold'
+            // We'll wait a tiny bit for the dropdown to update if needed
+            await page.waitForTimeout(50); 
+            if (await matSelect.locator('option[value="gold"]').count() > 0) {
+                await matSelect.selectOption('gold');
+            }
+            
+            await catSelect.selectOption('pickaxe');
+            await page.waitForTimeout(50);
+            if (await matSelect.locator('option[value="diamond"]').count() > 0) {
+                await matSelect.selectOption('diamond');
+            }
+        }
+
+        // Final state: Sword / Gold
+        await catSelect.selectOption('sword');
+        await matSelect.selectOption('gold');
+
+        // Check if it recovers and shows results
+        await UITestUtils.waitForResults(page);
+        const comboList = page.locator('#combo-list');
+        await expect(comboList).toContainText('Sharpness');
+    });
+
+    test('guaranteed enchantment sweep must be accurate across levels 1-30', async ({ page }) => {
+        const catSelect = page.locator('#cat-select');
+        const guaranteedSelect = page.locator('#guaranteed-first-select');
+
+        await catSelect.selectOption('pickaxe');
+        await expect(guaranteedSelect.locator('option[value="Efficiency IV"]')).toBeAttached({ timeout: 15000 });
+        await guaranteedSelect.selectOption('Efficiency IV');
+        
+        // Wait for the full sweep to finalize (all 30 levels)
+        await page.waitForFunction(() => {
+            const ctrl = (window as any).UIController;
+            return ctrl && ctrl.currentSweep && ctrl.currentSweep.length === 30 && ctrl.currentSweep.every((s: any) => s && s.s);
+        }, { timeout: 45000 });
+
+        // Sample multiple levels: 10, 20, 30
+        const levelsToTest = [9, 19, 29]; // 0-indexed in currentSweep
+        for (const lIdx of levelsToTest) {
+            const result = await page.evaluate((idx) => {
+                const ctrl = (window as any).UIController;
+                const stats = ctrl.currentSweep[idx].s;
+                const engine = ctrl.engine;
+                const effId = engine.registry.getEnchantId('Efficiency');
+                const prob = stats.any[effId] || 0;
+                const isAccurate = prob >= 0.9999 || stats.uncertainty >= 0.9999;
+                return { isAccurate, prob, uncertainty: stats.uncertainty, level: idx + 1 };
+            }, lIdx);
+            if (!result.isAccurate) {
+                console.error(`Sweep inaccurate at level ${result.level}: prob=${result.prob}, uncertainty=${result.uncertainty}`);
+            }
+            expect(result.isAccurate).toBe(true);
+        }
     });
 });
