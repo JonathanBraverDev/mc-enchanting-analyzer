@@ -1,23 +1,28 @@
-import { DATA } from '../core/data.js';
-import { DOMUtils, StringUtils } from '../utils/index.js';
-import { EnchantEngine } from '../engine/index.js';
+import { DATA } from '../../core/data.js';
+import { DOMUtils, StringUtils } from '../../utils/index.js';
+import { EnchantEngine } from '../../engine/index.js';
 
-export class ParamsManager {
-    private elements: { [id: string]: HTMLElement } = {};
-    private onParamsChange: (type: string) => void;
+/**
+ * View component for managing input parameters and their synchronization.
+ */
+export class ParamsView {
+    private elements: Record<string, HTMLElement> = {};
+    private onChange: (type: string) => void;
 
-    constructor(elements: string[], onParamsChange: (type: string) => void) {
-        this.onParamsChange = onParamsChange;
-        elements.forEach(id => {
+    constructor(elementIds: string[], onChange: (type: string) => void) {
+        this.onChange = onChange;
+        elementIds.forEach(id => {
             const el = document.getElementById(id);
             if (el) this.elements[id] = el;
         });
+
         this.populateVersions();
         this.setupListeners();
     }
 
     private populateVersions(): void {
         const vSelect = this.elements["v-select"] as HTMLSelectElement;
+        if (!vSelect) return;
         Object.keys(DATA.versions).reverse().forEach(v => {
             DOMUtils.addOption(vSelect, v, v);
         });
@@ -27,8 +32,8 @@ export class ParamsManager {
         Object.entries(this.elements).forEach(([id, el]) => {
             if (el instanceof HTMLSelectElement || el instanceof HTMLInputElement) {
                 el.onchange = () => {
-                    let type = id.replace('-select', '').replace('-range', '');
-                    this.onParamsChange(type);
+                    const type = id.replace('-select', '').replace('-range', '');
+                    this.onChange(type);
                 };
             }
         });
@@ -38,26 +43,29 @@ export class ParamsManager {
             lvl.oninput = () => {
                 const val = document.getElementById("lvl-val");
                 if (val) val.textContent = lvl.value;
-                this.onParamsChange('level-input');
+                this.onChange('level-input');
             };
         }
     }
 
     public getValues() {
         return {
-            version: (this.elements["v-select"] as HTMLSelectElement).value,
-            category: (this.elements["cat-select"] as HTMLSelectElement).value,
-            material: (this.elements["mat-select"] as HTMLSelectElement).value,
-            guaranteedFirst: (this.elements["guaranteed-first-select"] as HTMLSelectElement).value,
-            xpLevel: parseInt((this.elements["lvl-range"] as HTMLInputElement).value)
+            version: (this.elements["v-select"] as HTMLSelectElement)?.value || "",
+            category: (this.elements["cat-select"] as HTMLSelectElement)?.value || "",
+            material: (this.elements["mat-select"] as HTMLSelectElement)?.value || "",
+            guaranteedFirst: (this.elements["guaranteed-first-select"] as HTMLSelectElement)?.value || "",
+            xpLevel: parseInt((this.elements["lvl-range"] as HTMLInputElement)?.value || "30"),
+            chartMetric: (this.elements["chart-metric"] as HTMLSelectElement)?.value || "any",
+            sortMode: (this.elements["combo-sort"] as HTMLSelectElement)?.value || "prob"
         };
     }
 
     public updateMaterials(engine: EnchantEngine): void {
         const { category } = this.getValues();
         const matSelect = this.elements["mat-select"] as HTMLSelectElement;
+        if (!matSelect) return;
+
         const currentMat = matSelect.value;
-        
         matSelect.innerHTML = "";
         const eligibleKeys = engine.registry.getEligibleMaterials(category);
 
@@ -73,10 +81,11 @@ export class ParamsManager {
 
     public updateGuaranteedFirst(engine: EnchantEngine): void {
         const { category, material, xpLevel } = this.getValues();
-        const guaranteedFirstSelect = this.elements["guaranteed-first-select"] as HTMLSelectElement;
-        const saved = guaranteedFirstSelect.value;
-        
-        guaranteedFirstSelect.innerHTML = '<option value="">None (Random First)</option>';
+        const gSelect = this.elements["guaranteed-first-select"] as HTMLSelectElement;
+        if (!gSelect) return;
+
+        const saved = gSelect.value;
+        gSelect.innerHTML = '<option value="">None (Random First)</option>';
         if (!material) return;
         
         const ench = engine.registry.getEnchantability(material, category);
@@ -91,7 +100,12 @@ export class ParamsManager {
         });
 
         Array.from(allPossible).sort().forEach(s => {
-            DOMUtils.addOption(guaranteedFirstSelect, s, s, s === saved);
+            DOMUtils.addOption(gSelect, s, s, s === saved);
         });
+    }
+
+    public setEnchantability(val: number): void {
+        const el = document.getElementById("ench-val");
+        if (el) el.textContent = val.toString();
     }
 }
