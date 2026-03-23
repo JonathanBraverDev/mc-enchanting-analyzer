@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import assert from 'node:assert';
 import { UI_TEXTS } from '../core/config.js';
-import { ResultProcessor } from '../utils/index.js';
+import { HumanizationService } from '../utils/index.js';
 import { EnchantEngine } from '../engine/index.js';
 
 
@@ -116,6 +116,6 @@ export const EngineTestUtils = {
      */
     async getHumanStats(engine: EnchantEngine, cat: string, xp: number, mat: string, guaranteedFirst: string | null = null, threshold = 0.0001): Promise<any> {
         const stats = await engine.getFullStats(cat, xp, mat, guaranteedFirst, threshold);
-        return ResultProcessor.humanize(stats, engine.registry);
+        return HumanizationService.humanize(stats, engine.registry);
     }
 };

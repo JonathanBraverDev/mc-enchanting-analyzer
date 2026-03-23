@@ -1,6 +1,7 @@
 import { EnchantEngine } from '../engine/index.js';
 import { DATA } from '../core/data.js';
-import { ResultProcessor } from '../utils/index.js';
+import { HumanizationService } from '../utils/HumanizationService.js';
+import { SerializationService } from '../utils/SerializationService.js';
 
 let engine: EnchantEngine | null = null;
 const abortControllers = new Map<string, AbortController>();
@@ -43,16 +44,16 @@ self.onmessage = async (e: MessageEvent) => {
                         payload.threshold,
                         signal,
                         (partialStats) => {
-                            const human = ResultProcessor.humanize(partialStats, engine!.registry);
-                            const { compact, transferables } = ResultProcessor.serialize(partialStats);
+                            const human = HumanizationService.humanize(partialStats, engine!.registry);
+                            const { compact, transferables } = SerializationService.serialize(partialStats);
                             (self as any).postMessage({ type: 'progress', id, payload: { stats: compact, human } }, transferables);
                         },
                         payload.useBestCache || false,
                         payload.maxIterations
                     );
                     
-                    const human = ResultProcessor.humanize(stats, engine.registry);
-                    const { compact, transferables } = ResultProcessor.serialize(stats);
+                    const human = HumanizationService.humanize(stats, engine.registry);
+                    const { compact, transferables } = SerializationService.serialize(stats);
                     
                     (self as any).postMessage({ 
                         type: 'result', 
