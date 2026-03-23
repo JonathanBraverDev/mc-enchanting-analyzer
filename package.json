@@ -28,7 +28,7 @@
     "test": "npm run test:all",
     "test:all": "npm run clean && npm run build && npm run test:unit && npm run test:ui",
     "test:unit": "tsx --test src/tests/registry.test.ts src/tests/engine.test.ts src/tests/mechanics_rules.test.ts src/tests/enchantment_physical.test.ts src/tests/book_mechanics.test.ts",
-    "test:ui": "playwright test src/tests/ui.test.ts",
+    "test:ui": "playwright test src/tests/ui-basic.test.ts src/tests/ui-performance.test.ts",
     "update-snapshots": "tsx scripts/update-snapshots.ts",
     "release": "npm run test:all && npm run build:standalone"
   }
