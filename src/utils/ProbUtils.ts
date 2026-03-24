@@ -1,5 +1,6 @@
 /**
- * High-precision constant for BigInt fixed-point arithmetic (2^60)
+ * High-precision constant for BigInt fixed-point arithmetic (2^60).
+ * Kept together with ProbUtils as they are tightly coupled.
  */
 export const PRECISION = 1n << 60n;
 
@@ -22,15 +23,3 @@ export const ProbUtils = {
      */
     scale: (prob: bigint, factor: bigint): bigint => (prob * factor) / PRECISION
 };
-
-/**
- * Utility for bitwise operations on BigInts.
- */
-export class BitwiseUtils {
-    /**
-     * Returns a bitset with only the bit at the given index set.
-     */
-    static getBitset(id: number): bigint {
-        return 1n << BigInt(id);
-    }
-}

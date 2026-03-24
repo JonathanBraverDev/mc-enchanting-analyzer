@@ -1,4 +1,4 @@
-import { ProbUtils } from './math.js';
+import { ProbUtils } from './ProbUtils.js';
 import { ENGINE_DEFAULTS } from '../core/config.js';
 import { CalculationStats } from '../core/types.js';
 

@@ -1,4 +1,5 @@
-import { ComboUtils, RomanUtils } from './domain.js';
+import { ComboUtils } from './ComboUtils.js';
+import { RomanUtils } from './RomanUtils.js';
 import type { NameResolver, EnchantInsights, ResultSortMode } from './types.js';
 
 /**
