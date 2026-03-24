@@ -1,4 +1,4 @@
-import { PRECISION, ProbUtils, AsyncUtils } from '../utils/index.js';
+import { PRECISION, ProbUtils, AsyncUtils, ComboUtils } from '../utils/index.js';
 import { SummaryService } from '../services/index.js';
 import { Registry } from '../core/registry.js';
 import { ENGINE_DEFAULTS } from '../core/config.js';
@@ -25,9 +25,11 @@ export class StatAggregator {
         onProgress?: (stats: CalculationStats) => void,
         maxIterations?: number,
         summaryLimit: number = ENGINE_DEFAULTS.MAX_RESULTS_SUMMARY,
+        resultsLimit: number = ENGINE_DEFAULTS.MAX_RESULTS_SIZE,
         // Optional cache delegates to allow EnchantEngine to manage persistence
         getExtendedCache?: (ml: number) => SearchFrontier | undefined,
-        setExtendedCache?: (ml: number, frontier: SearchFrontier) => void
+        setExtendedCache?: (ml: number, frontier: SearchFrontier) => void,
+        useCache: boolean = true
     ): Promise<CalculationStats> {
         const bThreshold = ProbUtils.toBigInt(threshold);
         const enchantability = registry.getEnchantability(mat, cat);
@@ -60,10 +62,10 @@ export class StatAggregator {
             // Orchestrate search, using cache if provided by EnchantEngine
             const cached = getExtendedCache?.(ml);
             const result = SearchService.calculateCombinations(
-                registry, cat, ml, mat, guaranteedFirst, activeThreshold, searchLimit, cached
+                registry, cat, ml, mat, guaranteedFirst, activeThreshold, searchLimit, cached, resultsLimit
             );
             
-            if (setExtendedCache) {
+            if (useCache && setExtendedCache) {
                 setExtendedCache(ml, result);
             }
             
@@ -93,6 +95,23 @@ export class StatAggregator {
                     onProgress(SummaryService.summarize(finalCombos, totalUncertainty + (PRECISION - processedMProb), totalAnyMass, totalRankMass, totalCountMass, 0));
                 }
                 await AsyncUtils.yield();
+            }
+        }
+
+        if (cat === "book") {
+            // Re-derive mass maps for books because SearchService might have redistributed mass
+            totalAnyMass.clear();
+            totalRankMass.clear();
+            totalCountMass.clear();
+            for (const [packed, prob] of finalCombos) {
+                const enchants = ComboUtils.unpack(packed);
+                const count = enchants.length;
+                totalCountMass.set(count, (totalCountMass.get(count) || 0n) + prob);
+                for (const e of enchants) {
+                    const id = e >> 8;
+                    totalAnyMass.set(id, (totalAnyMass.get(id) || 0n) + prob);
+                    totalRankMass.set(e, (totalRankMass.get(e) || 0n) + prob);
+                }
             }
         }
 
