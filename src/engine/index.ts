@@ -1,4 +1,4 @@
-import { EnchantmentData, CalculationStats } from '../core/types.js';
+import { EnchantmentData, CalculationStats } from '../types/index.js';
 import { LRUCache, ProbUtils } from '../utils/index.js';
 import { Registry } from '../core/registry.js';
 import { RegistryFactory } from '../core/factory.js';

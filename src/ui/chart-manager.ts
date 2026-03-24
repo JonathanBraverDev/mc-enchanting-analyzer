@@ -1,21 +1,11 @@
 import { ThemeManager } from './theme.js';
 import { Registry } from '../core/registry.js';
-import { CalculationStats } from '../core/types.js';
+import { CalculationStats, ChartDataset } from '../types/index.js';
 import { RomanUtils } from '../utils/index.js';
 import { ENGINE_DEFAULTS } from '../core/config.js';
 
 declare const Chart: any;
 
-interface ChartDataset {
-    label: string;
-    data: number[];
-    borderColor: string;
-    backgroundColor: string;
-    borderWidth: number;
-    tension: number;
-    pointRadius: number;
-    borderDash?: number[];
-}
 
 /**
  * Encapsulates Chart.js lifecycle and data mapping.

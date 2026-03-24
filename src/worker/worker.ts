@@ -1,7 +1,6 @@
 import { EnchantEngine } from '../engine/index.js';
-import { DATA } from '../core/data.js';
-import { HumanizationService } from '../utils/HumanizationService.js';
-import { SerializationService } from '../utils/SerializationService.js';
+import { DATA } from '../data/index.js';
+import { HumanizationService, SerializationService } from '../services/index.js';
 
 let engine: EnchantEngine | null = null;
 const abortControllers = new Map<string, AbortController>();

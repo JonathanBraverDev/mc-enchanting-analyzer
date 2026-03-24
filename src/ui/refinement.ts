@@ -1,5 +1,6 @@
 import { Registry } from '../core/registry.js';
 import { UI_TEXTS, UI_DEFAULTS, SearchLevel, getParamsForMode } from '../core/config.js';
+import { EnchantInsights, SweepData } from '../types/index.js';
 import { WorkerClient } from '../worker/client.js';
 import { AsyncUtils } from '../utils/index.js';
 
@@ -13,8 +14,8 @@ export interface RefinementPayload {
 
 export interface RefinementCallbacks {
     onStatus: (status: string, level: SearchLevel) => void;
-    onInsights: (human: any, isFinal?: boolean) => void;
-    onChart: (sweep: any[]) => void;
+    onInsights: (human: EnchantInsights, isFinal?: boolean) => void;
+    onChart: (sweep: SweepData[]) => void;
 }
 
 /**
@@ -22,9 +23,9 @@ export interface RefinementCallbacks {
  */
 export class RefinementService {
     private activeId: number = 0;
-    private sweep: any[] = [];
+    private sweep: SweepData[] = [];
 
-    public get currentSweep(): any[] {
+    public get currentSweep(): SweepData[] {
         return this.sweep;
     }
 

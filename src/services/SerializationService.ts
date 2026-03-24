@@ -1,5 +1,5 @@
 import { ENGINE_DEFAULTS } from '../core/config.js';
-import { CompactStats } from './types.js';
+import { CompactStats } from '../types/index.js';
 
 /**
  * Service for zero-copy binary serialization of statistics.
