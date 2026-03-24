@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.0.1 (2026-03-25)
+
+### Fixed
+- **Improved Confidence Tracking**: Fixed a bug causing Calculation Confidence to be calculated incorrectly.
+- **Chart Cleanup**: Removed the "Total Accounted" line that used to report the faulty data from the enchantment count view.
+
+
 ## v2.0.0 (2026-03-24)
 
 ### The "Divide & Conquer" Update

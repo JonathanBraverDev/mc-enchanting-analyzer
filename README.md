@@ -35,4 +35,4 @@ To build your own standalone version, use: `npm run build:standalone`. The resul
 This tool uses a specialized "Progressive Refinement" search. It prioritizes the most statistically significant paths first, allowing the UI to remain incredibly responsive even when calculating deep probability trees for high-level enchantments.
 
 ---
-Created by **Jonathan Braver** | **Version 2.0.0**
+Created by **Jonathan Braver** | **Version 2.0.1**
