@@ -104,25 +104,6 @@ export class ChartManager {
                 });
             }
 
-            // Optional: Total Capture line to show we hit 100%
-            const captureData = sweep.map(x => {
-                if (!x || !x.s) return 0;
-                const base = Object.values(x.s.count).reduce((a, b) => a + b, 0);
-                return (base + (x.s.uncertainty || 0)) * 100;
-            });
-
-            if (captureData.some(d => d < 99.9)) {
-                datasets.push({
-                    label: "Total Accounted (incl. Uncertain)",
-                    data: captureData,
-                    borderColor: "rgba(255,255,255,0.3)",
-                    backgroundColor: "transparent",
-                    borderWidth: 1, 
-                    borderDash: [5, 5],
-                    tension: 0.1, 
-                    pointRadius: 0
-                });
-            }
         }
         return datasets;
     }
