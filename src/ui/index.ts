@@ -1,4 +1,4 @@
-import { DATA } from '../core/data.js';
+import { DATA } from '../data/index.js';
 import { EnchantEngine } from '../engine/index.js';
 import { UI_TEXTS } from '../core/config.js';
 import { WorkerClient } from '../worker/client.js';
@@ -6,8 +6,8 @@ import { ParamsView } from './views/ParamsView.js';
 import { ResultsView } from './views/ResultsView.js';
 import { ChartController } from './chart.js';
 import { RefinementService } from './refinement.js';
-import { HumanizationService } from '../utils/HumanizationService.js';
-import { EnchantInsights } from '../utils/types.js';
+import { HumanizationService } from '../services/index.js';
+import { EnchantInsights } from '../types/index.js';
 
 /**
  * Main Web Application Controller.

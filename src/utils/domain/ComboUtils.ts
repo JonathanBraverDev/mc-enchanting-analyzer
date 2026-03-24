@@ -1,4 +1,4 @@
-import { PackedEnchant, PackedCombo } from './types.js';
+import { PackedEnchant, PackedCombo } from '../types.js';
 
 /**
  * Utility for packing and unpacking enchantment combinations into BigInts.

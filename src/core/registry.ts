@@ -1,7 +1,6 @@
-import { EnchantmentData, VersionMechanics, ResolvedRegistry, MergedItems, MergedOverrides } from './types.js';
-import { PackedEnchant, RomanUtils } from '../utils/index.js';
+import { EnchantmentData, VersionMechanics, ResolvedRegistry, MergedItems, MergedOverrides, RegistryState, PackedEnchant } from '../types/index.js';
+import { RomanUtils } from '../utils/index.js';
 import { ENGINE_DEFAULTS } from './config.js';
-import { RegistryState } from './factory.js';
 import { MaterialService } from './RegistryMaterials.js';
 import { PoolService } from './RegistryPools.js';
 

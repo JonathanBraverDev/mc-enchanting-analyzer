@@ -1,23 +1,6 @@
-import { EnchantmentData, VersionManifest, VersionMechanics, Enchantment, ResolvedRegistry, MergedItems, MergedOverrides } from './types.js';
+import { EnchantmentData, VersionManifest, VersionMechanics, Enchantment, ResolvedRegistry, MergedItems, MergedOverrides, RegistryState } from '../types/index.js';
 import { VersionUtils } from '../utils/index.js';
 
-export interface RegistryState {
-    version: string;
-    mechanics: VersionMechanics;
-    mergedItems: MergedItems;
-    mergedOverrides: MergedOverrides;
-    resolvedRegistry: ResolvedRegistry;
-    mergedMaterials: Set<string>;
-    multiEnchantBooks: boolean;
-    idMap: Map<string, number>;
-    revIdMap: string[];
-    catIdMap: Map<string, number>;
-    matIdMap: Map<string, number>;
-    conflictBitsets: BigUint64Array;
-    weightMap: Uint32Array;
-    sortedRanks: [string, number][];
-    versionPool: Map<string, string[]>;
-}
 
 /**
  * Factory for building a fully initialized Registry state.

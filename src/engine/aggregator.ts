@@ -1,9 +1,8 @@
 import { PRECISION, ProbUtils, AsyncUtils } from '../utils/index.js';
-import { SummaryService } from '../utils/SummaryService.js';
+import { SummaryService } from '../services/index.js';
 import { Registry } from '../core/registry.js';
 import { ENGINE_DEFAULTS } from '../core/config.js';
-import { CalculationStats } from '../core/types.js';
-import { PackedCombo } from '../utils/types.js';
+import { CalculationStats, PackedCombo } from '../types/index.js';
 import { DistributionService } from './distribution.js';
 import { SearchService } from './search.js';
 import { SearchFrontier } from './frontier.js';

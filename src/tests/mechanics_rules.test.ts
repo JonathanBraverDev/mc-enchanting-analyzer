@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { EnchantEngine } from '../engine/index.js';
-import { DATA } from '../core/data.js';
+import { DATA } from '../data/index.js';
 import { ProbUtils } from '../utils/index.js';
 
 describe('Mechanics Rules Test Suite', () => {

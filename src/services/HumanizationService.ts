@@ -1,6 +1,6 @@
-import { ComboUtils } from './ComboUtils.js';
-import { RomanUtils } from './RomanUtils.js';
-import type { NameResolver, EnchantInsights, ResultSortMode } from './types.js';
+import { ComboUtils } from '../utils/domain/ComboUtils.js';
+import { RomanUtils } from '../utils/format/RomanUtils.js';
+import type { NameResolver, EnchantInsights, ResultSortMode } from '../types/index.js';
 
 /**
  * Service for converting raw statistics into human-readable insights.

@@ -1,7 +1,7 @@
 import { BinaryHeap, PRECISION, ComboUtils, RomanUtils } from '../utils/index.js';
 import { Registry } from '../core/registry.js';
 import { ENGINE_DEFAULTS } from '../core/config.js';
-import { PackedNode, PackedCombo } from '../utils/types.js';
+import { PackedNode, PackedCombo } from '../types/index.js';
 
 /**
  * State of a search for enchantment combinations.

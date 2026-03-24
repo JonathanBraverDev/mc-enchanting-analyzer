@@ -1,4 +1,4 @@
-import { SerializationService } from '../utils/SerializationService.js';
+import { SerializationService } from '../services/index.js';
 
 /**
  * Client wrapper around the Enchant Engine Web Worker.

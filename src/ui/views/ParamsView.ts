@@ -1,4 +1,4 @@
-import { DATA } from '../../core/data.js';
+import { DATA } from '../../data/index.js';
 import { DOMUtils, StringUtils } from '../../utils/index.js';
 import { EnchantEngine } from '../../engine/index.js';
 

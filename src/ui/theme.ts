@@ -1,4 +1,4 @@
-import { DATA } from '../core/data.js';
+import { DATA } from '../data/index.js';
 import { Registry } from '../core/registry.js';
 import { RomanUtils } from '../utils/index.js';
 

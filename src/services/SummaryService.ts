@@ -1,6 +1,6 @@
-import { ProbUtils } from './ProbUtils.js';
+import { ProbUtils } from '../utils/math/ProbUtils.js';
 import { ENGINE_DEFAULTS } from '../core/config.js';
-import { CalculationStats } from '../core/types.js';
+import { CalculationStats } from '../types/index.js';
 
 /**
  * Service for summarizing raw engine results into a standard JSON format.

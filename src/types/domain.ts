@@ -61,32 +61,3 @@ export interface EnchantmentData {
     ENCHANT_COLORS: { [enchantment: string]: string };
   };
 }
-
-export interface CalculationStats {
-  ranks: { [idAndRank: number]: number }; // (id << 8 | rank)
-  any: { [id: number]: number };          // base id
-  count: { [count: number]: number };
-  combos: { [packed: string]: number };    // Hex string of bit-packed BigInt
-  uncertainty: number;
-  pruned?: number;
-}
-export interface HumanStats {
-  ranks: { [enchantment: string]: number };
-  any: { [enchantment: string]: number };
-  count: { [count: number]: number };
-  combos: { [combo: string]: number };
-  uncertainty: number;
-  pruned?: number;
-}
-
-export interface ResolvedRegistry {
-  [enchantment: string]: Enchantment;
-}
-
-export interface MergedItems {
-  [category: string]: string[];
-}
-
-export interface MergedOverrides {
-  [enchantment: string]: Partial<Enchantment>;
-}

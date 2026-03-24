@@ -1,7 +1,7 @@
 import { UIUtils, RomanUtils } from '../../utils/index.js';
 import { UI_DEFAULTS, UI_TEXTS, SEARCH_LEVEL_COLORS, SearchLevel } from '../../core/config.js';
 import { Registry } from '../../core/registry.js';
-import { EnchantInsights } from '../../utils/types.js';
+import { EnchantInsights } from '../../types/index.js';
 
 /**
  * View component for rendering enchantment combinations and ranks.

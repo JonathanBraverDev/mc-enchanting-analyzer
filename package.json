@@ -19,7 +19,7 @@
   },
   "scripts": {
     "start": "npx serve .",
-    "clean": "node -e \"const fs = require('fs'); if (fs.existsSync('dist')) fs.rmSync('dist', { recursive: true, force: true }); fs.mkdirSync('dist');\"",
+    "clean": "node -e \"const fs = require('fs'); fs.rmSync('dist', { recursive: true, force: true }); fs.mkdirSync('dist', { recursive: true });\"",
     "build": "npm run clean && npm run build:js && npm run build:bundle",
     "build:ts": "tsc",
     "build:js": "esbuild src/ui/index.ts --bundle --outfile=dist/ui.js --minify --sourcemap --platform=browser && esbuild src/worker/worker.ts --bundle --outfile=dist/worker.js --minify --sourcemap --platform=browser",
