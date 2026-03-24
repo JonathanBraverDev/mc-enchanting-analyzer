@@ -2,7 +2,7 @@
 
 A high-performance, real-time simulation tool for Minecraft's enchanting mechanics. This analyzer provides instant, mathematically precise probabilities for any item, material, and version combination.
 
-![Analyzer Screenshot](file:///d:/Projects/mc-enchanting-analyzer/media/Screenshot.png)
+![Analyzer Screenshot](media/Screenshot.png)
 
 ## ✨ Why use this Analyzer?
 
@@ -35,4 +35,4 @@ To build your own standalone version, use: `npm run build:standalone`. The resul
 This tool uses a specialized "Progressive Refinement" search. It prioritizes the most statistically significant paths first, allowing the UI to remain incredibly responsive even when calculating deep probability trees for high-level enchantments.
 
 ---
-Created by **Jonathan Braver** | **Version 1.3.0**
+Created by **Jonathan Braver** | **Version 2.0.0**
