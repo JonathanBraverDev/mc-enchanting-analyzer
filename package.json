@@ -1,6 +1,6 @@
 {
   "name": "mc-enchanting-analyzer",
-  "version": "1.3.0",
+  "version": "2.0.0",
   "devDependencies": {
     "@playwright/test": "^1.58.2",
     "@types/chart.js": "^2.9.41",
@@ -19,18 +19,16 @@
   },
   "scripts": {
     "start": "npx serve .",
-    "clean": "node -e \"const fs = require('fs'); if (fs.existsSync('dist')) fs.rmSync('dist', { recursive: true, force: true }); fs.mkdirSync('dist');\"",
+    "clean": "node -e \"const fs = require('fs'); fs.rmSync('dist', { recursive: true, force: true }); fs.mkdirSync('dist', { recursive: true });\"",
     "build": "npm run clean && npm run build:js && npm run build:bundle",
     "build:ts": "tsc",
-    "build:js": "esbuild src/ui.ts src/worker.ts --bundle --outdir=dist --minify --sourcemap --platform=browser",
+    "build:js": "esbuild src/ui/index.ts --bundle --outfile=dist/ui.js --minify --sourcemap --platform=browser && esbuild src/worker/worker.ts --bundle --outfile=dist/worker.js --minify --sourcemap --platform=browser",
     "build:bundle": "node scripts/bundle-worker.js",
     "build:standalone": "npm run build && node scripts/inline-assets.js",
     "test": "npm run test:all",
-    "test:all": "npm run clean && npm run build && npm run test:unit && npm run test:ui",
-    "test:unit": "npm run test:registry && npm run test:engine",
-    "test:engine": "tsx --test src/engine.test.ts",
-    "test:registry": "tsx --test src/registry.test.ts",
-    "test:ui": "playwright test src/ui.test.ts",
+    "test:all": "npm run build && npm run test:unit && npm run test:ui",
+    "test:unit": "tsx --test src/tests/registry.test.ts src/tests/engine.test.ts src/tests/mechanics_rules.test.ts src/tests/enchantment_physical.test.ts src/tests/book_mechanics.test.ts",
+    "test:ui": "playwright test src/tests/ui-basic.test.ts src/tests/ui-performance.test.ts",
     "update-snapshots": "tsx scripts/update-snapshots.ts",
     "release": "npm run test:all && npm run build:standalone"
   }

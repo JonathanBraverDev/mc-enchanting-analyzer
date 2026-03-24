@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.0.0 (2026-03-24)
+
+### The "Divide & Conquer" Update
+- **Complete Restructure**: The entire project has been internally reorganized to make future work easier.
+- **Improved Book Accuracy**: Improved the engine to provide more precise results for books rolling multiple enchants.
+- **Expanded Test Suite**: Added comprehensive unit and performance tests to ensure long-term stability.
+- **Prettified README**: Finally fixed the README screenshot link to point at the correct location and took a better one.
+- **Changed CHANGELOG**: All entries now use the `vX.X.X (YYYY-MM-DD)` format.
+
 ## v1.3.0 (2026-03-22)
 
 ### Improved Accuracy & Stability
@@ -8,23 +17,23 @@
 - **Reliable builds**: Improved internal build scripts and testing for a smoother developer experience.
 - **UI Stabilization**: Resolved an issue where results would flicker or disappear during long calculations.
 
-## [1.2.0] - 2026-03-22
+## v1.2.0 (2026-03-22)
 
 ### Added
 - **Greater Accuracy**: New probability tracking for partial search results.
 - **Deeper Analysis**: Support for up to 6 concurrent enchantments on a single item.
 
-## [1.1.2] - 2026-03-21
+## v1.1.2 (2026-03-21)
 
 ### Changed
 - **Build Hygiene**: Added a `clean` script to safely remove the `dist` directory and updated the test workflow to ensure a clean state before building and testing.
 
-## [1.1.1] - 2026-03-21
+## v1.1.1 (2026-03-21)
 
 ### Fixed
 - **Visual Chart Glitch**: Resolved an issue where chart lines would momentarily dip to zero during high-accuracy progressive refinement.
 
-## [1.1.0] - 2026-03-21
+## v1.1.0 (2026-03-21)
 
 ### Added
 - **Modularized Utility Library**: Refactored the monolithic `utils.ts` into specialized modules (`math`, `domain`, `ui`, `collections`, `results`) for better maintainability.
