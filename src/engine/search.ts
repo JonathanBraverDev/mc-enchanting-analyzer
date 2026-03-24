@@ -19,7 +19,8 @@ export class SearchService {
         guaranteedFirst: string | null = null, 
         threshold: bigint = ProbUtils.toBigInt(0.0001),
         limit: number,
-        existingFrontier?: SearchFrontier
+        existingFrontier?: SearchFrontier,
+        resultsLimit: number = ENGINE_DEFAULTS.MAX_RESULTS_SIZE
     ): SearchFrontier {
         const frontier = FrontierFactory.create(registry, cat, modLevel, guaranteedFirst, existingFrontier, threshold);
         let { results, cumulativeAccountedMass, prunedMass, queue } = frontier;
@@ -65,7 +66,7 @@ export class SearchService {
 
             const deltas = this.processSearchNode(
                 registry, current, cat, guaranteedFirstId, initialPool, poolWeights, threshold, results, queue,
-                frontier.anyMass, frontier.rankMass, frontier.countMass
+                frontier.anyMass, frontier.rankMass, frontier.countMass, resultsLimit
             );
             
             uncertainty += deltas.uncertaintyDelta;
@@ -93,7 +94,8 @@ export class SearchService {
         queue: BinaryHeap<PackedNode>,
         anyMass: Map<number, bigint>,
         rankMass: Map<number, bigint>,
-        countMass: Map<number, bigint>
+        countMass: Map<number, bigint>,
+        resultsLimit: number
     ): { uncertaintyDelta: bigint; massDelta: bigint; prunedDelta: bigint } {
         const currentBitset = current.meta >> 8n;
         const currentLevel = Number(current.meta & 0xFFn);
@@ -103,13 +105,29 @@ export class SearchService {
         const probContinue = ProbUtils.toBigInt(probContinueNum);
 
         if (probContinue <= 0n) {
-            results.set(current.packedChosen, (results.get(current.packedChosen) || 0n) + current.prob);
+            if (cat === "book" && currentCount > 1) {
+                const redistributed = ComboUtils.removeAdditional(current.packedChosen, guaranteedFirstId);
+                const pChunk = current.prob / BigInt(redistributed.length);
+                for (const r of redistributed) {
+                    results.set(r, (results.get(r) || 0n) + pChunk);
+                }
+            } else {
+                results.set(current.packedChosen, (results.get(current.packedChosen) || 0n) + current.prob);
+            }
             countMass.set(currentCount, (countMass.get(currentCount) || 0n) + current.prob);
             return { uncertaintyDelta: 0n, massDelta: current.prob, prunedDelta: 0n };
         }
 
         const probStop = ProbUtils.scale(current.prob, (PRECISION - probContinue));
-        results.set(current.packedChosen, (results.get(current.packedChosen) || 0n) + probStop);
+        if (cat === "book" && currentCount > 1) {
+            const redistributed = ComboUtils.removeAdditional(current.packedChosen, guaranteedFirstId);
+            const pChunk = probStop / BigInt(redistributed.length);
+            for (const r of redistributed) {
+                results.set(r, (results.get(r) || 0n) + pChunk);
+            }
+        } else {
+            results.set(current.packedChosen, (results.get(current.packedChosen) || 0n) + probStop);
+        }
         countMass.set(currentCount, (countMass.get(currentCount) || 0n) + probStop);
         
         const probForward = ProbUtils.scale(current.prob, probContinue);
@@ -117,10 +135,18 @@ export class SearchService {
         // Safety checks
         const isLimitReached = currentCount >= ENGINE_DEFAULTS.MAX_ENCHANTS_PER_ITEM;
         const isTooSmall = probForward < threshold / ENGINE_DEFAULTS.PRUNE_THRESHOLD_DENOMINATOR;
-        const isMapFull = results.size >= ENGINE_DEFAULTS.MAX_RESULTS_SIZE && !results.has(current.packedChosen);
+        const isMapFull = results.size >= resultsLimit && !results.has(current.packedChosen);
 
         if (isLimitReached || isTooSmall || isMapFull) {
-            results.set(current.packedChosen, (results.get(current.packedChosen) || 0n) + probForward);
+            if (cat === "book" && currentCount > 1) {
+                const redistributed = ComboUtils.removeAdditional(current.packedChosen, guaranteedFirstId);
+                const pChunk = probForward / BigInt(redistributed.length);
+                for (const r of redistributed) {
+                    results.set(r, (results.get(r) || 0n) + pChunk);
+                }
+            } else {
+                results.set(current.packedChosen, (results.get(current.packedChosen) || 0n) + probForward);
+            }
             countMass.set(currentCount, (countMass.get(currentCount) || 0n) + probForward);
             return { uncertaintyDelta: probForward, massDelta: probStop + probForward, prunedDelta: probForward };
         }

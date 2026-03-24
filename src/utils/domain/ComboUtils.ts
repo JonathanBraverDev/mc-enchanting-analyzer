@@ -1,4 +1,4 @@
-import { PackedEnchant, PackedCombo } from '../types.js';
+import { PackedEnchant, PackedCombo } from '../../types/index.js';
 
 /**
  * Utility for packing and unpacking enchantment combinations into BigInts.
@@ -57,5 +57,22 @@ export class ComboUtils {
             out.push((id << 8) | rank);
         }
         return out;
+    }
+
+    /**
+     * For books: returns all possible combinations after removing one "additional" enchantment.
+     * The first enchantment (initial) is preserved.
+     */
+    static removeAdditional(packed: PackedCombo, guaranteedFirstId: number | null = null): PackedCombo[] {
+        const enchants = this.unpack(packed);
+        if (enchants.length <= 1) return [packed];
+        
+        const results: PackedCombo[] = [];
+        // Remove exactly one enchantment from the pool of "additional" ones (index 1 to N-1)
+        for (let i = 1; i < enchants.length; i++) {
+            const filtered = [...enchants.slice(0, i), ...enchants.slice(i + 1)];
+            results.push(this.pack(filtered, guaranteedFirstId));
+        }
+        return results;
     }
 }

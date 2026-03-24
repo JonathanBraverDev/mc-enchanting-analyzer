@@ -44,9 +44,25 @@ export class SummaryService {
         // Limit the number of combinations serialized for transfer
         let comboSource: Iterable<[bigint, bigint]> = combos;
         if (combos.size > comboLimit) {
-            comboSource = [...combos.entries()]
-                .sort((a, b) => b[1] < a[1] ? -1 : (b[1] > a[1] ? 1 : 0))
-                .slice(0, comboLimit);
+            if (comboLimit === 0) {
+                comboSource = [];
+            } else if (comboLimit <= 200) {
+                const results: [bigint, bigint][] = [];
+                for (const entry of combos.entries()) {
+                    if (results.length < comboLimit) {
+                        results.push(entry);
+                        if (results.length === comboLimit) results.sort((a, b) => b[1] < a[1] ? -1 : (b[1] > a[1] ? 1 : 0));
+                    } else if (entry[1] > results[results.length - 1][1]) {
+                        results[results.length - 1] = entry;
+                        results.sort((a, b) => b[1] < a[1] ? -1 : (b[1] > a[1] ? 1 : 0));
+                    }
+                }
+                comboSource = results;
+            } else {
+                comboSource = [...combos.entries()]
+                    .sort((a, b) => b[1] < a[1] ? -1 : (b[1] > a[1] ? 1 : 0))
+                    .slice(0, comboLimit);
+            }
         }
 
         for (const [packed, probBig] of comboSource) {

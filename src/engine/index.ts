@@ -20,7 +20,8 @@ export class EnchantEngine {
     private static readonly KEY_SHIFT_LEVEL = 12n;
     private static readonly KEY_SHIFT_GUARANTEED = 20n;
     private static readonly KEY_SHIFT_LIMIT = 28n;
-    private static readonly KEY_SHIFT_THRESHOLD = 44n;
+    private static readonly KEY_SHIFT_RESULTS_LIMIT = 44n;
+    private static readonly KEY_SHIFT_THRESHOLD = 60n;
     
     public registry: Registry;
     public comboCache = new LRUCache<bigint, SearchFrontier>(ENGINE_DEFAULTS.CACHE_SIZE_COMBO_OTHER);
@@ -33,7 +34,7 @@ export class EnchantEngine {
         EnchantEngine.allEngines.add(this);
     }
 
-    private getPackedKey(cat: string, modLevel: number, mat: string, guaranteedFirst: string | null, limit: number, threshold?: number): bigint {
+    private getPackedKey(cat: string, modLevel: number, mat: string, guaranteedFirst: string | null, limit: number, resultsLimit: number, threshold?: number): bigint {
         const catId = BigInt(this.registry.getCategoryId(cat));
         const matId = BigInt(this.registry.getMaterialId(mat));
         const guaranteedId = BigInt(this.registry.getEnchantId(guaranteedFirst ? guaranteedFirst.split(' ').slice(0, -1).join(' ') : ''));
@@ -43,6 +44,7 @@ export class EnchantEngine {
         key |= BigInt(modLevel) << EnchantEngine.KEY_SHIFT_LEVEL;
         key |= (guaranteedFirst ? guaranteedId : BigInt(ENGINE_DEFAULTS.UNKNOWN_ENCHANT_ID)) << EnchantEngine.KEY_SHIFT_GUARANTEED;
         key |= BigInt(limit) << EnchantEngine.KEY_SHIFT_LIMIT;
+        key |= BigInt(resultsLimit) << EnchantEngine.KEY_SHIFT_RESULTS_LIMIT;
         
         if (threshold !== undefined) {
             const tIdx = BigInt(Math.max(0, Math.min(255, Math.round(-Math.log10(threshold)))));
@@ -93,17 +95,18 @@ export class EnchantEngine {
         mat: string, 
         guaranteedFirst: string | null = null, 
         threshold: bigint = ProbUtils.toBigInt(0.0001),
-        maxIterations?: number
+        maxIterations?: number,
+        resultsLimit: number = ENGINE_DEFAULTS.MAX_RESULTS_SIZE
     ): SearchFrontier {
         const limit = this.getSearchLimit(cat, threshold, maxIterations);
-        const cacheKey = this.getPackedKey(cat, modLevel, mat, guaranteedFirst, limit);
+        const cacheKey = this.getPackedKey(cat, modLevel, mat, guaranteedFirst, limit, resultsLimit);
         const activeCache = cat === "book" ? this.bookComboCache : this.comboCache;
         
         const cached = activeCache.get(cacheKey);
         if (cached && cached.threshold <= threshold) return cached;
 
         const result = SearchService.calculateCombinations(
-            this.registry, cat, modLevel, mat, guaranteedFirst, threshold, limit, cached
+            this.registry, cat, modLevel, mat, guaranteedFirst, threshold, limit, cached, resultsLimit
         );
         
         activeCache.set(cacheKey, result);
@@ -123,11 +126,13 @@ export class EnchantEngine {
         onProgress?: (stats: CalculationStats) => void,
         useBestCache: boolean = false,
         maxIterations?: number,
-        summaryLimit: number = ENGINE_DEFAULTS.MAX_RESULTS_SUMMARY
+        summaryLimit: number = ENGINE_DEFAULTS.MAX_RESULTS_SUMMARY,
+        resultsLimit: number = ENGINE_DEFAULTS.MAX_RESULTS_SIZE,
+        useCache: boolean = true
     ): Promise<CalculationStats> {
         const limit = maxIterations ?? (cat === "book" ? ENGINE_DEFAULTS.FALLBACK_LIMIT_BOOK : (threshold < 0.0001 ? ENGINE_DEFAULTS.FALLBACK_LIMIT_HIGH_RES : ENGINE_DEFAULTS.FALLBACK_LIMIT_LOW_RES));
-        const baseKey = this.getPackedKey(cat, xp, mat, guaranteedFirst, limit);
-        const exactKey = this.getPackedKey(cat, xp, mat, guaranteedFirst, limit, threshold);
+        const baseKey = this.getPackedKey(cat, xp, mat, guaranteedFirst, limit, resultsLimit);
+        const exactKey = this.getPackedKey(cat, xp, mat, guaranteedFirst, limit, resultsLimit, threshold);
 
         // Check exact stats cache
         if (this.statsCache.has(exactKey)) return this.statsCache.get(exactKey)!;
@@ -140,9 +145,10 @@ export class EnchantEngine {
 
         // Delegate aggregation to service
         const finalStats = await StatAggregator.getFullStats(
-            this.registry, cat, xp, mat, guaranteedFirst, threshold, signal, onProgress, maxIterations, summaryLimit,
-            (ml) => (cat === "book" ? this.bookComboCache : this.comboCache).get(this.getPackedKey(cat, ml, mat, guaranteedFirst, limit)),
-            (ml, frontier) => (cat === "book" ? this.bookComboCache : this.comboCache).set(this.getPackedKey(cat, ml, mat, guaranteedFirst, limit), frontier)
+            this.registry, cat, xp, mat, guaranteedFirst, threshold, signal, onProgress, maxIterations, summaryLimit, resultsLimit,
+            (ml) => (cat === "book" ? this.bookComboCache : this.comboCache).get(this.getPackedKey(cat, ml, mat, guaranteedFirst, limit, resultsLimit)),
+            (ml, frontier) => (cat === "book" ? this.bookComboCache : this.comboCache).set(this.getPackedKey(cat, ml, mat, guaranteedFirst, limit, resultsLimit), frontier),
+            useCache
         );
 
         // Persistent Caching
