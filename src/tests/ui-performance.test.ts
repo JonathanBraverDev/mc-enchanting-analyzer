@@ -91,6 +91,30 @@ test.describe('UI Performance & Accuracy', () => {
         }
     });
 
+    test('guaranteed book enchantment must be exactly 100% in UI', async ({ page }) => {
+        const catSelect = page.locator('#cat-select');
+        const guaranteedSelect = page.locator('#guaranteed-first-select');
+        const status = page.locator('#refinement-status');
+
+        await catSelect.selectOption('book');
+        await expect(guaranteedSelect.locator('option[value="Silk Touch I"]')).toBeAttached({ timeout: 15000 });
+        await guaranteedSelect.selectOption('Silk Touch I');
+        
+        // Wait for refinement to complete
+        await expect(status).toHaveText(UI_TEXTS.STATUS_COMPLETE, { timeout: 20000 });
+
+        const result = await page.evaluate(() => {
+            const ctrl = (window as any).UIController;
+            const insights = ctrl.bestInsights;
+            if (!insights) return { error: "No insights found" };
+            
+            const prob = insights.any["Silk Touch"] || 0;
+            return { prob };
+        });
+        
+        expect(result.prob, `Silk Touch probability should be 1.0, got ${result.prob}`).toBe(1.0);
+    });
+
     test('should maintain chart metric if changed mid-calculation', async ({ page }) => {
         const catSelect = page.locator('#cat-select');
         const metricSelect = page.locator('#chart-metric');

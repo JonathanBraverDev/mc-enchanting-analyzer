@@ -10,6 +10,7 @@ export interface CalculationStats {
   combos: { [packed: string]: number };    // Hex string of bit-packed BigInt
   uncertainty: number;
   pruned?: number;
+  roundingError?: number;
 }
 
 /**
@@ -22,6 +23,7 @@ export interface EnchantInsights {
     combos: Record<string, number>;
     uncertainty: number;
     pruned?: number;
+    roundingError?: number;
 }
 
 export interface ResolvedRegistry {

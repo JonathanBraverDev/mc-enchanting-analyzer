@@ -23,7 +23,7 @@ export class SearchService {
         resultsLimit: number = ENGINE_DEFAULTS.MAX_RESULTS_SIZE
     ): SearchFrontier {
         const frontier = FrontierFactory.create(registry, cat, modLevel, guaranteedFirst, existingFrontier, threshold);
-        let { results, cumulativeAccountedMass, prunedMass, queue } = frontier;
+        let { results, cumulativeAccountedMass, prunedMass, roundingError, queue } = frontier;
         
         const guaranteedFirstId = FrontierFactory.getGuaranteedFirstId(registry, guaranteedFirst);
 
@@ -41,6 +41,7 @@ export class SearchService {
                 uncertainty: 0n, 
                 cumulativeAccountedMass: PRECISION, 
                 prunedMass: 0n, 
+                roundingError: 0n,
                 threshold 
             };
         }
@@ -70,6 +71,7 @@ export class SearchService {
             );
             
             uncertainty += deltas.uncertaintyDelta;
+            roundingError += deltas.roundingErrorDelta;
             cumulativeAccountedMass += deltas.massDelta;
             prunedMass += deltas.prunedDelta;
         }
@@ -79,7 +81,7 @@ export class SearchService {
             frontierUncertainty += item.prob;
         }
 
-        return { ...frontier, uncertainty: uncertainty + frontierUncertainty, prunedMass: uncertainty };
+        return { ...frontier, uncertainty: uncertainty + frontierUncertainty, prunedMass: uncertainty, roundingError };
     }
 
     private static processSearchNode(
@@ -97,7 +99,7 @@ export class SearchService {
         rankMass: Map<number, bigint>,
         countMass: Map<number, bigint>,
         resultsLimit: number
-    ): { uncertaintyDelta: bigint; massDelta: bigint; prunedDelta: bigint } {
+    ): { uncertaintyDelta: bigint; massDelta: bigint; prunedDelta: bigint; roundingErrorDelta: bigint } {
         const currentBitset = current.meta >> 8n;
         const currentLevel = Number(current.meta & 0xFFn);
 
@@ -113,11 +115,19 @@ export class SearchService {
                 for (const r of redistributed) {
                     results.set(r, (results.get(r) || 0n) + pChunk);
                 }
+                const enchants = ComboUtils.unpack(current.packedChosen);
+                for (let i = 1; i < enchants.length; i++) {
+                    const id = enchants[i] >> 8;
+                    anyMass.set(id, (anyMass.get(id) || 0n) - (pChunk + rem));
+                    rankMass.set(enchants[i], (rankMass.get(enchants[i]) || 0n) - (pChunk + rem));
+                }
+                countMass.set(currentCount - 1, (countMass.get(currentCount - 1) || 0n) + (current.prob - rem));
+                return { uncertaintyDelta: 0n, massDelta: current.prob, prunedDelta: 0n, roundingErrorDelta: rem };
             } else {
                 results.set(current.packedChosen, (results.get(current.packedChosen) || 0n) + current.prob);
+                countMass.set(currentCount, (countMass.get(currentCount) || 0n) + current.prob);
+                return { uncertaintyDelta: 0n, massDelta: current.prob, prunedDelta: 0n, roundingErrorDelta: 0n };
             }
-            countMass.set(currentCount, (countMass.get(currentCount) || 0n) + current.prob);
-            return { uncertaintyDelta: rem, massDelta: current.prob, prunedDelta: 0n };
         }
 
         const probStop = ProbUtils.scale(current.prob, (PRECISION - probContinue));
@@ -129,10 +139,17 @@ export class SearchService {
             for (const r of redistributed) {
                 results.set(r, (results.get(r) || 0n) + pChunk);
             }
+            const enchants = ComboUtils.unpack(current.packedChosen);
+            for (let i = 1; i < enchants.length; i++) {
+                const id = enchants[i] >> 8;
+                anyMass.set(id, (anyMass.get(id) || 0n) - (pChunk + remStop));
+                rankMass.set(enchants[i], (rankMass.get(enchants[i]) || 0n) - (pChunk + remStop));
+            }
+            countMass.set(currentCount - 1, (countMass.get(currentCount - 1) || 0n) + (probStop - remStop));
         } else {
             results.set(current.packedChosen, (results.get(current.packedChosen) || 0n) + probStop);
+            countMass.set(currentCount, (countMass.get(currentCount) || 0n) + probStop);
         }
-        countMass.set(currentCount, (countMass.get(currentCount) || 0n) + probStop);
         
         const probForward = ProbUtils.scale(current.prob, probContinue);
 
@@ -150,11 +167,19 @@ export class SearchService {
                 for (const r of redistributed) {
                     results.set(r, (results.get(r) || 0n) + pChunk);
                 }
+                const enchants = ComboUtils.unpack(current.packedChosen);
+                for (let i = 1; i < enchants.length; i++) {
+                    const id = enchants[i] >> 8;
+                    anyMass.set(id, (anyMass.get(id) || 0n) - (pChunk + remForward));
+                    rankMass.set(enchants[i], (rankMass.get(enchants[i]) || 0n) - (pChunk + remForward));
+                }
+                countMass.set(currentCount - 1, (countMass.get(currentCount - 1) || 0n) + (probForward - remForward));
+                return { uncertaintyDelta: 0n, massDelta: probStop + probForward, prunedDelta: probForward, roundingErrorDelta: remStop + remForward };
             } else {
                 results.set(current.packedChosen, (results.get(current.packedChosen) || 0n) + probForward);
+                countMass.set(currentCount, (countMass.get(currentCount) || 0n) + probForward);
+                return { uncertaintyDelta: probForward, massDelta: probStop + probForward, prunedDelta: probForward, roundingErrorDelta: remStop };
             }
-            countMass.set(currentCount, (countMass.get(currentCount) || 0n) + probForward);
-            return { uncertaintyDelta: remStop + remForward + probForward, massDelta: probStop + probForward, prunedDelta: probForward };
         }
 
         // Branching
@@ -175,7 +200,7 @@ export class SearchService {
         if (totalWeight === 0) {
             results.set(current.packedChosen, (results.get(current.packedChosen) || 0n) + probForward);
             countMass.set(currentCount, (countMass.get(currentCount) || 0n) + probForward);
-            return { uncertaintyDelta: remStop, massDelta: probStop + probForward, prunedDelta: 0n };
+            return { uncertaintyDelta: 0n, massDelta: probStop + probForward, prunedDelta: 0n, roundingErrorDelta: remStop };
         }
 
         const nextLevel = currentCount >= 1 ? Math.floor(currentLevel / 2) : currentLevel;
@@ -187,7 +212,7 @@ export class SearchService {
             if (queue.size() >= ENGINE_DEFAULTS.MAX_QUEUE_SIZE) {
                 results.set(current.packedChosen, (results.get(current.packedChosen) || 0n) + probForward);
                 countMass.set(currentCount, (countMass.get(currentCount) || 0n) + probForward);
-                return { uncertaintyDelta: remStop + probForward, massDelta: probStop + probForward, prunedDelta: probForward };
+                return { uncertaintyDelta: probForward, massDelta: probStop + probForward, prunedDelta: probForward, roundingErrorDelta: remStop };
             }
             
             const pNext = BigInt(weights[i]) * pBase;
@@ -205,7 +230,7 @@ export class SearchService {
             });
         }
 
-        return { uncertaintyDelta: remStop + remainder, massDelta: probStop + remainder, prunedDelta: remainder };
+        return { uncertaintyDelta: remainder, massDelta: probStop + remainder, prunedDelta: remainder, roundingErrorDelta: remStop };
     }
 
     private static processInitialNode(

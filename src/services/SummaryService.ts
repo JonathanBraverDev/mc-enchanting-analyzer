@@ -12,6 +12,7 @@ export class SummaryService {
     public static summarize(
         combos: Map<bigint, bigint>,
         uncertainty: bigint,
+        roundingError: bigint = 0n,
         anyMass?: Map<number, bigint>,
         rankMass?: Map<number, bigint>,
         countMass?: Map<number, bigint>,
@@ -22,7 +23,8 @@ export class SummaryService {
             any: {},
             count: {},
             combos: {},
-            uncertainty: ProbUtils.toNumber(uncertainty)
+            uncertainty: ProbUtils.toNumber(uncertainty),
+            roundingError: Number(roundingError)
         };
 
         if (anyMass) {
