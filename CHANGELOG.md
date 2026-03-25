@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.0.2 (2026-03-25)
+
+### Fixed
+- **Guaranteed First Accuracy**: Fixed a bug where guaranteed enchantments would show less than 100% probability. (again)
+
 ## v2.0.1 (2026-03-25)
 
 ### Fixed

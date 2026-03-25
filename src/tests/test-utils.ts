@@ -60,7 +60,9 @@ export const SnapshotUtils = {
             any: {},
             count: {},
             combos: {},
-            uncertainty: round(stats.uncertainty)
+            uncertainty: round(stats.uncertainty),
+            roundingError: stats.roundingError || 0,
+            pruned: round(stats.pruned || 0)
         };
 
         if (stats.combos) {
