@@ -15,22 +15,31 @@ test.describe('UI Performance & Accuracy', () => {
         const comboList = page.locator('#combo-list');
         const status = page.locator('#refinement-status');
 
+        // 1. Trigger Refinement
         await catSelect.selectOption('book');
+        
+        // 2. Wait for INITIAL results to appear so we have a baseline
         await UITestUtils.waitForResults(page);
 
-        // Flicker Detection via MutationObserver
+        // 3. Setup Flicker Detection for progressive refinement
         await page.evaluate(() => {
             (window as any).__flickerDetected = false;
             const target = document.getElementById('combo-list');
             if (!target) return;
             const observer = new MutationObserver(() => {
-                const items = target.querySelectorAll('.combo-item');
-                if (items.length === 0) (window as any).__flickerDetected = true;
+                const hasResults = target.querySelectorAll('.combo-names').length > 0;
+                const hasPlaceholder = target.querySelectorAll('.combo-placeholder').length > 0;
+                
+                // If results disappear or are replaced by a placeholder, it's a flicker
+                if (!hasResults || hasPlaceholder) {
+                    (window as any).__flickerDetected = true;
+                }
             });
             observer.observe(target, { childList: true, subtree: true });
             (window as any).__flickerObserver = observer;
         });
 
+        // 4. Wait for full completion
         await expect(status).toHaveText(UI_TEXTS.STATUS_COMPLETE, { timeout: 20000 });
 
         const flickerDetected = await page.evaluate(() => {

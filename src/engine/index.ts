@@ -43,7 +43,6 @@ export class EnchantEngine {
         key |= matId << EnchantEngine.KEY_SHIFT_MAT;
         key |= BigInt(modLevel) << EnchantEngine.KEY_SHIFT_LEVEL;
         key |= (guaranteedFirst ? guaranteedId : BigInt(ENGINE_DEFAULTS.UNKNOWN_ENCHANT_ID)) << EnchantEngine.KEY_SHIFT_GUARANTEED;
-        key |= BigInt(limit) << EnchantEngine.KEY_SHIFT_LIMIT;
         key |= BigInt(resultsLimit) << EnchantEngine.KEY_SHIFT_RESULTS_LIMIT;
         
         if (threshold !== undefined) {

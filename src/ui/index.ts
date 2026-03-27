@@ -118,6 +118,7 @@ class AppController {
 
     private async run(): Promise<void> {
         if (!this.isWorkerReady) return;
+        this.bestInsights = null;
 
         try {
             const engine = this.getEngine();
@@ -131,11 +132,13 @@ class AppController {
                 engine.registry,
                 {
                     onStatus: (status, level) => this.results.setRefinementStatus(status, level),
+                    onChartStatus: (status, progress) => this.results.setChartStatus(status, progress),
                     onInsights: (raw, isFinal) => this.updateInsightsFromRaw(raw, isFinal),
                     onChart: (sweep) => this.chart.refresh(sweep, engine.registry)
                 }
             );
         } catch (err) {
+            if (err === 'Aborted' || (err instanceof Error && err.message === 'Aborted')) return;
             this.showError(UI_TEXTS.STATUS_ERROR_CALC, err);
         }
     }
