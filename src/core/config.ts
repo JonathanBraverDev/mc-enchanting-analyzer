@@ -22,7 +22,9 @@ export const UI_TEXTS = {
     STATUS_SWITCHING_CATEGORY: "Switching category",
     STATUS_CALCULATING: "Calculating combinations",
     STATUS_ERROR_LOADING: "Initialization failed",
-    STATUS_ERROR_CALC: "Calculation failed"
+    STATUS_ERROR_CALC: "Calculation failed",
+    STATUS_CHART_PREPARING: "Scanning probabilities",
+    STATUS_CHART_SWEEPING: "Mapping levels"
 };
 
 export const UI_DEFAULTS = {
