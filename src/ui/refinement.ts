@@ -14,8 +14,9 @@ export interface RefinementPayload {
 
 export interface RefinementCallbacks {
     onStatus: (status: string, level: SearchLevel) => void;
-    onInsights: (human: EnchantInsights, isFinal?: boolean) => void;
-    onChart: (sweep: SweepData[]) => void;
+    onChartStatus?: (status: string, progress?: number) => void;
+    onInsights: (insights: any, isFinal: boolean) => void;
+    onChart: (sweep: any[]) => void;
 }
 
 /**
@@ -24,6 +25,8 @@ export interface RefinementCallbacks {
 export class RefinementService {
     private activeId: number = 0;
     private sweep: SweepData[] = [];
+    private isSweepRunning: boolean = false;
+    private targetThreshold: number = 0;
 
     public get currentSweep(): SweepData[] {
         return this.sweep;
@@ -52,9 +55,8 @@ export class RefinementService {
         const coarseDone = await this.executePass('coarse', basePayload, currentId, isBook, callbacks);
         if (currentId !== this.activeId) return;
 
-        // Trigger initial chart refresh after coarse pass
+        // Trigger initial chart refresh background
         this.refreshChart(basePayload, getParamsForMode('coarse', isBook).threshold, registry, currentId, callbacks);
-        if (currentId !== this.activeId) return;
 
         // Pass 2+: Standard -> Deep -> Ultra
         const refinementLevels: Exclude<SearchLevel, 'done' | 'coarse'>[] = ['standard', 'deep', 'ultra'];
@@ -63,10 +65,8 @@ export class RefinementService {
             const done = await this.executePass(level, basePayload, currentId, isBook, callbacks);
             if (currentId !== this.activeId) return;
 
-            // Update chart after standard pass or if refinement completes early
-            if (level === 'standard' || done) {
-                this.refreshChart(basePayload, getParamsForMode(level, isBook).threshold, registry, currentId, callbacks);
-            }
+            // Trigger non-blocking chart update at current pass precision
+            this.refreshChart(basePayload, getParamsForMode(level, isBook).threshold, registry, currentId, callbacks);
             
             if (done) break;
         }
@@ -109,28 +109,49 @@ export class RefinementService {
         currentId: number,
         callbacks: RefinementCallbacks
     ): Promise<void> {
-        const labels = Array.from({ length: UI_DEFAULTS.MAX_XP_LEVEL }, (_, i) => i + 1);
-        
-        // Prioritize the current XP level
-        const currentXP = payload.xp;
-        const remainingLabels = labels.filter(l => l !== currentXP);
-        const order = [currentXP, ...remainingLabels];
+        this.targetThreshold = threshold;
+        if (this.isSweepRunning) return;
 
-        for (const l of order) {
-            if (currentId !== this.activeId) return;
+        this.isSweepRunning = true;
+        try {
+            while (true) {
+                if (currentId !== this.activeId) break;
+                
+                const activeThreshold = this.targetThreshold;
+                const labels = Array.from({ length: UI_DEFAULTS.MAX_XP_LEVEL }, (_, i) => i + 1);
+                
+                if (callbacks.onChartStatus) {
+                    callbacks.onChartStatus(UI_TEXTS.STATUS_CHART_PREPARING);
+                }
+                
+                for (const l of labels) {
+                    if (currentId !== this.activeId) break;
+                    
+                    const response = await WorkerClient.request(
+                        'getFullStats',
+                        { ...payload, xp: l, threshold: activeThreshold, source: 'chart' }
+                    );
+                    
+                    if (currentId !== this.activeId) break;
+                    
+                    this.sweep[l - 1] = { l, s: response.stats };
+                    if (callbacks.onChartStatus) {
+                        callbacks.onChartStatus(UI_TEXTS.STATUS_CHART_SWEEPING, l / UI_DEFAULTS.MAX_XP_LEVEL);
+                    }
+                    callbacks.onChart(this.sweep);
+                    
+                    await AsyncUtils.yield();
+                }
+                
+                if (callbacks.onChartStatus) {
+                    callbacks.onChartStatus(""); // Hide on completion
+                }
 
-            const stats = await WorkerClient.request(
-                'getFullStats',
-                { ...payload, xp: l, threshold, source: 'chart' }
-            );
-
-            if (currentId !== this.activeId) return;
-            
-            this.sweep[l - 1] = { l, s: stats.stats };
-            callbacks.onChart(this.sweep);
-            
-            // Allow UI to breathe
-            await AsyncUtils.yield();
+                // If no higher precision was requested while we were sweeping, we are done
+                if (currentId !== this.activeId || this.targetThreshold === activeThreshold) break;
+            }
+        } finally {
+            this.isSweepRunning = false;
         }
     }
 }
