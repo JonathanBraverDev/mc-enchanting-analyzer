@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.1.0 (2026-03-29)
+
+### Fixed
+- **UI chart freeze**: Resolved an issue from v2.0.0 where the chart would only update at the end of the highest precision calculation, making it painfully slow to see results for books.
+
 ## v2.0.2 (2026-03-25)
 
 ### Fixed
