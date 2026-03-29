@@ -14,13 +14,15 @@ describe('Book Mechanics Test Suite', () => {
         assert.ok(stats.count[1] > 0.99, '1.4.6 books should only have 1 enchantment');
     });
 
-    it('1.7.2+: Books SHOULD allow multi-enchantment', async () => {
+    it('1.7.2+: Books SHOULD allow multi-enchantment (though reduced by 1)', async () => {
         const engine172 = new EnchantEngine(DATA, '1.7.2');
         const stats = await engine172.getFullStats('book', 30, 'book', null, 0.0001);
         
-        // Count 2+ should be possible
-        const multiProb = (stats.count[2] || 0) + (stats.count[3] || 0);
-        assert.ok(multiProb > 0.05, '1.7.2 books should allow multiple enchants');
+        // At level 30, it is very common for books to have multiple enchantments (if they rolled 3+)
+        // Count 1: ~79%, Count 2: ~16%, Count 3: ~1%
+        assert.ok(stats.count[1] > 0.75, '1.7.2 books should still result in many single-enchant results due to removal');
+        assert.ok(stats.count[2] > 0.10, '1.7.2 books should allow multiple enchants (e.g. if 3+ were generated)');
+        assert.ok((stats.count[4] || 0) < 0.001, 'Level 30 books should effectively never have 4+ enchants after removal');
     });
 
     it('Enchantment weighting on books should be uniform ( Registry check )', () => {
