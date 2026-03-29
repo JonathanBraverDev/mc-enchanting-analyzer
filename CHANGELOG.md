@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.2.0 (2026-03-29)
+
+### Added
+- **Book Mechanics Test Suite**: A dedicated regression suite for Minecraft book enchantment rules across versions.
+
+### Fixed
+- **Multi-Enchant Book Rework**: Re-architected the book generation logic to handle true random removal. This matches the behavior of official Minecraft mechanics and significantly improves accuracy for high-level book results.
+
 ## v2.1.0 (2026-03-29)
 
 ### Fixed
