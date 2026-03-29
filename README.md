@@ -35,4 +35,4 @@ To build your own standalone version, use: `npm run build:standalone`. The resul
 This tool uses a progressive refinement search. It prioritizes the most likely outcomes first, allowing the UI to remain responsive even when calculating enchantments for complex items.
 
 ---
-Created by **Jonathan Braver** | **Version 2.1.0**
+Created by **Jonathan Braver** | **Version 2.2.0**
