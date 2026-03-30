@@ -1,5 +1,6 @@
 import { DATA } from '../data/index.js';
-import { Registry } from '../core/registry.js';
+import { getFullEnchantName } from '../core/registry.js';
+import { RegistryState } from '../types/index.js';
 import { RomanUtils } from '../utils/index.js';
 
 /**
@@ -9,8 +10,8 @@ export const ThemeManager = {
     /**
      * Calculates a color for an enchantment based on its base name and rank.
      */
-    getEnchantColor: (idOrName: string | number, registry: Registry): string => {
-        let fullName = typeof idOrName === 'number' ? registry.getFullEnchantName(idOrName) : idOrName;
+    getEnchantColor: (idOrName: string | number, registry: RegistryState): string => {
+        let fullName = typeof idOrName === 'number' ? getFullEnchantName(registry, idOrName) : idOrName;
         const base = RomanUtils.getBaseName(fullName, registry.data.constants.ROMAN_MAP);
         let color = DATA.cosmetics.ENCHANT_COLORS[base];
         

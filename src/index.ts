@@ -1,5 +1,5 @@
 export { EnchantEngine } from './engine/index.js';
-export { Registry } from './core/registry.js';
+export * from './core/registry.js';
 export { DATA } from './data/index.js';
 export * from './types/index.js';
 export * from './core/config.js';

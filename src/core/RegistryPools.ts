@@ -1,14 +1,11 @@
-import { LRUCache, RomanUtils } from '../utils/index.js';
+import { RomanUtils } from '../utils/index.js';
 import { PackedEnchant, RegistryState } from '../types/index.js';
 import { ENGINE_DEFAULTS } from './config.js';
 
 /**
  * Service for managing enchantment pools and checking achievability.
- * Operates on RegistryState to avoid circular dependencies with the Registry class.
  */
 export class PoolService {
-    private static poolCache = new LRUCache<string, PackedEnchant[]>(200);
-
     /**
      * Returns the eligible pool of enchantments for a given category, level, and material for the given state.
      */
@@ -18,8 +15,8 @@ export class PoolService {
         level: number,
         mat: string
     ): PackedEnchant[] {
-        const cacheKey = `${state.version}|${cat}|${level}|${mat}`;
-        const cached = this.poolCache.get(cacheKey);
+        const cacheKey = `${cat}|${level}|${mat}`;
+        const cached = state.poolCache.get(cacheKey);
         if (cached) return cached;
 
         const pool = state.versionPool.get(cat) || [];
@@ -38,7 +35,7 @@ export class PoolService {
             }
         }
 
-        this.poolCache.set(cacheKey, out);
+        state.poolCache.set(cacheKey, out);
         return out;
     }
 

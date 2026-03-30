@@ -1,5 +1,5 @@
 import { EnchantmentData, VersionManifest, VersionMechanics, Enchantment, ResolvedRegistry, MergedItems, MergedOverrides, RegistryState } from '../types/index.js';
-import { VersionUtils } from '../utils/index.js';
+import { VersionUtils, LRUCache } from '../utils/index.js';
 import { ComboUtils } from '../utils/domain/ComboUtils.js';
 
 
@@ -9,6 +9,7 @@ import { ComboUtils } from '../utils/domain/ComboUtils.js';
 export class RegistryFactory {
     public static build(data: EnchantmentData, version: string): RegistryState {
         const state: RegistryState = {
+            data,
             version: "",
             mechanics: {},
             mergedItems: {},
@@ -25,7 +26,9 @@ export class RegistryFactory {
             sortedRanks: [],
             versionPool: new Map(),
             enchantToIndex: new Map(),
-            indexToEnchant: [0]
+            indexToEnchant: [0],
+            distCache: new Map(),
+            poolCache: new LRUCache(200)
         };
 
         const resolvedVersion = this.resolveVersion(data, version);

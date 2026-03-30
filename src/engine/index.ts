@@ -1,6 +1,6 @@
-import { EnchantmentData, CalculationStats, SearchFrontier } from '../types/index.js';
+import { EnchantmentData, CalculationStats, SearchFrontier, RegistryState } from '../types/index.js';
 import { LRUCache, ProbUtils } from '../utils/index.js';
-import { Registry } from '../core/registry.js';
+import { getCategoryId, getMaterialId, getEnchantId, getEligiblePool } from '../core/registry.js';
 import { RegistryFactory } from '../core/factory.js';
 import { ENGINE_DEFAULTS } from '../core/config.js';
 import { DistributionService } from './distribution.js';
@@ -12,8 +12,8 @@ import { StatAggregator } from './aggregator.js';
  * Orchestrates distribution calculation, best-first search, and statistics aggregation.
  */
 export class EnchantEngine {
-    static allEngines: Set<EnchantEngine> = new Set();
-    
+    static allEngines: Set<WeakRef<EnchantEngine>> = new Set();
+
     private static readonly KEY_SHIFT_CAT = 0n;
     private static readonly KEY_SHIFT_MAT = 6n;
     private static readonly KEY_SHIFT_LEVEL = 12n;
@@ -21,35 +21,35 @@ export class EnchantEngine {
     private static readonly KEY_SHIFT_LIMIT = 28n;
     private static readonly KEY_SHIFT_RESULTS_LIMIT = 44n;
     private static readonly KEY_SHIFT_THRESHOLD = 60n;
-    
-    public registry: Registry;
+
+    public registry: RegistryState;
     public comboCache = new LRUCache<bigint, SearchFrontier>(ENGINE_DEFAULTS.CACHE_SIZE_COMBO_OTHER);
     public bookComboCache = new LRUCache<bigint, SearchFrontier>(ENGINE_DEFAULTS.CACHE_SIZE_COMBO_BOOK);
     public statsCache = new LRUCache<bigint, CalculationStats>(ENGINE_DEFAULTS.CACHE_SIZE_STATS);
     public bestStatsCache = new LRUCache<bigint, { threshold: number, stats: CalculationStats }>(ENGINE_DEFAULTS.CACHE_SIZE_STATS);
-    
+
     constructor(data: EnchantmentData, version: string) {
-        this.registry = new Registry(data, RegistryFactory.build(data, version));
-        EnchantEngine.allEngines.add(this);
+        this.registry = RegistryFactory.build(data, version);
+        EnchantEngine.allEngines.add(new WeakRef(this));
     }
 
     private getPackedKey(cat: string, modLevel: number, mat: string, guaranteedFirst: string | null, limit: number, resultsLimit: number, threshold?: number): bigint {
-        const catId = BigInt(this.registry.getCategoryId(cat));
-        const matId = BigInt(this.registry.getMaterialId(mat));
-        const guaranteedId = BigInt(this.registry.getEnchantId(guaranteedFirst ? guaranteedFirst.split(' ').slice(0, -1).join(' ') : ''));
-        
+        const catId = BigInt(getCategoryId(this.registry, cat));
+        const matId = BigInt(getMaterialId(this.registry, mat));
+        const guaranteedId = BigInt(getEnchantId(this.registry, guaranteedFirst ? guaranteedFirst.split(' ').slice(0, -1).join(' ') : ''));
+
         let key = catId << EnchantEngine.KEY_SHIFT_CAT;
         key |= matId << EnchantEngine.KEY_SHIFT_MAT;
         key |= BigInt(modLevel) << EnchantEngine.KEY_SHIFT_LEVEL;
         key |= (guaranteedFirst ? guaranteedId : BigInt(ENGINE_DEFAULTS.UNKNOWN_ENCHANT_ID)) << EnchantEngine.KEY_SHIFT_GUARANTEED;
         key |= BigInt(limit) << EnchantEngine.KEY_SHIFT_LIMIT;
         key |= BigInt(resultsLimit) << EnchantEngine.KEY_SHIFT_RESULTS_LIMIT;
-        
+
         if (threshold !== undefined) {
             const tIdx = BigInt(Math.max(0, Math.min(255, Math.round(-Math.log10(threshold)))));
             key |= tIdx << EnchantEngine.KEY_SHIFT_THRESHOLD;
         }
-        
+
         return key;
     }
 
@@ -59,21 +59,32 @@ export class EnchantEngine {
     }
 
     public static clearAllCaches(): void {
-        DistributionService.clearCache();
-        for (const engine of this.allEngines) {
-            engine.comboCache.clear();
-            engine.bookComboCache.clear();
-            engine.statsCache.clear();
-            engine.bestStatsCache.clear();
+        for (const ref of this.allEngines) {
+            const engine = ref.deref();
+            if (engine) {
+                engine.registry.distCache.clear();
+                engine.registry.poolCache.clear();
+                engine.comboCache.clear();
+                engine.bookComboCache.clear();
+                engine.statsCache.clear();
+                engine.bestStatsCache.clear();
+            }
         }
     }
 
     public destroy(): void {
+        this.registry.distCache.clear();
+        this.registry.poolCache.clear();
         this.comboCache.clear();
         this.bookComboCache.clear();
         this.statsCache.clear();
         this.bestStatsCache.clear();
-        EnchantEngine.allEngines.delete(this);
+        for (const ref of EnchantEngine.allEngines) {
+            if (ref.deref() === this) {
+                EnchantEngine.allEngines.delete(ref);
+                break;
+            }
+        }
     }
 
     public getModifiedLevelDist(xp: number, enchantability: number): { [level: number]: bigint } {
@@ -81,7 +92,7 @@ export class EnchantEngine {
     }
 
     public getEligibleListNumeric(cat: string, level: number, mat: string, bitset: bigint = 0n): number[] {
-        const pool = this.registry.getEligiblePool(cat, level, mat);
+        const pool = getEligiblePool(this.registry, cat, level, mat);
         return pool.filter(p => (bitset & (1n << BigInt(p >> 8))) === 0n);
     }
 
@@ -89,10 +100,10 @@ export class EnchantEngine {
      * Iteratively calculates enchantment combinations using a Best-First approach.
      */
     public calculateCombinations(
-        cat: string, 
-        modLevel: number, 
-        mat: string, 
-        guaranteedFirst: string | null = null, 
+        cat: string,
+        modLevel: number,
+        mat: string,
+        guaranteedFirst: string | null = null,
         threshold: bigint = ProbUtils.toBigInt(0.0001),
         maxIterations?: number,
         resultsLimit: number = ENGINE_DEFAULTS.MAX_RESULTS_SIZE
@@ -100,14 +111,14 @@ export class EnchantEngine {
         const limit = this.getSearchLimit(cat, threshold, maxIterations);
         const cacheKey = this.getPackedKey(cat, modLevel, mat, guaranteedFirst, limit, resultsLimit);
         const activeCache = cat === "book" ? this.bookComboCache : this.comboCache;
-        
+
         const cached = activeCache.get(cacheKey);
         if (cached && cached.threshold <= threshold) return cached;
 
         const result = SearchService.calculateCombinations(
             this.registry, cat, modLevel, mat, guaranteedFirst, threshold, limit, cached, resultsLimit
         );
-        
+
         activeCache.set(cacheKey, result);
         return result;
     }
@@ -116,10 +127,10 @@ export class EnchantEngine {
      * Aggregates all statistics for a given enchantment attempt.
      */
     public async getFullStats(
-        cat: string, 
-        xp: number, 
-        mat: string, 
-        guaranteedFirst: string | null = null, 
+        cat: string,
+        xp: number,
+        mat: string,
+        guaranteedFirst: string | null = null,
         threshold: number = 0.0001,
         signal?: AbortSignal,
         onProgress?: (stats: CalculationStats) => void,

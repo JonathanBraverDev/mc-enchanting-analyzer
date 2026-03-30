@@ -1,6 +1,5 @@
-import { Registry } from '../core/registry.js';
+import { RegistryState, EnchantInsights, SweepData } from '../types/index.js';
 import { UI_TEXTS, UI_DEFAULTS, SearchLevel, getParamsForMode } from '../core/config.js';
-import { EnchantInsights, SweepData } from '../types/index.js';
 import { WorkerClient } from '../worker/client.js';
 import { AsyncUtils } from '../utils/index.js';
 
@@ -37,7 +36,7 @@ export class RefinementService {
      */
     public async run(
         payload: RefinementPayload,
-        registry: Registry,
+        registry: RegistryState,
         callbacks: RefinementCallbacks
     ): Promise<void> {
         const currentId = ++this.activeId;
@@ -105,7 +104,7 @@ export class RefinementService {
     private async refreshChart(
         payload: any,
         threshold: number,
-        registry: Registry,
+        registry: RegistryState,
         currentId: number,
         callbacks: RefinementCallbacks
     ): Promise<void> {
