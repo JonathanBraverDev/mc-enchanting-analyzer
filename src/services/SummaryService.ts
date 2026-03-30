@@ -10,7 +10,7 @@ export class SummaryService {
      * Summarizes raw engine results into a CalculationStats object.
      */
     public static summarize(
-        combos: Map<bigint, bigint>,
+        combos: Map<number, bigint>,
         uncertainty: bigint,
         roundingError: bigint = 0n,
         anyMass?: Map<number, bigint>,
@@ -44,12 +44,12 @@ export class SummaryService {
         }
 
         // Limit the number of combinations serialized for transfer
-        let comboSource: Iterable<[bigint, bigint]> = combos;
+        let comboSource: Iterable<[number, bigint]> = combos;
         if (combos.size > comboLimit) {
             if (comboLimit === 0) {
                 comboSource = [];
             } else if (comboLimit <= 200) {
-                const results: [bigint, bigint][] = [];
+                const results: [number, bigint][] = [];
                 for (const entry of combos.entries()) {
                     if (results.length < comboLimit) {
                         results.push(entry);

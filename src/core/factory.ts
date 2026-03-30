@@ -1,5 +1,6 @@
 import { EnchantmentData, VersionManifest, VersionMechanics, Enchantment, ResolvedRegistry, MergedItems, MergedOverrides, RegistryState } from '../types/index.js';
 import { VersionUtils } from '../utils/index.js';
+import { ComboUtils } from '../utils/domain/ComboUtils.js';
 
 
 /**
@@ -22,7 +23,9 @@ export class RegistryFactory {
             conflictBitsets: new BigUint64Array(0),
             weightMap: new Uint32Array(0),
             sortedRanks: [],
-            versionPool: new Map()
+            versionPool: new Map(),
+            enchantToIndex: new Map(),
+            indexToEnchant: [0]
         };
 
         const resolvedVersion = this.resolveVersion(data, version);
@@ -47,6 +50,8 @@ export class RegistryFactory {
         
         // 5. Initialize active version pool
         this.initializeVersionPool(state);
+
+        ComboUtils.init(state.enchantToIndex, state.indexToEnchant);
 
         return state;
     }
@@ -121,6 +126,20 @@ export class RegistryFactory {
 
         const romanMap = data.constants.ROMAN_MAP;
         state.sortedRanks = Object.entries(romanMap).sort((a, b) => b[1] - a[1]);
+
+        const allPairs: number[] = [];
+        for (let id = 0; id < allEnchNames.length; id++) {
+            const ench = data.global_enchantments[allEnchNames[id]];
+            const rankCount = Object.keys(ench.levels).length;
+            for (let rank = 1; rank <= rankCount; rank++) {
+                allPairs.push((id << 8) | rank);
+            }
+        }
+        allPairs.sort((a, b) => a - b);
+        for (let i = 0; i < allPairs.length; i++) {
+            state.enchantToIndex.set(allPairs[i], i + 1);
+            state.indexToEnchant.push(allPairs[i]);
+        }
     }
 
     private static initializeIdMaps(state: RegistryState, data: EnchantmentData): void {

@@ -10,10 +10,10 @@ export class SerializationService {
      */
     public static serialize(stats: any): { compact: CompactStats, transferables: ArrayBuffer[] } {
         const comboEntries = Object.entries(stats.combos);
-        const comboKeys = new BigUint64Array(comboEntries.length);
+        const comboKeys = new Float64Array(comboEntries.length);
         const comboProbs = new Float64Array(comboEntries.length);
         for (let i = 0; i < comboEntries.length; i++) {
-            comboKeys[i] = BigInt("0x" + comboEntries[i][0]);
+            comboKeys[i] = parseInt(comboEntries[i][0] as string, 16);
             comboProbs[i] = comboEntries[i][1] as number;
         }
 
