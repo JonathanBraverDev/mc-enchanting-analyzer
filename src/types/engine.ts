@@ -47,7 +47,7 @@ export interface NameResolver {
  * Packed representation of a search node to minimize object and array overhead.
  */
 export interface PackedNode {
-    packedChosen: bigint;
+    packedChosen: number;
     meta: bigint; // (bitset << 8 | level)
     prob: bigint;
 }
@@ -72,7 +72,9 @@ export interface RegistryState {
     weightMap: Uint32Array;
     sortedRanks: [string, number][];
     versionPool: Map<string, string[]>;
+    enchantToIndex: Map<number, number>;
+    indexToEnchant: number[];
 }
 
 export type PackedEnchant = number;
-export type PackedCombo = bigint;
+export type PackedCombo = number;

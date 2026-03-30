@@ -1,5 +1,5 @@
-import { PackedEnchant, LRUCache, RomanUtils } from '../utils/index.js';
-import { RegistryState } from './factory.js';
+import { LRUCache, RomanUtils } from '../utils/index.js';
+import { PackedEnchant, RegistryState } from '../types/index.js';
 import { ENGINE_DEFAULTS } from './config.js';
 
 /**
