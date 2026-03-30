@@ -132,7 +132,8 @@ export const global_enchantments = {
   "Frost Walker": {
     "weight": 2,
     "levels": {"I": [10, 25], "II": [20, 35]},
-    "conflicts": ["Depth Strider"]
+    "conflicts": ["Depth Strider"],
+    "valid_from": "1.9"
   },
   "Impaling": {
     "weight": 2,
@@ -159,7 +160,7 @@ export const global_enchantments = {
   },
   "Quick Charge": {
     "weight": 5,
-    "levels": {"I": [12, 50], "II": [32, 50], "III": [52, 50]},
+    "levels": {"I": [12, 50], "II": [32, 50], "III": [50, 52]},
     "valid_from": "1.14"
   },
   "Multishot": {
