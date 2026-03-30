@@ -2,7 +2,7 @@ import { PRECISION, ProbUtils, AsyncUtils, ComboUtils, RomanUtils } from '../uti
 import { SummaryService } from '../services/index.js';
 import { getEnchantability, isEnchantmentAchievable } from '../core/registry.js';
 import { ENGINE_DEFAULTS } from '../core/config.js';
-import { CalculationStats, PackedCombo, SearchFrontier, RegistryState } from '../types/index.js';
+import { CalculationStats, PackedCombo, SearchFrontier, RegistryState, SearchConfig } from '../types/index.js';
 import { DistributionService } from './distribution.js';
 import { SearchService } from './search.js';
 import { FrontierFactory } from './frontier.js';
@@ -16,21 +16,23 @@ export class StatAggregator {
      */
     public static async getFullStats(
         registry: RegistryState,
-        cat: string, 
-        xp: number, 
-        mat: string, 
-        guaranteedFirst: string | null = null, 
-        threshold: number = 0.0001,
-        signal?: AbortSignal,
-        onProgress?: (stats: CalculationStats) => void,
-        maxIterations?: number,
-        summaryLimit: number = ENGINE_DEFAULTS.MAX_RESULTS_SUMMARY,
-        resultsLimit: number = ENGINE_DEFAULTS.MAX_RESULTS_SIZE,
-        // Optional cache delegates to allow EnchantEngine to manage persistence
-        getExtendedCache?: (ml: number) => SearchFrontier | undefined,
-        setExtendedCache?: (ml: number, frontier: SearchFrontier) => void,
-        useCache: boolean = true
+        cat: string,
+        xp: number,
+        mat: string,
+        guaranteedFirst: string | null = null,
+        config: SearchConfig = {}
     ): Promise<CalculationStats> {
+        const {
+            threshold = 0.0001,
+            signal,
+            onProgress,
+            maxIterations,
+            summaryLimit = ENGINE_DEFAULTS.MAX_RESULTS_SUMMARY,
+            resultsLimit = ENGINE_DEFAULTS.MAX_RESULTS_SIZE,
+            getExtendedCache,
+            setExtendedCache,
+            useCache = true
+        } = config;
         const bThreshold = ProbUtils.toBigInt(threshold);
         const enchantability = getEnchantability(registry, mat, cat);
         const modDist = DistributionService.getModifiedLevelDist(xp, enchantability, registry);

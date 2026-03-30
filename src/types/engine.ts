@@ -80,3 +80,20 @@ export interface RegistryState {
 
 export type PackedEnchant = number;
 export type PackedCombo = number;
+
+/**
+ * Configuration options for a full statistics calculation.
+ */
+export interface SearchConfig {
+    guaranteedFirst?: string | null;
+    threshold?: number;
+    signal?: AbortSignal;
+    onProgress?: (stats: CalculationStats) => void;
+    useBestCache?: boolean;
+    maxIterations?: number;
+    summaryLimit?: number;
+    resultsLimit?: number;
+    useCache?: boolean;
+    getExtendedCache?: (ml: number) => SearchFrontier | undefined;
+    setExtendedCache?: (ml: number, frontier: SearchFrontier) => void;
+}

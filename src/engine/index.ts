@@ -1,4 +1,4 @@
-import { EnchantmentData, CalculationStats, SearchFrontier, RegistryState } from '../types/index.js';
+import { EnchantmentData, CalculationStats, SearchFrontier, RegistryState, SearchConfig } from '../types/index.js';
 import { LRUCache, ProbUtils } from '../utils/index.js';
 import { getCategoryId, getMaterialId, getEnchantId, getEligiblePool } from '../core/registry.js';
 import { RegistryFactory } from '../core/factory.js';
@@ -130,16 +130,19 @@ export class EnchantEngine {
         cat: string,
         xp: number,
         mat: string,
-        guaranteedFirst: string | null = null,
-        threshold: number = 0.0001,
-        signal?: AbortSignal,
-        onProgress?: (stats: CalculationStats) => void,
-        useBestCache: boolean = false,
-        maxIterations?: number,
-        summaryLimit: number = ENGINE_DEFAULTS.MAX_RESULTS_SUMMARY,
-        resultsLimit: number = ENGINE_DEFAULTS.MAX_RESULTS_SIZE,
-        useCache: boolean = true
+        config: SearchConfig = {}
     ): Promise<CalculationStats> {
+        const {
+            guaranteedFirst = null,
+            threshold = 0.0001,
+            signal,
+            onProgress,
+            useBestCache = false,
+            maxIterations,
+            summaryLimit = ENGINE_DEFAULTS.MAX_RESULTS_SUMMARY,
+            resultsLimit = ENGINE_DEFAULTS.MAX_RESULTS_SIZE,
+            useCache = true
+        } = config;
         const limit = maxIterations ?? (cat === "book" ? ENGINE_DEFAULTS.FALLBACK_LIMIT_BOOK : (threshold < 0.0001 ? ENGINE_DEFAULTS.FALLBACK_LIMIT_HIGH_RES : ENGINE_DEFAULTS.FALLBACK_LIMIT_LOW_RES));
         const baseKey = this.getPackedKey(cat, xp, mat, guaranteedFirst, limit, resultsLimit);
         const exactKey = this.getPackedKey(cat, xp, mat, guaranteedFirst, limit, resultsLimit, threshold);
@@ -155,10 +158,17 @@ export class EnchantEngine {
 
         // Delegate aggregation to service
         const finalStats = await StatAggregator.getFullStats(
-            this.registry, cat, xp, mat, guaranteedFirst, threshold, signal, onProgress, maxIterations, summaryLimit, resultsLimit,
-            (ml) => (cat === "book" ? this.bookComboCache : this.comboCache).get(this.getPackedKey(cat, ml, mat, guaranteedFirst, limit, resultsLimit)),
-            (ml, frontier) => (cat === "book" ? this.bookComboCache : this.comboCache).set(this.getPackedKey(cat, ml, mat, guaranteedFirst, limit, resultsLimit), frontier),
-            useCache
+            this.registry, cat, xp, mat, guaranteedFirst, {
+                threshold,
+                signal,
+                onProgress,
+                maxIterations,
+                summaryLimit,
+                resultsLimit,
+                getExtendedCache: (ml) => (cat === "book" ? this.bookComboCache : this.comboCache).get(this.getPackedKey(cat, ml, mat, guaranteedFirst, limit, resultsLimit)),
+                setExtendedCache: (ml, frontier) => (cat === "book" ? this.bookComboCache : this.comboCache).set(this.getPackedKey(cat, ml, mat, guaranteedFirst, limit, resultsLimit), frontier),
+                useCache
+            }
         );
 
         // Persistent Caching
