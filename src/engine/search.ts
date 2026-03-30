@@ -1,8 +1,8 @@
 import { BinaryHeap, PRECISION, ProbUtils, ComboUtils } from '../utils/index.js';
 import { Registry } from '../core/registry.js';
 import { ENGINE_DEFAULTS } from '../core/config.js';
-import { PackedNode, PackedCombo, PackedEnchant } from '../types/index.js';
-import { SearchFrontier, FrontierFactory } from './frontier.js';
+import { PackedNode, PackedCombo, PackedEnchant, SearchFrontier } from '../types/index.js';
+import { FrontierFactory } from './frontier.js';
 
 /**
  * Service for the Best-First search of enchantment combinations.

@@ -1,11 +1,12 @@
 import { EnchantEngine } from '../engine/index.js';
 import { DATA } from '../data/index.js';
 import { HumanizationService, SerializationService } from '../services/index.js';
+import type { WorkerRequest } from './protocol.js';
 
 let engine: EnchantEngine | null = null;
 const abortControllers = new Map<string, AbortController>();
 
-self.onmessage = async (e: MessageEvent) => {
+self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
     const { type, payload, id } = e.data;
 
     try {

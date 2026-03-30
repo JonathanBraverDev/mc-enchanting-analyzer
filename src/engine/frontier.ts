@@ -1,23 +1,7 @@
 import { BinaryHeap, PRECISION, ComboUtils, RomanUtils } from '../utils/index.js';
 import { Registry } from '../core/registry.js';
 import { ENGINE_DEFAULTS } from '../core/config.js';
-import { PackedNode, PackedCombo } from '../types/index.js';
-
-/**
- * State of a search for enchantment combinations.
- */
-export interface SearchFrontier {
-    queue: BinaryHeap<PackedNode>;
-    results: Map<PackedCombo, bigint>;
-    anyMass: Map<number, bigint>;
-    rankMass: Map<number, bigint>;
-    countMass: Map<number, bigint>;
-    uncertainty: bigint;
-    cumulativeAccountedMass: bigint;
-    prunedMass: bigint;
-    roundingError: bigint;
-    threshold: bigint;
-}
+import { PackedNode, PackedCombo, SearchFrontier } from '../types/index.js';
 
 export class FrontierFactory {
     /**

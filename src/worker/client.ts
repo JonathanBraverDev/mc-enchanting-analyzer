@@ -1,4 +1,5 @@
 import { SerializationService } from '../services/index.js';
+import type { WorkerResponse } from './protocol.js';
 
 /**
  * Client wrapper around the Enchant Engine Web Worker.
@@ -30,7 +31,7 @@ export const WorkerClient = {
             this.workers[type] = new Worker('dist/worker.js');
             const timeout = setTimeout(() => reject(new Error(`Worker ${type} initialization timed out`)), 10000);
 
-            this.workers[type]!.onmessage = (e) => {
+            this.workers[type]!.onmessage = (e: MessageEvent<WorkerResponse>) => {
                 const { type: msgType, id, payload } = e.data;
                 const reqKey = `${type}_${id}`;
                 const req = this.pendingRequests.get(reqKey);

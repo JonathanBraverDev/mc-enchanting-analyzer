@@ -2,10 +2,10 @@ import { PRECISION, ProbUtils, AsyncUtils, ComboUtils, RomanUtils } from '../uti
 import { SummaryService } from '../services/index.js';
 import { Registry } from '../core/registry.js';
 import { ENGINE_DEFAULTS } from '../core/config.js';
-import { CalculationStats, PackedCombo } from '../types/index.js';
+import { CalculationStats, PackedCombo, SearchFrontier } from '../types/index.js';
 import { DistributionService } from './distribution.js';
 import { SearchService } from './search.js';
-import { SearchFrontier, FrontierFactory } from './frontier.js';
+import { FrontierFactory } from './frontier.js';
 
 /**
  * Service for aggregating enchantment statistics across multiple modified levels.
