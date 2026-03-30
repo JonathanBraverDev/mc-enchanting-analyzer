@@ -79,7 +79,14 @@ export class RegistryFactory {
     private static applyVersionManifest(state: RegistryState, data: EnchantmentData, manifest: VersionManifest): void {
         if (manifest.item_enchantments) {
             for (const [cat, content] of Object.entries(manifest.item_enchantments)) {
-                const resolved = content.flatMap(item => data.enchantment_groups[item] || [item]);
+                const resolved = content.flatMap(item => {
+                    if (item === "book_pool") {
+                        return Object.entries(data.global_enchantments)
+                            .filter(([, e]) => (e as Enchantment).bookable !== false)
+                            .map(([name]) => name);
+                    }
+                    return data.enchantment_groups[item] || [item];
+                });
                 state.mergedItems[cat] = [...new Set(resolved)];
             }
         }
@@ -101,6 +108,17 @@ export class RegistryFactory {
     }
 
     private static finalizeEnchantmentRegistry(state: RegistryState, data: EnchantmentData): void {
+        // Expand conflicts symmetrically — only one direction needed in data
+        const enchantmentData = data.global_enchantments;
+        for (const [name, entry] of Object.entries(enchantmentData)) {
+            for (const conflictName of entry.conflicts ?? []) {
+                const conflictEntry = enchantmentData[conflictName];
+                if (conflictEntry && !conflictEntry.conflicts?.includes(name)) {
+                    (conflictEntry as Enchantment).conflicts = [...(conflictEntry.conflicts ?? []), name];
+                }
+            }
+        }
+
         const allEnchNames = Object.keys(data.global_enchantments);
         state.revIdMap = allEnchNames;
         allEnchNames.forEach((name, i) => state.idMap.set(name, i));
