@@ -1,7 +1,7 @@
 import { BinaryHeap, PRECISION, ProbUtils, ComboUtils } from '../utils/index.js';
-import { Registry } from '../core/registry.js';
+import { getEligiblePool } from '../core/registry.js';
 import { ENGINE_DEFAULTS } from '../core/config.js';
-import { PackedNode, PackedCombo, PackedEnchant, SearchFrontier } from '../types/index.js';
+import { PackedNode, PackedCombo, PackedEnchant, SearchFrontier, RegistryState } from '../types/index.js';
 import { FrontierFactory } from './frontier.js';
 
 /**
@@ -12,7 +12,7 @@ export class SearchService {
      * Iteratively calculates enchantment combinations using a Best-First approach.
      */
     public static calculateCombinations(
-        registry: Registry,
+        registry: RegistryState,
         cat: string, 
         modLevel: number, 
         mat: string, 
@@ -30,7 +30,7 @@ export class SearchService {
         let uncertainty = prunedMass;
         let iterations = 0;
 
-        const initialPool = registry.getEligiblePool(cat, modLevel, mat);
+        const initialPool = getEligiblePool(registry, cat, modLevel, mat);
         if (initialPool.length === 0) {
             return { 
                 queue: new BinaryHeap(), 
@@ -85,7 +85,7 @@ export class SearchService {
     }
 
     private static processSearchNode(
-        registry: Registry,
+        registry: RegistryState,
         current: PackedNode,
         currentCount: number,
         cat: string,

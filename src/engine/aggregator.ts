@@ -1,8 +1,8 @@
 import { PRECISION, ProbUtils, AsyncUtils, ComboUtils, RomanUtils } from '../utils/index.js';
 import { SummaryService } from '../services/index.js';
-import { Registry } from '../core/registry.js';
+import { getEnchantability, isEnchantmentAchievable } from '../core/registry.js';
 import { ENGINE_DEFAULTS } from '../core/config.js';
-import { CalculationStats, PackedCombo, SearchFrontier } from '../types/index.js';
+import { CalculationStats, PackedCombo, SearchFrontier, RegistryState } from '../types/index.js';
 import { DistributionService } from './distribution.js';
 import { SearchService } from './search.js';
 import { FrontierFactory } from './frontier.js';
@@ -15,7 +15,7 @@ export class StatAggregator {
      * Aggregates all statistics for a given enchantment attempt.
      */
     public static async getFullStats(
-        registry: Registry,
+        registry: RegistryState,
         cat: string, 
         xp: number, 
         mat: string, 
@@ -32,11 +32,11 @@ export class StatAggregator {
         useCache: boolean = true
     ): Promise<CalculationStats> {
         const bThreshold = ProbUtils.toBigInt(threshold);
-        const enchantability = registry.getEnchantability(mat, cat);
+        const enchantability = getEnchantability(registry, mat, cat);
         const modDist = DistributionService.getModifiedLevelDist(xp, enchantability, registry);
         const levels = Object.keys(modDist).map(Number).sort((a, b) => b - a);
 
-        if (guaranteedFirst && !registry.isEnchantmentAchievable(guaranteedFirst, cat, mat, levels)) {
+        if (guaranteedFirst && !isEnchantmentAchievable(registry, guaranteedFirst, cat, mat, levels)) {
             return { ranks: {}, any: {}, count: {}, combos: {}, uncertainty: 1.0 };
         }
 

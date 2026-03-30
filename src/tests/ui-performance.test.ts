@@ -66,7 +66,7 @@ test.describe('UI Performance & Accuracy', () => {
             const ctrl = (window as any).UIController;
             const stats = ctrl.currentSweep[29].s;
             const engine = ctrl.engine;
-            const sharpnessId = engine.registry.getEnchantId('Sharpness');
+            const sharpnessId = engine.registry.idMap.get('Sharpness');
             return stats.any[sharpnessId] >= 0.9999;
         });
         expect(isAccurateAt30).toBe(true);
@@ -91,7 +91,7 @@ test.describe('UI Performance & Accuracy', () => {
                 const ctrl = (window as any).UIController;
                 const stats = ctrl.currentSweep[idx].s;
                 const engine = ctrl.engine;
-                const effId = engine.registry.getEnchantId('Efficiency');
+                const effId = engine.registry.idMap.get('Efficiency');
                 const prob = stats.any[effId] || 0;
                 const isAccurate = prob >= 0.9999 || stats.uncertainty >= 0.9999;
                 return { isAccurate, prob, uncertainty: stats.uncertainty };

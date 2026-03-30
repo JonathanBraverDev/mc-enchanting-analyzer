@@ -1,6 +1,7 @@
 import { ComboUtils } from '../utils/domain/ComboUtils.js';
 import { RomanUtils } from '../utils/format/RomanUtils.js';
-import type { NameResolver, EnchantInsights, ResultSortMode, CalculationStats } from '../types/index.js';
+import type { EnchantInsights, ResultSortMode, CalculationStats, RegistryState } from '../types/index.js';
+import { getEnchantName, getFullEnchantName } from '../core/registry.js';
 
 /**
  * Service for converting raw statistics into human-readable insights.
@@ -11,7 +12,7 @@ export class HumanizationService {
      */
     public static humanize(
         stats: CalculationStats,
-        resolver: NameResolver,
+        resolver: RegistryState,
         sortMode: ResultSortMode = 'prob',
         romanMap?: Record<string, number>
     ): EnchantInsights {
@@ -25,19 +26,19 @@ export class HumanizationService {
         };
 
         for (const [idAndRank, prob] of Object.entries(stats.ranks)) {
-            const name = resolver.getFullEnchantName(Number(idAndRank));
+            const name = getFullEnchantName(resolver, Number(idAndRank));
             human.ranks[name] = prob as number;
         }
 
         for (const [id, prob] of Object.entries(stats.any)) {
-            const name = resolver.getEnchantName(Number(id));
+            const name = getEnchantName(resolver, Number(id));
             human.any[name] = prob as number;
         }
 
         const rawCombos: Record<string, number> = {};
         for (const [packed, prob] of Object.entries(stats.combos)) {
             const ids = ComboUtils.unpack(parseInt(packed, 16));
-            const comboKey = ids.map(n => resolver.getFullEnchantName(n)).join("+");
+            const comboKey = ids.map(n => getFullEnchantName(resolver, n)).join("+");
             rawCombos[comboKey] = prob as number;
         }
 

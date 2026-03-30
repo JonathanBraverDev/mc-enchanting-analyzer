@@ -1,5 +1,6 @@
-import { Enchantment } from './domain.js';
+import { Enchantment, EnchantmentData } from './domain.js';
 import { BinaryHeap } from '../utils/collections/BinaryHeap.js';
+import { LRUCache } from '../utils/collections/LRUCache.js';
 
 /**
  * Raw calculation statistics from the search engine.
@@ -55,6 +56,7 @@ export interface SearchFrontier {
  * Internal state of a Registry, containing pre-computed mapping and conflict data.
  */
 export interface RegistryState {
+    data: EnchantmentData;
     version: string;
     mechanics: import('./domain.js').VersionMechanics;
     mergedItems: MergedItems;
@@ -72,6 +74,8 @@ export interface RegistryState {
     versionPool: Map<string, string[]>;
     enchantToIndex: Map<number, number>;
     indexToEnchant: number[];
+    distCache: Map<string, { [level: number]: bigint }>;
+    poolCache: LRUCache<string, PackedEnchant[]>;
 }
 
 export type PackedEnchant = number;

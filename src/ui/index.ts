@@ -7,6 +7,7 @@ import { ResultsView } from './views/ResultsView.js';
 import { ChartController } from './chart.js';
 import { RefinementService } from './refinement.js';
 import { HumanizationService } from '../services/index.js';
+import { getEnchantability } from '../core/registry.js';
 import { EnchantInsights, CalculationStats } from '../types/index.js';
 
 /**
@@ -125,7 +126,7 @@ class AppController {
             this.params.updateGuaranteedFirst(engine);
             
             const vals = this.params.getValues();
-            this.params.setEnchantability(engine.registry.getEnchantability(vals.material, vals.category));
+            this.params.setEnchantability(getEnchantability(engine.registry, vals.material, vals.category));
 
             await this.refinement.run(
                 { ...vals, category: vals.category },

@@ -1,14 +1,14 @@
 import { BinaryHeap, PRECISION, ComboUtils, RomanUtils } from '../utils/index.js';
-import { Registry } from '../core/registry.js';
 import { ENGINE_DEFAULTS } from '../core/config.js';
-import { PackedNode, PackedCombo, SearchFrontier } from '../types/index.js';
+import { getEnchantId } from '../core/registry.js';
+import { PackedNode, PackedCombo, SearchFrontier, RegistryState } from '../types/index.js';
 
 export class FrontierFactory {
     /**
      * Initializes a new SearchFrontier or clones an existing one.
      */
     public static create(
-        registry: Registry,
+        registry: RegistryState,
         cat: string,
         modLevel: number,
         guaranteedFirst: string | null,
@@ -38,7 +38,7 @@ export class FrontierFactory {
 
         const romanMap = registry.data.constants.ROMAN_MAP;
         const guaranteedId = this.getGuaranteedFirstId(registry, guaranteedFirst);
-        
+
         const rankStr = guaranteedFirst?.split(' ').pop();
         const rank = rankStr ? RomanUtils.getRomanValue(rankStr, romanMap) : null;
         const full = (guaranteedId !== null && rank !== null) ? (guaranteedId << 8 | rank) : null;
@@ -57,17 +57,17 @@ export class FrontierFactory {
             prob: PRECISION
         });
 
-        return { 
+        return {
             queue, results, anyMass, rankMass, countMass,
-            uncertainty: 0n, cumulativeAccountedMass: 0n, prunedMass: 0n, roundingError: 0n, threshold 
+            uncertainty: 0n, cumulativeAccountedMass: 0n, prunedMass: 0n, roundingError: 0n, threshold
         };
     }
 
-    public static getGuaranteedFirstId(registry: Registry, guaranteedFirst: string | null): number | null {
+    public static getGuaranteedFirstId(registry: RegistryState, guaranteedFirst: string | null): number | null {
         if (!guaranteedFirst) return null;
         const romanMap = registry.data.constants.ROMAN_MAP;
         const base = RomanUtils.getBaseName(guaranteedFirst, romanMap);
-        const id = registry.getEnchantId(base);
+        const id = getEnchantId(registry, base);
         return id !== ENGINE_DEFAULTS.UNKNOWN_ENCHANT_ID ? id : null;
     }
 }

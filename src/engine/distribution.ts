@@ -1,20 +1,19 @@
 import { PRECISION } from '../utils/index.js';
 import { ENGINE_DEFAULTS } from '../core/config.js';
-import { Registry } from '../core/registry.js';
+import { RegistryState } from '../types/index.js';
 
 /**
  * Service for calculating the probability distribution of Modified Levels.
  */
 export class DistributionService {
-    private static distCache = new Map<string, { [level: number]: bigint }>();
-
     /**
      * Calculates the probability distribution of Modified Levels.
      */
-    public static getModifiedLevelDist(xp: number, enchantability: number, registry: Registry): { [level: number]: bigint } {
+    public static getModifiedLevelDist(xp: number, enchantability: number, registry: RegistryState): { [level: number]: bigint } {
         const mech = registry.mechanics;
         const key = `${xp}@${enchantability}@${mech.enchantability_bonus_divisor}@${mech.random_bonus_range}`;
-        if (this.distCache.has(key)) return this.distCache.get(key)!;
+        const cache = registry.distCache;
+        if (cache.has(key)) return cache.get(key)!;
 
         // 1.0 in BigInt fixed-point
         if (enchantability <= 0) return { [xp]: PRECISION };
@@ -57,14 +56,7 @@ export class DistributionService {
             }
         }
 
-        this.distCache.set(key, finalDist);
+        cache.set(key, finalDist);
         return finalDist;
-    }
-
-    /**
-     * Clears the distribution cache.
-     */
-    public static clearCache(): void {
-        this.distCache.clear();
     }
 }

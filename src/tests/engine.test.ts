@@ -6,6 +6,7 @@ import { ProbUtils } from '../utils/index.js';
 import { HumanizationService } from '../services/index.js';
 import { SnapshotUtils, EngineTestUtils } from './test-utils.js';
 import { ENGINE_DEFAULTS } from '../core/config.js';
+import { getEnchantId } from '../core/registry.js';
 
 // Polyfill for requestAnimationFrame in Node (Sync version for tests)
 if (typeof (globalThis as any).requestAnimationFrame !== 'function') {
@@ -72,11 +73,11 @@ describe('Enchantment Engine Test Suite', () => {
         const engine = new EnchantEngine(DATA, '1.20');
 
         it('Progressive Refinement Parity: Resumed search should match fresh search', async () => {
-            const standard = await engine.getFullStats('book', 30, 'book', null, 0.001);
+            const standard = await engine.getFullStats('book', 30, 'book', { threshold: 0.001 });
             engine.comboCache.clear();
             engine.statsCache.clear();
-            await engine.getFullStats('book', 30, 'book', null, 0.05); // Coarse
-            const resumed = await engine.getFullStats('book', 30, 'book', null, 0.001); // Resume
+            await engine.getFullStats('book', 30, 'book', { threshold: 0.05 }); // Coarse
+            const resumed = await engine.getFullStats('book', 30, 'book', { threshold: 0.001 }); // Resume
             
             const keysS = Object.keys(standard.any).sort().slice(0, 5);
             const keysR = Object.keys(resumed.any).sort().slice(0, 5);
@@ -107,7 +108,7 @@ describe('Enchantment Engine Test Suite', () => {
 
         it('Guaranteed First should yield 100% total probability', async () => {
             const guaranteedFirst = "Efficiency IV";
-            const stats = await engine.getFullStats('pickaxe', 30, 'diamond', guaranteedFirst, 0.0001);
+            const stats = await engine.getFullStats('pickaxe', 30, 'diamond', { guaranteedFirst, threshold: 0.0001 });
             const effId = engine.registry.idMap.get('Efficiency')!;
             const probAnyEff = stats.any[effId];
             
@@ -120,7 +121,7 @@ describe('Enchantment Engine Test Suite', () => {
         });
 
         it('should maintain high precision for complex enchantment results', async () => {
-            const stats = await engine.getFullStats('pickaxe', 30, 'diamond', null, 0.00001);
+            const stats = await engine.getFullStats('pickaxe', 30, 'diamond', { threshold: 0.00001 });
             let totalProb = 0; // Uncertainty is now properly tracked within the combos themselves as partial states
             for (const p of Object.values(stats.combos)) {
                 totalProb += Number(p);
@@ -133,11 +134,11 @@ describe('Enchantment Engine Test Suite', () => {
              
              // Force a high-uncertainty search by setting extremely low maxIterations (e.g., 5)
              const stats = await engine.getFullStats(
-                 'sword', 30, 'diamond', 'Sharpness IV', 0.000001, 
-                 undefined, undefined, false, 5 
+                 'sword', 30, 'diamond',
+                 { guaranteedFirst: 'Sharpness IV', threshold: 0.000001, useBestCache: false, maxIterations: 5 }
              );
      
-             const sharpnessId = engine.registry.getEnchantId('Sharpness');
+             const sharpnessId = getEnchantId(engine.registry,'Sharpness');
              const anySharpness = stats.any[sharpnessId];
              
              assert.ok(stats.uncertainty > 0.1, `Expected high uncertainty, got ${stats.uncertainty}`);
@@ -149,8 +150,8 @@ describe('Enchantment Engine Test Suite', () => {
 
          it('Guaranteed book enchant should be exactly 100%', async () => {
              const engine = new EnchantEngine(DATA, '1.20.1');
-             const stats = await engine.getFullStats('book', 30, 'book', 'Silk Touch I', 0.0001);
-             const silkTouchId = engine.registry.getEnchantId('Silk Touch');
+             const stats = await engine.getFullStats('book', 30, 'book', { guaranteedFirst: 'Silk Touch I', threshold: 0.0001 });
+             const silkTouchId = getEnchantId(engine.registry,'Silk Touch');
              assert.strictEqual(stats.any[silkTouchId], 1.0, 'Guaranteed book enchant should be 100%');
          });
     });
@@ -161,31 +162,31 @@ describe('Enchantment Engine Test Suite', () => {
 
         it('Snapshot: 1.8 Diamond Sword @ Level 30', async () => {
             const engine = new EnchantEngine(DATA, '1.8');
-            const stats = await engine.getFullStats('sword', 30, 'diamond', null, SNAPSHOT_THRESHOLD, undefined, undefined, false, SNAPSHOT_LIMIT, SNAPSHOT_LIMIT, SNAPSHOT_LIMIT, false);
+            const stats = await engine.getFullStats('sword', 30, 'diamond', { threshold: SNAPSHOT_THRESHOLD, useBestCache: false, maxIterations: SNAPSHOT_LIMIT, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false });
             await SnapshotUtils.assertSnapshot('1.8_sword_30_diamond', stats);
         });
 
         it('Snapshot: 1.21 Mace @ Level 30', async () => {
             const engine = new EnchantEngine(DATA, '1.21');
-            const stats = await engine.getFullStats('mace', 30, 'mace', null, SNAPSHOT_THRESHOLD, undefined, undefined, false, SNAPSHOT_LIMIT, SNAPSHOT_LIMIT, SNAPSHOT_LIMIT, false);
+            const stats = await engine.getFullStats('mace', 30, 'mace', { threshold: SNAPSHOT_THRESHOLD, useBestCache: false, maxIterations: SNAPSHOT_LIMIT, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false });
             await SnapshotUtils.assertSnapshot('1.21_mace_30_mace', stats);
         });
 
         it('Snapshot: 1.7.2 Multi-Enchant Book @ Level 30', async () => {
             const engine = new EnchantEngine(DATA, '1.7.2');
-            const stats = await engine.getFullStats('book', 30, 'book', null, SNAPSHOT_THRESHOLD, undefined, undefined, false, SNAPSHOT_LIMIT, SNAPSHOT_LIMIT, SNAPSHOT_LIMIT, false);
+            const stats = await engine.getFullStats('book', 30, 'book', { threshold: SNAPSHOT_THRESHOLD, useBestCache: false, maxIterations: SNAPSHOT_LIMIT, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false });
             await SnapshotUtils.assertSnapshot('1.7.2_book_30_book', stats);
         });
 
         it('Snapshot: 1.21.11 Spear @ Level 30', async () => {
             const engine = new EnchantEngine(DATA, '1.21.11');
-            const stats = await engine.getFullStats('spear', 30, 'diamond', null, SNAPSHOT_THRESHOLD, undefined, undefined, false, SNAPSHOT_LIMIT, SNAPSHOT_LIMIT, SNAPSHOT_LIMIT, false);
+            const stats = await engine.getFullStats('spear', 30, 'diamond', { threshold: SNAPSHOT_THRESHOLD, useBestCache: false, maxIterations: SNAPSHOT_LIMIT, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false });
             await SnapshotUtils.assertSnapshot('1.21.11_spear_30_diamond', stats);
         });
 
         it('Snapshot: 1.21.11 Book @ Level 30', async () => {
             const engine = new EnchantEngine(DATA, '1.21.11');
-            const stats = await engine.getFullStats('book', 30, 'book', null, SNAPSHOT_THRESHOLD, undefined, undefined, false, SNAPSHOT_LIMIT, SNAPSHOT_LIMIT, SNAPSHOT_LIMIT, false);
+            const stats = await engine.getFullStats('book', 30, 'book', { threshold: SNAPSHOT_THRESHOLD, useBestCache: false, maxIterations: SNAPSHOT_LIMIT, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false });
             await SnapshotUtils.assertSnapshot('1.21.11_book_30_book', stats);
         });
     });
@@ -195,14 +196,14 @@ describe('Enchantment Engine Test Suite', () => {
              const engine = new EnchantEngine(DATA, '1.8');
              
              // 1. Get stats for Sword
-             const swordStats = await engine.getFullStats('sword', 30, 'diamond', null, 0.001);
-             const sharpnessId = engine.registry.getEnchantId('Sharpness') as number;
+             const swordStats = await engine.getFullStats('sword', 30, 'diamond', { threshold: 0.001 });
+             const sharpnessId = getEnchantId(engine.registry,'Sharpness') as number;
              assert.ok(swordStats.any[sharpnessId] > 0, 'Sword should have Sharpness');
              
              // 2. Get stats for Pickaxe (same version, level, material)
              // This should bypass the sword cache because category ID is different
-             const pickaxeStats = await engine.getFullStats('pickaxe', 30, 'diamond', null, 0.001);
-             const efficiencyId = engine.registry.getEnchantId('Efficiency') as number;
+             const pickaxeStats = await engine.getFullStats('pickaxe', 30, 'diamond', { threshold: 0.001 });
+             const efficiencyId = getEnchantId(engine.registry,'Efficiency') as number;
              
              assert.strictEqual(pickaxeStats.any[sharpnessId] || 0, 0, 'Pickaxe should NOT have Sharpness');
              assert.ok(pickaxeStats.any[efficiencyId] > 0, 'Pickaxe should have Efficiency');

@@ -1,108 +1,60 @@
-import { EnchantmentData, VersionMechanics, ResolvedRegistry, MergedItems, MergedOverrides, RegistryState, PackedEnchant } from '../types/index.js';
+import { RegistryState, PackedEnchant } from '../types/index.js';
 import { RomanUtils } from '../utils/index.js';
 import { ENGINE_DEFAULTS } from './config.js';
 import { MaterialService } from './RegistryMaterials.js';
 import { PoolService } from './RegistryPools.js';
 
-/**
- * Handles version-specific data lookup and material eligibility.
- * Now a lightweight view over pre-computed RegistryState, delegating complex logic to services.
- */
-export class Registry {
-    public version: string;
-    public data: EnchantmentData;
-    public mechanics: VersionMechanics;
-    public mergedItems: MergedItems;
-    public mergedOverrides: MergedOverrides;
-    public resolvedRegistry: ResolvedRegistry;
-    public mergedMaterials: Set<string>;
-    public multiEnchantBooks: boolean;
-    
-    public idMap: Map<string, number>;
-    public revIdMap: string[];
-    public catIdMap: Map<string, number>;
-    public matIdMap: Map<string, number>;
-    public conflictBitsets: BigUint64Array;
-    public weightMap: Uint32Array;
-    public sortedRanks: [string, number][];
+export function getEligibleMaterials(state: RegistryState, cat: string): string[] {
+    return MaterialService.getEligibleMaterials(state.data, cat, state.mergedMaterials);
+}
 
-    public versionPool: Map<string, string[]>;
-    
-    private state: RegistryState;
+export function getEnchantName(state: RegistryState, id: number): string {
+    return state.revIdMap[id] || "Unknown";
+}
 
-    constructor(data: EnchantmentData, state: RegistryState) {
-        this.data = data;
-        this.state = state;
-        
-        this.version = state.version;
-        this.mechanics = state.mechanics;
-        this.mergedItems = state.mergedItems;
-        this.mergedOverrides = state.mergedOverrides;
-        this.resolvedRegistry = state.resolvedRegistry;
-        this.mergedMaterials = state.mergedMaterials;
-        this.multiEnchantBooks = state.multiEnchantBooks;
-        this.idMap = state.idMap;
-        this.revIdMap = state.revIdMap;
-        this.catIdMap = state.catIdMap;
-        this.matIdMap = state.matIdMap;
-        this.conflictBitsets = state.conflictBitsets;
-        this.weightMap = state.weightMap;
-        this.sortedRanks = state.sortedRanks;
-        this.versionPool = state.versionPool;
-    }
+export function getRankRoman(state: RegistryState, rank: number): string {
+    return RomanUtils.rankToRoman(rank, state.data.constants.ROMAN_MAP);
+}
 
-    public getEligibleMaterials(cat: string): string[] {
-        return MaterialService.getEligibleMaterials(this.data, cat, this.mergedMaterials);
-    }
+export function getCategoryId(state: RegistryState, cat: string): number {
+    return state.catIdMap.get(cat) ?? ENGINE_DEFAULTS.UNKNOWN_CATEGORY_ID;
+}
 
-    public getEnchantName(id: number): string {
-        return this.revIdMap[id] || "Unknown";
-    }
+export function getMaterialId(state: RegistryState, mat: string): number {
+    return state.matIdMap.get(mat) ?? ENGINE_DEFAULTS.UNKNOWN_MATERIAL_ID;
+}
 
-    public getRankRoman(rank: number): string {
-        return RomanUtils.rankToRoman(rank, this.data.constants.ROMAN_MAP);
-    }
+export function getEnchantId(state: RegistryState, name: string): number {
+    return state.idMap.get(name) ?? ENGINE_DEFAULTS.UNKNOWN_ENCHANT_ID;
+}
 
-    public getCategoryId(cat: string): number {
-        return this.catIdMap.get(cat) ?? ENGINE_DEFAULTS.UNKNOWN_CATEGORY_ID;
-    }
+export function hasConflict(state: RegistryState, idA: number, idB: number): boolean {
+    return (state.conflictBitsets[idA] & (1n << BigInt(idB))) !== 0n;
+}
 
-    public getMaterialId(mat: string): number {
-        return this.matIdMap.get(mat) ?? ENGINE_DEFAULTS.UNKNOWN_MATERIAL_ID;
-    }
+export function isCategoryAvailable(state: RegistryState, cat: string): boolean {
+    const pool = state.mergedItems[cat];
+    return !!(pool && pool.length > 0);
+}
 
-    public getEnchantId(name: string): number {
-        return this.idMap.get(name) ?? ENGINE_DEFAULTS.UNKNOWN_ENCHANT_ID;
-    }
+export function getCategoryPool(state: RegistryState, cat: string): string[] {
+    return state.mergedItems[cat] || [];
+}
 
-    public hasConflict(idA: number, idB: number): boolean {
-        return (this.conflictBitsets[idA] & (1n << BigInt(idB))) !== 0n;
-    }
+export function getFullEnchantName(state: RegistryState, idAndRank: number): string {
+    const id = idAndRank >> 8;
+    const rank = idAndRank & 0xFF;
+    return `${getEnchantName(state, id)} ${getRankRoman(state, rank)}`;
+}
 
-    public isCategoryAvailable(cat: string): boolean {
-        const pool = this.mergedItems[cat];
-        return !!(pool && pool.length > 0);
-    }
+export function getEligiblePool(state: RegistryState, cat: string, level: number, mat: string): PackedEnchant[] {
+    return PoolService.getEligiblePool(state, cat, level, mat);
+}
 
-    public getCategoryPool(cat: string): string[] {
-        return this.mergedItems[cat] || [];
-    }
+export function isEnchantmentAchievable(state: RegistryState, fullName: string, cat: string, mat: string, levels: number[]): boolean {
+    return PoolService.isEnchantmentAchievable(state, fullName, cat, mat, levels, state.data.constants.ROMAN_MAP);
+}
 
-    public getFullEnchantName(idAndRank: number): string {
-        const id = idAndRank >> 8;
-        const rank = idAndRank & 0xFF;
-        return `${this.getEnchantName(id)} ${this.getRankRoman(rank)}`;
-    }
-
-    public getEligiblePool(cat: string, level: number, mat: string): PackedEnchant[] {
-        return PoolService.getEligiblePool(this.state, cat, level, mat);
-    }
-
-    public isEnchantmentAchievable(fullName: string, cat: string, mat: string, levels: number[]): boolean {
-        return PoolService.isEnchantmentAchievable(this.state, fullName, cat, mat, levels, this.data.constants.ROMAN_MAP);
-    }
-
-    public getEnchantability(mat: string, cat: string): number {
-        return MaterialService.getEnchantability(this.data, mat, cat);
-    }
+export function getEnchantability(state: RegistryState, mat: string, cat: string): number {
+    return MaterialService.getEnchantability(state.data, mat, cat);
 }
