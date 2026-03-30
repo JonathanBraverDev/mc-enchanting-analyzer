@@ -40,16 +40,18 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
                         payload.cat,
                         payload.xp,
                         payload.mat,
-                        payload.guaranteedFirst,
-                        payload.threshold,
-                        signal,
-                        (partialStats) => {
-                            const human = HumanizationService.humanize(partialStats, engine!.registry);
-                            const { compact, transferables } = SerializationService.serialize(partialStats);
-                            (self as any).postMessage({ type: 'progress', id, payload: { stats: compact, human } }, transferables);
-                        },
-                        payload.useBestCache || false,
-                        payload.maxIterations
+                        {
+                            guaranteedFirst: payload.guaranteedFirst,
+                            threshold: payload.threshold,
+                            signal,
+                            onProgress: (partialStats) => {
+                                const human = HumanizationService.humanize(partialStats, engine!.registry);
+                                const { compact, transferables } = SerializationService.serialize(partialStats);
+                                (self as any).postMessage({ type: 'progress', id, payload: { stats: compact, human } }, transferables);
+                            },
+                            useBestCache: payload.useBestCache || false,
+                            maxIterations: payload.maxIterations
+                        }
                     );
                     
                     const human = HumanizationService.humanize(stats, engine.registry);
