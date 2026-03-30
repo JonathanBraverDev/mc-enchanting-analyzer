@@ -1,11 +1,10 @@
-import { EnchantmentData, CalculationStats } from '../types/index.js';
+import { EnchantmentData, CalculationStats, SearchFrontier } from '../types/index.js';
 import { LRUCache, ProbUtils } from '../utils/index.js';
 import { Registry } from '../core/registry.js';
 import { RegistryFactory } from '../core/factory.js';
 import { ENGINE_DEFAULTS } from '../core/config.js';
 import { DistributionService } from './distribution.js';
 import { SearchService } from './search.js';
-import { SearchFrontier } from './frontier.js';
 import { StatAggregator } from './aggregator.js';
 
 /**

@@ -1,4 +1,20 @@
-import { EnchantInsights } from './engine.js';
+/**
+ * Human-readable enchantment calculation statistics.
+ */
+export interface EnchantInsights {
+    ranks: Record<string, number>;
+    any: Record<string, number>;
+    count: Record<number, number>;
+    combos: Record<string, number>;
+    uncertainty: number;
+    pruned?: number;
+    roundingError?: number;
+}
+
+export interface NameResolver {
+    getFullEnchantName(n: number): string;
+    getEnchantName(id: number): string;
+}
 
 /**
  * Single data point in a level sweep (e.g., for charting).

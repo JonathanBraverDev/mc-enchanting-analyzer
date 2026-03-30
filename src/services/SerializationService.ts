@@ -1,5 +1,5 @@
 import { ENGINE_DEFAULTS } from '../core/config.js';
-import { CompactStats } from '../types/index.js';
+import { CompactStats, CalculationStats } from '../types/index.js';
 
 /**
  * Service for zero-copy binary serialization of statistics.
@@ -8,7 +8,7 @@ export class SerializationService {
     /**
      * Serializes statistics into a CompactStats object for transfer.
      */
-    public static serialize(stats: any): { compact: CompactStats, transferables: ArrayBuffer[] } {
+    public static serialize(stats: CalculationStats): { compact: CompactStats, transferables: ArrayBuffer[] } {
         const comboEntries = Object.entries(stats.combos);
         const comboKeys = new Float64Array(comboEntries.length);
         const comboProbs = new Float64Array(comboEntries.length);
@@ -58,8 +58,8 @@ export class SerializationService {
     /**
      * Reconstructs statistics from a CompactStats object.
      */
-    public static deserialize(compact: CompactStats): any {
-        const stats: any = { ranks: {}, any: {}, count: {}, combos: {}, uncertainty: compact.uncertainty, pruned: compact.pruned };
+    public static deserialize(compact: CompactStats): CalculationStats {
+        const stats: CalculationStats = { ranks: {}, any: {}, count: {}, combos: {}, uncertainty: compact.uncertainty, pruned: compact.pruned };
         
         for (let i = 0; i < compact.comboKeys.length; i++) {
             stats.combos[compact.comboKeys[i].toString(16)] = compact.comboProbs[i];

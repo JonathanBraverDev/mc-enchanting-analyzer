@@ -1,6 +1,6 @@
 import { ComboUtils } from '../utils/domain/ComboUtils.js';
 import { RomanUtils } from '../utils/format/RomanUtils.js';
-import type { NameResolver, EnchantInsights, ResultSortMode } from '../types/index.js';
+import type { NameResolver, EnchantInsights, ResultSortMode, CalculationStats } from '../types/index.js';
 
 /**
  * Service for converting raw statistics into human-readable insights.
@@ -10,7 +10,7 @@ export class HumanizationService {
      * Converts statistics into a human-readable format with optional sorting.
      */
     public static humanize(
-        stats: any,
+        stats: CalculationStats,
         resolver: NameResolver,
         sortMode: ResultSortMode = 'prob',
         romanMap?: Record<string, number>

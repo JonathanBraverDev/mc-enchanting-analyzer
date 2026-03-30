@@ -1,4 +1,5 @@
 import { Enchantment } from './domain.js';
+import { BinaryHeap } from '../utils/collections/BinaryHeap.js';
 
 /**
  * Raw calculation statistics from the search engine.
@@ -13,19 +14,6 @@ export interface CalculationStats {
   roundingError?: number;
 }
 
-/**
- * Human-readable enchantment calculation statistics.
- */
-export interface EnchantInsights {
-    ranks: Record<string, number>;
-    any: Record<string, number>;
-    count: Record<number, number>;
-    combos: Record<string, number>;
-    uncertainty: number;
-    pruned?: number;
-    roundingError?: number;
-}
-
 export interface ResolvedRegistry {
   [enchantment: string]: Enchantment;
 }
@@ -38,11 +26,6 @@ export interface MergedOverrides {
   [enchantment: string]: Partial<Enchantment>;
 }
 
-export interface NameResolver {
-    getFullEnchantName(n: number): string;
-    getEnchantName(id: number): string;
-}
-
 /**
  * Packed representation of a search node to minimize object and array overhead.
  */
@@ -52,6 +35,21 @@ export interface PackedNode {
     prob: bigint;
 }
 
+/**
+ * State of a search for enchantment combinations.
+ */
+export interface SearchFrontier {
+    queue: BinaryHeap<PackedNode>;
+    results: Map<PackedCombo, bigint>;
+    anyMass: Map<number, bigint>;
+    rankMass: Map<number, bigint>;
+    countMass: Map<number, bigint>;
+    uncertainty: bigint;
+    cumulativeAccountedMass: bigint;
+    prunedMass: bigint;
+    roundingError: bigint;
+    threshold: bigint;
+}
 
 /**
  * Internal state of a Registry, containing pre-computed mapping and conflict data.

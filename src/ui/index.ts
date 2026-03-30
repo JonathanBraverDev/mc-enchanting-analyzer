@@ -7,7 +7,7 @@ import { ResultsView } from './views/ResultsView.js';
 import { ChartController } from './chart.js';
 import { RefinementService } from './refinement.js';
 import { HumanizationService } from '../services/index.js';
-import { EnchantInsights } from '../types/index.js';
+import { EnchantInsights, CalculationStats } from '../types/index.js';
 
 /**
  * Main Web Application Controller.
@@ -106,7 +106,7 @@ class AppController {
         this.run();
     }
 
-    private lastRawStats: any = null;
+    private lastRawStats: CalculationStats | null = null;
 
     public get currentSweep() {
         return this.refinement.currentSweep;
@@ -143,7 +143,7 @@ class AppController {
         }
     }
 
-    private updateInsightsFromRaw(raw: any, isFinal: boolean = false): void {
+    private updateInsightsFromRaw(raw: CalculationStats | null, isFinal: boolean = false): void {
         if (!raw) return;
         this.lastRawStats = raw;
 
