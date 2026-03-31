@@ -13,10 +13,10 @@ export class SearchService {
      */
     public static calculateCombinations(
         registry: RegistryState,
-        cat: string, 
-        modLevel: number, 
-        mat: string, 
-        guaranteedFirst: string | null = null, 
+        cat: string,
+        modLevel: number,
+        mat: string,
+        guaranteedFirst: string | null = null,
         threshold: bigint = ProbUtils.toBigInt(0.0001),
         limit: number,
         existingFrontier?: SearchFrontier,
@@ -24,7 +24,7 @@ export class SearchService {
     ): SearchFrontier {
         const frontier = FrontierFactory.create(registry, cat, modLevel, guaranteedFirst, existingFrontier, threshold);
         let { results, cumulativeAccountedMass, prunedMass, roundingError, queue } = frontier;
-        
+
         const guaranteedFirstId = FrontierFactory.getGuaranteedFirstId(registry, guaranteedFirst);
 
         let uncertainty = prunedMass;
@@ -32,17 +32,17 @@ export class SearchService {
 
         const initialPool = getEligiblePool(registry, cat, modLevel, mat);
         if (initialPool.length === 0) {
-            return { 
-                queue: new BinaryHeap(), 
-                results: new Map(), 
-                anyMass: new Map(), 
-                rankMass: new Map(), 
-                countMass: new Map([[0, PRECISION]]), 
-                uncertainty: 0n, 
-                cumulativeAccountedMass: PRECISION, 
-                prunedMass: 0n, 
+            return {
+                queue: new BinaryHeap(),
+                results: new Map(),
+                anyMass: new Map(),
+                rankMass: new Map(),
+                countMass: new Map([[0, PRECISION]]),
+                uncertainty: 0n,
+                cumulativeAccountedMass: PRECISION,
+                prunedMass: 0n,
                 roundingError: 0n,
-                threshold 
+                threshold
             };
         }
 
@@ -56,9 +56,9 @@ export class SearchService {
             iterations++;
             const current = queue.pop()!;
             const currentCount = ComboUtils.getCount(current.packedChosen);
-            
+
             if (currentCount === 0) {
-                const rem = this.processInitialNode(current, modLevel, guaranteedFirstId, initialPool, poolWeights, initialTotalWeight, queue, frontier.anyMass, frontier.rankMass);
+                const rem = this.processInitialNode(registry, current, modLevel, guaranteedFirstId, initialPool, poolWeights, initialTotalWeight, queue, frontier.anyMass, frontier.rankMass);
                 uncertainty += rem;
                 cumulativeAccountedMass += rem;
                 prunedMass += rem;
@@ -69,7 +69,7 @@ export class SearchService {
                 registry, current, currentCount, cat, guaranteedFirstId, initialPool, poolWeights, threshold, results, queue,
                 frontier.anyMass, frontier.rankMass, frontier.countMass, resultsLimit
             );
-            
+
             uncertainty += deltas.uncertaintyDelta;
             roundingError += deltas.roundingErrorDelta;
             cumulativeAccountedMass += deltas.massDelta;
@@ -100,6 +100,7 @@ export class SearchService {
         countMass: Map<number, bigint>,
         resultsLimit: number
     ): { uncertaintyDelta: bigint; massDelta: bigint; prunedDelta: bigint; roundingErrorDelta: bigint } {
+        const { enchantToIndex, indexToEnchant } = registry;
         const currentBitset = current.meta >> 8n;
         const currentLevel = Number(current.meta & 0xFFn);
 
@@ -109,13 +110,13 @@ export class SearchService {
         if (probContinue <= 0n) {
             let rem = 0n;
             if (cat === "book" && currentCount > 1) {
-                const redistributed = ComboUtils.removeAdditional(current.packedChosen, guaranteedFirstId);
+                const redistributed = ComboUtils.removeAdditional(current.packedChosen, guaranteedFirstId, enchantToIndex, indexToEnchant);
                 rem = current.prob % BigInt(redistributed.length);
                 const pChunk = current.prob / BigInt(redistributed.length);
                 for (const r of redistributed) {
                     results.set(r, (results.get(r) || 0n) + pChunk);
                 }
-                const enchants = ComboUtils.unpack(current.packedChosen);
+                const enchants = ComboUtils.unpack(current.packedChosen, indexToEnchant);
                 for (let i = 1; i < enchants.length; i++) {
                     const id = enchants[i] >> 8;
                     anyMass.set(id, (anyMass.get(id) || 0n) - (pChunk + rem));
@@ -133,37 +134,37 @@ export class SearchService {
         const probStop = ProbUtils.scale(current.prob, (PRECISION - probContinue));
         let remStop = 0n;
         if (cat === "book" && currentCount > 1) {
-            const redistributed = ComboUtils.removeAdditional(current.packedChosen, guaranteedFirstId);
+            const redistributed = ComboUtils.removeAdditional(current.packedChosen, guaranteedFirstId, enchantToIndex, indexToEnchant);
             const nOutcomes = BigInt(redistributed.length);
             remStop = probStop % nOutcomes;
             const pChunk = probStop / nOutcomes;
-            
+
             for (const r of redistributed) {
                 results.set(r, (results.get(r) || 0n) + pChunk);
             }
 
             // Correctly attribute mass based on survival across all outcomes
-            const originalEnchants = ComboUtils.unpack(current.packedChosen);
-            
+            const originalEnchants = ComboUtils.unpack(current.packedChosen, indexToEnchant);
+
             for (const e of originalEnchants) {
                 const id = e >> 8;
                 // Count how many of the redistributed results still contain this enchantment
-                const nOccurrences = redistributed.filter(r => ComboUtils.unpack(r).some(re => re === e)).length;
+                const nOccurrences = redistributed.filter(r => ComboUtils.unpack(r, indexToEnchant).some(re => re === e)).length;
                 const survivorMass = (BigInt(nOccurrences) * probStop) / nOutcomes;
                 const loss = probStop - survivorMass;
-                
+
                 if (loss > 0n) {
                     anyMass.set(id, (anyMass.get(id) || 0n) - loss);
                     rankMass.set(e, (rankMass.get(e) || 0n) - loss);
                 }
             }
-            
+
             countMass.set(currentCount - 1, (countMass.get(currentCount - 1) || 0n) + (probStop - remStop));
         } else {
             results.set(current.packedChosen, (results.get(current.packedChosen) || 0n) + probStop);
             countMass.set(currentCount, (countMass.get(currentCount) || 0n) + probStop);
         }
-        
+
         const probForward = ProbUtils.scale(current.prob, probContinue);
 
         // Safety checks
@@ -174,13 +175,13 @@ export class SearchService {
         if (isLimitReached || isTooSmall || isMapFull) {
             let remForward = 0n;
             if (cat === "book" && currentCount > 1) {
-                const redistributed = ComboUtils.removeAdditional(current.packedChosen, guaranteedFirstId);
+                const redistributed = ComboUtils.removeAdditional(current.packedChosen, guaranteedFirstId, enchantToIndex, indexToEnchant);
                 remForward = probForward % BigInt(redistributed.length);
                 const pChunk = probForward / BigInt(redistributed.length);
                 for (const r of redistributed) {
                     results.set(r, (results.get(r) || 0n) + pChunk);
                 }
-                const enchants = ComboUtils.unpack(current.packedChosen);
+                const enchants = ComboUtils.unpack(current.packedChosen, indexToEnchant);
                 for (let i = 1; i < enchants.length; i++) {
                     const id = enchants[i] >> 8;
                     anyMass.set(id, (anyMass.get(id) || 0n) - (pChunk + remForward));
@@ -219,7 +220,7 @@ export class SearchService {
         const nextLevel = currentCount >= 1 ? Math.floor(currentLevel / 2) : currentLevel;
         const pBase = probForward / BigInt(totalWeight);
         const remainder = probForward % BigInt(totalWeight);
-        const currentChosen = ComboUtils.unpack(current.packedChosen);
+        const currentChosen = ComboUtils.unpack(current.packedChosen, indexToEnchant);
 
         for (let i = 0; i < eligible.length; i++) {
             if (queue.size() >= ENGINE_DEFAULTS.MAX_QUEUE_SIZE) {
@@ -227,9 +228,9 @@ export class SearchService {
                 countMass.set(currentCount, (countMass.get(currentCount) || 0n) + probForward);
                 return { uncertaintyDelta: probForward, massDelta: probStop + probForward, prunedDelta: probForward, roundingErrorDelta: remStop };
             }
-            
+
             const pNext = BigInt(weights[i]) * pBase;
-            const nextPacked = ComboUtils.pack([...currentChosen, eligible[i]], guaranteedFirstId);
+            const nextPacked = ComboUtils.pack([...currentChosen, eligible[i]], guaranteedFirstId, enchantToIndex);
             const nextId = ComboUtils.getEnchantId(eligible[i]);
 
             // Add new enchant to Rank and Any mass of this path
@@ -247,6 +248,7 @@ export class SearchService {
     }
 
     private static processInitialNode(
+        registry: RegistryState,
         current: PackedNode,
         modLevel: number,
         guaranteedId: number | null,
@@ -257,17 +259,18 @@ export class SearchService {
         anyMass: Map<number, bigint>,
         rankMass: Map<number, bigint>
     ): bigint {
+        const { enchantToIndex } = registry;
         const pBase = current.prob / BigInt(totalWeight);
         const remainder = current.prob % BigInt(totalWeight);
         for (let i = 0; i < pool.length; i++) {
             const pNext = BigInt(weights[i]) * pBase;
             const nextId = pool[i] >> 8;
-            
+
             anyMass.set(nextId, (anyMass.get(nextId) || 0n) + pNext);
             rankMass.set(pool[i], (rankMass.get(pool[i]) || 0n) + pNext);
 
             queue.push({
-                packedChosen: ComboUtils.pack([pool[i]], guaranteedId),
+                packedChosen: ComboUtils.pack([pool[i]], guaranteedId, enchantToIndex),
                 meta: ((1n << BigInt(nextId)) << 8n) | BigInt(modLevel),
                 prob: pNext
             });
