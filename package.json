@@ -27,7 +27,7 @@
     "build:standalone": "npm run build && node scripts/inline-assets.js",
     "test": "npm run test:all",
     "test:all": "npm run build && npm run test:unit && npm run test:ui",
-    "test:unit": "tsx --test src/tests/registry.test.ts src/tests/engine.test.ts src/tests/mechanics_rules.test.ts src/tests/enchantment_physical.test.ts src/tests/book_mechanics.test.ts src/tests/integration.test.ts src/tests/integration-chart.test.ts",
+    "test:unit": "tsx --test src/tests/registry.test.ts src/tests/engine.test.ts src/tests/mechanics_rules.test.ts src/tests/enchantment_physical.test.ts src/tests/book_mechanics.test.ts src/tests/integration.test.ts src/tests/integration-chart.test.ts src/tests/binary-heap.test.ts src/tests/combo-utils.test.ts src/tests/prob-conservation.test.ts src/tests/utils.test.ts src/tests/lru-cache.test.ts src/tests/services.test.ts src/tests/data-integrity.test.ts",
     "test:ui": "playwright test src/tests/ui-basic.test.ts src/tests/ui-performance.test.ts",
     "update-snapshots": "tsx scripts/update-snapshots.ts",
     "release": "npm run test:all && npm run build:standalone"
