@@ -1,3 +1,5 @@
+import type { CalculationStats } from './engine.js';
+
 /**
  * Human-readable enchantment calculation statistics.
  */
@@ -21,7 +23,7 @@ export interface NameResolver {
  */
 export interface SweepData {
     l: number; // XP Level
-    s: EnchantInsights; // Statistical summary using consistent insights model
+    s: CalculationStats; // Raw stats from the calculation engine
 }
 
 /**
