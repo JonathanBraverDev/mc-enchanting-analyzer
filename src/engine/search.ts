@@ -111,19 +111,14 @@ export class SearchService {
         if (probContinue <= 0n) {
             let rem = 0n;
             if (cat === "book" && currentCount > 1) {
-                const redistributed = ComboUtils.removeAdditional(current.packedChosen, guaranteedFirstId, enchantToIndex, indexToEnchant);
-                rem = current.prob % BigInt(redistributed.length);
-                const pChunk = current.prob / BigInt(redistributed.length);
-                for (const r of redistributed) {
-                    results.set(r, (results.get(r) || 0n) + pChunk);
-                }
+                const { pChunk, rem: r } = this.redistributeBookProb(current.packedChosen, current.prob, currentCount, guaranteedFirstId, enchantToIndex, indexToEnchant, results, countMass);
+                rem = r;
                 const enchants = ComboUtils.unpack(current.packedChosen, indexToEnchant);
                 for (let i = 1; i < enchants.length; i++) {
                     const id = enchants[i] >> 8;
                     anyMass.set(id, (anyMass.get(id) || 0n) - (pChunk + rem));
                     rankMass.set(enchants[i], (rankMass.get(enchants[i]) || 0n) - (pChunk + rem));
                 }
-                countMass.set(currentCount - 1, (countMass.get(currentCount - 1) || 0n) + (current.prob - rem));
                 return { uncertaintyDelta: 0n, massDelta: current.prob, prunedDelta: 0n, roundingErrorDelta: rem };
             } else {
                 results.set(current.packedChosen, (results.get(current.packedChosen) || 0n) + current.prob);
@@ -135,14 +130,9 @@ export class SearchService {
         const probStop = ProbUtils.scale(current.prob, (PRECISION - probContinue));
         let remStop = 0n;
         if (cat === "book" && currentCount > 1) {
-            const redistributed = ComboUtils.removeAdditional(current.packedChosen, guaranteedFirstId, enchantToIndex, indexToEnchant);
+            const { redistributed, rem } = this.redistributeBookProb(current.packedChosen, probStop, currentCount, guaranteedFirstId, enchantToIndex, indexToEnchant, results, countMass);
+            remStop = rem;
             const nOutcomes = BigInt(redistributed.length);
-            remStop = probStop % nOutcomes;
-            const pChunk = probStop / nOutcomes;
-
-            for (const r of redistributed) {
-                results.set(r, (results.get(r) || 0n) + pChunk);
-            }
 
             // Correctly attribute mass based on survival across all outcomes
             const originalEnchants = ComboUtils.unpack(current.packedChosen, indexToEnchant);
@@ -159,8 +149,6 @@ export class SearchService {
                     rankMass.set(e, (rankMass.get(e) || 0n) - loss);
                 }
             }
-
-            countMass.set(currentCount - 1, (countMass.get(currentCount - 1) || 0n) + (probStop - remStop));
         } else {
             results.set(current.packedChosen, (results.get(current.packedChosen) || 0n) + probStop);
             countMass.set(currentCount, (countMass.get(currentCount) || 0n) + probStop);
@@ -176,19 +164,14 @@ export class SearchService {
         if (isLimitReached || isTooSmall || isMapFull) {
             let remForward = 0n;
             if (cat === "book" && currentCount > 1) {
-                const redistributed = ComboUtils.removeAdditional(current.packedChosen, guaranteedFirstId, enchantToIndex, indexToEnchant);
-                remForward = probForward % BigInt(redistributed.length);
-                const pChunk = probForward / BigInt(redistributed.length);
-                for (const r of redistributed) {
-                    results.set(r, (results.get(r) || 0n) + pChunk);
-                }
+                const { pChunk, rem } = this.redistributeBookProb(current.packedChosen, probForward, currentCount, guaranteedFirstId, enchantToIndex, indexToEnchant, results, countMass);
+                remForward = rem;
                 const enchants = ComboUtils.unpack(current.packedChosen, indexToEnchant);
                 for (let i = 1; i < enchants.length; i++) {
                     const id = enchants[i] >> 8;
                     anyMass.set(id, (anyMass.get(id) || 0n) - (pChunk + remForward));
                     rankMass.set(enchants[i], (rankMass.get(enchants[i]) || 0n) - (pChunk + remForward));
                 }
-                countMass.set(currentCount - 1, (countMass.get(currentCount - 1) || 0n) + (probForward - remForward));
                 return { uncertaintyDelta: 0n, massDelta: probStop + probForward, prunedDelta: probForward, roundingErrorDelta: remStop + remForward };
             } else {
                 results.set(current.packedChosen, (results.get(current.packedChosen) || 0n) + probForward);
@@ -246,6 +229,33 @@ export class SearchService {
         }
 
         return { uncertaintyDelta: remainder, massDelta: probStop + remainder, prunedDelta: remainder, roundingErrorDelta: remStop };
+    }
+
+    /**
+     * Common core of book redistribution: calls removeAdditional, splits `prob` equally across
+     * all N→(N-1) outcomes, writes each chunk to `results`, updates `countMass`, and returns the
+     * redistributed combos, per-chunk probability, and integer remainder for the caller to use in
+     * its own mass-tracking logic.
+     */
+    private static redistributeBookProb(
+        packedChosen: PackedCombo,
+        prob: bigint,
+        currentCount: number,
+        guaranteedFirstId: number | null,
+        enchantToIndex: Map<number, number>,
+        indexToEnchant: number[],
+        results: Map<PackedCombo, bigint>,
+        countMass: Map<number, bigint>
+    ): { redistributed: PackedCombo[]; pChunk: bigint; rem: bigint } {
+        const redistributed = ComboUtils.removeAdditional(packedChosen, guaranteedFirstId, enchantToIndex, indexToEnchant);
+        const nOutcomes = BigInt(redistributed.length);
+        const rem = prob % nOutcomes;
+        const pChunk = prob / nOutcomes;
+        for (const r of redistributed) {
+            results.set(r, (results.get(r) || 0n) + pChunk);
+        }
+        countMass.set(currentCount - 1, (countMass.get(currentCount - 1) || 0n) + (prob - rem));
+        return { redistributed, pChunk, rem };
     }
 
     private static processInitialNode(
