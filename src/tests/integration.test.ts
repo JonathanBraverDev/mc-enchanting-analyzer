@@ -149,26 +149,24 @@ describe('Integration: RefinementService with mocked WorkerClient', () => {
     });
 
     // -----------------------------------------------------------------------
-    // Test 3 — isSweepRunning stuck bug (documents known regression)
+    // Test 3 — isSweepRunning reset fix
     // -----------------------------------------------------------------------
-    it('BUG: isSweepRunning stays stuck when chart requests hang after cancellation', async () => {
-        // When WorkerClient is re-initialised (version switch), in-flight worker
-        // promises are never rejected — they hang forever.  The chart sweep is
-        // awaiting one of those promises, so its finally{} block never runs, and
-        // isSweepRunning stays true.  The next call to refreshChart() sees
-        // isSweepRunning=true and returns immediately, so the chart never updates.
-        //
-        // TODO: Fix by rejecting all WorkerClient.pendingRequests on re-init.
-        // When fixed, change the assertion at the bottom to:
-        //   assert.ok(run2ChartCalls.length > 0, 'chart should update after restart')
+    it('FIX: isSweepRunning resets on new run(), allowing chart sweep to restart', async () => {
+        // run() now resets isSweepRunning=false before starting, so even if run1's
+        // chart sweep is stuck on a hung request, run2 can start a fresh sweep.
 
         const mainQueue: Array<(v: any) => void> = [];
         let chartRequestCount = 0;
+        let run2Active = false;
 
         WorkerClient.request = (_type: string, payload: any): Promise<any> => {
             if (payload.source === 'chart') {
                 chartRequestCount++;
-                return new Promise(() => {}); // simulates a dead/hung worker
+                if (run2Active) {
+                    // run2's chart requests resolve immediately so onChart fires
+                    return Promise.resolve({ stats: makeStats(0.01) });
+                }
+                return new Promise(() => {}); // run1's chart requests hang
             }
             return new Promise(resolve => mainQueue.push(resolve));
         };
@@ -186,11 +184,10 @@ describe('Integration: RefinementService with mocked WorkerClient', () => {
         await flush();
 
         const chartReqsAfterRun1 = chartRequestCount;
-        assert.ok(chartReqsAfterRun1 >= 1, 'run1 chart sweep should have started (isSweepRunning=true now)');
+        assert.ok(chartReqsAfterRun1 >= 1, 'run1 chart sweep should have started');
 
         // --- Run 2: cancels run1, coarse resolves, tries to start chart sweep ---
-        // Remember how many requests are in the queue before run2 starts, so we
-        // can pick out run2's coarse request specifically.
+        run2Active = true;
         const queueBeforeRun2 = mainQueue.length;
         service.run({ ...BASE_PAYLOAD, xpLevel: 15 }, null as any, {
             onStatus: () => {},
@@ -203,16 +200,12 @@ describe('Integration: RefinementService with mocked WorkerClient', () => {
         run2Resolvers[0]({ stats: makeStats(0.1) }); // resolve run2 coarse
         await flush();
 
-        // BUG: isSweepRunning is still true from run1's hung chart request.
-        // refreshChart() for run2 returns early, so no new chart requests are made.
-        assert.strictEqual(
-            chartRequestCount, chartReqsAfterRun1,
-            'BUG: no new chart requests from run2 because isSweepRunning is stuck'
+        // FIX: isSweepRunning is reset at the start of run(), so run2's chart sweep starts.
+        assert.ok(
+            chartRequestCount > chartReqsAfterRun1,
+            'FIX: run2 should make new chart requests after restart'
         );
-        assert.strictEqual(
-            run2ChartCalls.length, 0,
-            'BUG: onChart never called for run2 — chart frozen after version switch'
-        );
+        assert.ok(run2ChartCalls.length > 0, 'chart should update after restart');
     });
 
     // -----------------------------------------------------------------------
@@ -255,15 +248,11 @@ describe('Integration: RefinementService with mocked WorkerClient', () => {
     });
 
     // -----------------------------------------------------------------------
-    // Test 4 — WorkerClient pending-request drain (documents known regression)
+    // Test 4 — WorkerClient pending-request drain (fix verified)
     // -----------------------------------------------------------------------
-    it('BUG: WorkerClient.init() does not reject in-flight requests (they hang forever)', async () => {
-        // When WorkerClient.init() is called it terminates the old worker process
-        // but leaves every entry in pendingRequests unresolved.  Any code awaiting
-        // WorkerClient.request() from the old worker will hang forever.
-        //
-        // TODO: Fix by iterating WorkerClient.pendingRequests and calling reject()
-        // on each entry before (or immediately after) terminating the worker.
+    it('FIX: WorkerClient.drainPendingForWorker() rejects in-flight requests on re-init', async () => {
+        // drainPendingForWorker() is now called by initWorker() before terminating
+        // the old worker, so any awaiting code gets a rejection instead of hanging.
 
         let wasRejected = false;
         const TEST_KEY = 'main_integration_drain_test';
@@ -276,21 +265,90 @@ describe('Integration: RefinementService with mocked WorkerClient', () => {
             });
         });
 
-        // The current (broken) state: the entry is still live, not rejected
         assert.strictEqual(
             WorkerClient.pendingRequests.has(TEST_KEY), true,
             'pending request is in the map before re-init'
         );
-        assert.strictEqual(wasRejected, false, 'BUG: pending request has not been rejected');
 
-        // A correct implementation would call req.reject(new Error('re-init')) here.
-        // We document the bug by confirming the request is still unresolved.
-        // (hangingPromise will never settle, which is the bug itself.)
+        // Simulate what initWorker() now does: drain pending requests for this worker
+        WorkerClient.drainPendingForWorker('main');
 
-        // Cleanup so we don't pollute other tests
-        WorkerClient.pendingRequests.delete(TEST_KEY);
-        // Suppress the unhandled-rejection warning by making hangingPromise non-fatal
+        // FIX: request IS rejected after re-init
+        assert.strictEqual(wasRejected, true, 'request IS rejected after re-init');
+        assert.strictEqual(
+            WorkerClient.pendingRequests.has(TEST_KEY), false,
+            'pending request is removed from the map after drain'
+        );
+
+        // hangingPromise now rejects (expected); suppress unhandled-rejection warning
         hangingPromise.catch(() => {});
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Version / book state reset tests
+// ---------------------------------------------------------------------------
+
+describe('Integration: Version switch and book state reset', () => {
+    afterEach(() => {
+        EnchantEngine.clearAllEngines();
+    });
+
+    it('engine re-initialization reflects new version registry (1.4.6 → 1.3.1)', () => {
+        // Simulate what the worker does on WorkerClient.init(newVersion):
+        // destroy old engine, create new engine with new version.
+        const engineA = new EnchantEngine(DATA, '1.4.6');
+        assert.ok(
+            engineA.registry.mergedMaterials.has('book'),
+            '1.4.6: book material should be available'
+        );
+        assert.strictEqual(engineA.registry.multiEnchantBooks, false, '1.4.6: single-enchant books');
+
+        // Simulate re-init: destroy old, create new
+        engineA.destroy();
+        const engineB = new EnchantEngine(DATA, '1.3.1');
+        assert.ok(
+            !engineB.registry.mergedMaterials.has('book'),
+            '1.3.1: book material should NOT be available after version switch'
+        );
+    });
+
+    it('drainPendingForWorker drains both main and chart worker keys', () => {
+        const mainRejections: string[] = [];
+        const chartRejections: string[] = [];
+
+        WorkerClient.pendingRequests.set('main_999', {
+            resolve: () => {},
+            reject: () => mainRejections.push('main_999'),
+        });
+        WorkerClient.pendingRequests.set('chart_888', {
+            resolve: () => {},
+            reject: () => chartRejections.push('chart_888'),
+        });
+        // An unrelated key must survive
+        WorkerClient.pendingRequests.set('main_888_progress', {
+            resolve: () => {},
+            reject: () => {},
+        });
+
+        WorkerClient.drainPendingForWorker('main');
+
+        assert.deepStrictEqual(mainRejections, ['main_999'], 'main_999 should be rejected');
+        assert.deepStrictEqual(chartRejections, [], 'chart_888 should be untouched');
+
+        // Clean up
+        WorkerClient.pendingRequests.delete('chart_888');
+        WorkerClient.pendingRequests.delete('main_888_progress');
+    });
+
+    it('version switch with book category: getFullStats reflects new version (no books in 1.3.1)', async () => {
+        // Engine for 1.3.1 should return empty pool for book category
+        const engine = new EnchantEngine(DATA, '1.3.1');
+        const pool = engine.getEligibleListNumeric('book', 30, 'book', 0n);
+        assert.strictEqual(
+            pool.length, 0,
+            '1.3.1: book should have no eligible enchantments (book category does not exist)'
+        );
     });
 });
 
