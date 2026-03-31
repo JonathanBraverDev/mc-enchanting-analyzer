@@ -1,4 +1,4 @@
-import { EnchantmentData, VersionManifest, VersionMechanics, Enchantment, ResolvedRegistry, MergedItems, MergedOverrides, RegistryState } from '../types/index.js';
+import { EnchantmentData, VersionManifest, Enchantment, ResolvedRegistry, MergedItems, MergedOverrides, RegistryState } from '../types/index.js';
 import { VersionUtils, LRUCache } from '../utils/index.js';
 
 
@@ -108,36 +108,41 @@ export class RegistryFactory {
     }
 
     private static finalizeEnchantmentRegistry(state: RegistryState, data: EnchantmentData): void {
-        // Expand conflicts symmetrically — only one direction needed in data
         const enchantmentData = data.global_enchantments;
-        for (const [name, entry] of Object.entries(enchantmentData)) {
-            for (const conflictName of entry.conflicts ?? []) {
-                const conflictEntry = enchantmentData[conflictName];
-                if (conflictEntry && !conflictEntry.conflicts?.includes(name)) {
-                    (conflictEntry as Enchantment).conflicts = [...(conflictEntry.conflicts ?? []), name];
-                }
-            }
-        }
+        const allEnchNames = Object.keys(enchantmentData);
 
-        const allEnchNames = Object.keys(data.global_enchantments);
         state.revIdMap = allEnchNames;
         allEnchNames.forEach((name, i) => state.idMap.set(name, i));
-        
+
         state.conflictBitsets = new BigUint64Array(allEnchNames.length);
         state.weightMap = new Uint32Array(allEnchNames.length);
 
+        // First pass: resolve all props (applying version overrides)
         for (let i = 0; i < allEnchNames.length; i++) {
             const name = allEnchNames[i];
-            const props = Object.assign({}, data.global_enchantments[name], state.mergedOverrides[name] || {}) as Enchantment;
+            const props = Object.assign({}, enchantmentData[name], state.mergedOverrides[name] || {}) as Enchantment;
             state.resolvedRegistry[name] = props;
             state.weightMap[i] = props.weight;
-            
+        }
+
+        // Build symmetric conflict map from resolved props — do NOT mutate the DATA singleton
+        const effectiveConflicts = new Map<string, Set<string>>();
+        for (const name of allEnchNames) {
+            effectiveConflicts.set(name, new Set(state.resolvedRegistry[name].conflicts ?? []));
+        }
+        for (const [name, conflicts] of effectiveConflicts) {
+            for (const conflictName of conflicts) {
+                effectiveConflicts.get(conflictName)?.add(name);
+            }
+        }
+
+        // Second pass: build bitsets from symmetric conflict map
+        for (let i = 0; i < allEnchNames.length; i++) {
+            const name = allEnchNames[i];
             let bitset = 0n;
-            if (props.conflicts) {
-                for (const cName of props.conflicts) {
-                    const cId = state.idMap.get(cName);
-                    if (cId !== undefined) bitset |= (1n << BigInt(cId));
-                }
+            for (const cName of effectiveConflicts.get(name) ?? []) {
+                const cId = state.idMap.get(cName);
+                if (cId !== undefined) bitset |= (1n << BigInt(cId));
             }
             state.conflictBitsets[i] = bitset;
         }
