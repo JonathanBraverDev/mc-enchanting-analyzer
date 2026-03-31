@@ -133,14 +133,13 @@ export class SearchService {
             const { redistributed, rem } = this.redistributeBookProb(current.packedChosen, probStop, currentCount, guaranteedFirstId, enchantToIndex, indexToEnchant, results, countMass);
             remStop = rem;
             const nOutcomes = BigInt(redistributed.length);
-
-            // Correctly attribute mass based on survival across all outcomes
             const originalEnchants = ComboUtils.unpack(current.packedChosen, indexToEnchant);
 
             for (const e of originalEnchants) {
                 const id = e >> 8;
-                // Count how many of the redistributed results still contain this enchantment
-                const nOccurrences = redistributed.filter(r => ComboUtils.unpack(r, indexToEnchant).some(re => re === e)).length;
+                // Simplified mass counting for redistribution: mass is split equally across all outcomes.
+                // If an outcome doesn't contain an enchantment, that portion of the mass is lost for that enchantment.
+                const nOccurrences = redistributed.filter(r => ComboUtils.unpack(r, indexToEnchant).includes(e)).length;
                 const survivorMass = (BigInt(nOccurrences) * probStop) / nOutcomes;
                 const loss = probStop - survivorMass;
 
