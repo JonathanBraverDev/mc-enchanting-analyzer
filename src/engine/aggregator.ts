@@ -1,8 +1,8 @@
 import { PRECISION, ProbUtils, AsyncUtils, ComboUtils, RomanUtils } from '../utils/index.js';
 import { SummaryService } from '../services/index.js';
 import { getEnchantability, isEnchantmentAchievable } from '../core/registry.js';
-import { ENGINE_DEFAULTS } from '../core/config.js';
-import { CalculationStats, PackedCombo, SearchFrontier, RegistryState, SearchConfig } from '../types/index.js';
+import { ENGINE_DEFAULTS, getSearchLimit } from '../core/config.js';
+import { CalculationStats, PackedCombo, SearchFrontier, RegistryState, InternalSearchConfig } from '../types/index.js';
 import { DistributionService } from './distribution.js';
 import { SearchService } from './search.js';
 import { FrontierFactory } from './frontier.js';
@@ -20,7 +20,7 @@ export class StatAggregator {
         xp: number,
         mat: string,
         guaranteedFirst: string | null = null,
-        config: SearchConfig = {}
+        config: InternalSearchConfig = {}
     ): Promise<CalculationStats> {
         const {
             threshold = 0.0001,
@@ -60,7 +60,7 @@ export class StatAggregator {
             if (signal?.aborted) throw new Error("Aborted");
 
             const mProb = modDist[ml];
-            const searchLimit = maxIterations ?? (cat === "book" ? ENGINE_DEFAULTS.FALLBACK_LIMIT_BOOK : (threshold < 0.0001 ? ENGINE_DEFAULTS.FALLBACK_LIMIT_HIGH_RES : ENGINE_DEFAULTS.FALLBACK_LIMIT_LOW_RES));
+            const searchLimit = getSearchLimit(cat, threshold, maxIterations);
             
             // Orchestrate search, using cache if provided by EnchantEngine
             const cached = getExtendedCache?.(ml);

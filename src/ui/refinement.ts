@@ -1,4 +1,4 @@
-import { RegistryState, EnchantInsights, SweepData } from '../types/index.js';
+import { RegistryState, CalculationStats, SweepData } from '../types/index.js';
 import { UI_TEXTS, UI_DEFAULTS, SearchLevel, getParamsForMode } from '../core/config.js';
 import { WorkerClient } from '../worker/client.js';
 import { AsyncUtils } from '../utils/index.js';
@@ -14,8 +14,8 @@ export interface RefinementPayload {
 export interface RefinementCallbacks {
     onStatus: (status: string, level: SearchLevel) => void;
     onChartStatus?: (status: string, progress?: number) => void;
-    onInsights: (insights: any, isFinal: boolean) => void;
-    onChart: (sweep: any[]) => void;
+    onStats: (stats: CalculationStats, isFinal: boolean) => void;
+    onChart: (sweep: SweepData[]) => void;
 }
 
 /**
@@ -91,14 +91,15 @@ export class RefinementService {
             { ...payload, threshold: config.threshold, source: 'main', useBestCache: true, maxIterations: config.limit },
             (partial) => {
                 if (currentId === this.activeId) {
-                    callbacks.onInsights(partial.stats, false);
+                    callbacks.onStats(partial.stats, false);
                 }
-            }
+            },
+            'main'
         );
 
         if (currentId !== this.activeId) return true;
 
-        callbacks.onInsights(response.stats, true);
+        callbacks.onStats(response.stats, true);
         return response.stats && response.stats.uncertainty === 0;
     }
 
@@ -131,7 +132,9 @@ export class RefinementService {
                     try {
                         response = await WorkerClient.request(
                             'getFullStats',
-                            { ...payload, xp: l, threshold: activeThreshold, source: 'chart' }
+                            { ...payload, xp: l, threshold: activeThreshold, source: 'chart' },
+                            undefined,
+                            'chart'
                         );
                     } catch {
                         break; // worker was re-initialized; exit sweep cleanly

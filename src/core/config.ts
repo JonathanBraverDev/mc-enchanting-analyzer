@@ -107,3 +107,12 @@ export const ENGINE_DEFAULTS = {
     UNKNOWN_MATERIAL_ID: 63,
     UNKNOWN_ENCHANT_ID: 255
 };
+
+/**
+ * Shared threshold-to-limit lookup used by both EnchantEngine and StatAggregator.
+ */
+export function getSearchLimit(cat: string, threshold: number, maxIterations?: number): number {
+    if (maxIterations !== undefined) return maxIterations;
+    if (cat === "book") return ENGINE_DEFAULTS.FALLBACK_LIMIT_BOOK;
+    return threshold < 0.0001 ? ENGINE_DEFAULTS.FALLBACK_LIMIT_HIGH_RES : ENGINE_DEFAULTS.FALLBACK_LIMIT_LOW_RES;
+}
