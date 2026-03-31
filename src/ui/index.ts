@@ -55,6 +55,7 @@ class AppController {
     private getEngine(): EnchantEngine {
         const { version } = this.params.getValues();
         if (!this.engine || this.engine.registry.version !== version) {
+            if (this.engine) this.engine.destroy();
             this.engine = new EnchantEngine(DATA, version);
         }
         return this.engine;
@@ -164,9 +165,9 @@ class AppController {
     }
 }
 
-window.onload = () => {
+window.addEventListener("load", () => {
     const app = new AppController();
     app.init();
     (window as any).App = app;
     (window as any).UIController = app; // Backward compatibility for tests
-};
+});
