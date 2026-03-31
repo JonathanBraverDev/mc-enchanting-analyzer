@@ -3,6 +3,13 @@ import { UI_TEXTS, UI_DEFAULTS, SearchLevel, getParamsForMode } from '../core/co
 import { WorkerClient } from '../worker/client.js';
 import { AsyncUtils } from '../utils/index.js';
 
+interface BaseSearchPayload {
+    cat: string;
+    xp: number;
+    mat: string;
+    guaranteedFirst: string | null;
+}
+
 export interface RefinementPayload {
     category: string;
     material: string;
@@ -78,7 +85,7 @@ export class RefinementService {
 
     private async executePass(
         level: Exclude<SearchLevel, 'done'>,
-        payload: any,
+        payload: BaseSearchPayload,
         currentId: number,
         isBook: boolean,
         callbacks: RefinementCallbacks
@@ -104,7 +111,7 @@ export class RefinementService {
     }
 
     private async refreshChart(
-        payload: any,
+        payload: BaseSearchPayload,
         threshold: number,
         registry: RegistryState,
         currentId: number,
@@ -128,7 +135,7 @@ export class RefinementService {
                 for (const l of labels) {
                     if (currentId !== this.activeId) break;
 
-                    let response: any;
+                    let response: { stats: CalculationStats };
                     try {
                         response = await WorkerClient.request(
                             'getFullStats',

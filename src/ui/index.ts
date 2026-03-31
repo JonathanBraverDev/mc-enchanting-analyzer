@@ -8,7 +8,7 @@ import { ChartController } from './chart.js';
 import { RefinementService } from './refinement.js';
 import { HumanizationService } from '../services/index.js';
 import { getEnchantability } from '../core/registry.js';
-import { EnchantInsights, CalculationStats } from '../types/index.js';
+import { EnchantInsights, CalculationStats, ResultSortMode } from '../types/index.js';
 
 /**
  * Main Web Application Controller.
@@ -150,7 +150,7 @@ class AppController {
         this.lastRawStats = raw;
 
         const { sortMode } = this.params.getValues();
-        const insights = HumanizationService.humanize(raw, this.getEngine().registry, sortMode as any, DATA.constants.ROMAN_MAP);
+        const insights = HumanizationService.humanize(raw, this.getEngine().registry, sortMode as ResultSortMode, DATA.constants.ROMAN_MAP);
         
         const uncertainty = insights.uncertainty ?? 1;
         if (isFinal || (this.bestInsights && uncertainty < (this.bestInsights.uncertainty || 1)) || !this.bestInsights) {
@@ -159,15 +159,22 @@ class AppController {
         }
     }
 
-    private showError(title: string, err: any): void {
+    private showError(title: string, err: unknown): void {
         console.error(title, err);
         this.results.showPlaceholder(`${title}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+}
+
+declare global {
+    interface Window {
+        App: AppController;
+        UIController: AppController;
     }
 }
 
 window.addEventListener("load", () => {
     const app = new AppController();
     app.init();
-    (window as any).App = app;
-    (window as any).UIController = app; // Backward compatibility for tests
+    window.App = app;
+    window.UIController = app; // Backward compatibility for tests
 });

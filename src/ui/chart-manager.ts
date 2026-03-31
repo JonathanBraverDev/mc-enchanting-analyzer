@@ -4,14 +4,22 @@ import { CalculationStats, ChartDataset, RegistryState } from '../types/index.js
 import { RomanUtils } from '../utils/index.js';
 import { ENGINE_DEFAULTS } from '../core/config.js';
 
-declare const Chart: any;
+interface ChartInstance {
+    data: { labels: unknown[]; datasets: unknown[] };
+    destroy(): void;
+    update(mode: string): void;
+}
+interface ChartConstructor {
+    new(ctx: CanvasRenderingContext2D | null, config: Record<string, unknown>): ChartInstance;
+}
+declare const Chart: ChartConstructor;
 
 
 /**
  * Encapsulates Chart.js lifecycle and data mapping.
  */
 export class ChartManager {
-    public chart: any = null;
+    public chart: ChartInstance | null = null;
     private canvas: HTMLCanvasElement | null = null;
 
     constructor(canvasId: string) {
@@ -109,7 +117,7 @@ export class ChartManager {
     }
 
 
-    private getChartOptions(): any {
+    private getChartOptions(): Record<string, unknown> {
         return {
             responsive: true, maintainAspectRatio: false,
             animation: false, // Performance: Disable animations to enable Path2D caching
