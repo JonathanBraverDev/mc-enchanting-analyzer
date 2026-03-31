@@ -24,8 +24,19 @@ export const WorkerClient = {
         ]);
     },
 
+    drainPendingForWorker(type: string): void {
+        const prefix = `${type}_`;
+        for (const [key, req] of [...this.pendingRequests.entries()]) {
+            if (key.startsWith(prefix)) {
+                req.reject(new Error(`Worker ${type} re-initialized`));
+                this.pendingRequests.delete(key);
+            }
+        }
+    },
+
     initWorker(type: 'main' | 'chart', version: string): Promise<void> {
         return new Promise((resolve, reject) => {
+            this.drainPendingForWorker(type);
             if (this.workers[type]) this.workers[type]!.terminate();
             
             this.workers[type] = new Worker('dist/worker.js');
