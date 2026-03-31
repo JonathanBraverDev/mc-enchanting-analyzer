@@ -82,7 +82,7 @@ export type PackedEnchant = number;
 export type PackedCombo = number;
 
 /**
- * Configuration options for a full statistics calculation.
+ * Public configuration options for a full statistics calculation.
  */
 export interface SearchConfig {
     guaranteedFirst?: string | null;
@@ -94,6 +94,13 @@ export interface SearchConfig {
     summaryLimit?: number;
     resultsLimit?: number;
     useCache?: boolean;
+}
+
+/**
+ * Internal configuration used at the engine→aggregator boundary.
+ * Extends SearchConfig with cache accessors that are internal implementation details.
+ */
+export interface InternalSearchConfig extends SearchConfig {
     getExtendedCache?: (ml: number) => SearchFrontier | undefined;
     setExtendedCache?: (ml: number, frontier: SearchFrontier) => void;
 }

@@ -1,8 +1,8 @@
-import { EnchantmentData, CalculationStats, SearchFrontier, RegistryState, SearchConfig } from '../types/index.js';
+import { EnchantmentData, CalculationStats, SearchFrontier, RegistryState, SearchConfig, InternalSearchConfig } from '../types/index.js';
 import { LRUCache, ProbUtils } from '../utils/index.js';
 import { getCategoryId, getMaterialId, getEnchantId, getEligiblePool } from '../core/registry.js';
 import { RegistryFactory } from '../core/factory.js';
-import { ENGINE_DEFAULTS } from '../core/config.js';
+import { ENGINE_DEFAULTS, getSearchLimit } from '../core/config.js';
 import { DistributionService } from './distribution.js';
 import { SearchService } from './search.js';
 import { StatAggregator } from './aggregator.js';
@@ -108,7 +108,7 @@ export class EnchantEngine {
         maxIterations?: number,
         resultsLimit: number = ENGINE_DEFAULTS.MAX_RESULTS_SIZE
     ): SearchFrontier {
-        const limit = this.getSearchLimit(cat, threshold, maxIterations);
+        const limit = getSearchLimit(cat, ProbUtils.toNumber(threshold), maxIterations);
         const cacheKey = this.getPackedKey(cat, modLevel, mat, guaranteedFirst, limit, resultsLimit);
         const activeCache = cat === "book" ? this.bookComboCache : this.comboCache;
 
@@ -143,7 +143,7 @@ export class EnchantEngine {
             resultsLimit = ENGINE_DEFAULTS.MAX_RESULTS_SIZE,
             useCache = true
         } = config;
-        const limit = maxIterations ?? (cat === "book" ? ENGINE_DEFAULTS.FALLBACK_LIMIT_BOOK : (threshold < 0.0001 ? ENGINE_DEFAULTS.FALLBACK_LIMIT_HIGH_RES : ENGINE_DEFAULTS.FALLBACK_LIMIT_LOW_RES));
+        const limit = getSearchLimit(cat, threshold, maxIterations);
         const baseKey = this.getPackedKey(cat, xp, mat, guaranteedFirst, limit, resultsLimit);
         const exactKey = this.getPackedKey(cat, xp, mat, guaranteedFirst, limit, resultsLimit, threshold);
 
@@ -156,19 +156,20 @@ export class EnchantEngine {
             if (best && best.threshold <= threshold) return best.stats;
         }
 
-        // Delegate aggregation to service
+        // Delegate aggregation to service (InternalSearchConfig adds cache accessors)
+        const internalConfig: InternalSearchConfig = {
+            threshold,
+            signal,
+            onProgress,
+            maxIterations,
+            summaryLimit,
+            resultsLimit,
+            getExtendedCache: (ml) => (cat === "book" ? this.bookComboCache : this.comboCache).get(this.getPackedKey(cat, ml, mat, guaranteedFirst, limit, resultsLimit)),
+            setExtendedCache: (ml, frontier) => (cat === "book" ? this.bookComboCache : this.comboCache).set(this.getPackedKey(cat, ml, mat, guaranteedFirst, limit, resultsLimit), frontier),
+            useCache
+        };
         const finalStats = await StatAggregator.getFullStats(
-            this.registry, cat, xp, mat, guaranteedFirst, {
-                threshold,
-                signal,
-                onProgress,
-                maxIterations,
-                summaryLimit,
-                resultsLimit,
-                getExtendedCache: (ml) => (cat === "book" ? this.bookComboCache : this.comboCache).get(this.getPackedKey(cat, ml, mat, guaranteedFirst, limit, resultsLimit)),
-                setExtendedCache: (ml, frontier) => (cat === "book" ? this.bookComboCache : this.comboCache).set(this.getPackedKey(cat, ml, mat, guaranteedFirst, limit, resultsLimit), frontier),
-                useCache
-            }
+            this.registry, cat, xp, mat, guaranteedFirst, internalConfig
         );
 
         // Persistent Caching
@@ -181,9 +182,4 @@ export class EnchantEngine {
         return finalStats;
     }
 
-    private getSearchLimit(cat: string, threshold: bigint, maxIterations?: number): number {
-        if (maxIterations !== undefined) return maxIterations;
-        if (cat === "book") return ENGINE_DEFAULTS.FALLBACK_LIMIT_BOOK;
-        return ProbUtils.toNumber(threshold) < 0.0001 ? ENGINE_DEFAULTS.FALLBACK_LIMIT_HIGH_RES : ENGINE_DEFAULTS.FALLBACK_LIMIT_LOW_RES;
-    }
 }

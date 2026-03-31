@@ -70,7 +70,7 @@ describe('Integration: RefinementService with mocked WorkerClient', () => {
 
         service.run(BASE_PAYLOAD, null as any, {
             onStatus: () => {},
-            onInsights: (insights, isFinal) => { if (isFinal) finalInsights.push(insights); },
+            onStats: (insights, isFinal) => { if (isFinal) finalInsights.push(insights); },
             onChart: () => {},
         });
 
@@ -121,7 +121,7 @@ describe('Integration: RefinementService with mocked WorkerClient', () => {
         // --- Start run 1 ---
         service.run(BASE_PAYLOAD, null as any, {
             onStatus: () => {},
-            onInsights: (_, isFinal) => { if (isFinal) run1Final.push(true); },
+            onStats: (_, isFinal) => { if (isFinal) run1Final.push(true); },
             onChart: () => {},
         });
         assert.strictEqual(mainQueue.length, 1, 'run1 coarse request pending');
@@ -130,7 +130,7 @@ describe('Integration: RefinementService with mocked WorkerClient', () => {
         // --- Start run 2 (cancels run 1 by incrementing activeId) ---
         service.run({ ...BASE_PAYLOAD, xpLevel: 15 }, null as any, {
             onStatus: () => {},
-            onInsights: (_, isFinal) => { if (isFinal) run2Final.push(true); },
+            onStats: (_, isFinal) => { if (isFinal) run2Final.push(true); },
             onChart: () => {},
         });
 
@@ -177,7 +177,7 @@ describe('Integration: RefinementService with mocked WorkerClient', () => {
         // --- Run 1: coarse resolves → chart sweep starts → first chart request hangs ---
         service.run(BASE_PAYLOAD, null as any, {
             onStatus: () => {},
-            onInsights: () => {},
+            onStats: () => {},
             onChart: () => {},
         });
         mainQueue.shift()!({ stats: makeStats(0.1) }); // resolve run1 coarse
@@ -191,7 +191,7 @@ describe('Integration: RefinementService with mocked WorkerClient', () => {
         const queueBeforeRun2 = mainQueue.length;
         service.run({ ...BASE_PAYLOAD, xpLevel: 15 }, null as any, {
             onStatus: () => {},
-            onInsights: () => {},
+            onStats: () => {},
             onChart: (sweep) => run2ChartCalls.push([...sweep]),
         });
 
@@ -230,7 +230,7 @@ describe('Integration: RefinementService with mocked WorkerClient', () => {
                 null as any,
                 {
                     onStatus: () => {},
-                    onInsights: (_insights: any, isFinal: boolean) => { if (isFinal) finalInsights.push(_insights); },
+                    onStats: (_insights: any, isFinal: boolean) => { if (isFinal) finalInsights.push(_insights); },
                     onChart: () => {},
                 }
             ).catch((e: Error) => errors.push(e));

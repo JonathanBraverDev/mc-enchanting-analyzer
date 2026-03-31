@@ -82,21 +82,20 @@ export const WorkerClient = {
         });
     },
 
-    request(type: string, payload: any, onProgress?: (data: any) => void): Promise<any> {
+    request(type: string, payload: any, onProgress?: (data: any) => void, workerTarget: 'main' | 'chart' = 'main'): Promise<any> {
         return new Promise((resolve, reject) => {
-            const source: 'main' | 'chart' = (payload.source === 'chart') ? 'chart' : 'main';
-            const worker = this.workers[source];
-            
-            if (!worker) return reject(new Error(`Worker ${source} not initialized`));
-            
+            const worker = this.workers[workerTarget];
+
+            if (!worker) return reject(new Error(`Worker ${workerTarget} not initialized`));
+
             const id = ++this.requestId;
-            const reqKey = `${source}_${id}`;
-            
+            const reqKey = `${workerTarget}_${id}`;
+
             this.pendingRequests.set(reqKey, { resolve, reject });
             if (onProgress) {
                 this.pendingRequests.set(`${reqKey}_progress`, onProgress as any);
             }
-            
+
             worker.postMessage({ type, id, payload });
         });
     }

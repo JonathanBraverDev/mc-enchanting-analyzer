@@ -134,7 +134,7 @@ class AppController {
                 {
                     onStatus: (status, level) => this.results.setRefinementStatus(status, level),
                     onChartStatus: (status, progress) => this.results.setChartStatus(status, progress),
-                    onInsights: (raw, isFinal) => this.updateInsightsFromRaw(raw, isFinal),
+                    onStats: (raw, isFinal) => this.updateInsightsFromRaw(raw, isFinal),
                     onChart: (sweep) => this.chart.refresh(sweep, engine.registry)
                 }
             );

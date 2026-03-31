@@ -66,7 +66,7 @@ describe('Integration: Chart sweep with mocked WorkerClient', () => {
 
         service.run(BASE_PAYLOAD, null as any, {
             onStatus: () => {},
-            onInsights: () => {},
+            onStats: () => {},
             onChart: (sweep) => {
                 // Detect which level index was just updated by comparing against last state.
                 // Each onChart call updates exactly one new entry (the just-completed level).
@@ -127,7 +127,7 @@ describe('Integration: Chart sweep with mocked WorkerClient', () => {
 
         service.run(bookPayload, null as any, {
             onStatus: () => {},
-            onInsights: () => {},
+            onStats: () => {},
             onChart: (sweep) => {
                 const updatedIdx = sweep.findIndex((s, i) => s !== lastSweep[i]);
                 if (updatedIdx !== -1) {
@@ -197,7 +197,7 @@ describe('Integration: Chart sweep with mocked WorkerClient', () => {
 
         service.run(BASE_PAYLOAD, null as any, {
             onStatus: () => {},
-            onInsights: () => {},
+            onStats: () => {},
             onChart: (sweep) => {
                 const updatedIdx = sweep.findIndex((s, i) => s !== lastSweep[i]);
                 // Capture a snapshot whenever level 30 (index 29) is the just-updated entry,
