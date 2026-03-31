@@ -1,5 +1,11 @@
 import { SerializationService } from '../services/index.js';
 import type { WorkerResponse } from './protocol.js';
+import type { CalculationStats } from '../types/index.js';
+
+type WorkerResult = { stats: CalculationStats };
+type RequestEntry = { resolve: (data: WorkerResult) => void; reject: (err: unknown) => void };
+type ProgressEntry = (data: WorkerResult) => void;
+type PendingEntry = RequestEntry | ProgressEntry;
 
 /**
  * Client wrapper around the Enchant Engine Web Worker.
@@ -14,7 +20,7 @@ export const WorkerClient = {
         main: null as Worker | null,
         chart: null as Worker | null
     },
-    pendingRequests: new Map<string, { resolve: (data: any) => void, reject: (err: any) => void }>(),
+    pendingRequests: new Map<string, PendingEntry>(),
     requestId: 0,
 
     async init(version: string): Promise<void> {
@@ -28,7 +34,9 @@ export const WorkerClient = {
         const prefix = `${type}_`;
         for (const [key, req] of [...this.pendingRequests.entries()]) {
             if (key.startsWith(prefix)) {
-                req.reject(new Error(`Worker ${type} re-initialized`));
+                if (typeof req !== 'function') {
+                    req.reject(new Error(`Worker ${type} re-initialized`));
+                }
                 this.pendingRequests.delete(key);
             }
         }
@@ -55,21 +63,21 @@ export const WorkerClient = {
 
                 if (msgType === 'result') {
                     const { stats } = payload || {};
-                    const finalStats = (stats && stats.comboKeys) ? SerializationService.deserialize(stats) : stats;
+                    const finalStats: CalculationStats = (stats && stats.comboKeys) ? SerializationService.deserialize(stats) : stats as unknown as CalculationStats;
 
-                    if (req) {
+                    if (req && typeof req !== 'function') {
                         req.resolve({ stats: finalStats });
                         this.pendingRequests.delete(reqKey);
                         this.pendingRequests.delete(`${reqKey}_progress`);
                     }
                 } else if (msgType === 'progress') {
                     const { stats } = payload || {};
-                    const finalStats = (stats && stats.comboKeys) ? SerializationService.deserialize(stats) : stats;
+                    const finalStats: CalculationStats = (stats && stats.comboKeys) ? SerializationService.deserialize(stats) : stats as unknown as CalculationStats;
 
                     const progCb = this.pendingRequests.get(`${reqKey}_progress`);
-                    if (progCb) (progCb as any)({ stats: finalStats });
+                    if (progCb && typeof progCb === 'function') progCb({ stats: finalStats });
                 } else if (msgType === 'error') {
-                    if (req) {
+                    if (req && typeof req !== 'function') {
                         req.reject(payload);
                         this.pendingRequests.delete(reqKey);
                         this.pendingRequests.delete(`${reqKey}_progress`);
@@ -82,7 +90,7 @@ export const WorkerClient = {
         });
     },
 
-    request(type: string, payload: any, onProgress?: (data: any) => void, workerTarget: 'main' | 'chart' = 'main'): Promise<any> {
+    request(type: string, payload: Record<string, unknown>, onProgress?: ProgressEntry, workerTarget: 'main' | 'chart' = 'main'): Promise<WorkerResult> {
         return new Promise((resolve, reject) => {
             const worker = this.workers[workerTarget];
 
@@ -93,7 +101,7 @@ export const WorkerClient = {
 
             this.pendingRequests.set(reqKey, { resolve, reject });
             if (onProgress) {
-                this.pendingRequests.set(`${reqKey}_progress`, onProgress as any);
+                this.pendingRequests.set(`${reqKey}_progress`, onProgress);
             }
 
             worker.postMessage({ type, id, payload });

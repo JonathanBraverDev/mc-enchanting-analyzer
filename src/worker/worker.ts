@@ -3,6 +3,13 @@ import { DATA } from '../data/index.js';
 import { SerializationService } from '../services/index.js';
 import type { WorkerRequest } from './protocol.js';
 
+// TypeScript lib "DOM" types `self` as Window, but at runtime in a worker it's DedicatedWorkerGlobalScope.
+// This minimal interface lets us call postMessage with Transferable[] without widening to `any`.
+interface WorkerPostable {
+    postMessage(message: unknown, transfer: Transferable[]): void;
+}
+const workerScope = self as unknown as WorkerPostable;
+
 let engine: EnchantEngine | null = null;
 const abortControllers = new Map<string, AbortController>();
 
@@ -46,7 +53,7 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
                             signal,
                             onProgress: (partialStats) => {
                                 const { compact, transferables } = SerializationService.serialize(partialStats);
-                                (self as any).postMessage({ type: 'progress', id, payload: { stats: compact } }, transferables);
+                                workerScope.postMessage({ type: 'progress', id, payload: { stats: compact } }, transferables);
                             },
                             useBestCache: payload.useBestCache || false,
                             maxIterations: payload.maxIterations
@@ -55,13 +62,13 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
 
                     const { compact, transferables } = SerializationService.serialize(stats);
 
-                    (self as any).postMessage({
+                    workerScope.postMessage({
                         type: 'result',
                         id,
                         payload: { stats: compact }
                     }, transferables);
-                } catch (err: any) {
-                    if (err.message === "Aborted") {
+                } catch (err: unknown) {
+                    if (err instanceof Error && err.message === "Aborted") {
                         self.postMessage({ type: 'error', id, payload: 'Aborted' });
                         return;
                     }
@@ -77,7 +84,7 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
             default:
                 throw new Error(`Unknown message type: ${type}`);
         }
-    } catch (err: any) {
-        self.postMessage({ type: 'error', id, payload: err.message });
+    } catch (err: unknown) {
+        self.postMessage({ type: 'error', id, payload: err instanceof Error ? err.message : String(err) });
     }
 };
