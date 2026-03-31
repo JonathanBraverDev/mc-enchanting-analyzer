@@ -1,4 +1,4 @@
-import { EnchantmentData, CalculationStats, SearchFrontier, RegistryState, SearchConfig, InternalSearchConfig } from '../types/index.js';
+import { EnchantmentData, CalculationStats, SearchFrontier, RegistryState, SearchConfig, InternalSearchConfig, PackedEnchant } from '../types/index.js';
 import { LRUCache, ProbUtils } from '../utils/index.js';
 import { getCategoryId, getMaterialId, getEnchantId, getEligiblePool } from '../core/registry.js';
 import { RegistryFactory } from '../core/factory.js';
@@ -23,6 +23,8 @@ export class EnchantEngine {
     private static readonly KEY_SHIFT_THRESHOLD = 60n;
 
     public registry: RegistryState;
+    public distCache = new Map<string, { [level: number]: bigint }>();
+    public poolCache = new LRUCache<string, PackedEnchant[]>(200);
     public comboCache = new LRUCache<bigint, SearchFrontier>(ENGINE_DEFAULTS.CACHE_SIZE_COMBO_OTHER);
     public bookComboCache = new LRUCache<bigint, SearchFrontier>(ENGINE_DEFAULTS.CACHE_SIZE_COMBO_BOOK);
     public statsCache = new LRUCache<bigint, CalculationStats>(ENGINE_DEFAULTS.CACHE_SIZE_STATS);
@@ -62,8 +64,8 @@ export class EnchantEngine {
         for (const ref of this.allEngines) {
             const engine = ref.deref();
             if (engine) {
-                engine.registry.distCache.clear();
-                engine.registry.poolCache.clear();
+                engine.distCache.clear();
+                engine.poolCache.clear();
                 engine.comboCache.clear();
                 engine.bookComboCache.clear();
                 engine.statsCache.clear();
@@ -73,8 +75,8 @@ export class EnchantEngine {
     }
 
     public destroy(): void {
-        this.registry.distCache.clear();
-        this.registry.poolCache.clear();
+        this.distCache.clear();
+        this.poolCache.clear();
         this.comboCache.clear();
         this.bookComboCache.clear();
         this.statsCache.clear();
@@ -88,11 +90,11 @@ export class EnchantEngine {
     }
 
     public getModifiedLevelDist(xp: number, enchantability: number): { [level: number]: bigint } {
-        return DistributionService.getModifiedLevelDist(xp, enchantability, this.registry);
+        return DistributionService.getModifiedLevelDist(xp, enchantability, this.registry, this.distCache);
     }
 
     public getEligibleListNumeric(cat: string, level: number, mat: string, bitset: bigint = 0n): number[] {
-        const pool = getEligiblePool(this.registry, cat, level, mat);
+        const pool = getEligiblePool(this.registry, cat, level, mat, this.poolCache);
         return pool.filter(p => (bitset & (1n << BigInt(p >> 8))) === 0n);
     }
 
@@ -116,7 +118,7 @@ export class EnchantEngine {
         if (cached && cached.threshold <= threshold) return cached;
 
         const result = SearchService.calculateCombinations(
-            this.registry, cat, modLevel, mat, guaranteedFirst, threshold, limit, cached, resultsLimit
+            this.registry, cat, modLevel, mat, guaranteedFirst, threshold, limit, cached, resultsLimit, this.poolCache
         );
 
         activeCache.set(cacheKey, result);
@@ -166,7 +168,9 @@ export class EnchantEngine {
             resultsLimit,
             getExtendedCache: (ml) => (cat === "book" ? this.bookComboCache : this.comboCache).get(this.getPackedKey(cat, ml, mat, guaranteedFirst, limit, resultsLimit)),
             setExtendedCache: (ml, frontier) => (cat === "book" ? this.bookComboCache : this.comboCache).set(this.getPackedKey(cat, ml, mat, guaranteedFirst, limit, resultsLimit), frontier),
-            useCache
+            useCache,
+            distCache: this.distCache,
+            poolCache: this.poolCache
         };
         const finalStats = await StatAggregator.getFullStats(
             this.registry, cat, xp, mat, guaranteedFirst, internalConfig

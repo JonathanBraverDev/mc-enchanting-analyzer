@@ -1,4 +1,4 @@
-import { RomanUtils } from '../utils/index.js';
+import { RomanUtils, LRUCache } from '../utils/index.js';
 import { PackedEnchant, RegistryState } from '../types/index.js';
 import { ENGINE_DEFAULTS } from './config.js';
 
@@ -13,10 +13,11 @@ export class PoolService {
         state: RegistryState,
         cat: string,
         level: number,
-        mat: string
+        mat: string,
+        cache?: LRUCache<string, PackedEnchant[]>
     ): PackedEnchant[] {
         const cacheKey = `${cat}|${level}|${mat}`;
-        const cached = state.poolCache.get(cacheKey);
+        const cached = cache?.get(cacheKey);
         if (cached) return cached;
 
         const pool = state.versionPool.get(cat) || [];
@@ -35,7 +36,7 @@ export class PoolService {
             }
         }
 
-        state.poolCache.set(cacheKey, out);
+        cache?.set(cacheKey, out);
         return out;
     }
 
@@ -48,10 +49,11 @@ export class PoolService {
         cat: string,
         mat: string,
         levels: number[],
-        romanMap: { [key: string]: number }
+        romanMap: { [key: string]: number },
+        cache?: LRUCache<string, PackedEnchant[]>
     ): boolean {
         for (const ml of levels) {
-            const pool = this.getEligiblePool(state, cat, ml, mat);
+            const pool = this.getEligiblePool(state, cat, ml, mat, cache);
             if (pool.some(p => {
                 const id = p >> 8;
                 const rank = p & 0xFF;

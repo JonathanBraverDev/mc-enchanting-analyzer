@@ -74,8 +74,6 @@ export interface RegistryState {
     versionPool: Map<string, string[]>;
     enchantToIndex: Map<number, number>;
     indexToEnchant: number[];
-    distCache: Map<string, { [level: number]: bigint }>;
-    poolCache: LRUCache<string, PackedEnchant[]>;
 }
 
 export type PackedEnchant = number;
@@ -103,4 +101,6 @@ export interface SearchConfig {
 export interface InternalSearchConfig extends SearchConfig {
     getExtendedCache?: (ml: number) => SearchFrontier | undefined;
     setExtendedCache?: (ml: number, frontier: SearchFrontier) => void;
+    distCache?: Map<string, { [level: number]: bigint }>;
+    poolCache?: LRUCache<string, PackedEnchant[]>;
 }
