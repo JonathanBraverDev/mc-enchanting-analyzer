@@ -7,6 +7,12 @@ import { VersionUtils } from '../utils/index.js';
  */
 export class RegistryFactory {
     public static build(data: EnchantmentData, version: string): RegistryState {
+        if (version == null || typeof version !== 'string') {
+            throw new Error(`Invalid version: expected a string, got ${version == null ? 'null/undefined' : typeof version}.`);
+        }
+        if (version === '') {
+            throw new Error('Invalid version: empty string is not allowed.');
+        }
         const state: RegistryState = {
             data,
             version: "",

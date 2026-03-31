@@ -1,6 +1,6 @@
 import { EnchantmentData, CalculationStats, SearchFrontier, RegistryState, SearchConfig, InternalSearchConfig, PackedEnchant } from '../types/index.js';
 import { LRUCache, ProbUtils } from '../utils/index.js';
-import { getCategoryId, getMaterialId, getEnchantId, getEligiblePool } from '../core/registry.js';
+import { getCategoryId, getMaterialId, getEnchantId, getEligiblePool, isCategoryAvailable } from '../core/registry.js';
 import { RegistryFactory } from '../core/factory.js';
 import { ENGINE_DEFAULTS, getSearchLimit } from '../core/config.js';
 import { DistributionService } from './distribution.js';
@@ -134,6 +134,19 @@ export class EnchantEngine {
         mat: string,
         config: SearchConfig = {}
     ): Promise<CalculationStats> {
+        if (!Number.isFinite(xp) || xp <= 0) {
+            throw new Error(`Invalid XP level: ${xp}. XP must be a positive integer.`);
+        }
+        if (xp > ENGINE_DEFAULTS.MAX_XP_LEVEL) {
+            throw new Error(`XP level ${xp} exceeds the maximum of ${ENGINE_DEFAULTS.MAX_XP_LEVEL}.`);
+        }
+        if (!isCategoryAvailable(this.registry, cat)) {
+            throw new Error(`Unknown or unavailable category: "${cat}" in version ${this.registry.version}.`);
+        }
+        if (getMaterialId(this.registry, mat) === ENGINE_DEFAULTS.UNKNOWN_MATERIAL_ID) {
+            throw new Error(`Unknown material: "${mat}".`);
+        }
+
         const {
             guaranteedFirst = null,
             threshold = 0.0001,
