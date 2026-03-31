@@ -9,6 +9,8 @@ import { ProbUtils, PRECISION } from '../utils/math/ProbUtils.js';
 import { VersionUtils } from '../utils/domain/VersionUtils.js';
 import { StringUtils, UIUtils } from '../utils/format/FormatUtils.js';
 import { RomanUtils } from '../utils/format/RomanUtils.js';
+import { KeyUtils, KEY_SHIFT_GUARANTEED } from '../utils/domain/KeyUtils.js';
+import { EnchantUtils } from '../utils/domain/EnchantUtils.js';
 
 const ROMAN_MAP = { "I": 1, "II": 2, "III": 3, "IV": 4, "V": 5 };
 
@@ -293,5 +295,77 @@ describe('RomanUtils.getBaseName', () => {
 
     it('does not strip a non-Roman-numeral last word', () => {
         assert.strictEqual(RomanUtils.getBaseName('Sharpness Max', ROMAN_MAP), 'Sharpness Max');
+    });
+});
+
+// ── KeyUtils ─────────────────────────────────────────────────────────────────
+
+const UNKNOWN_ENCHANT_ID = 255;
+
+describe('KeyUtils.getPackedKey', () => {
+    it('produces the same key for identical inputs', () => {
+        const k1 = KeyUtils.getPackedKey(1, 2, 15, 3, 1000, 500);
+        const k2 = KeyUtils.getPackedKey(1, 2, 15, 3, 1000, 500);
+        assert.strictEqual(k1, k2);
+    });
+
+    it('produces different keys for different catId', () => {
+        const k1 = KeyUtils.getPackedKey(0, 2, 15, 3, 1000, 500);
+        const k2 = KeyUtils.getPackedKey(1, 2, 15, 3, 1000, 500);
+        assert.notStrictEqual(k1, k2);
+    });
+
+    it('produces different keys for different matId', () => {
+        const k1 = KeyUtils.getPackedKey(1, 0, 15, 3, 1000, 500);
+        const k2 = KeyUtils.getPackedKey(1, 1, 15, 3, 1000, 500);
+        assert.notStrictEqual(k1, k2);
+    });
+
+    it('produces different keys for different modLevel', () => {
+        const k1 = KeyUtils.getPackedKey(1, 2, 10, 3, 1000, 500);
+        const k2 = KeyUtils.getPackedKey(1, 2, 20, 3, 1000, 500);
+        assert.notStrictEqual(k1, k2);
+    });
+
+    it('produces different keys for different guaranteedId', () => {
+        const k1 = KeyUtils.getPackedKey(1, 2, 15, 0, 1000, 500);
+        const k2 = KeyUtils.getPackedKey(1, 2, 15, 1, 1000, 500);
+        assert.notStrictEqual(k1, k2);
+    });
+
+    it('encodes UNKNOWN_ENCHANT_ID (255) in the guaranteed slot', () => {
+        const key = KeyUtils.getPackedKey(0, 0, 0, UNKNOWN_ENCHANT_ID, 0, 0);
+        const extracted = Number((key >> KEY_SHIFT_GUARANTEED) & 0xFFn);
+        assert.strictEqual(extracted, UNKNOWN_ENCHANT_ID);
+    });
+
+    it('includes threshold in key when provided', () => {
+        const k1 = KeyUtils.getPackedKey(1, 2, 15, 3, 1000, 500, 0.001);
+        const k2 = KeyUtils.getPackedKey(1, 2, 15, 3, 1000, 500, 0.01);
+        assert.notStrictEqual(k1, k2);
+    });
+});
+
+// ── EnchantUtils ─────────────────────────────────────────────────────────────
+
+describe('EnchantUtils.parse', () => {
+    it('returns null for null input', () => {
+        assert.strictEqual(EnchantUtils.parse(null, ROMAN_MAP), null);
+    });
+
+    it('parses "Sharpness IV" into {name:"Sharpness", rank:4}', () => {
+        assert.deepStrictEqual(EnchantUtils.parse('Sharpness IV', ROMAN_MAP), { name: 'Sharpness', rank: 4 });
+    });
+
+    it('parses bare name "Sharpness" as rank 1', () => {
+        assert.deepStrictEqual(EnchantUtils.parse('Sharpness', ROMAN_MAP), { name: 'Sharpness', rank: 1 });
+    });
+
+    it('parses multi-word name "Fire Aspect II"', () => {
+        assert.deepStrictEqual(EnchantUtils.parse('Fire Aspect II', ROMAN_MAP), { name: 'Fire Aspect', rank: 2 });
+    });
+
+    it('treats unknown trailing word as part of name (rank 1)', () => {
+        assert.deepStrictEqual(EnchantUtils.parse('Sharpness Max', ROMAN_MAP), { name: 'Sharpness Max', rank: 1 });
     });
 });

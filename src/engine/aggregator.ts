@@ -1,4 +1,4 @@
-import { PRECISION, ProbUtils, AsyncUtils, ComboUtils, RomanUtils } from '../utils/index.js';
+import { PRECISION, ProbUtils, AsyncUtils, ComboUtils, EnchantUtils } from '../utils/index.js';
 import { SummaryService } from '../services/index.js';
 import { getEnchantability, isEnchantmentAchievable } from '../core/registry.js';
 import { ENGINE_DEFAULTS, getSearchLimit } from '../core/config.js';
@@ -108,17 +108,15 @@ export class StatAggregator {
         totalRoundingError += distRoundingError;
 
         if (guaranteedFirst) {
-            const gId = FrontierFactory.getGuaranteedFirstId(registry, guaranteedFirst);
-            if (gId !== null) {
+            const romanMap = registry.data.constants.ROMAN_MAP;
+            const parsed = EnchantUtils.parse(guaranteedFirst, romanMap);
+            const gId = parsed ? registry.idMap.get(parsed.name) : undefined;
+            
+            if (gId !== undefined) {
                 totalAnyMass.set(gId, (totalAnyMass.get(gId) || 0n) + distRoundingError);
                 
-                const romanMap = registry.data.constants.ROMAN_MAP;
-                const rankStr = guaranteedFirst.split(' ').pop();
-                const rank = rankStr ? RomanUtils.getRomanValue(rankStr, romanMap) : null;
-                if (rank !== null) {
-                    const fullId = (gId << 8) | rank;
-                    totalRankMass.set(fullId, (totalRankMass.get(fullId) || 0n) + distRoundingError);
-                }
+                const fullId = (gId << 8) | (parsed?.rank ?? 1);
+                totalRankMass.set(fullId, (totalRankMass.get(fullId) || 0n) + distRoundingError);
                 
                 // Also attribute to count 1+ (usually guaranteed starts at 1)
                 totalCountMass.set(1, (totalCountMass.get(1) || 0n) + distRoundingError);

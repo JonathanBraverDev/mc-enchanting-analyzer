@@ -8,3 +8,5 @@ export * from './dom/DOMUtils.js';
 export * from './domain/VersionUtils.js';
 export * from './format/RomanUtils.js';
 export * from './domain/ComboUtils.js';
+export * from './domain/KeyUtils.js';
+export * from './domain/EnchantUtils.js';

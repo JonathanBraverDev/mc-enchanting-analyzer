@@ -1,5 +1,5 @@
 import { EnchantmentData, CalculationStats, SearchFrontier, RegistryState, SearchConfig, InternalSearchConfig, PackedEnchant } from '../types/index.js';
-import { LRUCache, ProbUtils } from '../utils/index.js';
+import { LRUCache, ProbUtils, KeyUtils, EnchantUtils } from '../utils/index.js';
 import { getCategoryId, getMaterialId, getEnchantId, getEligiblePool, isCategoryAvailable } from '../core/registry.js';
 import { RegistryFactory } from '../core/factory.js';
 import { ENGINE_DEFAULTS, getSearchLimit } from '../core/config.js';
@@ -14,13 +14,6 @@ import { StatAggregator } from './aggregator.js';
 export class EnchantEngine {
     static allEngines: Set<WeakRef<EnchantEngine>> = new Set();
 
-    private static readonly KEY_SHIFT_CAT = 0n;
-    private static readonly KEY_SHIFT_MAT = 6n;
-    private static readonly KEY_SHIFT_LEVEL = 12n;
-    private static readonly KEY_SHIFT_GUARANTEED = 20n;
-    private static readonly KEY_SHIFT_LIMIT = 28n;
-    private static readonly KEY_SHIFT_RESULTS_LIMIT = 44n;
-    private static readonly KEY_SHIFT_THRESHOLD = 60n;
 
     public registry: RegistryState;
     public distCache = new Map<string, { [level: number]: bigint }>();
@@ -36,23 +29,12 @@ export class EnchantEngine {
     }
 
     private getPackedKey(cat: string, modLevel: number, mat: string, guaranteedFirst: string | null, limit: number, resultsLimit: number, threshold?: number): bigint {
-        const catId = BigInt(getCategoryId(this.registry, cat));
-        const matId = BigInt(getMaterialId(this.registry, mat));
-        const guaranteedId = BigInt(getEnchantId(this.registry, guaranteedFirst ? guaranteedFirst.split(' ').slice(0, -1).join(' ') : ''));
+        const catId = getCategoryId(this.registry, cat);
+        const matId = getMaterialId(this.registry, mat);
+        const parsed = EnchantUtils.parse(guaranteedFirst, this.registry.data.constants.ROMAN_MAP);
+        const guaranteedId = parsed ? getEnchantId(this.registry, parsed.name) : ENGINE_DEFAULTS.UNKNOWN_ENCHANT_ID;
 
-        let key = catId << EnchantEngine.KEY_SHIFT_CAT;
-        key |= matId << EnchantEngine.KEY_SHIFT_MAT;
-        key |= BigInt(modLevel) << EnchantEngine.KEY_SHIFT_LEVEL;
-        key |= (guaranteedFirst ? guaranteedId : BigInt(ENGINE_DEFAULTS.UNKNOWN_ENCHANT_ID)) << EnchantEngine.KEY_SHIFT_GUARANTEED;
-        key |= BigInt(limit) << EnchantEngine.KEY_SHIFT_LIMIT;
-        key |= BigInt(resultsLimit) << EnchantEngine.KEY_SHIFT_RESULTS_LIMIT;
-
-        if (threshold !== undefined) {
-            const tIdx = BigInt(Math.max(0, Math.min(255, Math.round(-Math.log10(threshold)))));
-            key |= tIdx << EnchantEngine.KEY_SHIFT_THRESHOLD;
-        }
-
-        return key;
+        return KeyUtils.getPackedKey(catId, matId, modLevel, guaranteedId, limit, resultsLimit, threshold);
     }
 
     public static clearAllEngines(): void {

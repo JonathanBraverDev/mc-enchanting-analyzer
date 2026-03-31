@@ -1,4 +1,4 @@
-import { BinaryHeap, PRECISION, ComboUtils, RomanUtils } from '../utils/index.js';
+import { BinaryHeap, PRECISION, ComboUtils, EnchantUtils } from '../utils/index.js';
 import { ENGINE_DEFAULTS } from '../core/config.js';
 import { getEnchantId } from '../core/registry.js';
 import { PackedNode, PackedCombo, SearchFrontier, RegistryState } from '../types/index.js';
@@ -37,16 +37,17 @@ export class FrontierFactory {
         const countMass = new Map<number, bigint>();
 
         const romanMap = registry.data.constants.ROMAN_MAP;
-        const guaranteedId = this.getGuaranteedFirstId(registry, guaranteedFirst);
+        const parsed = EnchantUtils.parse(guaranteedFirst, romanMap);
+        const guaranteedId = parsed ? getEnchantId(registry, parsed.name) : ENGINE_DEFAULTS.UNKNOWN_ENCHANT_ID;
+        const hasGuaranteed = guaranteedId !== ENGINE_DEFAULTS.UNKNOWN_ENCHANT_ID;
 
-        const rankStr = guaranteedFirst?.split(' ').pop();
-        const rank = rankStr ? RomanUtils.getRomanValue(rankStr, romanMap) : null;
-        const full = (guaranteedId !== null && rank !== null) ? (guaranteedId << 8 | rank) : null;
+        const rank = parsed?.rank ?? 1;
+        const full = hasGuaranteed ? (guaranteedId << 8 | rank) : null;
 
         const initialPacked = full !== null ? ComboUtils.pack([full], guaranteedId, registry.enchantToIndex) : 0;
-        const initialBitset = guaranteedId !== null ? (1n << BigInt(guaranteedId)) : 0n;
+        const initialBitset = hasGuaranteed ? (1n << BigInt(guaranteedId)) : 0n;
 
-        if (full !== null && guaranteedId !== null) {
+        if (full !== null && hasGuaranteed) {
             anyMass.set(guaranteedId, PRECISION);
             rankMass.set(full, PRECISION);
         }
@@ -66,8 +67,9 @@ export class FrontierFactory {
     public static getGuaranteedFirstId(registry: RegistryState, guaranteedFirst: string | null): number | null {
         if (!guaranteedFirst) return null;
         const romanMap = registry.data.constants.ROMAN_MAP;
-        const base = RomanUtils.getBaseName(guaranteedFirst, romanMap);
-        const id = getEnchantId(registry, base);
+        const parsed = EnchantUtils.parse(guaranteedFirst, romanMap);
+        if (!parsed) return null;
+        const id = getEnchantId(registry, parsed.name);
         return id !== ENGINE_DEFAULTS.UNKNOWN_ENCHANT_ID ? id : null;
     }
 }

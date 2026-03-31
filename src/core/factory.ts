@@ -122,14 +122,28 @@ export class RegistryFactory {
         state.weightMap = new Uint32Array(allEnchNames.length);
 
         // First pass: resolve all props (applying version overrides)
+        this.resolveEnchantmentProps(state, data, allEnchNames);
+
+        // Build symmetric conflict map and bitsets
+        this.buildConflictBitsets(state, allEnchNames);
+
+        const romanMap = data.constants.ROMAN_MAP;
+        state.sortedRanks = Object.entries(romanMap).sort((a, b) => b[1] - a[1]);
+
+        // Initialize enchantment pairs (id << 8 | rank)
+        this.initializeEnchantmentPairs(state, data, allEnchNames);
+    }
+
+    private static resolveEnchantmentProps(state: RegistryState, data: EnchantmentData, allEnchNames: string[]): void {
         for (let i = 0; i < allEnchNames.length; i++) {
             const name = allEnchNames[i];
-            const props = Object.assign({}, enchantmentData[name], state.mergedOverrides[name] || {}) as Enchantment;
+            const props = Object.assign({}, data.global_enchantments[name], state.mergedOverrides[name] || {}) as Enchantment;
             state.resolvedRegistry[name] = props;
             state.weightMap[i] = props.weight;
         }
+    }
 
-        // Build symmetric conflict map from resolved props — do NOT mutate the DATA singleton
+    private static buildConflictBitsets(state: RegistryState, allEnchNames: string[]): void {
         const effectiveConflicts = new Map<string, Set<string>>();
         for (const name of allEnchNames) {
             effectiveConflicts.set(name, new Set(state.resolvedRegistry[name].conflicts ?? []));
@@ -140,7 +154,6 @@ export class RegistryFactory {
             }
         }
 
-        // Second pass: build bitsets from symmetric conflict map
         for (let i = 0; i < allEnchNames.length; i++) {
             const name = allEnchNames[i];
             let bitset = 0n;
@@ -150,10 +163,9 @@ export class RegistryFactory {
             }
             state.conflictBitsets[i] = bitset;
         }
+    }
 
-        const romanMap = data.constants.ROMAN_MAP;
-        state.sortedRanks = Object.entries(romanMap).sort((a, b) => b[1] - a[1]);
-
+    private static initializeEnchantmentPairs(state: RegistryState, data: EnchantmentData, allEnchNames: string[]): void {
         const allPairs: number[] = [];
         for (let id = 0; id < allEnchNames.length; id++) {
             const ench = data.global_enchantments[allEnchNames[id]];
