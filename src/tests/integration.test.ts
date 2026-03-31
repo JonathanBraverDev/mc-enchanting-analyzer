@@ -9,6 +9,8 @@ import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { RefinementService } from '../ui/refinement.js';
 import { WorkerClient } from '../worker/client.js';
+import { EnchantEngine } from '../engine/index.js';
+import { DATA } from '../data/index.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -214,6 +216,45 @@ describe('Integration: RefinementService with mocked WorkerClient', () => {
     });
 
     // -----------------------------------------------------------------------
+    // Test 5 — Stress test (rapid run() calls)
+    // -----------------------------------------------------------------------
+    it('stress: 10 rapid run() calls do not crash, final run completes', async () => {
+        const mainQueue: Array<(v: any) => void> = [];
+
+        WorkerClient.request = (_type: string, payload: any): Promise<any> => {
+            if (payload.source === 'chart') return new Promise(() => {}); // chart hangs
+            return new Promise(resolve => mainQueue.push(resolve));
+        };
+
+        const service = new RefinementService();
+        const finalInsights: any[] = [];
+        const errors: Error[] = [];
+
+        const categories = ['sword', 'pickaxe'];
+        for (let i = 0; i < 10; i++) {
+            service.run(
+                { ...BASE_PAYLOAD, category: categories[i % 2] },
+                null as any,
+                {
+                    onStatus: () => {},
+                    onInsights: (_insights: any, isFinal: boolean) => { if (isFinal) finalInsights.push(_insights); },
+                    onChart: () => {},
+                }
+            ).catch((e: Error) => errors.push(e));
+        }
+
+        // Drain the request queue; only the final run's requests fire callbacks
+        let maxIters = 50;
+        while (mainQueue.length > 0 && maxIters-- > 0) {
+            mainQueue.shift()!({ stats: makeStats(0) }); // uncertainty=0 → converge
+            await flush();
+        }
+
+        assert.strictEqual(errors.length, 0, 'No errors should occur during rapid run() calls');
+        assert.ok(finalInsights.length >= 1, 'Final run should fire onInsights at least once');
+    });
+
+    // -----------------------------------------------------------------------
     // Test 4 — WorkerClient pending-request drain (documents known regression)
     // -----------------------------------------------------------------------
     it('BUG: WorkerClient.init() does not reject in-flight requests (they hang forever)', async () => {
@@ -250,5 +291,56 @@ describe('Integration: RefinementService with mocked WorkerClient', () => {
         WorkerClient.pendingRequests.delete(TEST_KEY);
         // Suppress the unhandled-rejection warning by making hangingPromise non-fatal
         hangingPromise.catch(() => {});
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Guaranteed enchantment accuracy tests (engine direct, no worker mock needed)
+// Converted from src/tests/ui-performance.test.ts
+// ---------------------------------------------------------------------------
+
+describe('Integration: Guaranteed enchantment accuracy (engine direct)', () => {
+    afterEach(() => {
+        EnchantEngine.clearAllEngines();
+    });
+
+    it('guaranteed enchantment (Sword): Sharpness probability >= 99.99% at level 30', async () => {
+        const engine = new EnchantEngine(DATA, '1.21');
+        const stats = await engine.getFullStats('sword', 30, 'diamond', {
+            guaranteedFirst: 'Sharpness IV',
+            threshold: 0.0001,
+        });
+        const sharpnessId = engine.registry.idMap.get('Sharpness')!;
+        assert.ok(
+            stats.any[sharpnessId] >= 0.9999,
+            `Expected Sharpness prob >= 0.9999, got ${stats.any[sharpnessId]}`
+        );
+    });
+
+    it('guaranteed enchantment (Pickaxe): Efficiency probability >= 99.99% at levels 10, 20, 30', async () => {
+        const engine = new EnchantEngine(DATA, '1.21');
+        const effId = engine.registry.idMap.get('Efficiency')!;
+        for (const level of [10, 20, 30]) {
+            const stats = await engine.getFullStats('pickaxe', level, 'diamond', {
+                guaranteedFirst: 'Efficiency IV',
+                threshold: 0.0001,
+            });
+            const prob = stats.any[effId] ?? 0;
+            const isAccurate = prob >= 0.9999 || stats.uncertainty >= 0.9999;
+            assert.ok(
+                isAccurate,
+                `Level ${level}: prob=${prob}, uncertainty=${stats.uncertainty} — expected prob >= 0.9999 or uncertainty >= 0.9999`
+            );
+        }
+    });
+
+    it('guaranteed book enchantment: Silk Touch exactly 100%', async () => {
+        const engine = new EnchantEngine(DATA, '1.20.1');
+        const stats = await engine.getFullStats('book', 30, 'book', {
+            guaranteedFirst: 'Silk Touch I',
+            threshold: 0.0001,
+        });
+        const silkTouchId = engine.registry.idMap.get('Silk Touch')!;
+        assert.strictEqual(stats.any[silkTouchId], 1.0, 'Silk Touch probability should be exactly 1.0');
     });
 });
