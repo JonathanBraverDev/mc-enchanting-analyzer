@@ -40,6 +40,7 @@ export class RefinementService {
         callbacks: RefinementCallbacks
     ): Promise<void> {
         const currentId = ++this.activeId;
+        this.isSweepRunning = false;
         this.sweep = new Array(UI_DEFAULTS.MAX_XP_LEVEL).fill(null);
 
         const basePayload = { 
@@ -125,12 +126,17 @@ export class RefinementService {
                 
                 for (const l of labels) {
                     if (currentId !== this.activeId) break;
-                    
-                    const response = await WorkerClient.request(
-                        'getFullStats',
-                        { ...payload, xp: l, threshold: activeThreshold, source: 'chart' }
-                    );
-                    
+
+                    let response: any;
+                    try {
+                        response = await WorkerClient.request(
+                            'getFullStats',
+                            { ...payload, xp: l, threshold: activeThreshold, source: 'chart' }
+                        );
+                    } catch {
+                        break; // worker was re-initialized; exit sweep cleanly
+                    }
+
                     if (currentId !== this.activeId) break;
                     
                     this.sweep[l - 1] = { l, s: response.stats };
