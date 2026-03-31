@@ -1,5 +1,5 @@
 import { EnchantmentData, VersionManifest, Enchantment, ResolvedRegistry, MergedItems, MergedOverrides, RegistryState } from '../types/index.js';
-import { VersionUtils, LRUCache } from '../utils/index.js';
+import { VersionUtils } from '../utils/index.js';
 
 
 /**
@@ -25,9 +25,7 @@ export class RegistryFactory {
             sortedRanks: [],
             versionPool: new Map(),
             enchantToIndex: new Map(),
-            indexToEnchant: [0],
-            distCache: new Map(),
-            poolCache: new LRUCache(200)
+            indexToEnchant: [0]
         };
 
         const resolvedVersion = this.resolveVersion(data, version);

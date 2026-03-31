@@ -1,4 +1,4 @@
-import { BinaryHeap, PRECISION, ProbUtils, ComboUtils } from '../utils/index.js';
+import { BinaryHeap, PRECISION, ProbUtils, ComboUtils, LRUCache } from '../utils/index.js';
 import { getEligiblePool } from '../core/registry.js';
 import { ENGINE_DEFAULTS } from '../core/config.js';
 import { PackedNode, PackedCombo, PackedEnchant, SearchFrontier, RegistryState } from '../types/index.js';
@@ -20,7 +20,8 @@ export class SearchService {
         threshold: bigint = ProbUtils.toBigInt(0.0001),
         limit: number,
         existingFrontier?: SearchFrontier,
-        resultsLimit: number = ENGINE_DEFAULTS.MAX_RESULTS_SIZE
+        resultsLimit: number = ENGINE_DEFAULTS.MAX_RESULTS_SIZE,
+        poolCache?: LRUCache<string, PackedEnchant[]>
     ): SearchFrontier {
         const frontier = FrontierFactory.create(registry, cat, modLevel, guaranteedFirst, existingFrontier, threshold);
         let { results, cumulativeAccountedMass, prunedMass, roundingError, queue } = frontier;
@@ -30,7 +31,7 @@ export class SearchService {
         let uncertainty = prunedMass;
         let iterations = 0;
 
-        const initialPool = getEligiblePool(registry, cat, modLevel, mat);
+        const initialPool = getEligiblePool(registry, cat, modLevel, mat, poolCache);
         if (initialPool.length === 0) {
             return {
                 queue: new BinaryHeap(),

@@ -264,8 +264,7 @@ describe('DistributionService', () => {
     it('enchantability <= 0 returns single entry at the XP level with PRECISION probability', () => {
         // The guard "if (enchantability <= 0) return { [xp]: PRECISION }" must fire
         const fakeRegistry = {
-            mechanics: { enchantability_bonus_divisor: 4, random_bonus_range: 0.15 },
-            distCache: new Map<string, Record<number, bigint>>()
+            mechanics: { enchantability_bonus_divisor: 4, random_bonus_range: 0.15 }
         } as any;
 
         const dist = DistributionService.getModifiedLevelDist(30, 0, fakeRegistry);
@@ -276,12 +275,12 @@ describe('DistributionService', () => {
 
     it('result is cached: same call returns the identical object reference', () => {
         const fakeRegistry = {
-            mechanics: { enchantability_bonus_divisor: 4, random_bonus_range: 0.15 },
-            distCache: new Map<string, Record<number, bigint>>()
+            mechanics: { enchantability_bonus_divisor: 4, random_bonus_range: 0.15 }
         } as any;
+        const cache = new Map<string, Record<number, bigint>>();
 
-        const first  = DistributionService.getModifiedLevelDist(30, 10, fakeRegistry);
-        const second = DistributionService.getModifiedLevelDist(30, 10, fakeRegistry);
+        const first  = DistributionService.getModifiedLevelDist(30, 10, fakeRegistry, cache);
+        const second = DistributionService.getModifiedLevelDist(30, 10, fakeRegistry, cache);
         assert.strictEqual(first, second, 'cached call should return the exact same object');
     });
 });

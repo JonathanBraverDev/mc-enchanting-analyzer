@@ -31,14 +31,16 @@ export class StatAggregator {
             resultsLimit = ENGINE_DEFAULTS.MAX_RESULTS_SIZE,
             getExtendedCache,
             setExtendedCache,
-            useCache = true
+            useCache = true,
+            distCache,
+            poolCache
         } = config;
         const bThreshold = ProbUtils.toBigInt(threshold);
         const enchantability = getEnchantability(registry, mat, cat);
-        const modDist = DistributionService.getModifiedLevelDist(xp, enchantability, registry);
+        const modDist = DistributionService.getModifiedLevelDist(xp, enchantability, registry, distCache);
         const levels = Object.keys(modDist).map(Number).sort((a, b) => b - a);
 
-        if (guaranteedFirst && !isEnchantmentAchievable(registry, guaranteedFirst, cat, mat, levels)) {
+        if (guaranteedFirst && !isEnchantmentAchievable(registry, guaranteedFirst, cat, mat, levels, poolCache)) {
             return { ranks: {}, any: {}, count: {}, combos: {}, uncertainty: 1.0 };
         }
 
@@ -65,7 +67,7 @@ export class StatAggregator {
             // Orchestrate search, using cache if provided by EnchantEngine
             const cached = getExtendedCache?.(ml);
             const result = SearchService.calculateCombinations(
-                registry, cat, ml, mat, guaranteedFirst, activeThreshold, searchLimit, cached, resultsLimit
+                registry, cat, ml, mat, guaranteedFirst, activeThreshold, searchLimit, cached, resultsLimit, poolCache
             );
             
             if (useCache && setExtendedCache) {

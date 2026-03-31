@@ -9,11 +9,10 @@ export class DistributionService {
     /**
      * Calculates the probability distribution of Modified Levels.
      */
-    public static getModifiedLevelDist(xp: number, enchantability: number, registry: RegistryState): { [level: number]: bigint } {
+    public static getModifiedLevelDist(xp: number, enchantability: number, registry: RegistryState, cache?: Map<string, { [level: number]: bigint }>): { [level: number]: bigint } {
         const mech = registry.mechanics;
         const key = `${xp}@${enchantability}@${mech.enchantability_bonus_divisor}@${mech.random_bonus_range}`;
-        const cache = registry.distCache;
-        if (cache.has(key)) return cache.get(key)!;
+        if (cache?.has(key)) return cache.get(key)!;
 
         // 1.0 in BigInt fixed-point
         if (enchantability <= 0) return { [xp]: PRECISION };
@@ -56,7 +55,7 @@ export class DistributionService {
             }
         }
 
-        cache.set(key, finalDist);
+        cache?.set(key, finalDist);
         return finalDist;
     }
 }
