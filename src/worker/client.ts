@@ -54,20 +54,20 @@ export const WorkerClient = {
                 }
 
                 if (msgType === 'result') {
-                    const { stats, human } = payload || {};
+                    const { stats } = payload || {};
                     const finalStats = (stats && stats.comboKeys) ? SerializationService.deserialize(stats) : stats;
-                    
+
                     if (req) {
-                        req.resolve({ stats: finalStats, human });
+                        req.resolve({ stats: finalStats });
                         this.pendingRequests.delete(reqKey);
                         this.pendingRequests.delete(`${reqKey}_progress`);
                     }
                 } else if (msgType === 'progress') {
-                    const { stats, human } = payload || {};
+                    const { stats } = payload || {};
                     const finalStats = (stats && stats.comboKeys) ? SerializationService.deserialize(stats) : stats;
-                    
+
                     const progCb = this.pendingRequests.get(`${reqKey}_progress`);
-                    if (progCb) (progCb as any)({ stats: finalStats, human });
+                    if (progCb) (progCb as any)({ stats: finalStats });
                 } else if (msgType === 'error') {
                     if (req) {
                         req.reject(payload);

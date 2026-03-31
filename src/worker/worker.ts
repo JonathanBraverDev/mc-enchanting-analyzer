@@ -1,6 +1,6 @@
 import { EnchantEngine } from '../engine/index.js';
 import { DATA } from '../data/index.js';
-import { HumanizationService, SerializationService } from '../services/index.js';
+import { SerializationService } from '../services/index.js';
 import type { WorkerRequest } from './protocol.js';
 
 let engine: EnchantEngine | null = null;
@@ -45,22 +45,20 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
                             threshold: payload.threshold,
                             signal,
                             onProgress: (partialStats) => {
-                                const human = HumanizationService.humanize(partialStats, engine!.registry);
                                 const { compact, transferables } = SerializationService.serialize(partialStats);
-                                (self as any).postMessage({ type: 'progress', id, payload: { stats: compact, human } }, transferables);
+                                (self as any).postMessage({ type: 'progress', id, payload: { stats: compact } }, transferables);
                             },
                             useBestCache: payload.useBestCache || false,
                             maxIterations: payload.maxIterations
                         }
                     );
-                    
-                    const human = HumanizationService.humanize(stats, engine.registry);
+
                     const { compact, transferables } = SerializationService.serialize(stats);
-                    
-                    (self as any).postMessage({ 
-                        type: 'result', 
-                        id, 
-                        payload: { stats: compact, human } 
+
+                    (self as any).postMessage({
+                        type: 'result',
+                        id,
+                        payload: { stats: compact }
                     }, transferables);
                 } catch (err: any) {
                     if (err.message === "Aborted") {
@@ -73,18 +71,6 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
                         abortControllers.delete(source);
                     }
                 }
-                break;
-            }
-            
-            case 'getModifiedLevelDist': {
-                const dist = engine.getModifiedLevelDist(payload.xp, payload.enchantability);
-                self.postMessage({ type: 'result', id, payload: dist });
-                break;
-            }
-
-            case 'getEligibleListNumeric': {
-                const list = engine.getEligibleListNumeric(payload.cat, payload.level, payload.mat, payload.bitset || 0n);
-                self.postMessage({ type: 'result', id, payload: list });
                 break;
             }
 
