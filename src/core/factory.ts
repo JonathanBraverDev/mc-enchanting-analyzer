@@ -1,6 +1,5 @@
 import { EnchantmentData, VersionManifest, VersionMechanics, Enchantment, ResolvedRegistry, MergedItems, MergedOverrides, RegistryState } from '../types/index.js';
 import { VersionUtils, LRUCache } from '../utils/index.js';
-import { ComboUtils } from '../utils/domain/ComboUtils.js';
 
 
 /**
@@ -53,8 +52,6 @@ export class RegistryFactory {
         
         // 5. Initialize active version pool
         this.initializeVersionPool(state);
-
-        ComboUtils.init(state.enchantToIndex, state.indexToEnchant);
 
         return state;
     }

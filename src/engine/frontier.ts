@@ -43,7 +43,7 @@ export class FrontierFactory {
         const rank = rankStr ? RomanUtils.getRomanValue(rankStr, romanMap) : null;
         const full = (guaranteedId !== null && rank !== null) ? (guaranteedId << 8 | rank) : null;
 
-        const initialPacked = full !== null ? ComboUtils.pack([full], guaranteedId) : 0;
+        const initialPacked = full !== null ? ComboUtils.pack([full], guaranteedId, registry.enchantToIndex) : 0;
         const initialBitset = guaranteedId !== null ? (1n << BigInt(guaranteedId)) : 0n;
 
         if (full !== null && guaranteedId !== null) {

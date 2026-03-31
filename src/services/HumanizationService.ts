@@ -37,7 +37,7 @@ export class HumanizationService {
 
         const rawCombos: Record<string, number> = {};
         for (const [packed, prob] of Object.entries(stats.combos)) {
-            const ids = ComboUtils.unpack(parseInt(packed, 16));
+            const ids = ComboUtils.unpack(parseInt(packed, 16), resolver.indexToEnchant);
             const comboKey = ids.map(n => getFullEnchantName(resolver, n)).join("+");
             rawCombos[comboKey] = prob as number;
         }
