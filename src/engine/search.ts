@@ -172,11 +172,11 @@ export class SearchService {
         const nextLevel = currentCount >= 1 ? Math.floor(currentLevel / 2) : currentLevel;
         const pBase = probForward / BigInt(totalWeight);
         const remainder = probForward % BigInt(totalWeight);
-        const currentChosen = ComboUtils.unpack(current.packedChosen, indexToEnchant);
+        const guaranteedInCombo = guaranteedFirstId !== null && (currentBitset & (1n << BigInt(guaranteedFirstId))) !== 0n;
 
         for (let i = 0; i < eligible.length; i++) {
             const pNext = BigInt(weights[i]) * pBase;
-            const nextPacked = ComboUtils.pack([...currentChosen, eligible[i]], guaranteedFirstId, enchantToIndex);
+            const nextPacked = ComboUtils.packAppend(current.packedChosen, eligible[i], guaranteedFirstId, guaranteedInCombo, enchantToIndex);
             const nextId = ComboUtils.getEnchantId(eligible[i]);
 
             // Add new enchant to Rank and Any mass of this path
@@ -222,12 +222,15 @@ export class SearchService {
         countMass.set(currentCount - 1, (countMass.get(currentCount - 1) || 0n) + (prob - rem));
 
         // Correct anyMass/rankMass: for each original enchant, deduct the mass lost due to removal.
-        // Uses proportional survival across all outcomes (including slot 0).
+        // Each redistributed combo removes exactly one enchant, so enchant e appears in
+        // (nOutcomes - 1) outcomes unless e is the guaranteed enchant (whose removal outcome
+        // was filtered out by removeAdditional), in which case it appears in all nOutcomes.
         const originalEnchants = ComboUtils.unpack(packedChosen, indexToEnchant);
         for (const e of originalEnchants) {
             const id = e >> 8;
-            const nOccurrences = redistributed.filter(r => ComboUtils.unpack(r, indexToEnchant).includes(e)).length;
-            const survivorMass = (BigInt(nOccurrences) * prob) / nOutcomes;
+            const isGuaranteed = guaranteedFirstId !== null && id === guaranteedFirstId;
+            const nOccurrences = isGuaranteed ? nOutcomes : nOutcomes - 1n;
+            const survivorMass = (nOccurrences * prob) / nOutcomes;
             const loss = prob - survivorMass;
             if (loss > 0n) {
                 anyMass.set(id, (anyMass.get(id) || 0n) - loss);

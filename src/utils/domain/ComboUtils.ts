@@ -67,6 +67,64 @@ export class ComboUtils {
     }
 
     /**
+     * Appends a single enchant to an already-packed combo without creating an intermediate array.
+     * guaranteedInCombo must be true iff the guaranteed enchant is already present in existing.
+     * The caller must guarantee that newItem is not already in existing.
+     */
+    static packAppend(
+        existing: PackedCombo,
+        newItem: PackedEnchant,
+        guaranteedFirstId: number | null,
+        guaranteedInCombo: boolean,
+        enchantToIndex: Map<number, number>
+    ): PackedCombo {
+        const newIdx = enchantToIndex.get(newItem);
+        if (newIdx === undefined) return existing;
+
+        const count = this.getCount(existing);
+        const newId = newItem >> 8;
+        const isNewGuaranteed = guaranteedFirstId !== null && newId === guaranteedFirstId;
+
+        if (count === 0) {
+            return newIdx * this.BYTE_MULTIPLIERS[0];
+        }
+
+        if (isNewGuaranteed) {
+            // Guaranteed enchant goes to position 0; shift all existing bytes right
+            let packed = newIdx * this.BYTE_MULTIPLIERS[0];
+            for (let i = 0; i < count; i++) {
+                const b = Math.floor(existing / this.BYTE_MULTIPLIERS[i]) % 256;
+                packed += b * this.BYTE_MULTIPLIERS[i + 1];
+            }
+            return packed;
+        }
+
+        // Non-guaranteed: insert in descending idx order, after guaranteed slot if present
+        const sortStart = (guaranteedFirstId !== null && guaranteedInCombo) ? 1 : 0;
+
+        let insertPos = count;
+        for (let i = sortStart; i < count; i++) {
+            const b = Math.floor(existing / this.BYTE_MULTIPLIERS[i]) % 256;
+            if (newIdx > b) {
+                insertPos = i;
+                break;
+            }
+        }
+
+        let packed = 0;
+        for (let i = 0; i < insertPos; i++) {
+            const b = Math.floor(existing / this.BYTE_MULTIPLIERS[i]) % 256;
+            packed += b * this.BYTE_MULTIPLIERS[i];
+        }
+        packed += newIdx * this.BYTE_MULTIPLIERS[insertPos];
+        for (let i = insertPos; i < count; i++) {
+            const b = Math.floor(existing / this.BYTE_MULTIPLIERS[i]) % 256;
+            packed += b * this.BYTE_MULTIPLIERS[i + 1];
+        }
+        return packed;
+    }
+
+    /**
      * For books: returns all possible combinations after removing one "selected at random" enchantment.
      * Based on Minecraft Wiki: "If multiple enchantments were generated, then one selected at random is removed."
      */
