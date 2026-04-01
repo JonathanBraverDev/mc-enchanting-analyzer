@@ -6,8 +6,8 @@ export const KEY_SHIFT_MAT = 6n;
 export const KEY_SHIFT_LEVEL = 12n;
 export const KEY_SHIFT_GUARANTEED = 20n;
 export const KEY_SHIFT_LIMIT = 28n;
-export const KEY_SHIFT_RESULTS_LIMIT = 44n;
-export const KEY_SHIFT_THRESHOLD = 60n;
+export const KEY_SHIFT_RESULTS_LIMIT = 48n;
+export const KEY_SHIFT_THRESHOLD = 64n;
 
 /**
  * Utility for generating bit-packed cache keys.
