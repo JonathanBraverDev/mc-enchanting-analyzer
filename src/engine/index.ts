@@ -1,6 +1,5 @@
 import { EnchantmentData, CalculationStats, SearchFrontier, RegistryState, SearchConfig, InternalSearchConfig, PackedEnchant } from '../types/index.js';
 import { LRUCache, ProbUtils, KeyUtils, EnchantUtils } from '../utils/index.js';
-import { KEY_SHIFT_THRESHOLD } from '../utils/domain/KeyUtils.js';
 import { getCategoryId, getMaterialId, getEnchantId, getEligiblePool, isCategoryAvailable } from '../core/registry.js';
 import { RegistryFactory } from '../core/factory.js';
 import { ENGINE_DEFAULTS, getSearchLimit } from '../core/config.js';
@@ -22,20 +21,19 @@ export class EnchantEngine {
     public comboCache = new LRUCache<bigint, SearchFrontier>(ENGINE_DEFAULTS.CACHE_SIZE_COMBO_OTHER);
     public bookComboCache = new LRUCache<bigint, SearchFrontier>(ENGINE_DEFAULTS.CACHE_SIZE_COMBO_BOOK);
     public statsCache = new LRUCache<bigint, CalculationStats>(ENGINE_DEFAULTS.CACHE_SIZE_STATS);
-    public bestStatsCache = new LRUCache<bigint, { threshold: number, stats: CalculationStats }>(ENGINE_DEFAULTS.CACHE_SIZE_STATS);
 
     constructor(data: EnchantmentData, version: string) {
         this.registry = RegistryFactory.build(data, version);
         EnchantEngine.allEngines.add(new WeakRef(this));
     }
 
-    private getPackedKey(cat: string, modLevel: number, mat: string, guaranteedFirst: string | null, limit: number, resultsLimit: number, threshold?: number): bigint {
+    private getPackedKey(cat: string, modLevel: number, mat: string, guaranteedFirst: string | null, limit: number, resultsLimit: number): bigint {
         const catId = getCategoryId(this.registry, cat);
         const matId = getMaterialId(this.registry, mat);
         const parsed = EnchantUtils.parse(guaranteedFirst, this.registry.data.constants.ROMAN_MAP);
         const guaranteedId = parsed ? getEnchantId(this.registry, parsed.name) : ENGINE_DEFAULTS.UNKNOWN_ENCHANT_ID;
 
-        return KeyUtils.getPackedKey(catId, matId, modLevel, guaranteedId, limit, resultsLimit, threshold);
+        return KeyUtils.getPackedKey(catId, matId, modLevel, guaranteedId, limit, resultsLimit);
     }
 
     public static clearAllEngines(): void {
@@ -53,7 +51,6 @@ export class EnchantEngine {
                 engine.comboCache.clear();
                 engine.bookComboCache.clear();
                 engine.statsCache.clear();
-                engine.bestStatsCache.clear();
             } else {
                 dead.push(ref);
             }
@@ -69,7 +66,6 @@ export class EnchantEngine {
         this.comboCache.clear();
         this.bookComboCache.clear();
         this.statsCache.clear();
-        this.bestStatsCache.clear();
         for (const ref of EnchantEngine.allEngines) {
             if (ref.deref() === this) {
                 EnchantEngine.allEngines.delete(ref);
@@ -141,31 +137,26 @@ export class EnchantEngine {
             threshold = 0.0001,
             signal,
             onProgress,
-            useBestCache = false,
             maxIterations,
             summaryLimit = ENGINE_DEFAULTS.MAX_RESULTS_SUMMARY,
             resultsLimit = ENGINE_DEFAULTS.MAX_RESULTS_SIZE,
             useCache = true
         } = config;
         const limit = getSearchLimit(cat, threshold, maxIterations);
-        const baseKey = this.getPackedKey(cat, xp, mat, guaranteedFirst, limit, resultsLimit);
-        const tIdx = BigInt(Math.max(0, Math.min(255, Math.round(-Math.log10(threshold)))));
-        const exactKey = baseKey | (tIdx << KEY_SHIFT_THRESHOLD);
-
-        // Check exact stats cache
-        if (this.statsCache.has(exactKey)) return this.statsCache.get(exactKey)!;
-
-        // Check best-so-far stats cache (lower threshold than requested)
-        if (useBestCache) {
-            const best = this.bestStatsCache.get(baseKey);
-            if (best && best.threshold <= threshold) return best.stats;
-        }
 
         // Pre-resolve IDs once so closure only varies `ml`
         const catId = getCategoryId(this.registry, cat);
         const matId = getMaterialId(this.registry, mat);
         const parsedG = EnchantUtils.parse(guaranteedFirst, this.registry.data.constants.ROMAN_MAP);
         const guaranteedId = parsedG ? getEnchantId(this.registry, parsedG.name) : ENGINE_DEFAULTS.UNKNOWN_ENCHANT_ID;
+
+        // Stats cache key excludes `limit` so a more precise result satisfies coarser requests
+        const cacheKey = KeyUtils.getStatsKey(catId, matId, xp, guaranteedId, resultsLimit);
+
+        // Check unified stats cache — return if cached result is already precise enough
+        const cachedStats = this.statsCache.get(cacheKey);
+        if (cachedStats && cachedStats.uncertainty <= threshold) return cachedStats;
+
         const activeCache = cat === "book" ? this.bookComboCache : this.comboCache;
 
         // Delegate aggregation to service (InternalSearchConfig adds cache accessors)
@@ -186,11 +177,9 @@ export class EnchantEngine {
             this.registry, cat, xp, mat, guaranteedFirst, internalConfig
         );
 
-        // Persistent Caching
-        this.statsCache.set(exactKey, finalStats);
-        const existingBest = this.bestStatsCache.get(baseKey);
-        if (!existingBest || threshold < existingBest.threshold) {
-            this.bestStatsCache.set(baseKey, { threshold, stats: finalStats });
+        // Only overwrite if new result is more precise (lower uncertainty)
+        if (!cachedStats || finalStats.uncertainty < cachedStats.uncertainty) {
+            this.statsCache.set(cacheKey, finalStats);
         }
 
         return finalStats;

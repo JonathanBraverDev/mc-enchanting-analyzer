@@ -9,7 +9,7 @@ import { ProbUtils, PRECISION } from '../utils/math/ProbUtils.js';
 import { VersionUtils } from '../utils/domain/VersionUtils.js';
 import { StringUtils, UIUtils } from '../utils/format/FormatUtils.js';
 import { RomanUtils } from '../utils/format/RomanUtils.js';
-import { KeyUtils, KEY_SHIFT_GUARANTEED } from '../utils/domain/KeyUtils.js';
+import { KeyUtils, KEY_SHIFT_GUARANTEED, KEY_SHIFT_STATS_RESULTS_LIMIT } from '../utils/domain/KeyUtils.js';
 import { EnchantUtils } from '../utils/domain/EnchantUtils.js';
 
 const ROMAN_MAP = { "I": 1, "II": 2, "III": 3, "IV": 4, "V": 5 };
@@ -339,11 +339,59 @@ describe('KeyUtils.getPackedKey', () => {
         assert.strictEqual(extracted, UNKNOWN_ENCHANT_ID);
     });
 
-    it('includes threshold in key when provided', () => {
-        const k1 = KeyUtils.getPackedKey(1, 2, 15, 3, 1000, 500, 0.001);
-        const k2 = KeyUtils.getPackedKey(1, 2, 15, 3, 1000, 500, 0.01);
+});
+
+describe('KeyUtils.getStatsKey', () => {
+    it('produces the same key for identical inputs', () => {
+        const k1 = KeyUtils.getStatsKey(1, 2, 15, 3, 500);
+        const k2 = KeyUtils.getStatsKey(1, 2, 15, 3, 500);
+        assert.strictEqual(k1, k2);
+    });
+
+    it('produces different keys for different catId', () => {
+        const k1 = KeyUtils.getStatsKey(0, 2, 15, 3, 500);
+        const k2 = KeyUtils.getStatsKey(1, 2, 15, 3, 500);
         assert.notStrictEqual(k1, k2);
     });
+
+    it('produces different keys for different matId', () => {
+        const k1 = KeyUtils.getStatsKey(1, 0, 15, 3, 500);
+        const k2 = KeyUtils.getStatsKey(1, 1, 15, 3, 500);
+        assert.notStrictEqual(k1, k2);
+    });
+
+    it('produces different keys for different level', () => {
+        const k1 = KeyUtils.getStatsKey(1, 2, 10, 3, 500);
+        const k2 = KeyUtils.getStatsKey(1, 2, 20, 3, 500);
+        assert.notStrictEqual(k1, k2);
+    });
+
+    it('produces different keys for different guaranteedId', () => {
+        const k1 = KeyUtils.getStatsKey(1, 2, 15, 0, 500);
+        const k2 = KeyUtils.getStatsKey(1, 2, 15, 1, 500);
+        assert.notStrictEqual(k1, k2);
+    });
+
+    it('produces different keys for different resultsLimit', () => {
+        const k1 = KeyUtils.getStatsKey(1, 2, 15, 3, 100);
+        const k2 = KeyUtils.getStatsKey(1, 2, 15, 3, 500);
+        assert.notStrictEqual(k1, k2);
+    });
+
+    it('produces the same key regardless of limit (cross-tier cache hit)', () => {
+        // limit is NOT part of the stats key — ultra and coarse share a cache entry
+        const kCoarse = KeyUtils.getStatsKey(1, 2, 15, 3, 500);
+        const kUltra = KeyUtils.getStatsKey(1, 2, 15, 3, 500);
+        assert.strictEqual(kCoarse, kUltra);
+    });
+
+    it('encodes resultsLimit at KEY_SHIFT_STATS_RESULTS_LIMIT', () => {
+        const resultsLimit = 42;
+        const key = KeyUtils.getStatsKey(0, 0, 0, 0, resultsLimit);
+        const extracted = Number((key >> KEY_SHIFT_STATS_RESULTS_LIMIT) & 0xFFFFFn);
+        assert.strictEqual(extracted, resultsLimit);
+    });
+
 });
 
 // ── EnchantUtils ─────────────────────────────────────────────────────────────

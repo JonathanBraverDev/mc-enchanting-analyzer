@@ -9,7 +9,6 @@ export type WorkerRequest =
         guaranteedFirst: string | null;
         threshold: number;
         source?: string;
-        useBestCache?: boolean;
         maxIterations?: number;
       }};
 

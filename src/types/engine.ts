@@ -87,7 +87,6 @@ export interface SearchConfig {
     threshold?: number;
     signal?: AbortSignal;
     onProgress?: (stats: CalculationStats) => void;
-    useBestCache?: boolean;
     maxIterations?: number;
     summaryLimit?: number;
     resultsLimit?: number;
