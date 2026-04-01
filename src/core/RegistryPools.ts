@@ -16,7 +16,7 @@ export class PoolService {
         mat: string,
         cache?: LRUCache<string, PackedEnchant[]>
     ): PackedEnchant[] {
-        const cacheKey = `${cat}|${level}|${mat}`;
+        const cacheKey = `${cat}|${level}`;
         const cached = cache?.get(cacheKey);
         if (cached) return cached;
 
