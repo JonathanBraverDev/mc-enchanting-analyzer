@@ -135,8 +135,9 @@ export class SearchService {
         const isLimitReached = currentCount >= ENGINE_DEFAULTS.MAX_ENCHANTS_PER_ITEM;
         const isTooSmall = probForward < threshold / ENGINE_DEFAULTS.PRUNE_THRESHOLD_DENOMINATOR;
         const isMapFull = results.size >= resultsLimit && !results.has(current.packedChosen);
+        const isQueueFull = queue.size() >= ENGINE_DEFAULTS.MAX_QUEUE_SIZE;
 
-        if (isLimitReached || isTooSmall || isMapFull) {
+        if (isLimitReached || isTooSmall || isMapFull || isQueueFull) {
             if (cat === "book" && currentCount > 1) {
                 const { rem: remForward } = this.redistributeBookProb(current.packedChosen, probForward, currentCount, guaranteedFirstId, enchantToIndex, indexToEnchant, results, countMass, anyMass, rankMass);
                 return { uncertaintyDelta: 0n, massDelta: probStop + probForward, prunedDelta: probForward, roundingErrorDelta: remStop + remForward };
@@ -174,12 +175,6 @@ export class SearchService {
         const currentChosen = ComboUtils.unpack(current.packedChosen, indexToEnchant);
 
         for (let i = 0; i < eligible.length; i++) {
-            if (queue.size() >= ENGINE_DEFAULTS.MAX_QUEUE_SIZE) {
-                results.set(current.packedChosen, (results.get(current.packedChosen) || 0n) + probForward);
-                countMass.set(currentCount, (countMass.get(currentCount) || 0n) + probForward);
-                return { uncertaintyDelta: probForward, massDelta: probStop + probForward, prunedDelta: probForward, roundingErrorDelta: remStop };
-            }
-
             const pNext = BigInt(weights[i]) * pBase;
             const nextPacked = ComboUtils.pack([...currentChosen, eligible[i]], guaranteedFirstId, enchantToIndex);
             const nextId = ComboUtils.getEnchantId(eligible[i]);
