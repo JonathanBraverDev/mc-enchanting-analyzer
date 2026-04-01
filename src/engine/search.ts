@@ -88,7 +88,7 @@ export class SearchService {
             frontierUncertainty += item.prob;
         }
 
-        return { ...frontier, uncertainty: uncertainty + frontierUncertainty, prunedMass: uncertainty, roundingError };
+        return { ...frontier, uncertainty: uncertainty + frontierUncertainty, prunedMass: uncertainty, roundingError, cumulativeAccountedMass };
     }
 
     private static processSearchNode(

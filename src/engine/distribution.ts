@@ -17,8 +17,8 @@ export class DistributionService {
         // 1.0 in BigInt fixed-point
         if (enchantability <= 0) return { [xp]: PRECISION };
         
-        const div = mech.enchantability_bonus_divisor || 4;
-        const rngRange = mech.random_bonus_range || 0.15;
+        const div = mech.enchantability_bonus_divisor ?? 4;
+        const rngRange = mech.random_bonus_range ?? 0.15;
 
         const N = Math.floor(enchantability / div) + 1;
         

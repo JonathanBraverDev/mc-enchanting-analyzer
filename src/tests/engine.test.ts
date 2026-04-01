@@ -74,8 +74,7 @@ describe('Enchantment Engine Test Suite', () => {
 
         it('Progressive Refinement Parity: Resumed search should match fresh search', async () => {
             const standard = await engine.getFullStats('book', 30, 'book', { threshold: 0.001 });
-            engine.comboCache.clear();
-            engine.statsCache.clear();
+            engine.resetCaches();
             await engine.getFullStats('book', 30, 'book', { threshold: 0.05 }); // Coarse
             const resumed = await engine.getFullStats('book', 30, 'book', { threshold: 0.001 }); // Resume
             

@@ -128,6 +128,7 @@ export class RegistryFactory {
         this.buildConflictBitsets(state, allEnchNames);
 
         const romanMap = data.constants.ROMAN_MAP;
+        // Sorted descending by rank value so getEligiblePool finds the highest achievable rank first.
         state.sortedRanks = Object.entries(romanMap).sort((a, b) => b[1] - a[1]);
 
         // Initialize enchantment pairs (id << 8 | rank)
