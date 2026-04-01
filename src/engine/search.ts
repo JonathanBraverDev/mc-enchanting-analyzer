@@ -12,6 +12,8 @@ function addTo(map: Map<number, bigint>, key: number, value: bigint): void {
  * Service for the Best-First search of enchantment combinations.
  */
 export class SearchService {
+    private static _eligible: PackedEnchant[] = new Array(64);
+    private static _weights: number[] = new Array(64);
     /**
      * Iteratively calculates enchantment combinations using a Best-First approach.
      */
@@ -141,8 +143,12 @@ export class SearchService {
 
         // Branching
         let totalWeight = 0;
-        const eligible = new Array<PackedEnchant>(pool.length);
-        const weights = new Array<number>(pool.length);
+        if (pool.length > SearchService._eligible.length) {
+            SearchService._eligible = new Array(pool.length);
+            SearchService._weights = new Array(pool.length);
+        }
+        const eligible = SearchService._eligible;
+        const weights = SearchService._weights;
         let eligibleCount = 0;
 
         for (let i = 0; i < pool.length; i++) {
