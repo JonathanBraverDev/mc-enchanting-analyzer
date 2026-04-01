@@ -160,9 +160,9 @@ export class EnchantEngine {
         // Stats cache key excludes `limit` so a more precise result satisfies coarser requests
         const cacheKey = KeyUtils.getStatsKey(catId, matId, xp, guaranteedId, resultsLimit);
 
-        // Check unified stats cache — return if cached result is already precise enough
+        // Check unified stats cache
         const cachedStats = this.statsCache.get(cacheKey);
-        if (cachedStats && cachedStats.uncertainty <= threshold) return cachedStats;
+        if (cachedStats) return cachedStats;
 
         const activeCache = cat === "book" ? this.bookComboCache : this.comboCache;
 
