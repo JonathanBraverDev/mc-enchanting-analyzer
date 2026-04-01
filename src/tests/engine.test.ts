@@ -189,6 +189,18 @@ describe('Enchantment Engine Test Suite', () => {
             const stats = await engine.getFullStats('book', 30, 'book', { threshold: SNAPSHOT_THRESHOLD, useBestCache: false, maxIterations: SNAPSHOT_LIMIT, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false });
             await SnapshotUtils.assertSnapshot('1.21.11_book_30_book', stats);
         });
+
+        it('Snapshot: 1.21 Diamond Sword @ Level 30 (Guaranteed Sharpness IV)', async () => {
+            const engine = new EnchantEngine(DATA, '1.21');
+            const stats = await engine.getFullStats('sword', 30, 'diamond', { threshold: SNAPSHOT_THRESHOLD, useBestCache: false, maxIterations: SNAPSHOT_LIMIT, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false, guaranteedFirst: 'Sharpness IV' });
+            await SnapshotUtils.assertSnapshot('1.21_sword_30_diamond_guaranteed_sharpness', stats);
+        });
+
+        it('Snapshot: 1.8 Bow @ Level 30 (Guaranteed Power IV)', async () => {
+            const engine = new EnchantEngine(DATA, '1.8');
+            const stats = await engine.getFullStats('bow', 30, 'bow', { threshold: SNAPSHOT_THRESHOLD, useBestCache: false, maxIterations: SNAPSHOT_LIMIT, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false, guaranteedFirst: 'Power IV' });
+            await SnapshotUtils.assertSnapshot('1.8_bow_30_bow_guaranteed_power', stats);
+        });
     });
 
     describe('6. Cache Isolation & Consistency', () => {
