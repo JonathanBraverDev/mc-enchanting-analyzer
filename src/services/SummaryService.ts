@@ -24,7 +24,7 @@ export class SummaryService {
             count: {},
             combos: {},
             uncertainty: ProbUtils.toNumber(uncertainty),
-            roundingError: Number(roundingError)
+            roundingError: ProbUtils.toNumber(roundingError)
         };
 
         if (anyMass) {

@@ -218,11 +218,7 @@ export class RegistryFactory {
 
     private static initializeVersionPool(state: RegistryState): void {
         for (const [cat, pool] of Object.entries(state.mergedItems)) {
-            const filtered = pool.filter(name => {
-                const props = state.resolvedRegistry[name];
-                return VersionUtils.isInRange(state.version, props.valid_from, props.valid_to);
-            });
-            state.versionPool.set(cat, filtered);
+            state.versionPool.set(cat, pool);
         }
     }
 }

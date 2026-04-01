@@ -22,7 +22,8 @@ export class HumanizationService {
             count: { ...stats.count },
             combos: {},
             uncertainty: stats.uncertainty,
-            pruned: stats.pruned
+            pruned: stats.pruned,
+            roundingError: stats.roundingError
         };
 
         for (const [idAndRank, prob] of Object.entries(stats.ranks)) {

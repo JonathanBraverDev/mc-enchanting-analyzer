@@ -19,7 +19,6 @@ export const cosmetics = {
     "Fire Protection": "hsl(15, 80%, 50%)",
     "Blast Protection": "hsl(0, 0%, 50%)",
     "Projectile Protection": "hsl(210, 60%, 50%)",
-    "Mending": "hsl(110, 80%, 60%)",
     "Looting": "hsl(260, 60%, 60%)",
     "Knockback": "hsl(180, 50%, 50%)",
     "Fire Aspect": "hsl(10, 90%, 50%)",
@@ -41,6 +40,10 @@ export const cosmetics = {
     "Channeling": "hsl(50, 100%, 70%)",
     "Density": "hsl(260, 50%, 50%)",
     "Breach": "hsl(10, 60%, 40%)",
-    "Lunge": "hsl(40, 80%, 50%)"
+    "Lunge": "hsl(40, 80%, 50%)",
+    "Quick Charge": "hsl(40, 90%, 60%)",
+    "Multishot": "hsl(170, 60%, 55%)",
+    "Piercing": "hsl(210, 40%, 55%)",
+    "Feather Falling": "hsl(250, 60%, 75%)"
   }
 } as const;
