@@ -15,16 +15,23 @@ export class EnchantEngine {
     static allEngines: Set<WeakRef<EnchantEngine>> = new Set();
 
 
-    public registry: RegistryState;
-    public distCache = new Map<string, { [level: number]: bigint }>();
-    public poolCache = new LRUCache<string, PackedEnchant[]>(200);
-    public comboCache = new LRUCache<bigint, SearchFrontier>(ENGINE_DEFAULTS.CACHE_SIZE_COMBO_OTHER);
-    public bookComboCache = new LRUCache<bigint, SearchFrontier>(ENGINE_DEFAULTS.CACHE_SIZE_COMBO_BOOK);
-    public statsCache = new LRUCache<bigint, CalculationStats>(ENGINE_DEFAULTS.CACHE_SIZE_STATS);
+    private _registry: RegistryState;
+    get registry(): RegistryState { return this._registry; }
+    private distCache = new Map<string, { [level: number]: bigint }>();
+    private poolCache = new LRUCache<string, PackedEnchant[]>(200);
+    private comboCache = new LRUCache<bigint, SearchFrontier>(ENGINE_DEFAULTS.CACHE_SIZE_COMBO_OTHER);
+    private bookComboCache = new LRUCache<bigint, SearchFrontier>(ENGINE_DEFAULTS.CACHE_SIZE_COMBO_BOOK);
+    private statsCache = new LRUCache<bigint, CalculationStats>(ENGINE_DEFAULTS.CACHE_SIZE_STATS);
 
     constructor(data: EnchantmentData, version: string) {
-        this.registry = RegistryFactory.build(data, version);
+        this._registry = RegistryFactory.build(data, version);
         EnchantEngine.allEngines.add(new WeakRef(this));
+    }
+
+    /** Clears the combo and stats caches. Useful in tests to force fresh computation. */
+    public resetCaches(): void {
+        this.comboCache.clear();
+        this.statsCache.clear();
     }
 
     private getPackedKey(cat: string, modLevel: number, mat: string, guaranteedFirst: string | null, limit: number, resultsLimit: number): bigint {
