@@ -231,7 +231,7 @@ export class SearchService {
         anyMass: Map<number, bigint>,
         rankMass: Map<number, bigint>
     ): { rem: bigint } {
-        const redistributed = ComboUtils.removeAdditional(packedChosen, guaranteedFirstId, enchantToIndex, indexToEnchant);
+        const redistributed = ComboUtils.removeAdditional(packedChosen, guaranteedFirstId, enchantToIndex, indexToEnchant, originalEnchants);
         const nOutcomes = BigInt(redistributed.length);
         const rem = prob % nOutcomes;
         const pChunk = prob / nOutcomes;
