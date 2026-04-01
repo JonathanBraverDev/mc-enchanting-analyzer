@@ -11,6 +11,11 @@ import { FrontierFactory } from './frontier.js';
  * Service for aggregating enchantment statistics across multiple modified levels.
  */
 export class StatAggregator {
+    private static addMass(target: Map<number, bigint>, source: Map<number, bigint>, mProb: bigint): void {
+        for (const [id, mass] of source) {
+            target.set(id, (target.get(id) || 0n) + ProbUtils.scale(mass, mProb));
+        }
+    }
     /**
      * Aggregates all statistics for a given enchantment attempt.
      */
@@ -57,23 +62,23 @@ export class StatAggregator {
         let totalRoundingError = 0n;
         
         let iterCount = 0;
+        const searchLimit = getSearchLimit(cat, threshold, maxIterations);
 
         for (const ml of levels) {
             if (signal?.aborted) throw new Error("Aborted");
 
             const mProb = modDist[ml];
-            const searchLimit = getSearchLimit(cat, threshold, maxIterations);
-            
+
             // Orchestrate search, using cache if provided by EnchantEngine
             const cached = getExtendedCache?.(ml);
             const result = SearchService.calculateCombinations(
                 registry, cat, ml, mat, guaranteedFirst, activeThreshold, searchLimit, cached, resultsLimit, poolCache
             );
-            
+
             if (useCache && setExtendedCache) {
                 setExtendedCache(ml, result);
             }
-            
+
             for (const [key, prob] of result.results) {
                 const totalProb = ProbUtils.scale(prob, mProb);
                 finalCombos.set(key, (finalCombos.get(key) || 0n) + totalProb);
@@ -81,15 +86,9 @@ export class StatAggregator {
 
             // Accumulate masses from this Modified Level's frontier
             const { anyMass, rankMass, countMass } = result;
-            const addMass = (target: Map<number, bigint>, source: Map<number, bigint>) => {
-                for (const [id, mass] of source) {
-                    target.set(id, (target.get(id) || 0n) + ProbUtils.scale(mass, mProb));
-                }
-            };
-
-            addMass(totalAnyMass, anyMass);
-            addMass(totalRankMass, rankMass);
-            addMass(totalCountMass, countMass);
+            StatAggregator.addMass(totalAnyMass, anyMass, mProb);
+            StatAggregator.addMass(totalRankMass, rankMass, mProb);
+            StatAggregator.addMass(totalCountMass, countMass, mProb);
 
             totalUncertainty += ProbUtils.scale(result.uncertainty, mProb);
             totalPrunedMass += ProbUtils.scale(result.prunedMass, mProb);

@@ -1,5 +1,6 @@
 import { EnchantmentData, CalculationStats, SearchFrontier, RegistryState, SearchConfig, InternalSearchConfig, PackedEnchant } from '../types/index.js';
 import { LRUCache, ProbUtils, KeyUtils, EnchantUtils } from '../utils/index.js';
+import { KEY_SHIFT_THRESHOLD } from '../utils/domain/KeyUtils.js';
 import { getCategoryId, getMaterialId, getEnchantId, getEligiblePool, isCategoryAvailable } from '../core/registry.js';
 import { RegistryFactory } from '../core/factory.js';
 import { ENGINE_DEFAULTS, getSearchLimit } from '../core/config.js';
@@ -148,7 +149,8 @@ export class EnchantEngine {
         } = config;
         const limit = getSearchLimit(cat, threshold, maxIterations);
         const baseKey = this.getPackedKey(cat, xp, mat, guaranteedFirst, limit, resultsLimit);
-        const exactKey = this.getPackedKey(cat, xp, mat, guaranteedFirst, limit, resultsLimit, threshold);
+        const tIdx = BigInt(Math.max(0, Math.min(255, Math.round(-Math.log10(threshold)))));
+        const exactKey = baseKey | (tIdx << KEY_SHIFT_THRESHOLD);
 
         // Check exact stats cache
         if (this.statsCache.has(exactKey)) return this.statsCache.get(exactKey)!;
@@ -159,6 +161,13 @@ export class EnchantEngine {
             if (best && best.threshold <= threshold) return best.stats;
         }
 
+        // Pre-resolve IDs once so closure only varies `ml`
+        const catId = getCategoryId(this.registry, cat);
+        const matId = getMaterialId(this.registry, mat);
+        const parsedG = EnchantUtils.parse(guaranteedFirst, this.registry.data.constants.ROMAN_MAP);
+        const guaranteedId = parsedG ? getEnchantId(this.registry, parsedG.name) : ENGINE_DEFAULTS.UNKNOWN_ENCHANT_ID;
+        const activeCache = cat === "book" ? this.bookComboCache : this.comboCache;
+
         // Delegate aggregation to service (InternalSearchConfig adds cache accessors)
         const internalConfig: InternalSearchConfig = {
             threshold,
@@ -167,8 +176,8 @@ export class EnchantEngine {
             maxIterations,
             summaryLimit,
             resultsLimit,
-            getExtendedCache: (ml) => (cat === "book" ? this.bookComboCache : this.comboCache).get(this.getPackedKey(cat, ml, mat, guaranteedFirst, limit, resultsLimit)),
-            setExtendedCache: (ml, frontier) => (cat === "book" ? this.bookComboCache : this.comboCache).set(this.getPackedKey(cat, ml, mat, guaranteedFirst, limit, resultsLimit), frontier),
+            getExtendedCache: (ml) => activeCache.get(KeyUtils.getPackedKey(catId, matId, ml, guaranteedId, limit, resultsLimit)),
+            setExtendedCache: (ml, frontier) => activeCache.set(KeyUtils.getPackedKey(catId, matId, ml, guaranteedId, limit, resultsLimit), frontier),
             useCache,
             distCache: this.distCache,
             poolCache: this.poolCache
