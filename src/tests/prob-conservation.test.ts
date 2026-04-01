@@ -35,7 +35,7 @@ describe('Probability Conservation', () => {
 
     it('uncertainty is non-negative for a partially-converged search', async () => {
         const engine = new EnchantEngine(DATA, '1.21');
-        const stats  = await engine.getFullStats('chestplate', 15, 'iron', { threshold: 0.01, useBestCache: false });
+        const stats  = await engine.getFullStats('chestplate', 15, 'iron', { threshold: 0.01 });
 
         assert.ok(
             stats.uncertainty >= 0,
@@ -46,7 +46,7 @@ describe('Probability Conservation', () => {
     it('sum(count) + uncertainty ≈ 1.0 for a partially-converged search', async () => {
         const engine = new EnchantEngine(DATA, '1.21');
         // threshold=0.01 → meaningful uncertainty left in the frontier
-        const stats  = await engine.getFullStats('chestplate', 15, 'iron', { threshold: 0.01, useBestCache: false });
+        const stats  = await engine.getFullStats('chestplate', 15, 'iron', { threshold: 0.01 });
 
         const total = countSum(stats) + stats.uncertainty;
         assert.ok(
@@ -57,7 +57,7 @@ describe('Probability Conservation', () => {
 
     it('sum(count) + uncertainty ≈ 1.0 for a fully-converged book search (1.20)', async () => {
         const engine = new EnchantEngine(DATA, '1.20');
-        const stats  = await engine.getFullStats('book', 30, 'book', { threshold: 0.0001, useBestCache: false });
+        const stats  = await engine.getFullStats('book', 30, 'book', { threshold: 0.0001 });
 
         const total = countSum(stats) + stats.uncertainty;
         assert.ok(
@@ -76,7 +76,7 @@ describe('Probability Conservation', () => {
 
         for (const { version, cat, level, mat } of cases) {
             const engine = new EnchantEngine(DATA, version);
-            const stats  = await engine.getFullStats(cat, level, mat, { threshold: 0.001, useBestCache: false });
+            const stats  = await engine.getFullStats(cat, level, mat, { threshold: 0.001 });
             const label  = `${version} ${cat}@${level} ${mat}`;
 
             assert.ok(
@@ -97,7 +97,6 @@ describe('Probability Conservation', () => {
         const stats   = await engine.getFullStats('bow', 30, 'bow', {
             guaranteedFirst: 'Power IV',
             threshold: 0.0001,
-            useBestCache: false,
         });
         const powerId = engine.registry.idMap.get('Power')!;
 

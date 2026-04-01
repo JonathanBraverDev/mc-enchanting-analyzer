@@ -95,7 +95,7 @@ export class RefinementService {
 
         const response = await WorkerClient.request(
             'getFullStats',
-            { ...payload, threshold: config.threshold, source: 'main', useBestCache: true, maxIterations: config.limit },
+            { ...payload, threshold: config.threshold, source: 'main', maxIterations: config.limit },
             (partial) => {
                 if (currentId === this.activeId) {
                     callbacks.onStats(partial.stats, false);

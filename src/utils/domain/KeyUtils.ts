@@ -7,7 +7,8 @@ export const KEY_SHIFT_LEVEL = 12n;
 export const KEY_SHIFT_GUARANTEED = 20n;
 export const KEY_SHIFT_LIMIT = 28n;
 export const KEY_SHIFT_RESULTS_LIMIT = 48n;
-export const KEY_SHIFT_THRESHOLD = 64n;
+/** Used by the stats cache key, which omits `limit` (bits 28–47 are free). */
+export const KEY_SHIFT_STATS_RESULTS_LIMIT = 28n;
 
 /**
  * Utility for generating bit-packed cache keys.
@@ -15,6 +16,7 @@ export const KEY_SHIFT_THRESHOLD = 64n;
 export class KeyUtils {
     /**
      * Packs enchantment search parameters into a single BigInt key.
+     * Used for frontier/combo caches (includes `limit` so search state is limit-specific).
      */
     public static getPackedKey(
         catId: number,
@@ -22,8 +24,7 @@ export class KeyUtils {
         modLevel: number,
         guaranteedId: number,
         limit: number,
-        resultsLimit: number,
-        threshold?: number
+        resultsLimit: number
     ): bigint {
         let key = BigInt(catId) << KEY_SHIFT_CAT;
         key |= BigInt(matId) << KEY_SHIFT_MAT;
@@ -32,10 +33,26 @@ export class KeyUtils {
         key |= BigInt(limit) << KEY_SHIFT_LIMIT;
         key |= BigInt(resultsLimit) << KEY_SHIFT_RESULTS_LIMIT;
 
-        if (threshold !== undefined) {
-            const tIdx = BigInt(Math.max(0, Math.min(255, Math.round(-Math.log10(threshold)))));
-            key |= tIdx << KEY_SHIFT_THRESHOLD;
-        }
+        return key;
+    }
+
+    /**
+     * Packs stats cache parameters into a single BigInt key, omitting `limit`.
+     * This allows a more precise (higher-limit) result to satisfy a coarser request
+     * via the uncertainty check, enabling cross-tier cache hits.
+     */
+    public static getStatsKey(
+        catId: number,
+        matId: number,
+        level: number,
+        guaranteedId: number,
+        resultsLimit: number
+    ): bigint {
+        let key = BigInt(catId) << KEY_SHIFT_CAT;
+        key |= BigInt(matId) << KEY_SHIFT_MAT;
+        key |= BigInt(level) << KEY_SHIFT_LEVEL;
+        key |= BigInt(guaranteedId) << KEY_SHIFT_GUARANTEED;
+        key |= BigInt(resultsLimit) << KEY_SHIFT_STATS_RESULTS_LIMIT;
 
         return key;
     }

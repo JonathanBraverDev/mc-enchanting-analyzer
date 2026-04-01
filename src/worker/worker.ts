@@ -55,7 +55,6 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
                                 const { compact, transferables } = SerializationService.serialize(partialStats);
                                 workerScope.postMessage({ type: 'progress', id, payload: { stats: compact } }, transferables);
                             },
-                            useBestCache: payload.useBestCache || false,
                             maxIterations: payload.maxIterations
                         }
                     );

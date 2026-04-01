@@ -135,7 +135,7 @@ describe('Enchantment Engine Test Suite', () => {
              // Force a high-uncertainty search by setting extremely low maxIterations (e.g., 5)
              const stats = await engine.getFullStats(
                  'sword', 30, 'diamond',
-                 { guaranteedFirst: 'Sharpness IV', threshold: 0.000001, useBestCache: false, maxIterations: 5 }
+                 { guaranteedFirst: 'Sharpness IV', threshold: 0.000001, maxIterations: 5 }
              );
      
              const sharpnessId = getEnchantId(engine.registry,'Sharpness');
@@ -162,43 +162,43 @@ describe('Enchantment Engine Test Suite', () => {
 
         it('Snapshot: 1.8 Diamond Sword @ Level 30', async () => {
             const engine = new EnchantEngine(DATA, '1.8');
-            const stats = await engine.getFullStats('sword', 30, 'diamond', { threshold: SNAPSHOT_THRESHOLD, useBestCache: false, maxIterations: SNAPSHOT_LIMIT, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false });
+            const stats = await engine.getFullStats('sword', 30, 'diamond', { threshold: SNAPSHOT_THRESHOLD, maxIterations: SNAPSHOT_LIMIT, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false });
             await SnapshotUtils.assertSnapshot('1.8_sword_30_diamond', stats);
         });
 
         it('Snapshot: 1.21 Mace @ Level 30', async () => {
             const engine = new EnchantEngine(DATA, '1.21');
-            const stats = await engine.getFullStats('mace', 30, 'mace', { threshold: SNAPSHOT_THRESHOLD, useBestCache: false, maxIterations: SNAPSHOT_LIMIT, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false });
+            const stats = await engine.getFullStats('mace', 30, 'mace', { threshold: SNAPSHOT_THRESHOLD, maxIterations: SNAPSHOT_LIMIT, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false });
             await SnapshotUtils.assertSnapshot('1.21_mace_30_mace', stats);
         });
 
         it('Snapshot: 1.7.2 Multi-Enchant Book @ Level 30', async () => {
             const engine = new EnchantEngine(DATA, '1.7.2');
-            const stats = await engine.getFullStats('book', 30, 'book', { threshold: SNAPSHOT_THRESHOLD, useBestCache: false, maxIterations: SNAPSHOT_LIMIT, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false });
+            const stats = await engine.getFullStats('book', 30, 'book', { threshold: SNAPSHOT_THRESHOLD, maxIterations: SNAPSHOT_LIMIT, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false });
             await SnapshotUtils.assertSnapshot('1.7.2_book_30_book', stats);
         });
 
         it('Snapshot: 1.21.11 Spear @ Level 30', async () => {
             const engine = new EnchantEngine(DATA, '1.21.11');
-            const stats = await engine.getFullStats('spear', 30, 'diamond', { threshold: SNAPSHOT_THRESHOLD, useBestCache: false, maxIterations: SNAPSHOT_LIMIT, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false });
+            const stats = await engine.getFullStats('spear', 30, 'diamond', { threshold: SNAPSHOT_THRESHOLD, maxIterations: SNAPSHOT_LIMIT, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false });
             await SnapshotUtils.assertSnapshot('1.21.11_spear_30_diamond', stats);
         });
 
         it('Snapshot: 1.21.11 Book @ Level 30', async () => {
             const engine = new EnchantEngine(DATA, '1.21.11');
-            const stats = await engine.getFullStats('book', 30, 'book', { threshold: SNAPSHOT_THRESHOLD, useBestCache: false, maxIterations: SNAPSHOT_LIMIT, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false });
+            const stats = await engine.getFullStats('book', 30, 'book', { threshold: SNAPSHOT_THRESHOLD, maxIterations: SNAPSHOT_LIMIT, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false });
             await SnapshotUtils.assertSnapshot('1.21.11_book_30_book', stats);
         });
 
         it('Snapshot: 1.21 Diamond Sword @ Level 30 (Guaranteed Sharpness IV)', async () => {
             const engine = new EnchantEngine(DATA, '1.21');
-            const stats = await engine.getFullStats('sword', 30, 'diamond', { threshold: SNAPSHOT_THRESHOLD, useBestCache: false, maxIterations: SNAPSHOT_LIMIT, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false, guaranteedFirst: 'Sharpness IV' });
+            const stats = await engine.getFullStats('sword', 30, 'diamond', { threshold: SNAPSHOT_THRESHOLD, maxIterations: SNAPSHOT_LIMIT, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false, guaranteedFirst: 'Sharpness IV' });
             await SnapshotUtils.assertSnapshot('1.21_sword_30_diamond_guaranteed_sharpness', stats);
         });
 
         it('Snapshot: 1.8 Bow @ Level 30 (Guaranteed Power IV)', async () => {
             const engine = new EnchantEngine(DATA, '1.8');
-            const stats = await engine.getFullStats('bow', 30, 'bow', { threshold: SNAPSHOT_THRESHOLD, useBestCache: false, maxIterations: SNAPSHOT_LIMIT, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false, guaranteedFirst: 'Power IV' });
+            const stats = await engine.getFullStats('bow', 30, 'bow', { threshold: SNAPSHOT_THRESHOLD, maxIterations: SNAPSHOT_LIMIT, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false, guaranteedFirst: 'Power IV' });
             await SnapshotUtils.assertSnapshot('1.8_bow_30_bow_guaranteed_power', stats);
         });
     });
