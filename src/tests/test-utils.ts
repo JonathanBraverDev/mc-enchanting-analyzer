@@ -14,7 +14,7 @@ export const SnapshotUtils = {
      * Compares a set of statistics against a saved snapshot.
      */
     async assertSnapshot(name: string, stats: any): Promise<void> {
-        const snapshotDir = path.resolve(process.cwd(), 'tests', 'snapshots');
+        const snapshotDir = path.resolve(process.cwd(), 'src', 'tests', 'snapshots');
         const snapshotPath = path.join(snapshotDir, `${name}.json`);
 
         if (!fs.existsSync(snapshotPath)) {
@@ -37,7 +37,7 @@ export const SnapshotUtils = {
      * Saves a set of statistics as a snapshot.
      */
     async saveSnapshot(name: string, stats: any): Promise<void> {
-        const snapshotDir = path.resolve(process.cwd(), 'tests', 'snapshots');
+        const snapshotDir = path.resolve(process.cwd(), 'src', 'tests', 'snapshots');
         const snapshotPath = path.join(snapshotDir, `${name}.json`);
 
         if (!fs.existsSync(snapshotDir)) {

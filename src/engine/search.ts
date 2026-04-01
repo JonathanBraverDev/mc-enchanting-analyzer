@@ -109,16 +109,8 @@ export class SearchService {
         const probContinue = ProbUtils.toBigInt(probContinueNum);
 
         if (probContinue <= 0n) {
-            let rem = 0n;
             if (cat === "book" && currentCount > 1) {
-                const { pChunk, rem: r } = this.redistributeBookProb(current.packedChosen, current.prob, currentCount, guaranteedFirstId, enchantToIndex, indexToEnchant, results, countMass);
-                rem = r;
-                const enchants = ComboUtils.unpack(current.packedChosen, indexToEnchant);
-                for (let i = 1; i < enchants.length; i++) {
-                    const id = enchants[i] >> 8;
-                    anyMass.set(id, (anyMass.get(id) || 0n) - (pChunk + rem));
-                    rankMass.set(enchants[i], (rankMass.get(enchants[i]) || 0n) - (pChunk + rem));
-                }
+                const { rem } = this.redistributeBookProb(current.packedChosen, current.prob, currentCount, guaranteedFirstId, enchantToIndex, indexToEnchant, results, countMass, anyMass, rankMass);
                 return { uncertaintyDelta: 0n, massDelta: current.prob, prunedDelta: 0n, roundingErrorDelta: rem };
             } else {
                 results.set(current.packedChosen, (results.get(current.packedChosen) || 0n) + current.prob);
@@ -130,24 +122,8 @@ export class SearchService {
         const probStop = ProbUtils.scale(current.prob, (PRECISION - probContinue));
         let remStop = 0n;
         if (cat === "book" && currentCount > 1) {
-            const { redistributed, rem } = this.redistributeBookProb(current.packedChosen, probStop, currentCount, guaranteedFirstId, enchantToIndex, indexToEnchant, results, countMass);
+            const { rem } = this.redistributeBookProb(current.packedChosen, probStop, currentCount, guaranteedFirstId, enchantToIndex, indexToEnchant, results, countMass, anyMass, rankMass);
             remStop = rem;
-            const nOutcomes = BigInt(redistributed.length);
-            const originalEnchants = ComboUtils.unpack(current.packedChosen, indexToEnchant);
-
-            for (const e of originalEnchants) {
-                const id = e >> 8;
-                // Simplified mass counting for redistribution: mass is split equally across all outcomes.
-                // If an outcome doesn't contain an enchantment, that portion of the mass is lost for that enchantment.
-                const nOccurrences = redistributed.filter(r => ComboUtils.unpack(r, indexToEnchant).includes(e)).length;
-                const survivorMass = (BigInt(nOccurrences) * probStop) / nOutcomes;
-                const loss = probStop - survivorMass;
-
-                if (loss > 0n) {
-                    anyMass.set(id, (anyMass.get(id) || 0n) - loss);
-                    rankMass.set(e, (rankMass.get(e) || 0n) - loss);
-                }
-            }
         } else {
             results.set(current.packedChosen, (results.get(current.packedChosen) || 0n) + probStop);
             countMass.set(currentCount, (countMass.get(currentCount) || 0n) + probStop);
@@ -161,16 +137,8 @@ export class SearchService {
         const isMapFull = results.size >= resultsLimit && !results.has(current.packedChosen);
 
         if (isLimitReached || isTooSmall || isMapFull) {
-            let remForward = 0n;
             if (cat === "book" && currentCount > 1) {
-                const { pChunk, rem } = this.redistributeBookProb(current.packedChosen, probForward, currentCount, guaranteedFirstId, enchantToIndex, indexToEnchant, results, countMass);
-                remForward = rem;
-                const enchants = ComboUtils.unpack(current.packedChosen, indexToEnchant);
-                for (let i = 1; i < enchants.length; i++) {
-                    const id = enchants[i] >> 8;
-                    anyMass.set(id, (anyMass.get(id) || 0n) - (pChunk + remForward));
-                    rankMass.set(enchants[i], (rankMass.get(enchants[i]) || 0n) - (pChunk + remForward));
-                }
+                const { rem: remForward } = this.redistributeBookProb(current.packedChosen, probForward, currentCount, guaranteedFirstId, enchantToIndex, indexToEnchant, results, countMass, anyMass, rankMass);
                 return { uncertaintyDelta: 0n, massDelta: probStop + probForward, prunedDelta: probForward, roundingErrorDelta: remStop + remForward };
             } else {
                 results.set(current.packedChosen, (results.get(current.packedChosen) || 0n) + probForward);
@@ -231,10 +199,11 @@ export class SearchService {
     }
 
     /**
-     * Common core of book redistribution: calls removeAdditional, splits `prob` equally across
-     * all N→(N-1) outcomes, writes each chunk to `results`, updates `countMass`, and returns the
-     * redistributed combos, per-chunk probability, and integer remainder for the caller to use in
-     * its own mass-tracking logic.
+     * Core of book redistribution: calls removeAdditional, splits `prob` equally across all N→(N-1)
+     * outcomes, writes each chunk to `results`, updates `countMass`, corrects `anyMass`/`rankMass`
+     * using proportional survival (nOccurrences/nOutcomes) for every enchant including slot 0,
+     * and returns the redistributed combos, per-chunk probability, and integer remainder.
+     * The caller should add `rem` to `roundingErrorDelta`.
      */
     private static redistributeBookProb(
         packedChosen: PackedCombo,
@@ -244,7 +213,9 @@ export class SearchService {
         enchantToIndex: Map<number, number>,
         indexToEnchant: number[],
         results: Map<PackedCombo, bigint>,
-        countMass: Map<number, bigint>
+        countMass: Map<number, bigint>,
+        anyMass: Map<number, bigint>,
+        rankMass: Map<number, bigint>
     ): { redistributed: PackedCombo[]; pChunk: bigint; rem: bigint } {
         const redistributed = ComboUtils.removeAdditional(packedChosen, guaranteedFirstId, enchantToIndex, indexToEnchant);
         const nOutcomes = BigInt(redistributed.length);
@@ -254,6 +225,21 @@ export class SearchService {
             results.set(r, (results.get(r) || 0n) + pChunk);
         }
         countMass.set(currentCount - 1, (countMass.get(currentCount - 1) || 0n) + (prob - rem));
+
+        // Correct anyMass/rankMass: for each original enchant, deduct the mass lost due to removal.
+        // Uses proportional survival across all outcomes (including slot 0).
+        const originalEnchants = ComboUtils.unpack(packedChosen, indexToEnchant);
+        for (const e of originalEnchants) {
+            const id = e >> 8;
+            const nOccurrences = redistributed.filter(r => ComboUtils.unpack(r, indexToEnchant).includes(e)).length;
+            const survivorMass = (BigInt(nOccurrences) * prob) / nOutcomes;
+            const loss = prob - survivorMass;
+            if (loss > 0n) {
+                anyMass.set(id, (anyMass.get(id) || 0n) - loss);
+                rankMass.set(e, (rankMass.get(e) || 0n) - loss);
+            }
+        }
+
         return { redistributed, pChunk, rem };
     }
 
