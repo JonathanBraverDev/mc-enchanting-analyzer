@@ -7,5 +7,5 @@ rust_engine/pkg/
 src/wasm/rust_engine_bg.wasm
 
 # Test Artifacts
-tests/snapshots/*.actual.json
+**/tests/snapshots/*.actual.json
 test-results/
