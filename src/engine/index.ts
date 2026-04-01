@@ -43,6 +43,7 @@ export class EnchantEngine {
     }
 
     public static clearAllCaches(): void {
+        const dead: WeakRef<EnchantEngine>[] = [];
         for (const ref of this.allEngines) {
             const engine = ref.deref();
             if (engine) {
@@ -52,7 +53,12 @@ export class EnchantEngine {
                 engine.bookComboCache.clear();
                 engine.statsCache.clear();
                 engine.bestStatsCache.clear();
+            } else {
+                dead.push(ref);
             }
+        }
+        for (const ref of dead) {
+            this.allEngines.delete(ref);
         }
     }
 
