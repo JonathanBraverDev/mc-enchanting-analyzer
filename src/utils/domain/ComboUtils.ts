@@ -128,22 +128,28 @@ export class ComboUtils {
      * For books: returns all possible combinations after removing one "selected at random" enchantment.
      * Based on Minecraft Wiki: "If multiple enchantments were generated, then one selected at random is removed."
      */
-    static removeAdditional(packed: PackedCombo, guaranteedFirstId: number | null, enchantToIndex: Map<number, number>, indexToEnchant: number[]): PackedCombo[] {
-        const enchants = this.unpack(packed, indexToEnchant);
+    private static readonly _removeScratch: PackedEnchant[] = [];
+
+    static removeAdditional(packed: PackedCombo, guaranteedFirstId: number | null, enchantToIndex: Map<number, number>, indexToEnchant: number[], precomputedEnchants?: PackedEnchant[]): PackedCombo[] {
+        const enchants = precomputedEnchants ?? this.unpack(packed, indexToEnchant);
         if (enchants.length <= 1) return [packed];
 
         const possibleResults: PackedCombo[] = [];
+        const s = this._removeScratch;
         // Generate all possible N combinations of size N-1 by removing one at random
         for (let i = 0; i < enchants.length; i++) {
-            const filtered = [...enchants.slice(0, i), ...enchants.slice(i + 1)];
-            possibleResults.push(this.pack(filtered, guaranteedFirstId, enchantToIndex));
+            s.length = 0;
+            for (let j = 0; j < enchants.length; j++) {
+                if (j !== i) s.push(enchants[j]);
+            }
+            possibleResults.push(this.pack(s, guaranteedFirstId, enchantToIndex));
         }
 
         if (guaranteedFirstId !== null) {
             // Player Perspective: If a player SEES an enchantment in the tooltip,
             // then by definition that enchantment was NOT the one removed.
-            // We filter the results to only those that still contain the tooltip enchantment.
-            return possibleResults.filter(r => this.unpack(r, indexToEnchant).some(e => (e >> 8) === guaranteedFirstId));
+            // enchants[i] is the removed enchant, so keep results where it wasn't the guaranteed.
+            return possibleResults.filter((_, i) => (enchants[i] >> 8) !== guaranteedFirstId);
         }
 
         return possibleResults;
