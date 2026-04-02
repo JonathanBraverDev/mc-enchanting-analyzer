@@ -10,6 +10,12 @@ export type WorkerRequest =
         threshold: number;
         source?: string;
         maxIterations?: number;
+      }}
+    | { type: "getFullStatsProgressive"; id: number; payload: {
+        cat: string; xp: number; mat: string; guaranteedFirst: string | null;
+        source: string;
+        tiers: Array<{ threshold: number; limit: number }>;
+        summaryLimit?: number; resultsLimit?: number;
       }};
 
 export type WorkerResponse =

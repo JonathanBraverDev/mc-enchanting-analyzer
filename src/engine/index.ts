@@ -123,6 +123,88 @@ export class EnchantEngine {
     }
 
     /**
+     * Aggregates statistics using tiered progressive search, calling onTierComplete after each tier.
+     * Checks and updates the stats cache the same way as getFullStats, but delegates frontier
+     * management entirely to StatAggregator.getFullStatsTiered (no combo cache wiring).
+     */
+    public async getFullStatsProgressive(
+        cat: string,
+        xp: number,
+        mat: string,
+        guaranteedFirst: string | null,
+        tiers: Array<{ threshold: number; limit: number }>,
+        onTierComplete: (stats: CalculationStats, tierIndex: number) => void,
+        config?: Partial<SearchConfig>
+    ): Promise<CalculationStats> {
+        if (!Number.isFinite(xp) || xp <= 0) {
+            throw new Error(`Invalid XP level: ${xp}. XP must be a positive integer.`);
+        }
+        if (xp > ENGINE_DEFAULTS.MAX_XP_LEVEL) {
+            throw new Error(`XP level ${xp} exceeds the maximum of ${ENGINE_DEFAULTS.MAX_XP_LEVEL}.`);
+        }
+        if (!isCategoryAvailable(this.registry, cat)) {
+            throw new Error(`Unknown or unavailable category: "${cat}" in version ${this.registry.version}.`);
+        }
+        if (getMaterialId(this.registry, mat) === ENGINE_DEFAULTS.UNKNOWN_MATERIAL_ID) {
+            throw new Error(`Unknown material: "${mat}".`);
+        }
+
+        const {
+            threshold = 0.0001,
+            signal,
+            onProgress,
+            maxIterations,
+            summaryLimit = ENGINE_DEFAULTS.MAX_RESULTS_SUMMARY,
+            resultsLimit = ENGINE_DEFAULTS.MAX_RESULTS_SIZE,
+            useCache = true
+        } = config ?? {};
+
+        const catId = getCategoryId(this.registry, cat);
+        const matId = getMaterialId(this.registry, mat);
+        const parsedG = EnchantUtils.parse(guaranteedFirst, this.registry.data.constants.ROMAN_MAP);
+        const guaranteedId = parsedG ? getEnchantId(this.registry, parsedG.name) : ENGINE_DEFAULTS.UNKNOWN_ENCHANT_ID;
+
+        const cacheKey = KeyUtils.getStatsKey(catId, matId, xp, guaranteedId);
+
+        const cachedStats = this.statsCache.get(cacheKey);
+        if (cachedStats) return cachedStats;
+
+        // Tiered aggregator manages frontiers locally — no combo cache wiring needed
+        const internalConfig: InternalSearchConfig = {
+            threshold,
+            signal,
+            onProgress,
+            maxIterations,
+            summaryLimit,
+            resultsLimit,
+            useCache,
+            distCache: this.distCache,
+            poolCache: this.poolCache
+        };
+
+        // Wrap onTierComplete to cache each tier's result as it completes
+        const wrappedOnTierComplete = (stats: CalculationStats, tierIndex: number) => {
+            onTierComplete(stats, tierIndex);
+            const currentCached = this.statsCache.get(cacheKey);
+            if (!currentCached || stats.uncertainty < currentCached.uncertainty) {
+                this.statsCache.set(cacheKey, stats);
+            }
+        };
+
+        const finalStats = await StatAggregator.getFullStatsTiered(
+            this.registry, cat, xp, mat, guaranteedFirst, tiers, wrappedOnTierComplete, internalConfig
+        );
+
+        // Only overwrite if new result is more precise (lower uncertainty)
+        const currentCached = this.statsCache.get(cacheKey);
+        if (!currentCached || finalStats.uncertainty < currentCached.uncertainty) {
+            this.statsCache.set(cacheKey, finalStats);
+        }
+
+        return finalStats;
+    }
+
+    /**
      * Aggregates all statistics for a given enchantment attempt.
      */
     public async getFullStats(

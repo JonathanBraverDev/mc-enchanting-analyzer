@@ -50,14 +50,15 @@ describe('Integration: Chart sweep with mocked WorkerClient', () => {
     // Test 1 — Sequential chart sweep
     // -----------------------------------------------------------------------
     it('sequential chart sweep: levels populate 1→30 in order', async () => {
-        const mainQueue: Array<(v: any) => void> = [];
+        type QueueEntry = { onProgress?: (v: any) => void; resolve: (v: any) => void };
+        const mainQueue: QueueEntry[] = [];
 
-        WorkerClient.request = (_type: string, payload: any): Promise<any> => {
+        WorkerClient.request = (type: string, payload: any, onProgress?: any): Promise<any> => {
             if (payload.source === 'chart') {
                 // Resolve immediately with dummy stats
                 return Promise.resolve({ stats: makeStats(0.01) });
             }
-            return new Promise(resolve => mainQueue.push(resolve));
+            return new Promise(resolve => mainQueue.push({ onProgress, resolve }));
         };
 
         const service = new RefinementService();
@@ -78,9 +79,9 @@ describe('Integration: Chart sweep with mocked WorkerClient', () => {
             },
         });
 
-        // Resolve coarse main pass (not converged → refinement continues in background)
-        assert.strictEqual(mainQueue.length, 1, 'coarse request should be queued synchronously');
-        mainQueue.shift()!({ stats: makeStats(0.1) });
+        // Fire coarse tier progress to trigger refreshChart (not converged)
+        assert.strictEqual(mainQueue.length, 1, 'progressive request should be queued synchronously');
+        mainQueue[0].onProgress?.({ stats: makeStats(0.1) });
 
         // Wait for the coarse chart sweep to populate all 30 levels
         for (let i = 0; i < 5; i++) await flush();
@@ -104,19 +105,24 @@ describe('Integration: Chart sweep with mocked WorkerClient', () => {
             foundLinear30,
             `Expected a linear 1→30 trace in chart updates. Captured log: [${chartPopulatedLog}]`
         );
+
+        // Clean up
+        mainQueue[0].resolve({ stats: makeStats(0.1) });
+        await flush();
     });
 
     // -----------------------------------------------------------------------
     // Test 2 — Multi-pass refinement
     // -----------------------------------------------------------------------
     it('multi-pass refinement: at least 2 full sweeps complete', async () => {
-        const mainQueue: Array<(v: any) => void> = [];
+        type QueueEntry = { onProgress?: (v: any) => void; resolve: (v: any) => void };
+        const mainQueue: QueueEntry[] = [];
 
-        WorkerClient.request = (_type: string, payload: any): Promise<any> => {
+        WorkerClient.request = (type: string, payload: any, onProgress?: any): Promise<any> => {
             if (payload.source === 'chart') {
                 return Promise.resolve({ stats: makeStats(0.01) });
             }
-            return new Promise(resolve => mainQueue.push(resolve));
+            return new Promise(resolve => mainQueue.push({ onProgress, resolve }));
         };
 
         // Use 'book' for highest complexity (matches original Playwright test)
@@ -137,17 +143,16 @@ describe('Integration: Chart sweep with mocked WorkerClient', () => {
             },
         });
 
-        // Resolve coarse main pass (not converged)
-        assert.strictEqual(mainQueue.length, 1, 'coarse request pending');
-        mainQueue.shift()!({ stats: makeStats(0.1) });
+        // Fire coarse tier progress (not converged) → first chart sweep starts
+        assert.strictEqual(mainQueue.length, 1, 'progressive request pending');
+        mainQueue[0].onProgress?.({ stats: makeStats(0.1) });
 
-        // Let coarse return and chart sweep start; standard request gets queued
+        // Let coarse chart sweep start
         await flush();
 
-        // Resolve standard main pass while chart sweep may still be running.
+        // Fire standard tier progress while chart sweep may still be running.
         // This updates targetThreshold so the sweep loops (or a second sweep starts).
-        assert.ok(mainQueue.length >= 1, 'standard request should be pending after coarse');
-        mainQueue.shift()!({ stats: makeStats(0.01) });
+        mainQueue[0].onProgress?.({ stats: makeStats(0.01) });
 
         // Allow time for both sweeps (2 × 30 levels × setTimeout 0)
         for (let i = 0; i < 8; i++) await flush();
@@ -171,23 +176,28 @@ describe('Integration: Chart sweep with mocked WorkerClient', () => {
             completeSweeps >= 2,
             `Expected >= 2 complete 1→30 sweeps. Got ${completeSweeps}. Log (first 70): [${chartPopulatedLog.slice(0, 70)}]`
         );
+
+        // Clean up
+        mainQueue[0].resolve({ stats: makeStats(0.01) });
+        await flush();
     });
 
     // -----------------------------------------------------------------------
     // Test 3 — Accuracy improvement between coarse and final passes
     // -----------------------------------------------------------------------
     it('accuracy improves between coarse and final passes', async () => {
-        const mainQueue: Array<(v: any) => void> = [];
+        type QueueEntry = { onProgress?: (v: any) => void; resolve: (v: any) => void };
+        const mainQueue: QueueEntry[] = [];
 
         // Simulate accuracy improvement: finer threshold returns lower uncertainty
         // sword coarse threshold = 0.01, standard threshold = 0.0005
-        WorkerClient.request = (_type: string, payload: any): Promise<any> => {
+        WorkerClient.request = (type: string, payload: any, onProgress?: any): Promise<any> => {
             if (payload.source === 'chart') {
                 const threshold = payload.threshold as number;
                 const uncertainty = threshold >= 0.005 ? 0.1 : 0.001;
                 return Promise.resolve({ stats: makeStats(uncertainty) });
             }
-            return new Promise(resolve => mainQueue.push(resolve));
+            return new Promise(resolve => mainQueue.push({ onProgress, resolve }));
         };
 
         const service = new RefinementService();
@@ -214,13 +224,13 @@ describe('Integration: Chart sweep with mocked WorkerClient', () => {
             },
         });
 
-        // Resolve coarse main pass → first chart sweep with coarse threshold
-        mainQueue.shift()!({ stats: makeStats(0.1) });
+        // Fire coarse tier progress → first chart sweep with coarse threshold
+        assert.strictEqual(mainQueue.length, 1, 'progressive request should be queued');
+        mainQueue[0].onProgress?.({ stats: makeStats(0.1) });
         await flush();
 
-        // Resolve standard main pass → second chart sweep with finer threshold
-        assert.ok(mainQueue.length >= 1, 'standard request should be pending');
-        mainQueue.shift()!({ stats: makeStats(0.01) });
+        // Fire standard tier progress → second chart sweep with finer threshold
+        mainQueue[0].onProgress?.({ stats: makeStats(0.01) });
 
         // Wait for both sweeps to complete
         for (let i = 0; i < 8; i++) await flush();
@@ -240,5 +250,9 @@ describe('Integration: Chart sweep with mocked WorkerClient', () => {
             `Expected the final sweep to reduce uncertainty for at least one level. ` +
             `Coarse[0]: ${coarseSweepSnap![0].uncertainty}, Final[0]: ${finalSweepSnap![0].uncertainty}`
         );
+
+        // Clean up
+        mainQueue[0].resolve({ stats: makeStats(0.01) });
+        await flush();
     });
 });
