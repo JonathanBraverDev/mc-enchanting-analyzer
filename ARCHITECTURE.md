@@ -66,16 +66,17 @@ src/worker/          ← Web Worker plumbing
   client.ts          (imports: services, protocol, types)
 
 src/ui/              ← browser UI (imports everything above)
-  index.ts           ← UIController: wires DOM, workers, chart, refinement
+  index.ts           ← AppController: wires DOM, workers, chart, refinement
   views/ParamsView.ts
   views/ResultsView.ts
   chart.ts
+  chart-manager.ts
   refinement.ts
   theme.ts
 ```
 
 Dependency direction: `data` ← `types` ← `utils` ← `core` ← `engine` ← `services` ← `worker` ← `ui`
-(No reverse imports; each layer only imports from layers to its left.)
+(Each layer imports only from layers to its left, with one noted exception: `engine/aggregator.ts` imports `SummaryService` from `services` for inline progress callbacks.)
 
 ---
 
@@ -95,7 +96,7 @@ Worker (src/worker/worker.ts)
     ▼
 EnchantEngine.getFullStats  (src/engine/index.ts)
   ├─ validates inputs (xp range, known category/material)
-  ├─ checks statsCache / bestStatsCache
+  ├─ checks statsCache
   └─ StatAggregator.getFullStats(registry, cat, xp, mat, guaranteedFirst, config)
         │
         ├─ DistributionService.getModifiedLevelDist(xp, enchantability)
@@ -140,7 +141,8 @@ UI (HumanizationService.humanize + ResultsView.render + ChartController.update)
 | `calculateCombinations(cat, modLevel, mat, guaranteedFirst?, threshold?, maxIterations?, resultsLimit?) → SearchFrontier` | Runs best-first search for a single modified level; wraps SearchService with cache |
 | `getModifiedLevelDist(xp, enchantability) → {[level]: bigint}` | Returns probability distribution over modified enchantment levels |
 | `getEligibleListNumeric(cat, level, mat, bitset?) → number[]` | Returns packed enchant IDs eligible at a level, excluding the given bitset |
-| `static clearAllEngines()` | Destroys caches for all live engines |
+| `static clearAllCaches()` | Clears all caches across all live engines (keeps engine registry intact) |
+| `static clearAllEngines()` | Clears all caches AND removes all engine refs from the global tracking set |
 | `destroy()` | Clears caches and removes this engine from the global tracking set |
 
 ### `src/engine/aggregator.ts` — `StatAggregator`
@@ -177,7 +179,7 @@ UI (HumanizationService.humanize + ResultsView.render + ChartController.update)
 | `getEnchantId(state, name) → number` | Returns numeric enchantment ID, or UNKNOWN_ENCHANT_ID (255) if not found |
 | `isCategoryAvailable(state, cat) → boolean` | True if the category has any enchantments in this version's pool |
 | `getEligiblePool(state, cat, level, mat, cache?) → PackedEnchant[]` | Returns packed (id<<8\|rank) list of eligible enchants at the given level |
-| `isEnchantmentAchievable(state, fullName, cat, mat, levels, romanMap, cache?) → boolean` | Checks if a named enchantment appears in any pool for the given levels |
+| `isEnchantmentAchievable(state, fullName, cat, mat, levels, cache?) → boolean` | Checks if a named enchantment appears in any pool for the given levels |
 | `getEnchantability(state, mat, cat) → number` | Returns base enchantability value for a material+category combination |
 
 ### `src/services/SummaryService.ts`
@@ -214,21 +216,40 @@ UI (HumanizationService.humanize + ResultsView.render + ChartController.update)
 | `ENGINE_DEFAULTS.UNKNOWN_MATERIAL_ID` | 63 | Sentinel returned by getMaterialId for unknown materials |
 | `ENGINE_DEFAULTS.UNKNOWN_ENCHANT_ID` | 255 | Sentinel returned by getEnchantId for unknown enchantments |
 | `ENGINE_DEFAULTS.MAX_RESULTS_SIZE` | 5000 | Hard cap on combos stored in a SearchFrontier |
-| `ENGINE_DEFAULTS.CACHE_SIZE_COMBO_BOOK` | 8 | LRU size for book combo cache (larger search space) |
-| `ENGINE_DEFAULTS.CACHE_SIZE_COMBO_OTHER` | 64 | LRU size for non-book combo cache |
+| `ENGINE_DEFAULTS.CACHE_SIZE_COMBO_BOOK` | 64 | LRU size for book combo cache (larger search space) |
+| `ENGINE_DEFAULTS.CACHE_SIZE_COMBO_OTHER` | 128 | LRU size for non-book combo cache |
+| `ENGINE_DEFAULTS.CACHE_SIZE_STATS` | 8 | LRU size for the unified stats cache |
 
 ---
 
 ## Caching Layers (inside `EnchantEngine`)
 
+All caches and `_registry` are **private** fields on `EnchantEngine`.
+
 ```
-distCache   Map<string, {[level]: bigint}>     xp+enchantability → modified level distribution
-poolCache   LRUCache<string, PackedEnchant[]>  "cat|level|mat" → eligible enchant list
-comboCache  LRUCache<bigint, SearchFrontier>   packed key → search frontier (non-book)
-bookComboCache LRUCache<bigint, SearchFrontier> packed key → search frontier (book)
-statsCache  LRUCache<bigint, CalculationStats> exact key (includes threshold) → final stats
-bestStatsCache LRUCache<bigint, {threshold, stats}> base key → best stats computed so far
+distCache      Map<string, {[level]: bigint}>      "xp@enchantability@div@rngRange" → modified level distribution
+poolCache      LRUCache<string, PackedEnchant[]>   "cat|level" → eligible enchant list  (mat is NOT in the key)
+comboCache     LRUCache<bigint, SearchFrontier>    getPackedKey (includes limit) → search frontier (non-book)
+bookComboCache LRUCache<bigint, SearchFrontier>    getPackedKey (includes limit) → search frontier (book)
+statsCache     LRUCache<bigint, CalculationStats>  getStatsKey  (no limit, no threshold) → final stats
 ```
 
-Cache keys for combo/stats caches are bit-packed `bigint`s encoding:
-`catId | matId | modLevel | guaranteedId | limit | resultsLimit | thresholdIndex`
+**statsCache semantics**
+- Key: `getStatsKey(catId, matId, xp, guaranteedId, resultsLimit)` — no threshold, no limit in key
+- Read: return cached entry unconditionally (no quality gate)
+- Write: overwrite only if the new result has strictly lower uncertainty than the cached entry
+
+**comboCache / bookComboCache semantics**
+- Key: `getPackedKey(catId, matId, modLevel, guaranteedId, limit, resultsLimit)` — limit IS in the key (frontier is limit-specific)
+- Read: return cached only if `cached.threshold <= threshold` (i.e. cached search was at least as precise)
+
+**Bit layout of packed keys**
+
+| Bits | Field | Key type |
+|------|-------|----------|
+| 0–5  | catId | both |
+| 6–11 | matId | both |
+| 12–19 | modLevel / xp | both |
+| 20–27 | guaranteedId | both |
+| 28–47 | limit | `getPackedKey` only |
+| 28–47 (stats) / 48–63 (combo) | resultsLimit | both (different shift) |
