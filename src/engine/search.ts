@@ -58,6 +58,13 @@ export class SearchService {
 
         while (queue.size() > 0 && iterations < limit && cumulativeAccountedMass < (PRECISION - (PRECISION / ENGINE_DEFAULTS.MASS_ACCOUNTED_THRESHOLD_DENOMINATOR))) {
             const next = queue.peek()!;
+            // Outer break uses a 10× larger fraction than the inner isTooSmall prune in
+            // processSearchNode (PRUNE_THRESHOLD_DENOMINATOR / 10n). This intentional gap
+            // keeps a buffer zone: items in (threshold/100, threshold/10) are left in the
+            // queue for the next tier or refinement pass, where a finer threshold will
+            // expand them properly. Collapsing both to the same denominator (÷100) would
+            // cause tier-1 to process items right at the prune boundary, immediately prune
+            // their forward branches, and leave tier-2 with nothing useful to refine.
             if (next.prob < threshold / 10n) break;
 
             iterations++;
@@ -88,7 +95,7 @@ export class SearchService {
             frontierUncertainty += item.prob;
         }
 
-        return { ...frontier, uncertainty: uncertainty + frontierUncertainty, prunedMass: uncertainty, roundingError, cumulativeAccountedMass };
+        return { ...frontier, uncertainty: uncertainty + frontierUncertainty, prunedMass, roundingError, cumulativeAccountedMass };
     }
 
     private static processSearchNode(
