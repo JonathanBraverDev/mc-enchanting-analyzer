@@ -19,7 +19,8 @@ declare const Chart: ChartConstructor;
  * Encapsulates Chart.js lifecycle and data mapping.
  */
 export class ChartManager {
-    public chart: ChartInstance | null = null;
+    private chart: ChartInstance | null = null;
+    get chartInstance(): ChartInstance | null { return this.chart; }
     private canvas: HTMLCanvasElement | null = null;
 
     constructor(canvasId: string) {

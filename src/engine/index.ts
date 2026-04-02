@@ -12,7 +12,7 @@ import { StatAggregator } from './aggregator.js';
  * Orchestrates distribution calculation, best-first search, and statistics aggregation.
  */
 export class EnchantEngine {
-    static allEngines: Set<WeakRef<EnchantEngine>> = new Set();
+    private static allEngines: Set<WeakRef<EnchantEngine>> = new Set();
 
 
     private _registry: RegistryState;

@@ -1,5 +1,4 @@
 export * from './math/ProbUtils.js';
-export * from './math/BitwiseUtils.js';
 export * from './collections/BinaryHeap.js';
 export * from './collections/LRUCache.js';
 export * from './format/FormatUtils.js';
