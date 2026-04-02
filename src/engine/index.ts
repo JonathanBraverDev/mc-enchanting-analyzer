@@ -34,13 +34,13 @@ export class EnchantEngine {
         this.statsCache.clear();
     }
 
-    private getPackedKey(cat: string, modLevel: number, mat: string, guaranteedFirst: string | null, limit: number, resultsLimit: number): bigint {
+    private getPackedKey(cat: string, modLevel: number, mat: string, guaranteedFirst: string | null, limit: number): bigint {
         const catId = getCategoryId(this.registry, cat);
         const matId = getMaterialId(this.registry, mat);
         const parsed = EnchantUtils.parse(guaranteedFirst, this.registry.data.constants.ROMAN_MAP);
         const guaranteedId = parsed ? getEnchantId(this.registry, parsed.name) : ENGINE_DEFAULTS.UNKNOWN_ENCHANT_ID;
 
-        return KeyUtils.getPackedKey(catId, matId, modLevel, guaranteedId, limit, resultsLimit);
+        return KeyUtils.getPackedKey(catId, matId, modLevel, guaranteedId, limit);
     }
 
     public static clearAllEngines(): void {
@@ -103,7 +103,7 @@ export class EnchantEngine {
         resultsLimit: number = ENGINE_DEFAULTS.MAX_RESULTS_SIZE
     ): SearchFrontier {
         const limit = getSearchLimit(cat, ProbUtils.toNumber(threshold), maxIterations);
-        const cacheKey = this.getPackedKey(cat, modLevel, mat, guaranteedFirst, limit, resultsLimit);
+        const cacheKey = this.getPackedKey(cat, modLevel, mat, guaranteedFirst, limit);
         const activeCache = cat === "book" ? this.bookComboCache : this.comboCache;
 
         const cached = activeCache.get(cacheKey);
@@ -157,8 +157,8 @@ export class EnchantEngine {
         const parsedG = EnchantUtils.parse(guaranteedFirst, this.registry.data.constants.ROMAN_MAP);
         const guaranteedId = parsedG ? getEnchantId(this.registry, parsedG.name) : ENGINE_DEFAULTS.UNKNOWN_ENCHANT_ID;
 
-        // Stats cache key excludes `limit` so a more precise result satisfies coarser requests
-        const cacheKey = KeyUtils.getStatsKey(catId, matId, xp, guaranteedId, resultsLimit);
+        // Stats cache key excludes `limit` and `resultsLimit` (constant) so a more precise result satisfies coarser requests
+        const cacheKey = KeyUtils.getStatsKey(catId, matId, xp, guaranteedId);
 
         // Check unified stats cache
         const cachedStats = this.statsCache.get(cacheKey);
@@ -174,8 +174,8 @@ export class EnchantEngine {
             maxIterations,
             summaryLimit,
             resultsLimit,
-            getExtendedCache: (ml) => activeCache.get(KeyUtils.getPackedKey(catId, matId, ml, guaranteedId, limit, resultsLimit)),
-            setExtendedCache: (ml, frontier) => activeCache.set(KeyUtils.getPackedKey(catId, matId, ml, guaranteedId, limit, resultsLimit), frontier),
+            getExtendedCache: (ml) => activeCache.get(KeyUtils.getPackedKey(catId, matId, ml, guaranteedId, limit)),
+            setExtendedCache: (ml, frontier) => activeCache.set(KeyUtils.getPackedKey(catId, matId, ml, guaranteedId, limit), frontier),
             useCache,
             distCache: this.distCache,
             poolCache: this.poolCache

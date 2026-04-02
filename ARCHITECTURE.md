@@ -235,13 +235,14 @@ statsCache     LRUCache<bigint, CalculationStats>  getStatsKey  (no limit, no th
 ```
 
 **statsCache semantics**
-- Key: `getStatsKey(catId, matId, xp, guaranteedId, resultsLimit)` — no threshold, no limit in key
+- Key: `getStatsKey(catId, matId, xp, guaranteedId)` — no threshold, no limit, no resultsLimit in key
 - Read: return cached entry unconditionally (no quality gate)
 - Write: overwrite only if the new result has strictly lower uncertainty than the cached entry
 
 **comboCache / bookComboCache semantics**
-- Key: `getPackedKey(catId, matId, modLevel, guaranteedId, limit, resultsLimit)` — limit IS in the key (frontier is limit-specific)
-- Read: return cached only if `cached.threshold <= threshold` (i.e. cached search was at least as precise)
+- Key: `getPackedKey(catId, matId, modLevel, guaranteedId, limit)` — limit IS in the key (frontier is limit-specific)
+- Read: return cached entry unconditionally (no threshold check)
+- Write: always overwrite
 
 **Bit layout of packed keys**
 
@@ -252,4 +253,3 @@ statsCache     LRUCache<bigint, CalculationStats>  getStatsKey  (no limit, no th
 | 12–19 | modLevel / xp | both |
 | 20–27 | guaranteedId | both |
 | 28–47 | limit | `getPackedKey` only |
-| 28–47 (stats) / 48–63 (combo) | resultsLimit | both (different shift) |
