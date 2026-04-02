@@ -80,6 +80,52 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
                 break;
             }
 
+            case 'getFullStatsProgressive': {
+                const source = payload.source;
+
+                const existing = abortControllers.get(source);
+                if (existing) {
+                    existing.abort();
+                }
+
+                const ctrl = new AbortController();
+                abortControllers.set(source, ctrl);
+                const signal = ctrl.signal;
+
+                try {
+                    const stats = await engine.getFullStatsProgressive(
+                        payload.cat,
+                        payload.xp,
+                        payload.mat,
+                        payload.guaranteedFirst,
+                        payload.tiers,
+                        (tierStats) => {
+                            const { compact, transferables } = SerializationService.serialize(tierStats);
+                            workerScope.postMessage({ type: 'progress', id, payload: { stats: compact } }, transferables);
+                        },
+                        {
+                            signal,
+                            summaryLimit: payload.summaryLimit,
+                            resultsLimit: payload.resultsLimit,
+                        }
+                    );
+
+                    const { compact, transferables } = SerializationService.serialize(stats);
+                    workerScope.postMessage({ type: 'result', id, payload: { stats: compact } }, transferables);
+                } catch (err: unknown) {
+                    if (err instanceof Error && err.message === "Aborted") {
+                        self.postMessage({ type: 'error', id, payload: 'Aborted' });
+                        return;
+                    }
+                    throw err;
+                } finally {
+                    if (abortControllers.get(source) === ctrl) {
+                        abortControllers.delete(source);
+                    }
+                }
+                break;
+            }
+
             default:
                 throw new Error(`Unknown message type: ${type}`);
         }

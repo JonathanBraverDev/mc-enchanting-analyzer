@@ -51,53 +51,67 @@ describe('Integration: RefinementService with mocked WorkerClient', () => {
     // -----------------------------------------------------------------------
     // Test 1 — Progressive refinement
     // -----------------------------------------------------------------------
-    it('progressive refinement: onInsights fires after EACH pass, not just the final one', async () => {
+    it('progressive refinement: onStats fires after EACH tier, not just the final one', async () => {
         // Regression: a common bug is that only the last pass fires the display
-        // callback. We verify coarse → standard → deep each trigger onInsights.
+        // callback. We verify coarse → standard → deep each trigger onStats.
 
-        const mainQueue: Array<(v: any) => void> = [];
+        let progressCb: ((v: any) => void) | undefined;
+        let mainResolve: ((v: any) => void) | undefined;
 
-        WorkerClient.request = (_type: string, payload: any, _onProgress?: any): Promise<any> => {
+        WorkerClient.request = (type: string, payload: any, onProgress?: any): Promise<any> => {
             if (payload.source === 'chart') {
                 // Chart sweep requests: never resolve so they don't interfere
                 return new Promise(() => {});
             }
-            return new Promise(resolve => mainQueue.push(resolve));
+            if (type === 'getFullStatsProgressive') {
+                progressCb = onProgress;
+                return new Promise(resolve => { mainResolve = resolve; });
+            }
+            return new Promise(() => {});
         };
 
         const service = new RefinementService();
-        const finalInsights: any[] = [];
+        const allStats: boolean[] = []; // track isFinal per call
 
         service.run(BASE_PAYLOAD, null as any, {
             onStatus: () => {},
-            onStats: (insights, isFinal) => { if (isFinal) finalInsights.push(insights); },
+            onStats: (_insights, isFinal) => { allStats.push(isFinal); },
             onChart: () => {},
         });
 
-        // executePass() calls WorkerClient.request synchronously before awaiting,
-        // so the coarse request is queued before run() yields.
-        assert.strictEqual(mainQueue.length, 1, 'coarse request queued synchronously');
+        // The progressive request is queued synchronously before run() yields.
+        assert.ok(progressCb !== undefined, 'progress callback should be registered');
 
-        // --- Resolve COARSE (uncertainty > 0 → not yet converged) ---
-        mainQueue.shift()!({ stats: makeStats(0.1) });
+        // --- COARSE tier complete (uncertainty > 0 → not yet converged) ---
+        progressCb!({ stats: makeStats(0.1) });
         await flush();
 
-        assert.strictEqual(finalInsights.length, 1, 'onInsights(isFinal=true) should fire after coarse');
-        assert.strictEqual(mainQueue.length, 1, 'standard request should now be pending');
+        assert.strictEqual(allStats.length, 1, 'onStats should fire after coarse');
+        assert.strictEqual(allStats[0], false, 'coarse should not be isFinal');
 
-        // --- Resolve STANDARD (still not converged) ---
-        mainQueue.shift()!({ stats: makeStats(0.01) });
+        // --- STANDARD tier complete (still not converged) ---
+        progressCb!({ stats: makeStats(0.01) });
         await flush();
 
-        assert.strictEqual(finalInsights.length, 2, 'onInsights(isFinal=true) should fire after standard');
-        assert.strictEqual(mainQueue.length, 1, 'deep request should now be pending');
+        assert.strictEqual(allStats.length, 2, 'onStats should fire after standard');
+        assert.strictEqual(allStats[1], false, 'standard should not be isFinal');
 
-        // --- Resolve DEEP (uncertainty = 0 → converged → loop breaks) ---
-        mainQueue.shift()!({ stats: makeStats(0) });
+        // --- DEEP tier complete (uncertainty = 0 → converged, isFinal=true) ---
+        progressCb!({ stats: makeStats(0) });
         await flush();
 
-        assert.strictEqual(finalInsights.length, 3, 'onInsights(isFinal=true) should fire after deep');
-        assert.strictEqual(mainQueue.length, 0, 'no more requests after convergence');
+        assert.strictEqual(allStats.length, 3, 'onStats should fire after deep');
+        assert.strictEqual(allStats[2], true, 'deep with uncertainty=0 should be isFinal');
+
+        // --- ULTRA tier should be ignored (already converged) ---
+        progressCb!({ stats: makeStats(0) });
+        await flush();
+
+        assert.strictEqual(allStats.length, 3, 'onStats should NOT fire after ultra (already converged)');
+
+        // Clean up: resolve the pending promise
+        mainResolve!({ stats: makeStats(0) });
+        await flush();
     });
 
     // -----------------------------------------------------------------------
@@ -107,11 +121,20 @@ describe('Integration: RefinementService with mocked WorkerClient', () => {
         // A version/category switch calls run() again, incrementing activeId.
         // Any still-pending promise from the old run should be silently dropped.
 
-        const mainQueue: Array<(v: any) => void> = [];
+        let requestCount = 0;
+        let run1ProgressCb: ((v: any) => void) | undefined;
+        let run2ProgressCb: ((v: any) => void) | undefined;
+        let run2Resolve: ((v: any) => void) | undefined;
 
-        WorkerClient.request = (_type: string, payload: any): Promise<any> => {
+        WorkerClient.request = (type: string, payload: any, onProgress?: any): Promise<any> => {
             if (payload.source === 'chart') return new Promise(() => {});
-            return new Promise(resolve => mainQueue.push(resolve));
+            requestCount++;
+            if (requestCount === 1) {
+                run1ProgressCb = onProgress;
+                return new Promise(() => {}); // run1 never resolves (cancelled)
+            }
+            run2ProgressCb = onProgress;
+            return new Promise(resolve => { run2Resolve = resolve; });
         };
 
         const service = new RefinementService();
@@ -124,8 +147,7 @@ describe('Integration: RefinementService with mocked WorkerClient', () => {
             onStats: (_, isFinal) => { if (isFinal) run1Final.push(true); },
             onChart: () => {},
         });
-        assert.strictEqual(mainQueue.length, 1, 'run1 coarse request pending');
-        const run1CoarseResolve = mainQueue.shift()!;
+        assert.ok(run1ProgressCb !== undefined, 'run1 progressive request pending');
 
         // --- Start run 2 (cancels run 1 by incrementing activeId) ---
         service.run({ ...BASE_PAYLOAD, xpLevel: 15 }, null as any, {
@@ -134,18 +156,23 @@ describe('Integration: RefinementService with mocked WorkerClient', () => {
             onChart: () => {},
         });
 
-        // Now resolve run 1's coarse — should be silently dropped
-        run1CoarseResolve({ stats: makeStats(0.1) });
+        // Now fire run 1's progress — should be silently dropped
+        run1ProgressCb!({ stats: makeStats(0.1) });
         await flush();
 
         assert.strictEqual(run1Final.length, 0, 'run1 callbacks should be suppressed after cancellation');
 
-        // Run 2's own coarse should now be pending
-        assert.ok(mainQueue.length >= 1, 'run2 should have a pending request');
-        mainQueue.shift()!({ stats: makeStats(0) }); // converged immediately
+        // Run 2's progressive request should be pending
+        assert.ok(run2ProgressCb !== undefined, 'run2 should have a pending request');
+        // Fire progress with uncertainty=0 → converged, isFinal=true
+        run2ProgressCb!({ stats: makeStats(0) });
         await flush();
 
         assert.strictEqual(run2Final.length, 1, 'run2 should fire its own callbacks normally');
+
+        // Clean up
+        run2Resolve!({ stats: makeStats(0) });
+        await flush();
     });
 
     // -----------------------------------------------------------------------
@@ -155,11 +182,12 @@ describe('Integration: RefinementService with mocked WorkerClient', () => {
         // run() now resets isSweepRunning=false before starting, so even if run1's
         // chart sweep is stuck on a hung request, run2 can start a fresh sweep.
 
-        const mainQueue: Array<(v: any) => void> = [];
+        type QueueEntry = { onProgress?: (v: any) => void; resolve: (v: any) => void };
+        const mainQueue: QueueEntry[] = [];
         let chartRequestCount = 0;
         let run2Active = false;
 
-        WorkerClient.request = (_type: string, payload: any): Promise<any> => {
+        WorkerClient.request = (type: string, payload: any, onProgress?: any): Promise<any> => {
             if (payload.source === 'chart') {
                 chartRequestCount++;
                 if (run2Active) {
@@ -168,25 +196,27 @@ describe('Integration: RefinementService with mocked WorkerClient', () => {
                 }
                 return new Promise(() => {}); // run1's chart requests hang
             }
-            return new Promise(resolve => mainQueue.push(resolve));
+            return new Promise(resolve => mainQueue.push({ onProgress, resolve }));
         };
 
         const service = new RefinementService();
         const run2ChartCalls: any[][] = [];
 
-        // --- Run 1: coarse resolves → chart sweep starts → first chart request hangs ---
+        // --- Run 1: coarse tier fires → chart sweep starts → first chart request hangs ---
         service.run(BASE_PAYLOAD, null as any, {
             onStatus: () => {},
             onStats: () => {},
             onChart: () => {},
         });
-        mainQueue.shift()!({ stats: makeStats(0.1) }); // resolve run1 coarse
+        // Fire progress for run1's coarse tier to trigger refreshChart
+        assert.strictEqual(mainQueue.length, 1, 'run1 progressive request pending');
+        mainQueue[0].onProgress?.({ stats: makeStats(0.1) }); // fire coarse tier
         await flush();
 
         const chartReqsAfterRun1 = chartRequestCount;
         assert.ok(chartReqsAfterRun1 >= 1, 'run1 chart sweep should have started');
 
-        // --- Run 2: cancels run1, coarse resolves, tries to start chart sweep ---
+        // --- Run 2: cancels run1, coarse tier fires, tries to start chart sweep ---
         run2Active = true;
         const queueBeforeRun2 = mainQueue.length;
         service.run({ ...BASE_PAYLOAD, xpLevel: 15 }, null as any, {
@@ -195,9 +225,9 @@ describe('Integration: RefinementService with mocked WorkerClient', () => {
             onChart: (sweep) => run2ChartCalls.push([...sweep]),
         });
 
-        const run2Resolvers = mainQueue.splice(queueBeforeRun2); // run2's coarse
-        assert.strictEqual(run2Resolvers.length, 1, 'run2 coarse should be the only new request');
-        run2Resolvers[0]({ stats: makeStats(0.1) }); // resolve run2 coarse
+        const run2Entries = mainQueue.splice(queueBeforeRun2); // run2's progressive request
+        assert.strictEqual(run2Entries.length, 1, 'run2 progressive request should be the only new request');
+        run2Entries[0].onProgress?.({ stats: makeStats(0.1) }); // fire run2 coarse tier
         await flush();
 
         // FIX: isSweepRunning is reset at the start of run(), so run2's chart sweep starts.
@@ -206,17 +236,22 @@ describe('Integration: RefinementService with mocked WorkerClient', () => {
             'FIX: run2 should make new chart requests after restart'
         );
         assert.ok(run2ChartCalls.length > 0, 'chart should update after restart');
+
+        // Clean up
+        run2Entries[0].resolve({ stats: makeStats(0.1) });
+        await flush();
     });
 
     // -----------------------------------------------------------------------
     // Test 5 — Stress test (rapid run() calls)
     // -----------------------------------------------------------------------
     it('stress: 10 rapid run() calls do not crash, final run completes', async () => {
-        const mainQueue: Array<(v: any) => void> = [];
+        type QueueEntry = { onProgress?: (v: any) => void; resolve: (v: any) => void };
+        const mainQueue: QueueEntry[] = [];
 
-        WorkerClient.request = (_type: string, payload: any): Promise<any> => {
+        WorkerClient.request = (_type: string, payload: any, onProgress?: any): Promise<any> => {
             if (payload.source === 'chart') return new Promise(() => {}); // chart hangs
-            return new Promise(resolve => mainQueue.push(resolve));
+            return new Promise(resolve => mainQueue.push({ onProgress, resolve }));
         };
 
         const service = new RefinementService();
@@ -236,10 +271,13 @@ describe('Integration: RefinementService with mocked WorkerClient', () => {
             ).catch((e: Error) => errors.push(e));
         }
 
-        // Drain the request queue; only the final run's requests fire callbacks
+        // Drain the request queue; only the final run's callbacks fire (others are cancelled)
+        // Fire onProgress first (triggers onStats/isFinal for converged stats), then resolve
         let maxIters = 50;
         while (mainQueue.length > 0 && maxIters-- > 0) {
-            mainQueue.shift()!({ stats: makeStats(0) }); // uncertainty=0 → converge
+            const entry = mainQueue.shift()!;
+            entry.onProgress?.({ stats: makeStats(0) }); // uncertainty=0 → converge
+            entry.resolve({ stats: makeStats(0) });
             await flush();
         }
 

@@ -50,64 +50,46 @@ export class RefinementService {
         this.isSweepRunning = false;
         this.sweep = new Array(UI_DEFAULTS.MAX_XP_LEVEL).fill(null);
 
-        const basePayload = { 
-            cat: payload.category, 
-            xp: payload.xpLevel, 
-            mat: payload.material, 
-            guaranteedFirst: payload.guaranteedFirst 
+        const basePayload = {
+            cat: payload.category,
+            xp: payload.xpLevel,
+            mat: payload.material,
+            guaranteedFirst: payload.guaranteedFirst
         };
         const isBook = payload.category === "book";
 
-        // Pass 1: Coarse (Instant)
-        const coarseDone = await this.executePass('coarse', basePayload, currentId, isBook, callbacks);
-        if (currentId !== this.activeId) return;
+        const levels: Exclude<SearchLevel, 'done'>[] = ['coarse', 'standard', 'deep', 'ultra'];
+        const tiers = levels.map(level => {
+            const params = getParamsForMode(level, isBook);
+            return { threshold: params.threshold, limit: params.limit };
+        });
 
-        // Trigger initial chart refresh background
-        this.refreshChart(basePayload, getParamsForMode('coarse', isBook).threshold, registry, currentId, callbacks);
+        callbacks.onStatus(getParamsForMode('coarse', isBook).status, 'coarse');
 
-        // Pass 2+: Standard -> Deep -> Ultra
-        const refinementLevels: Exclude<SearchLevel, 'done' | 'coarse'>[] = ['standard', 'deep', 'ultra'];
-        
-        for (const level of refinementLevels) {
-            const done = await this.executePass(level, basePayload, currentId, isBook, callbacks);
-            if (currentId !== this.activeId) return;
+        let tierIndex = 0;
+        let converged = false;
 
-            // Trigger non-blocking chart update at current pass precision
-            this.refreshChart(basePayload, getParamsForMode(level, isBook).threshold, registry, currentId, callbacks);
-            
-            if (done) break;
-        }
-
-        if (currentId === this.activeId) {
-            callbacks.onStatus(UI_TEXTS.STATUS_COMPLETE, "done");
-        }
-    }
-
-    private async executePass(
-        level: Exclude<SearchLevel, 'done'>,
-        payload: BaseSearchPayload,
-        currentId: number,
-        isBook: boolean,
-        callbacks: RefinementCallbacks
-    ): Promise<boolean> {
-        const config = getParamsForMode(level, isBook);
-        callbacks.onStatus(config.status, level);
-
-        const response = await WorkerClient.request(
-            'getFullStats',
-            { ...payload, threshold: config.threshold, source: 'main', maxIterations: config.limit },
+        await WorkerClient.request(
+            'getFullStatsProgressive',
+            { ...basePayload, source: 'main', tiers },
             (partial) => {
-                if (currentId === this.activeId) {
-                    callbacks.onStats(partial.stats, false);
+                if (currentId !== this.activeId || converged) return;
+                converged = partial.stats?.uncertainty === 0;
+                const isFinal = tierIndex === tiers.length - 1 || converged;
+                callbacks.onStats(partial.stats, isFinal);
+                const level = levels[tierIndex];
+                this.refreshChart(basePayload, getParamsForMode(level, isBook).threshold, registry, currentId, callbacks);
+                tierIndex++;
+                if (!converged && tierIndex < levels.length) {
+                    callbacks.onStatus(getParamsForMode(levels[tierIndex], isBook).status, levels[tierIndex]);
                 }
             },
             'main'
         );
 
-        if (currentId !== this.activeId) return true;
+        if (currentId !== this.activeId) return;
 
-        callbacks.onStats(response.stats, true);
-        return response.stats && response.stats.uncertainty === 0;
+        callbacks.onStatus(UI_TEXTS.STATUS_COMPLETE, "done");
     }
 
     private async refreshChart(
