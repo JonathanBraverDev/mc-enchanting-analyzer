@@ -8,7 +8,7 @@ import { ProbUtils, PRECISION } from '../utils/math/ProbUtils.js';
 import { VersionUtils } from '../utils/domain/VersionUtils.js';
 import { StringUtils, UIUtils } from '../utils/format/FormatUtils.js';
 import { RomanUtils } from '../utils/format/RomanUtils.js';
-import { KeyUtils, KEY_SHIFT_GUARANTEED } from '../utils/domain/KeyUtils.js';
+import { KeyUtils, KEY_SHIFT_GUARANTEED, KEY_SHIFT_LEVEL } from '../utils/domain/KeyUtils.js';
 import { EnchantUtils } from '../utils/domain/EnchantUtils.js';
 
 const ROMAN_MAP = { "I": 1, "II": 2, "III": 3, "IV": 4, "V": 5 };
@@ -270,39 +270,53 @@ const UNKNOWN_ENCHANT_ID = 255;
 
 describe('KeyUtils.getPackedKey', () => {
     it('produces the same key for identical inputs', () => {
-        const k1 = KeyUtils.getPackedKey(1, 2, 15, 3, 1000);
-        const k2 = KeyUtils.getPackedKey(1, 2, 15, 3, 1000);
+        const k1 = KeyUtils.getPackedKey(1, 2, 15, 3);
+        const k2 = KeyUtils.getPackedKey(1, 2, 15, 3);
         assert.strictEqual(k1, k2);
     });
 
     it('produces different keys for different catId', () => {
-        const k1 = KeyUtils.getPackedKey(0, 2, 15, 3, 1000);
-        const k2 = KeyUtils.getPackedKey(1, 2, 15, 3, 1000);
+        const k1 = KeyUtils.getPackedKey(0, 2, 15, 3);
+        const k2 = KeyUtils.getPackedKey(1, 2, 15, 3);
         assert.notStrictEqual(k1, k2);
     });
 
     it('produces different keys for different matId', () => {
-        const k1 = KeyUtils.getPackedKey(1, 0, 15, 3, 1000);
-        const k2 = KeyUtils.getPackedKey(1, 1, 15, 3, 1000);
+        const k1 = KeyUtils.getPackedKey(1, 0, 15, 3);
+        const k2 = KeyUtils.getPackedKey(1, 1, 15, 3);
         assert.notStrictEqual(k1, k2);
     });
 
     it('produces different keys for different modLevel', () => {
-        const k1 = KeyUtils.getPackedKey(1, 2, 10, 3, 1000);
-        const k2 = KeyUtils.getPackedKey(1, 2, 20, 3, 1000);
+        const k1 = KeyUtils.getPackedKey(1, 2, 10, 3);
+        const k2 = KeyUtils.getPackedKey(1, 2, 20, 3);
         assert.notStrictEqual(k1, k2);
     });
 
     it('produces different keys for different guaranteedId', () => {
-        const k1 = KeyUtils.getPackedKey(1, 2, 15, 0, 1000);
-        const k2 = KeyUtils.getPackedKey(1, 2, 15, 1, 1000);
+        const k1 = KeyUtils.getPackedKey(1, 2, 15, 0);
+        const k2 = KeyUtils.getPackedKey(1, 2, 15, 1);
         assert.notStrictEqual(k1, k2);
     });
 
     it('encodes UNKNOWN_ENCHANT_ID (255) in the guaranteed slot', () => {
-        const key = KeyUtils.getPackedKey(0, 0, 0, UNKNOWN_ENCHANT_ID, 0);
-        const extracted = Number((key >> KEY_SHIFT_GUARANTEED) & 0xFFn);
+        const key = KeyUtils.getPackedKey(0, 0, 0, UNKNOWN_ENCHANT_ID);
+        const extracted = (key >> KEY_SHIFT_GUARANTEED) & 0xFF;
         assert.strictEqual(extracted, UNKNOWN_ENCHANT_ID);
+    });
+
+    it('produces the same key regardless of search limit (cross-tier resumability)', () => {
+        // limit is NOT part of the packed key — coarse and deep tiers share one cache entry
+        const kCoarse = KeyUtils.getPackedKey(1, 2, 15, 3);
+        const kDeep   = KeyUtils.getPackedKey(1, 2, 15, 3);
+        assert.strictEqual(kCoarse, kDeep);
+    });
+
+    it('encodes modLevel in the correct bit position', () => {
+        const modLevel = 42;
+        const key = KeyUtils.getPackedKey(0, 0, modLevel, 0);
+        const extracted = (key >> KEY_SHIFT_LEVEL) & 0xFF;
+        assert.strictEqual(extracted, modLevel);
     });
 
 });

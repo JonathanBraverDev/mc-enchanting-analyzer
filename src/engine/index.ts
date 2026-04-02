@@ -19,9 +19,9 @@ export class EnchantEngine {
     get registry(): RegistryState { return this._registry; }
     private distCache = new Map<string, { [level: number]: bigint }>();
     private poolCache = new LRUCache<string, PackedEnchant[]>(200);
-    private comboCache = new LRUCache<bigint, SearchFrontier>(ENGINE_DEFAULTS.CACHE_SIZE_COMBO_OTHER);
-    private bookComboCache = new LRUCache<bigint, SearchFrontier>(ENGINE_DEFAULTS.CACHE_SIZE_COMBO_BOOK);
-    private statsCache = new LRUCache<bigint, CalculationStats>(ENGINE_DEFAULTS.CACHE_SIZE_STATS);
+    private comboCache = new LRUCache<number, SearchFrontier>(ENGINE_DEFAULTS.CACHE_SIZE_COMBO_OTHER);
+    private bookComboCache = new LRUCache<number, SearchFrontier>(ENGINE_DEFAULTS.CACHE_SIZE_COMBO_BOOK);
+    private statsCache = new LRUCache<number, CalculationStats>(ENGINE_DEFAULTS.CACHE_SIZE_STATS);
 
     constructor(data: EnchantmentData, version: string) {
         this._registry = RegistryFactory.build(data, version);
@@ -34,13 +34,18 @@ export class EnchantEngine {
         this.statsCache.clear();
     }
 
-    private getPackedKey(cat: string, modLevel: number, mat: string, guaranteedFirst: string | null, limit: number): bigint {
+    /** Clears only the stats cache, leaving combo caches intact for cross-tier resumption tests. */
+    public resetStatsCache(): void {
+        this.statsCache.clear();
+    }
+
+    private getPackedKey(cat: string, modLevel: number, mat: string, guaranteedFirst: string | null): number {
         const catId = getCategoryId(this.registry, cat);
         const matId = getMaterialId(this.registry, mat);
         const parsed = EnchantUtils.parse(guaranteedFirst, this.registry.data.constants.ROMAN_MAP);
         const guaranteedId = parsed ? getEnchantId(this.registry, parsed.name) : ENGINE_DEFAULTS.UNKNOWN_ENCHANT_ID;
 
-        return KeyUtils.getPackedKey(catId, matId, modLevel, guaranteedId, limit);
+        return KeyUtils.getPackedKey(catId, matId, modLevel, guaranteedId);
     }
 
     public static clearAllEngines(): void {
@@ -103,7 +108,7 @@ export class EnchantEngine {
         resultsLimit: number = ENGINE_DEFAULTS.MAX_RESULTS_SIZE
     ): SearchFrontier {
         const limit = getSearchLimit(cat, ProbUtils.toNumber(threshold), maxIterations);
-        const cacheKey = this.getPackedKey(cat, modLevel, mat, guaranteedFirst, limit);
+        const cacheKey = this.getPackedKey(cat, modLevel, mat, guaranteedFirst);
         const activeCache = cat === "book" ? this.bookComboCache : this.comboCache;
 
         const cached = activeCache.get(cacheKey);
@@ -149,8 +154,6 @@ export class EnchantEngine {
             resultsLimit = ENGINE_DEFAULTS.MAX_RESULTS_SIZE,
             useCache = true
         } = config;
-        const limit = getSearchLimit(cat, threshold, maxIterations);
-
         // Pre-resolve IDs once so closure only varies `ml`
         const catId = getCategoryId(this.registry, cat);
         const matId = getMaterialId(this.registry, mat);
@@ -174,8 +177,8 @@ export class EnchantEngine {
             maxIterations,
             summaryLimit,
             resultsLimit,
-            getExtendedCache: (ml) => activeCache.get(KeyUtils.getPackedKey(catId, matId, ml, guaranteedId, limit)),
-            setExtendedCache: (ml, frontier) => activeCache.set(KeyUtils.getPackedKey(catId, matId, ml, guaranteedId, limit), frontier),
+            getExtendedCache: (ml) => activeCache.get(KeyUtils.getPackedKey(catId, matId, ml, guaranteedId)),
+            setExtendedCache: (ml, frontier) => activeCache.set(KeyUtils.getPackedKey(catId, matId, ml, guaranteedId), frontier),
             useCache,
             distCache: this.distCache,
             poolCache: this.poolCache
