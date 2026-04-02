@@ -6,9 +6,6 @@ export const KEY_SHIFT_MAT = 6n;
 export const KEY_SHIFT_LEVEL = 12n;
 export const KEY_SHIFT_GUARANTEED = 20n;
 export const KEY_SHIFT_LIMIT = 28n;
-export const KEY_SHIFT_RESULTS_LIMIT = 48n;
-/** Used by the stats cache key, which omits `limit` (bits 28–47 are free). */
-export const KEY_SHIFT_STATS_RESULTS_LIMIT = 28n;
 
 /**
  * Utility for generating bit-packed cache keys.
@@ -23,15 +20,13 @@ export class KeyUtils {
         matId: number,
         modLevel: number,
         guaranteedId: number,
-        limit: number,
-        resultsLimit: number
+        limit: number
     ): bigint {
         let key = BigInt(catId) << KEY_SHIFT_CAT;
         key |= BigInt(matId) << KEY_SHIFT_MAT;
         key |= BigInt(modLevel) << KEY_SHIFT_LEVEL;
         key |= BigInt(guaranteedId) << KEY_SHIFT_GUARANTEED;
         key |= BigInt(limit) << KEY_SHIFT_LIMIT;
-        key |= BigInt(resultsLimit) << KEY_SHIFT_RESULTS_LIMIT;
 
         return key;
     }
@@ -45,14 +40,12 @@ export class KeyUtils {
         catId: number,
         matId: number,
         level: number,
-        guaranteedId: number,
-        resultsLimit: number
+        guaranteedId: number
     ): bigint {
         let key = BigInt(catId) << KEY_SHIFT_CAT;
         key |= BigInt(matId) << KEY_SHIFT_MAT;
         key |= BigInt(level) << KEY_SHIFT_LEVEL;
         key |= BigInt(guaranteedId) << KEY_SHIFT_GUARANTEED;
-        key |= BigInt(resultsLimit) << KEY_SHIFT_STATS_RESULTS_LIMIT;
 
         return key;
     }
