@@ -136,7 +136,7 @@ test.describe('UI Performance & Accuracy', () => {
         await expect(status).toHaveText(UI_TEXTS.STATUS_COMPLETE, { timeout: 20000 });
 
         const datasetCount = await page.evaluate(() => {
-            return (window as any).UIController.chartManager.chart.data.datasets.length;
+            return (window as any).UIController.chartManager.chartInstance.data.datasets.length;
         });
         expect(datasetCount).toBeGreaterThan(5);
     });

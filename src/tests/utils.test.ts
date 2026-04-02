@@ -1,10 +1,9 @@
 /**
  * Unit tests for pure utility functions:
- * BitwiseUtils, ProbUtils, VersionUtils, StringUtils, UIUtils, RomanUtils
+ * ProbUtils, VersionUtils, StringUtils, UIUtils, RomanUtils
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { BitwiseUtils } from '../utils/math/BitwiseUtils.js';
 import { ProbUtils, PRECISION } from '../utils/math/ProbUtils.js';
 import { VersionUtils } from '../utils/domain/VersionUtils.js';
 import { StringUtils, UIUtils } from '../utils/format/FormatUtils.js';
@@ -13,39 +12,6 @@ import { KeyUtils, KEY_SHIFT_GUARANTEED, KEY_SHIFT_STATS_RESULTS_LIMIT } from '.
 import { EnchantUtils } from '../utils/domain/EnchantUtils.js';
 
 const ROMAN_MAP = { "I": 1, "II": 2, "III": 3, "IV": 4, "V": 5 };
-
-// ── BitwiseUtils ─────────────────────────────────────────────────────────────
-
-describe('BitwiseUtils', () => {
-    it('getBitset(0) equals 1n', () => {
-        assert.strictEqual(BitwiseUtils.getBitset(0), 1n);
-    });
-
-    it('getBitset(1) equals 2n', () => {
-        assert.strictEqual(BitwiseUtils.getBitset(1), 2n);
-    });
-
-    it('getBitset(n) equals 1n << BigInt(n) for various positions', () => {
-        for (const n of [0, 1, 5, 10, 30, 63]) {
-            assert.strictEqual(
-                BitwiseUtils.getBitset(n), 1n << BigInt(n),
-                `getBitset(${n}) should equal 1n << ${n}n`
-            );
-        }
-    });
-
-    it('distinct bit positions do not overlap', () => {
-        const a = BitwiseUtils.getBitset(3);
-        const b = BitwiseUtils.getBitset(7);
-        assert.strictEqual(a & b, 0n);
-    });
-
-    it('combining two bits via OR matches individual bitsets', () => {
-        const a = BitwiseUtils.getBitset(2);
-        const b = BitwiseUtils.getBitset(5);
-        assert.strictEqual(a | b, (1n << 2n) | (1n << 5n));
-    });
-});
 
 // ── ProbUtils ────────────────────────────────────────────────────────────────
 
