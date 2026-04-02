@@ -153,7 +153,7 @@ class AppController {
         const insights = HumanizationService.humanize(raw, this.getEngine().registry, sortMode as ResultSortMode, DATA.constants.ROMAN_MAP);
         
         const uncertainty = insights.uncertainty ?? 1;
-        if (isFinal || (this.bestInsights && uncertainty < (this.bestInsights.uncertainty || 1)) || !this.bestInsights) {
+        if (isFinal || (this.bestInsights && uncertainty < (this.bestInsights.uncertainty ?? 1)) || !this.bestInsights) {
             this.bestInsights = insights;
             this.results.update(insights, this.getEngine().registry);
         }

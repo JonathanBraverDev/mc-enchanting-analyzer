@@ -13,14 +13,14 @@ export class PoolService {
         state: RegistryState,
         cat: string,
         level: number,
-        mat: string,
         cache?: LRUCache<string, PackedEnchant[]>
     ): PackedEnchant[] {
         const cacheKey = `${cat}|${level}`;
         const cached = cache?.get(cacheKey);
         if (cached) return cached;
 
-        const pool = state.versionPool.get(cat) || [];
+        const pool = state.versionPool.get(cat);
+        if (pool === undefined) throw new Error(`Unknown category "${cat}"`);
         const out: PackedEnchant[] = [];
         
         for (const name of pool) {
@@ -49,7 +49,6 @@ export class PoolService {
         state: RegistryState,
         fullName: string,
         cat: string,
-        mat: string,
         levels: number[],
         romanMap: { [key: string]: number },
         cache?: LRUCache<string, PackedEnchant[]>
@@ -61,7 +60,7 @@ export class PoolService {
         const targetRank = parsed.rank;
 
         for (const ml of levels) {
-            const pool = this.getEligiblePool(state, cat, ml, mat, cache);
+            const pool = this.getEligiblePool(state, cat, ml, cache);
             if (pool.some(p => (p >> 8) === targetId && (p & 0xFF) === targetRank)) return true;
         }
         return false;

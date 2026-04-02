@@ -114,7 +114,7 @@ export class ResultsView {
             const item = document.createElement("div");
             item.className = "rank-item";
             
-            const tooltipEntries = [`Weight: ${props?.weight || '?'}`];
+            const tooltipEntries = [`Weight: ${props?.weight ?? '?'}`];
             if (props?.valid_from) tooltipEntries.push(`From: ${props.valid_from}`);
             if (props?.valid_to) tooltipEntries.push(`Until: ${props.valid_to}`);
             item.title = tooltipEntries.join('\n');

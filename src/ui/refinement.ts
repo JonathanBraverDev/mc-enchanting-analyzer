@@ -74,7 +74,7 @@ export class RefinementService {
             { ...basePayload, source: 'main', tiers },
             (partial) => {
                 if (currentId !== this.activeId || converged) return;
-                converged = partial.stats?.uncertainty === 0;
+                converged = (partial.stats?.uncertainty ?? 1) < 1e-9;
                 const isFinal = tierIndex === tiers.length - 1 || converged;
                 callbacks.onStats(partial.stats, isFinal);
                 const level = levels[tierIndex];

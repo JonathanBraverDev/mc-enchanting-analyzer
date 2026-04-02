@@ -45,6 +45,8 @@ export class MaterialService {
         if (cat === "book") return 1;
         const { armor, tools } = data.material_values;
         const isArmor = data.constants.ARMOR_CATS.includes(cat);
-        return (isArmor ? armor[mat] : tools[mat]) || 10;
+        const value = (isArmor ? armor[mat] : tools[mat]);
+        if (value === undefined) throw new Error(`Unknown material "${mat}" for category "${cat}"`);
+        return value;
     }
 }

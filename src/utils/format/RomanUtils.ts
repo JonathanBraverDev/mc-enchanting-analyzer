@@ -6,14 +6,17 @@ export class RomanUtils {
      * Converts a numeric rank to a Roman numeral based on the provided map.
      */
     static rankToRoman(rank: number, romanMap: { [key: string]: number }): string {
-        return Object.keys(romanMap)[rank - 1] || rank.toString();
+        const result = Object.keys(romanMap)[rank - 1];
+        if (result === undefined) throw new Error(`Invalid rank: ${rank}`);
+        return result;
     }
 
     /**
      * Extracts Roman numeral value from a string using the provided map.
      */
     static getRomanValue(r: string, romanMap: { [key: string]: number }): number {
-        return romanMap[r] || 0;
+        if (!(r in romanMap)) throw new Error(`Invalid Roman numeral: "${r}"`);
+        return romanMap[r];
     }
 
     /**

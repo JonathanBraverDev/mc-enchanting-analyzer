@@ -45,7 +45,7 @@ export class StatAggregator {
         const modDist = DistributionService.getModifiedLevelDist(xp, enchantability, registry, distCache);
         const levels = Object.keys(modDist).map(Number).sort((a, b) => b - a);
 
-        if (guaranteedFirst && !isEnchantmentAchievable(registry, guaranteedFirst, cat, mat, levels, poolCache)) {
+        if (guaranteedFirst && !isEnchantmentAchievable(registry, guaranteedFirst, cat, levels, poolCache)) {
             return { ranks: {}, any: {}, count: {}, combos: {}, uncertainty: 1.0 };
         }
 
@@ -171,7 +171,7 @@ export class StatAggregator {
         const modDist = DistributionService.getModifiedLevelDist(xp, enchantability, registry, distCache);
         const levels = Object.keys(modDist).map(Number).sort((a, b) => b - a);
 
-        if (guaranteedFirst && !isEnchantmentAchievable(registry, guaranteedFirst, cat, mat, levels, poolCache)) {
+        if (guaranteedFirst && !isEnchantmentAchievable(registry, guaranteedFirst, cat, levels, poolCache)) {
             return { ranks: {}, any: {}, count: {}, combos: {}, uncertainty: 1.0 };
         }
 
