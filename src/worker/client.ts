@@ -8,10 +8,6 @@ type ProgressEntry = (data: WorkerResult) => void;
 type PendingEntry = RequestEntry | ProgressEntry;
 
 /**
- * Client wrapper around the Enchant Engine Web Worker.
- * Manages request/response lifecycle and progress callbacks.
- */
-/**
  * Client wrapper around the Enchant Engine Web Workers.
  * Manages dual workers (Main and Chart) to enable parallel refinement and sweeps.
  */

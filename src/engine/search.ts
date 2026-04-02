@@ -111,7 +111,7 @@ export class SearchService {
         const currentBitset = current.meta >> 8n;
         const currentLevel = Number(current.meta & 0xFFn);
         const isBook = cat === "book";
-        // Unpack once; reused by every settleMass call to avoid repeated unpack in redistributeBookProb.
+        // Unpack once for reuse.
         const currentEnchants = (isBook && currentCount > 1)
             ? ComboUtils.unpack(current.packedChosen, indexToEnchant)
             : [] as PackedEnchant[];
@@ -219,10 +219,12 @@ export class SearchService {
 
     /**
      * Core of book redistribution: calls removeAdditional, splits `prob` equally across all N→(N-1)
-     * outcomes, writes each chunk to `results`, updates `countMass`, corrects `anyMass`/`rankMass`
-     * using proportional survival (nOccurrences/nOutcomes) for every enchant including slot 0,
-     * and returns the integer remainder.
-     * The caller should add `rem` to `roundingErrorDelta`.
+     * outcomes, writes each chunk to `results`, updates `countMass`, corrects `anyMass`/`rankMass`,
+     * and returns the integer remainder. The caller should add `rem` to `roundingErrorDelta`.
+     *
+     * anyMass/rankMass correction: each redistributed combo removes exactly one enchant, so enchant
+     * `e` appears in (nOutcomes - 1) of them — except the guaranteed enchant, whose removal outcomes
+     * were filtered out by removeAdditional, so it appears in all nOutcomes.
      */
     private static redistributeBookProb(
         packedChosen: PackedCombo,
@@ -246,10 +248,7 @@ export class SearchService {
         }
         addTo(countMass, currentCount - 1, prob - rem);
 
-        // Correct anyMass/rankMass: for each original enchant, deduct the mass lost due to removal.
-        // Each redistributed combo removes exactly one enchant, so enchant e appears in
-        // (nOutcomes - 1) outcomes unless e is the guaranteed enchant (whose removal outcome
-        // was filtered out by removeAdditional), in which case it appears in all nOutcomes.
+        // Correct anyMass/rankMass: deduct mass lost per enchant based on survival probability.
         for (const e of originalEnchants) {
             const id = ComboUtils.getEnchantId(e);
             const isGuaranteed = guaranteedFirstId !== null && id === guaranteedFirstId;

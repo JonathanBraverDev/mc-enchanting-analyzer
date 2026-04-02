@@ -160,7 +160,7 @@ export class EnchantEngine {
         const parsedG = EnchantUtils.parse(guaranteedFirst, this.registry.data.constants.ROMAN_MAP);
         const guaranteedId = parsedG ? getEnchantId(this.registry, parsedG.name) : ENGINE_DEFAULTS.UNKNOWN_ENCHANT_ID;
 
-        // Stats cache key excludes `limit` and `resultsLimit` (constant) so a more precise result satisfies coarser requests
+        // Stats cache key is request-independent so results are reused across queries
         const cacheKey = KeyUtils.getStatsKey(catId, matId, xp, guaranteedId);
 
         // Check unified stats cache
