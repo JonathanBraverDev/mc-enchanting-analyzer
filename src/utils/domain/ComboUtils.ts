@@ -127,6 +127,9 @@ export class ComboUtils {
     /**
      * For books: returns all possible combinations after removing one "selected at random" enchantment.
      * Based on Minecraft Wiki: "If multiple enchantments were generated, then one selected at random is removed."
+     *
+     * Player perspective: if a player SEES an enchantment in the tooltip, it was NOT the one removed.
+     * So when a guaranteed enchant is present, outcomes where it was removed are filtered out.
      */
     private static readonly _removeScratch: PackedEnchant[] = [];
 
@@ -146,9 +149,7 @@ export class ComboUtils {
         }
 
         if (guaranteedFirstId !== null) {
-            // Player Perspective: If a player SEES an enchantment in the tooltip,
-            // then by definition that enchantment was NOT the one removed.
-            // enchants[i] is the removed enchant, so keep results where it wasn't the guaranteed.
+            // Keep only outcomes where the guaranteed enchant was not the one removed.
             return possibleResults.filter((_, i) => (enchants[i] >> 8) !== guaranteedFirstId);
         }
 

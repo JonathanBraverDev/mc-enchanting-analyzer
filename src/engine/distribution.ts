@@ -30,7 +30,7 @@ export class DistributionService {
         for (let k = 0; k <= 2 * N - 2; k++) {
             const val = xp + k + 1;
             const count = k < N ? (k + 1) : (2 * N - 1 - k);
-            // Parity Note: Division before multiplication replicates the truncation error of the original nested loops
+            // Division before multiplication preserves integer truncation behavior
             baseDist[val] = (baseDist[val] || 0n) + (PRECISION / nSq) * BigInt(count);
         }
 
@@ -50,7 +50,7 @@ export class DistributionService {
                 const bonus = (k * unitStep) - halfRange;
                 const count = k < steps ? (k + 1) : (totalTriSteps - k);
                 const modVal = Math.max(1, Math.floor(base * (1 + bonus) + 0.5));
-                // Parity Note: Same division-first pattern for bit-identical results
+                // Division before multiplication preserves integer truncation behavior
                 finalDist[modVal] = (finalDist[modVal] || 0n) + (bProb / triSq) * BigInt(count);
             }
         }
