@@ -229,9 +229,9 @@ All caches and `_registry` are **private** fields on `EnchantEngine`.
 ```
 distCache      Map<string, {[level]: bigint}>      "xp@enchantability@div@rngRange" → modified level distribution
 poolCache      LRUCache<string, PackedEnchant[]>   "cat|level" → eligible enchant list  (mat is NOT in the key)
-comboCache     LRUCache<bigint, SearchFrontier>    getPackedKey (includes limit) → search frontier (non-book)
-bookComboCache LRUCache<bigint, SearchFrontier>    getPackedKey (includes limit) → search frontier (book)
-statsCache     LRUCache<bigint, CalculationStats>  getStatsKey  (no limit, no threshold) → final stats
+comboCache     LRUCache<number, SearchFrontier>    getPackedKey (no limit) → search frontier (non-book)
+bookComboCache LRUCache<number, SearchFrontier>    getPackedKey (no limit) → search frontier (book)
+statsCache     LRUCache<number, CalculationStats>  getStatsKey  (no limit, no threshold) → final stats
 ```
 
 **statsCache semantics**
@@ -240,9 +240,9 @@ statsCache     LRUCache<bigint, CalculationStats>  getStatsKey  (no limit, no th
 - Write: overwrite only if the new result has strictly lower uncertainty than the cached entry
 
 **comboCache / bookComboCache semantics**
-- Key: `getPackedKey(catId, matId, modLevel, guaranteedId, limit)` — limit IS in the key (frontier is limit-specific)
-- Read: return cached entry unconditionally (no threshold check)
-- Write: always overwrite
+- Key: `getPackedKey(catId, matId, modLevel, guaranteedId)` — `limit` is NOT in the key, enabling cross-tier resumability (a deep tier can resume the frontier cached by a coarser tier)
+- Read: if `cached.threshold <= requested threshold`, return cached entry directly; otherwise pass as `existingFrontier` to continue the search
+- Write: always overwrite with the latest (more-explored) frontier
 
 **Bit layout of packed keys**
 
@@ -252,4 +252,3 @@ statsCache     LRUCache<bigint, CalculationStats>  getStatsKey  (no limit, no th
 | 6–11 | matId | both |
 | 12–19 | modLevel / xp | both |
 | 20–27 | guaranteedId | both |
-| 28–47 | limit | `getPackedKey` only |
