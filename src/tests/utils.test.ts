@@ -226,9 +226,9 @@ describe('RomanUtils.rankToRoman', () => {
         assert.strictEqual(RomanUtils.rankToRoman(5, ROMAN_MAP), 'V');
     });
 
-    it('returns stringified number for out-of-range ranks', () => {
-        assert.strictEqual(RomanUtils.rankToRoman(0, ROMAN_MAP), '0');
-        assert.strictEqual(RomanUtils.rankToRoman(6, ROMAN_MAP), '6');
+    it('throws for out-of-range ranks', () => {
+        assert.throws(() => RomanUtils.rankToRoman(0, ROMAN_MAP), /Invalid rank/);
+        assert.throws(() => RomanUtils.rankToRoman(6, ROMAN_MAP), /Invalid rank/);
     });
 });
 
@@ -239,10 +239,10 @@ describe('RomanUtils.getRomanValue', () => {
         assert.strictEqual(RomanUtils.getRomanValue('V', ROMAN_MAP), 5);
     });
 
-    it('returns 0 for unknown strings', () => {
-        assert.strictEqual(RomanUtils.getRomanValue('X', ROMAN_MAP), 0);
-        assert.strictEqual(RomanUtils.getRomanValue('', ROMAN_MAP), 0);
-        assert.strictEqual(RomanUtils.getRomanValue('VI', ROMAN_MAP), 0);
+    it('throws for unknown strings', () => {
+        assert.throws(() => RomanUtils.getRomanValue('X', ROMAN_MAP), /Invalid Roman numeral/);
+        assert.throws(() => RomanUtils.getRomanValue('', ROMAN_MAP), /Invalid Roman numeral/);
+        assert.throws(() => RomanUtils.getRomanValue('VI', ROMAN_MAP), /Invalid Roman numeral/);
     });
 });
 

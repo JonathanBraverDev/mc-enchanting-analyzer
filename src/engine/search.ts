@@ -37,7 +37,7 @@ export class SearchService {
         let uncertainty = prunedMass;
         let iterations = 0;
 
-        const initialPool = getEligiblePool(registry, cat, modLevel, mat, poolCache);
+        const initialPool = getEligiblePool(registry, cat, modLevel, poolCache);
         if (initialPool.length === 0) {
             return {
                 queue: new BinaryHeap(),

@@ -22,9 +22,10 @@ export class EnchantUtils {
         if (parts.length < 2) return { name: fullName, rank: 1 };
 
         const rankStr = parts[parts.length - 1];
-        const rank = RomanUtils.getRomanValue(rankStr, romanMap);
-
-        if (rank === 0) {
+        let rank: number;
+        try {
+            rank = RomanUtils.getRomanValue(rankStr, romanMap);
+        } catch {
             return { name: fullName, rank: 1 };
         }
 

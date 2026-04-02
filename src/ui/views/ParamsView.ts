@@ -94,7 +94,7 @@ export class ParamsView {
         
         const allPossible = new Set<string>();
         Object.keys(dist).forEach(ml => {
-            const numeric = engine.getEligibleListNumeric(category, parseInt(ml), material, 0n);
+            const numeric = engine.getEligibleListNumeric(category, parseInt(ml), 0n);
             numeric.forEach(n => {
                 allPossible.add(getFullEnchantName(engine.registry, n));
             });

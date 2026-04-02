@@ -9,7 +9,9 @@ export function getEligibleMaterials(state: RegistryState, cat: string): string[
 }
 
 export function getEnchantName(state: RegistryState, id: number): string {
-    return state.revIdMap[id] || "Unknown";
+    const name = state.revIdMap[id];
+    if (name === undefined) throw new Error(`Unknown enchant ID ${id}`);
+    return name;
 }
 
 export function getRankRoman(state: RegistryState, rank: number): string {
@@ -47,12 +49,12 @@ export function getFullEnchantName(state: RegistryState, idAndRank: number): str
     return `${getEnchantName(state, id)} ${getRankRoman(state, rank)}`;
 }
 
-export function getEligiblePool(state: RegistryState, cat: string, level: number, mat: string, cache?: LRUCache<string, PackedEnchant[]>): PackedEnchant[] {
-    return PoolService.getEligiblePool(state, cat, level, mat, cache);
+export function getEligiblePool(state: RegistryState, cat: string, level: number, cache?: LRUCache<string, PackedEnchant[]>): PackedEnchant[] {
+    return PoolService.getEligiblePool(state, cat, level, cache);
 }
 
-export function isEnchantmentAchievable(state: RegistryState, fullName: string, cat: string, mat: string, levels: number[], cache?: LRUCache<string, PackedEnchant[]>): boolean {
-    return PoolService.isEnchantmentAchievable(state, fullName, cat, mat, levels, state.data.constants.ROMAN_MAP, cache);
+export function isEnchantmentAchievable(state: RegistryState, fullName: string, cat: string, levels: number[], cache?: LRUCache<string, PackedEnchant[]>): boolean {
+    return PoolService.isEnchantmentAchievable(state, fullName, cat, levels, state.data.constants.ROMAN_MAP, cache);
 }
 
 export function getEnchantability(state: RegistryState, mat: string, cat: string): number {

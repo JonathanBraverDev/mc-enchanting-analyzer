@@ -11,6 +11,7 @@ import { RefinementService } from '../ui/refinement.js';
 import { WorkerClient } from '../worker/client.js';
 import { EnchantEngine } from '../engine/index.js';
 import { DATA } from '../data/index.js';
+import { isCategoryAvailable } from '../core/registry.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -380,12 +381,11 @@ describe('Integration: Version switch and book state reset', () => {
     });
 
     it('version switch with book category: getFullStats reflects new version (no books in 1.3.1)', async () => {
-        // Engine for 1.3.1 should return empty pool for book category
+        // Engine for 1.3.1 should report book category as unavailable
         const engine = new EnchantEngine(DATA, '1.3.1');
-        const pool = engine.getEligibleListNumeric('book', 30, 'book', 0n);
         assert.strictEqual(
-            pool.length, 0,
-            '1.3.1: book should have no eligible enchantments (book category does not exist)'
+            isCategoryAvailable(engine.registry, 'book'), false,
+            '1.3.1: book category should not be available'
         );
     });
 });

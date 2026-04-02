@@ -90,8 +90,8 @@ export class EnchantEngine {
         return DistributionService.getModifiedLevelDist(xp, enchantability, this.registry, this.distCache);
     }
 
-    public getEligibleListNumeric(cat: string, level: number, mat: string, bitset: bigint = 0n): number[] {
-        const pool = getEligiblePool(this.registry, cat, level, mat, this.poolCache);
+    public getEligibleListNumeric(cat: string, level: number, bitset: bigint = 0n): number[] {
+        const pool = getEligiblePool(this.registry, cat, level, this.poolCache);
         return pool.filter(p => (bitset & (1n << BigInt(p >> 8))) === 0n);
     }
 
