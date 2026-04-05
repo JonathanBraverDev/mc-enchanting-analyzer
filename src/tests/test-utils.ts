@@ -81,6 +81,9 @@ export const SnapshotUtils = {
     }
 };
 
+/** Assertion timeout scaled for CI runners. */
+export const UI_TIMEOUT = process.env.CI ? 45000 : 15000;
+
 /**
  * Utilities for Playwright-based UI tests.
  */
@@ -97,7 +100,7 @@ export const UITestUtils = {
     /**
      * Waits for the first enchantment combination to appear in the UI.
      */
-    async waitForResults(page: any, timeout = 15000): Promise<void> {
+    async waitForResults(page: any, timeout = process.env.CI ? 45000 : 15000): Promise<void> {
         await page.locator('#combo-list .combo-item').first().waitFor({ state: 'visible', timeout });
     },
 

@@ -55,6 +55,8 @@ export class StatAggregator {
         let lastStats: CalculationStats = { ranks: {}, any: {}, count: {}, combos: {}, uncertainty: 1.0 };
 
         for (let tierIndex = 0; tierIndex < tiers.length; tierIndex++) {
+            // Yield between tiers so the worker event loop can process abort signals
+            if (tierIndex > 0) await AsyncUtils.yield();
             // Between tiers: return best result so far instead of throwing
             if (signal?.aborted) return lastStats;
 
@@ -73,7 +75,10 @@ export class StatAggregator {
             let totalRoundingError = 0n;
 
             let abortedMidTier = false;
+            let mlCount = 0;
             for (const ml of levels) {
+                // Yield every few levels so the worker can process abort messages
+                if (++mlCount % 3 === 0) await AsyncUtils.yield();
                 // Between modified levels: save partial work instead of throwing
                 if (signal?.aborted) {
                     abortedMidTier = true;
