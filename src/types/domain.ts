@@ -14,6 +14,7 @@ export interface Enchantment {
   conflicts?: string[];
   valid_from?: string;
   valid_to?: string;
+  bookable?: boolean;
 }
 
 export interface VersionMechanics {

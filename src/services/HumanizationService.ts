@@ -1,6 +1,7 @@
 import { ComboUtils } from '../utils/domain/ComboUtils.js';
 import { RomanUtils } from '../utils/format/RomanUtils.js';
-import type { NameResolver, EnchantInsights, ResultSortMode } from '../types/index.js';
+import type { EnchantInsights, ResultSortMode, CalculationStats, RegistryState } from '../types/index.js';
+import { getEnchantName, getFullEnchantName } from '../core/registry.js';
 
 /**
  * Service for converting raw statistics into human-readable insights.
@@ -10,8 +11,8 @@ export class HumanizationService {
      * Converts statistics into a human-readable format with optional sorting.
      */
     public static humanize(
-        stats: any,
-        resolver: NameResolver,
+        stats: CalculationStats,
+        resolver: RegistryState,
         sortMode: ResultSortMode = 'prob',
         romanMap?: Record<string, number>
     ): EnchantInsights {
@@ -21,23 +22,24 @@ export class HumanizationService {
             count: { ...stats.count },
             combos: {},
             uncertainty: stats.uncertainty,
-            pruned: stats.pruned
+            pruned: stats.pruned,
+            roundingError: stats.roundingError
         };
 
         for (const [idAndRank, prob] of Object.entries(stats.ranks)) {
-            const name = resolver.getFullEnchantName(Number(idAndRank));
+            const name = getFullEnchantName(resolver, Number(idAndRank));
             human.ranks[name] = prob as number;
         }
 
         for (const [id, prob] of Object.entries(stats.any)) {
-            const name = resolver.getEnchantName(Number(id));
+            const name = getEnchantName(resolver, Number(id));
             human.any[name] = prob as number;
         }
 
         const rawCombos: Record<string, number> = {};
         for (const [packed, prob] of Object.entries(stats.combos)) {
-            const ids = ComboUtils.unpack(BigInt("0x" + packed));
-            const comboKey = ids.map(n => resolver.getFullEnchantName(n)).join("+");
+            const ids = ComboUtils.unpack(parseInt(packed, 16), resolver.indexToEnchant);
+            const comboKey = ids.map(n => getFullEnchantName(resolver, n)).join("+");
             rawCombos[comboKey] = prob as number;
         }
 

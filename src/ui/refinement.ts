@@ -1,8 +1,14 @@
-import { Registry } from '../core/registry.js';
+import { RegistryState, CalculationStats, SweepData } from '../types/index.js';
 import { UI_TEXTS, UI_DEFAULTS, SearchLevel, getParamsForMode } from '../core/config.js';
-import { EnchantInsights, SweepData } from '../types/index.js';
 import { WorkerClient } from '../worker/client.js';
 import { AsyncUtils } from '../utils/index.js';
+
+interface BaseSearchPayload {
+    cat: string;
+    xp: number;
+    mat: string;
+    guaranteedFirst: string | null;
+}
 
 export interface RefinementPayload {
     category: string;
@@ -15,8 +21,8 @@ export interface RefinementPayload {
 export interface RefinementCallbacks {
     onStatus: (status: string, level: SearchLevel) => void;
     onChartStatus?: (status: string, progress?: number) => void;
-    onInsights: (insights: any, isFinal: boolean) => void;
-    onChart: (sweep: any[]) => void;
+    onStats: (stats: CalculationStats, isFinal: boolean) => void;
+    onChart: (sweep: SweepData[]) => void;
 }
 
 /**
@@ -37,75 +43,59 @@ export class RefinementService {
      */
     public async run(
         payload: RefinementPayload,
-        registry: Registry,
+        registry: RegistryState,
         callbacks: RefinementCallbacks
     ): Promise<void> {
         const currentId = ++this.activeId;
+        this.isSweepRunning = false;
         this.sweep = new Array(UI_DEFAULTS.MAX_XP_LEVEL).fill(null);
 
-        const basePayload = { 
-            cat: payload.category, 
-            xp: payload.xpLevel, 
-            mat: payload.material, 
-            guaranteedFirst: payload.guaranteedFirst 
+        const basePayload = {
+            cat: payload.category,
+            xp: payload.xpLevel,
+            mat: payload.material,
+            guaranteedFirst: payload.guaranteedFirst
         };
         const isBook = payload.category === "book";
 
-        // Pass 1: Coarse (Instant)
-        const coarseDone = await this.executePass('coarse', basePayload, currentId, isBook, callbacks);
-        if (currentId !== this.activeId) return;
+        const levels: Exclude<SearchLevel, 'done'>[] = ['coarse', 'standard', 'deep', 'ultra'];
+        const tiers = levels.map(level => {
+            const params = getParamsForMode(level, isBook);
+            return { threshold: params.threshold, limit: params.limit };
+        });
 
-        // Trigger initial chart refresh background
-        this.refreshChart(basePayload, getParamsForMode('coarse', isBook).threshold, registry, currentId, callbacks);
+        callbacks.onStatus(getParamsForMode('coarse', isBook).status, 'coarse');
 
-        // Pass 2+: Standard -> Deep -> Ultra
-        const refinementLevels: Exclude<SearchLevel, 'done' | 'coarse'>[] = ['standard', 'deep', 'ultra'];
-        
-        for (const level of refinementLevels) {
-            const done = await this.executePass(level, basePayload, currentId, isBook, callbacks);
-            if (currentId !== this.activeId) return;
+        let tierIndex = 0;
+        let converged = false;
 
-            // Trigger non-blocking chart update at current pass precision
-            this.refreshChart(basePayload, getParamsForMode(level, isBook).threshold, registry, currentId, callbacks);
-            
-            if (done) break;
-        }
-
-        if (currentId === this.activeId) {
-            callbacks.onStatus(UI_TEXTS.STATUS_COMPLETE, "done");
-        }
-    }
-
-    private async executePass(
-        level: Exclude<SearchLevel, 'done'>,
-        payload: any,
-        currentId: number,
-        isBook: boolean,
-        callbacks: RefinementCallbacks
-    ): Promise<boolean> {
-        const config = getParamsForMode(level, isBook);
-        callbacks.onStatus(config.status, level);
-
-        const response = await WorkerClient.request(
-            'getFullStats',
-            { ...payload, threshold: config.threshold, source: 'main', useBestCache: true, maxIterations: config.limit },
+        await WorkerClient.request(
+            'getFullStatsProgressive',
+            { ...basePayload, source: 'main', tiers },
             (partial) => {
-                if (currentId === this.activeId) {
-                    callbacks.onInsights(partial.stats, false);
+                if (currentId !== this.activeId || converged) return;
+                converged = (partial.stats?.uncertainty ?? 1) < 1e-9;
+                const isFinal = tierIndex === tiers.length - 1 || converged;
+                callbacks.onStats(partial.stats, isFinal);
+                const level = levels[tierIndex];
+                this.refreshChart(basePayload, getParamsForMode(level, isBook).threshold, registry, currentId, callbacks);
+                tierIndex++;
+                if (!converged && tierIndex < levels.length) {
+                    callbacks.onStatus(getParamsForMode(levels[tierIndex], isBook).status, levels[tierIndex]);
                 }
-            }
+            },
+            'main'
         );
 
-        if (currentId !== this.activeId) return true;
+        if (currentId !== this.activeId) return;
 
-        callbacks.onInsights(response.stats, true);
-        return response.stats && response.stats.uncertainty === 0;
+        callbacks.onStatus(UI_TEXTS.STATUS_COMPLETE, "done");
     }
 
     private async refreshChart(
-        payload: any,
+        payload: BaseSearchPayload,
         threshold: number,
-        registry: Registry,
+        registry: RegistryState,
         currentId: number,
         callbacks: RefinementCallbacks
     ): Promise<void> {
@@ -126,12 +116,19 @@ export class RefinementService {
                 
                 for (const l of labels) {
                     if (currentId !== this.activeId) break;
-                    
-                    const response = await WorkerClient.request(
-                        'getFullStats',
-                        { ...payload, xp: l, threshold: activeThreshold, source: 'chart' }
-                    );
-                    
+
+                    let response: { stats: CalculationStats };
+                    try {
+                        response = await WorkerClient.request(
+                            'getFullStats',
+                            { ...payload, xp: l, threshold: activeThreshold, source: 'chart' },
+                            undefined,
+                            'chart'
+                        );
+                    } catch {
+                        break; // worker was re-initialized; exit sweep cleanly
+                    }
+
                     if (currentId !== this.activeId) break;
                     
                     this.sweep[l - 1] = { l, s: response.stats };

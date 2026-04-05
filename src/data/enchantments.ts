@@ -8,13 +8,13 @@ export const global_enchantments = {
   "Smite": {
     "weight": 5,
     "levels": {"I": [5, 25], "II": [13, 33], "III": [21, 41], "IV": [29, 49], "V": [37, 57]},
-    "conflicts": ["Sharpness", "Bane of Arthropods", "Density", "Breach"],
+    "conflicts": ["Bane of Arthropods", "Density", "Breach"],
     "valid_from": "1.0"
   },
   "Bane of Arthropods": {
     "weight": 5,
     "levels": {"I": [5, 25], "II": [13, 33], "III": [21, 41], "IV": [29, 49], "V": [37, 57]},
-    "conflicts": ["Sharpness", "Smite", "Density", "Breach"],
+    "conflicts": ["Density", "Breach"],
     "valid_from": "1.0"
   },
   "Knockback": {
@@ -56,7 +56,6 @@ export const global_enchantments = {
   "Silk Touch": {
     "weight": 1,
     "levels": {"I": [15, 65]},
-    "conflicts": ["Fortune"],
     "valid_from": "1.0"
   },
   "Power": {
@@ -88,19 +87,18 @@ export const global_enchantments = {
   "Fire Protection": {
     "weight": 5,
     "levels": {"I": [10, 18], "II": [18, 26], "III": [26, 34], "IV": [34, 42]},
-    "conflicts": ["Protection", "Blast Protection", "Projectile Protection"],
+    "conflicts": ["Blast Protection", "Projectile Protection"],
     "valid_from": "1.0"
   },
   "Blast Protection": {
     "weight": 2,
     "levels": {"I": [5, 13], "II": [13, 21], "III": [21, 29], "IV": [29, 37]},
-    "conflicts": ["Protection", "Fire Protection", "Projectile Protection"],
+    "conflicts": ["Projectile Protection"],
     "valid_from": "1.0"
   },
   "Projectile Protection": {
     "weight": 5,
     "levels": {"I": [3, 9], "II": [9, 15], "III": [15, 21], "IV": [21, 27]},
-    "conflicts": ["Protection", "Fire Protection", "Blast Protection"],
     "valid_from": "1.0"
   },
   "Respiration": {
@@ -132,7 +130,8 @@ export const global_enchantments = {
   "Frost Walker": {
     "weight": 2,
     "levels": {"I": [10, 25], "II": [20, 35]},
-    "conflicts": ["Depth Strider"]
+    "valid_from": "1.9",
+    "bookable": false
   },
   "Impaling": {
     "weight": 2,
@@ -148,18 +147,17 @@ export const global_enchantments = {
   "Riptide": {
     "weight": 2,
     "levels": {"I": [17, 50], "II": [24, 50], "III": [31, 50]},
-    "conflicts": ["Loyalty", "Channeling"],
+    "conflicts": ["Channeling"],
     "valid_from": "1.13"
   },
   "Channeling": {
     "weight": 1,
     "levels": {"I": [25, 50]},
-    "conflicts": ["Riptide"],
     "valid_from": "1.13"
   },
   "Quick Charge": {
     "weight": 5,
-    "levels": {"I": [12, 50], "II": [32, 50], "III": [52, 50]},
+    "levels": {"I": [12, 50], "II": [32, 50], "III": [50, 52]},
     "valid_from": "1.14"
   },
   "Multishot": {
@@ -171,7 +169,6 @@ export const global_enchantments = {
   "Piercing": {
     "weight": 10,
     "levels": {"I": [1, 50], "II": [11, 50], "III": [21, 50], "IV": [31, 50]},
-    "conflicts": ["Multishot"],
     "valid_from": "1.14"
   },
   "Luck of the Sea": {
@@ -187,19 +184,19 @@ export const global_enchantments = {
   "Density": {
     "weight": 5,
     "levels": {"I": [5, 25], "II": [13, 33], "III": [21, 41], "IV": [29, 49], "V": [37, 57]},
-    "conflicts": ["Breach", "Smite", "Bane of Arthropods", "Sharpness"],
+    "conflicts": ["Breach"],
     "valid_from": "1.21"
   },
   "Breach": {
     "weight": 2,
     "levels": {"I": [15, 65], "II": [24, 74], "III": [33, 83], "IV": [42, 92]},
-    "conflicts": ["Density", "Smite", "Bane of Arthropods", "Sharpness"],
     "valid_from": "1.21"
   },
   "Lunge": {
     "weight": 5,
     "levels": {"I": [10, 25], "II": [20, 35], "III": [30, 45]},
-    "valid_from": "1.21.11"
+    "valid_from": "1.21.11",
+    "bookable": false
   }
 } as const;
 
@@ -215,18 +212,6 @@ export const enchantment_groups = {
   "legacy_bow_pool": ["Power", "Punch", "Flame", "Infinity"],
   "tool_pool": ["Efficiency", "Unbreaking", "Fortune", "Silk Touch"],
   "fishing_pool": ["Luck of the Sea", "Lure", "Unbreaking"],
-  "book_pool": [
-    "Protection", "Fire Protection", "Blast Protection", "Projectile Protection",
-    "Sharpness", "Smite", "Bane of Arthropods", "Knockback", "Fire Aspect", "Looting", "Sweeping Edge",
-    "Efficiency", "Fortune", "Silk Touch", "Unbreaking",
-    "Power", "Punch", "Flame", "Infinity",
-    "Luck of the Sea", "Lure",
-    "Depth Strider", "Feather Falling",
-    "Respiration", "Aqua Affinity", "Thorns",
-    "Impaling", "Loyalty", "Riptide", "Channeling",
-    "Quick Charge", "Multishot", "Piercing",
-    "Density", "Breach"
-  ],
   "trident_pool": ["Impaling", "Loyalty", "Riptide", "Channeling", "Unbreaking"],
   "crossbow_pool": ["Quick Charge", "Multishot", "Piercing", "Unbreaking"],
   "mace_pool": ["Density", "Breach", "Smite", "Bane of Arthropods", "Fire Aspect", "Unbreaking"],

@@ -1,8 +1,21 @@
-﻿## v2.2.0
+﻿## v3.0.0
 
-### Added
-- **Book Mechanics Test Suite**: A dedicated regression suite for Minecraft book enchantment rules across versions.
+### The "Precision Architecture" Update
+
+A major internal overhaul focused on accuracy, performance, and long-term maintainability.
+
+### Improved
+- **Faster deep searches**: The engine now reuses work across refinement tiers, so complex items like books converge to precise results much faster.
+- **Better book accuracy**: Fixed several edge cases in book enchantment probability tracking that could cause small inaccuracies at high precision.
+- **Performance**: Significant speedups across the board Γאפ eliminated bottlenecks in probability redistribution and cache key handling.
 
 ### Fixed
-- **Multi-Enchant Book Rework**: Re-architected the book generation logic to handle true random removal. This matches the behavior of official Minecraft mechanics and significantly improves accuracy for high-level book results.
+- **Frost Walker** version availability corrected.
+- **Quick Charge III** level range corrected.
+- **Enchantment conflicts** are now validated automatically instead of relying on manually maintained lists.
+- Fixed a rare issue where the search could double-count probability mass near queue capacity.
+
+### Changed
+- Complete internal restructuring of the engine, type system, and registry. The public-facing behavior is unchanged, but the codebase is now fully type-safe and modular.
+- Expanded test suite from ~30 to 242 tests covering engine correctness, edge cases, and cross-version regression.
 
