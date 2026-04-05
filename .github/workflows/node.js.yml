@@ -3,12 +3,14 @@ name: Node.js CI
 on:
   push:
     branches: [ "main" ]
-    tags: [ "*" ]
+    tags: [ "v*" ]
   pull_request:
     branches: [ "main" ]
 
 jobs:
   build:
+    # Skip matrix build for tag pushes — the branch push already tested this commit
+    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
     runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -29,7 +31,7 @@ jobs:
     - run: npm test
 
   release:
-    needs: build
+    # Runs independently on tag pushes — no need to duplicate the build matrix
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     permissions:
@@ -51,6 +53,10 @@ jobs:
         node-version: 22.x
         cache: 'npm'
     - run: npm ci
+    - name: Install Playwright Chromium
+      run: npx playwright install chromium --with-deps
+    - run: npm run build
+    - run: npm test
     - run: npm run build:standalone
     - name: Create Release
       uses: softprops/action-gh-release@v2
