@@ -93,6 +93,22 @@ describe('SummaryService', () => {
         const result = SummaryService.summarize(combos, 0n, 0n, undefined, undefined, undefined, 10);
         assert.strictEqual(Object.keys(result.combos).length, 5);
     });
+
+    it('output combos are explicitly sorted by probability descending', () => {
+        const combos = new Map<number, bigint>();
+        // Use keys that contain letters so V8 doesn't reorder them as numeric keys
+        combos.set(0xa, PRECISION / 10n); // 0.1
+        combos.set(0xb, PRECISION / 2n);  // 0.5
+        combos.set(0xc, PRECISION / 4n);  // 0.25
+        
+        const result = SummaryService.summarize(combos, 0n, 0n, undefined, undefined, undefined, 10);
+        const probs = Object.values(result.combos);
+        
+        // Expected order: 0.5 (b), 0.25 (c), 0.1 (a)
+        assert.strictEqual(probs[0], 0.5,  'highest prob should be first');
+        assert.strictEqual(probs[1], 0.25, 'middle prob should be second');
+        assert.strictEqual(probs[2], 0.1,  'lowest prob should be last');
+    });
 });
 
 // ── SerializationService ───────────────────────────────────────────────────

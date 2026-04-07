@@ -158,6 +158,9 @@ test.describe('UI Performance & Accuracy', () => {
         // Settle on sword and verify the UI recovers with correct results
         await catSelect.selectOption('sword');
         await expect(status).toHaveText(UI_TEXTS.STATUS_COMPLETE, { timeout: UI_TIMEOUT });
-        await expect(page.locator('#combo-list')).toContainText('Sharpness');
+        
+        // Ensure placeholder is GONE before checking text
+        await expect(page.locator('.combo-placeholder')).toHaveCount(0, { timeout: UI_TIMEOUT });
+        await expect(page.locator('#combo-list')).toContainText('Sharpness', { timeout: UI_TIMEOUT });
     });
 });

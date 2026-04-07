@@ -47,10 +47,19 @@ export class ResultsView {
 
     public update(insights: EnchantInsights, registry: RegistryState): void {
         const hasResults = Object.keys(insights.combos).length > 0;
-        if (!hasResults) return; // Don't wipe the UI if we got an empty/preliminary update
         
-        this.renderCombos(insights, registry);
-        this.renderRanks(insights, registry);
+        if (hasResults) {
+            this.renderCombos(insights, registry);
+            this.renderRanks(insights, registry);
+        } else {
+            this.showNoResults();
+        }
+    }
+
+    public showNoResults(): void {
+        if (this.comboEl) {
+            this.comboEl.innerHTML = `<div class="combo-placeholder" style="opacity: 0.5; padding: 15px; font-size: 0.85rem;">No combinations found for this level.</div>`;
+        }
     }
 
     private renderCombos(insights: EnchantInsights, registry: RegistryState): void {
