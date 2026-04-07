@@ -99,7 +99,7 @@ class AppController {
             return;
         }
 
-        if (type === 'level-input') {
+        if (type === 'cat' || type === 'level-input') {
             if (this.runDebounceTimeout) clearTimeout(this.runDebounceTimeout);
             this.runDebounceTimeout = window.setTimeout(() => this.run(), 50);
             return;
@@ -146,16 +146,21 @@ class AppController {
     }
 
     private updateInsightsFromRaw(raw: CalculationStats | null, isFinal: boolean = false): void {
-        if (!raw) return;
+        const engine = this.getEngine();
+        if (!raw) {
+            if (isFinal) this.results.showNoResults();
+            return;
+        }
+        
         this.lastRawStats = raw;
 
         const { sortMode } = this.params.getValues();
-        const insights = HumanizationService.humanize(raw, this.getEngine().registry, sortMode as ResultSortMode, DATA.constants.ROMAN_MAP);
+        const insights = HumanizationService.humanize(raw, engine.registry, sortMode as ResultSortMode, DATA.constants.ROMAN_MAP);
         
         const uncertainty = insights.uncertainty ?? 1;
         if (isFinal || (this.bestInsights && uncertainty < (this.bestInsights.uncertainty ?? 1)) || !this.bestInsights) {
             this.bestInsights = insights;
-            this.results.update(insights, this.getEngine().registry);
+            this.results.update(insights, engine.registry);
         }
     }
 

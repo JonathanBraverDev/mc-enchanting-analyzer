@@ -88,10 +88,10 @@ export class StatAggregator {
                 const mProb = modDist[ml];
                 const existingFrontier = frontierMap.get(ml);
 
-                const result = SearchService.calculateCombinations(
+                const result = await SearchService.calculateCombinations(
                     registry, cat, ml, mat, guaranteedFirst,
                     activeThreshold, tier.limit,
-                    existingFrontier, resultsLimit, poolCache
+                    existingFrontier, resultsLimit, poolCache, signal
                 );
 
                 frontierMap.set(ml, result);
@@ -202,8 +202,8 @@ export class StatAggregator {
 
             // Orchestrate search, using cache if provided by EnchantEngine
             const cached = getExtendedCache?.(ml);
-            const result = SearchService.calculateCombinations(
-                registry, cat, ml, mat, guaranteedFirst, activeThreshold, searchLimit, cached, resultsLimit, poolCache
+            const result = await SearchService.calculateCombinations(
+                registry, cat, ml, mat, guaranteedFirst, activeThreshold, searchLimit, cached, resultsLimit, poolCache, signal
             );
 
             if (useCache && setExtendedCache) {
