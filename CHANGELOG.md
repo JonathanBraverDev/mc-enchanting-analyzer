@@ -1,4 +1,12 @@
 # Changelog
+ 
+ ## v3.0.1 (2026-04-07)
+ 
+ ### Improved
+ - **User Interface**: Significantly improved responsiveness and eliminated flickering when switching between item categories or materials.
+ - **Book Enchanting**: Optimized the internal selection engine to ensure fluid performance, even when calculating hundreds of thousands of book combinations.
+ - **System Stability**: Resolved several background synchronization issues that could cause searches to stall or behave inconsistently under heavy load.
+ - **Reliability**: Enhanced the worker communication layer to handle interruptions and error boundaries more gracefully.
 
 ## v3.0.0 (2026-04-05)
 
