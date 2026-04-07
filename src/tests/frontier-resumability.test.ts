@@ -30,7 +30,7 @@ describe('Frontier Resumability & Cache Behavior', () => {
 
     // ── Test A: SearchService direct resumption ─────────────────────────────
 
-    it('SearchService resumes from existing frontier', () => {
+    it('SearchService resumes from existing frontier', async () => {
         const engine = new EnchantEngine(DATA, '1.21');
 
         // book/ml=50 has millions of reachable combinations; 500 iterations barely
@@ -41,12 +41,12 @@ describe('Frontier Resumability & Cache Behavior', () => {
         const cat = 'book', ml = 50, mat = 'book';
 
         // First pass: 500 iterations from the initial state
-        const result500 = SearchService.calculateCombinations(
+        const result500 = await SearchService.calculateCombinations(
             engine.registry, cat, ml, mat, null, threshold, 500
         );
 
         // Second pass: 2 000 more iterations, resuming from result500
-        const result2000 = SearchService.calculateCombinations(
+        const result2000 = await SearchService.calculateCombinations(
             engine.registry, cat, ml, mat, null, threshold, 2000, result500
         );
 
