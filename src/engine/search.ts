@@ -186,14 +186,6 @@ export class SearchService {
 
         const probContinue = SearchService.PROB_CONTINUE_TABLE[currentLevel] || 0n;
 
-        if (probContinue === 0n) {
-            const rem = this.settleMass(registry, isBook, currentCount, current.packedChosen, currentEnchants, current.prob, guaranteedFirstId, enchantToIndex, indexToEnchant, results, countMass, anyMass, rankMass);
-            accountant.record('resolved', current.prob - rem);
-            accountant.record('rounding', rem);
-            if (rem > 0n && instrumentation) instrumentation.roundingErrorEvents++;
-            return;
-        }
-
         const probStop = ProbUtils.scale(current.prob, (PRECISION - probContinue));
         const remStop = this.settleMass(registry, isBook, currentCount, current.packedChosen, currentEnchants, probStop, guaranteedFirstId, enchantToIndex, indexToEnchant, results, countMass, anyMass, rankMass);
 
@@ -206,8 +198,9 @@ export class SearchService {
 
         if (isLimitReached || isTooSmall || isMapFull) {
             const remForward = this.settleMass(registry, isBook, currentCount, current.packedChosen, currentEnchants, probForward, guaranteedFirstId, enchantToIndex, indexToEnchant, results, countMass, anyMass, rankMass);
-            const scaleRoundingLoss = current.prob - (probStop + probForward);
-            const localRounding = remStop + remForward + scaleRoundingLoss;
+            // In Banker's Rounding land, stop + forward approx current.prob.
+            // Any discrepency is recorded as rounding error.
+            const localRounding = remStop + remForward + (current.prob - (probStop + probForward));
             
             accountant.record('resolved', probStop - remStop);
             accountant.record('rounding', localRounding);
@@ -247,21 +240,21 @@ export class SearchService {
         }
 
         if (totalWeight === 0) {
-            addTo(results, current.packedChosen, probForward);
-            addTo(countMass, currentCount, probForward);
-            accountant.record('resolved', probStop + probForward - remStop);
-            accountant.record('rounding', remStop);
-            if (remStop > 0n && instrumentation) instrumentation.roundingErrorEvents++;
+            const remForward = this.settleMass(registry, isBook, currentCount, current.packedChosen, currentEnchants, probForward, guaranteedFirstId, enchantToIndex, indexToEnchant, results, countMass, anyMass, rankMass);
+            const localRounding = remStop + remForward + (current.prob - (probStop + probForward));
+
+            accountant.record('resolved', (probStop + probForward) - (remStop + remForward));
+            accountant.record('rounding', localRounding);
+            if (localRounding > 0n && instrumentation) instrumentation.roundingErrorEvents++;
             return;
         }
 
         const nextLevel = currentCount >= 1 ? Math.floor(currentLevel / 2) : currentLevel;
-        const pBase = probForward / BigInt(totalWeight);
-        const remainder = probForward % BigInt(totalWeight);
+        const { parts: splits, remainder: splitRemainder } = ProbUtils.distributeDetailed(probForward, weights, totalWeight, eligibleCount);
         const guaranteedInCombo = guaranteedFirstId !== null && (currentBitset & (1n << BigInt(guaranteedFirstId))) !== 0n;
 
         for (let i = 0; i < eligibleCount; i++) {
-            const pNext = BigInt(weights[i]) * pBase;
+            const pNext = splits[i];
             const nextPacked = ComboUtils.packAppend(current.packedChosen, eligible[i], guaranteedFirstId, guaranteedInCombo, enchantToIndex);
             const nextId = ComboUtils.getEnchantId(eligible[i]);
 
@@ -280,9 +273,9 @@ export class SearchService {
         const scaleRoundingLoss = current.prob - (probStop + probForward);
         accountant.record('resolved', probStop - remStop);
         accountant.record('rounding', remStop + scaleRoundingLoss);
-        accountant.record('sieved', remainder); // Unused remainder of integer split is sieved
+        accountant.record('sieved', splitRemainder);
 
-        if ((remStop + scaleRoundingLoss) > 0n && instrumentation) instrumentation.roundingErrorEvents++;
+        if ((remStop + scaleRoundingLoss + splitRemainder) > 0n && instrumentation) instrumentation.roundingErrorEvents++;
     }
 
     /** Settles `prob` into results/countMass, via book redistribution when applicable, and returns rem. */
@@ -350,8 +343,8 @@ export class SearchService {
             const isGuaranteed = guaranteedFirstId !== null && id === guaranteedFirstId;
             const nSurvivors = isGuaranteed ? nOutcomes : nOutcomes - 1;
             
-            // Precise survivor mass: (prob * count) / total
-            const { quotient: survivorMass } = ProbUtils.mulDiv(prob, BigInt(nSurvivors), BigInt(nOutcomes));
+            // Precise survivor mass: (prob * count) / total using Banker's Rounding
+            const survivorMass = ProbUtils.roundDiv(prob * BigInt(nSurvivors), BigInt(nOutcomes));
             const loss = prob - survivorMass;
             if (loss > 0n) {
                 anyMass.set(id, (anyMass.get(id) || 0n) - loss);
@@ -376,10 +369,9 @@ export class SearchService {
         accountant: MassAccountant
     ): void {
         const { enchantToIndex } = registry;
-        const pBase = current.prob / BigInt(totalWeight);
-        const remainder = current.prob % BigInt(totalWeight);
+        const { parts: splits, remainder: splitRemainder } = ProbUtils.distributeDetailed(current.prob, weights, totalWeight);
         for (let i = 0; i < pool.length; i++) {
-            const pNext = BigInt(weights[i]) * pBase;
+            const pNext = splits[i];
             const nextId = ComboUtils.getEnchantId(pool[i]);
 
             addTo(anyMass, nextId, pNext);
@@ -392,6 +384,6 @@ export class SearchService {
                 prob: pNext
             });
         }
-        accountant.record('sieved', remainder);
+        accountant.record('sieved', splitRemainder);
     }
 }
