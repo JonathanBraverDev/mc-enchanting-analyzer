@@ -83,29 +83,17 @@ export class MassAccountant {
 
     /**
      * Scales all buckets of another accountant and adds them to this one.
-     * Ensures internal probability conservation by attributing scaling remainder to rounding.
+     * Uses Banker's Rounding for statistically zero-drift conservation.
      */
     public addScaled(other: MassAccountant, factor: bigint): void {
         const b = other.getBookkeeping();
-        const s = (val: bigint) => ProbUtils.scale(val, factor);
 
-        const r = s(b.resolved);
-        const p = s(b.pending);
-        const v = s(b.sieved);
-        const o = s(b.overflow);
-        const c = s(b.capped);
-        const n = s(b.rounding);
-
-        const totalExpected = ProbUtils.scale(other.getTotalMass(), factor);
-        const totalActual = r + p + v + o + c + n;
-        const diff = totalExpected - totalActual;
-
-        this.resolved += r;
-        this.pending += p;
-        this.sieved += v;
-        this.overflow += o;
-        this.capped += c;
-        this.rounding += n + diff;
+        this.resolved += ProbUtils.scale(b.resolved, factor);
+        this.pending  += ProbUtils.scale(b.pending, factor);
+        this.sieved   += ProbUtils.scale(b.sieved, factor);
+        this.overflow += ProbUtils.scale(b.overflow, factor);
+        this.capped   += ProbUtils.scale(b.capped, factor);
+        this.rounding += ProbUtils.scale(b.rounding, factor);
     }
 
     public getTotalMass(): bigint {

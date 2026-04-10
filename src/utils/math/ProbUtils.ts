@@ -23,20 +23,10 @@ export const ProbUtils = {
     toNumber: (b: bigint): number => Number(b) / Number(PRECISION),
 
     /**
-     * Scales a probability by a fixed-point factor.
+     * Scales a probability by a fixed-point factor using Banker's Rounding.
+     * Statistically neutral across thousands of operations.
      */
-    scale: (prob: bigint, factor: bigint): bigint => (prob * factor) / PRECISION,
-
-    /**
-     * Scales a probability by a fixed-point factor and returns the remainder.
-     * @param prob The total probability mass (BigInt PRECISION units)
-     * @param factor The scaling factor (BigInt PRECISION units, representing a 0.0-1.0 range)
-     * @returns { result, remainder } where 'result' is the scaled mass and 'remainder' is the fractional loss
-     */
-    scaleDetailed: (prob: bigint, factor: bigint): { result: bigint; remainder: bigint } => {
-        const { quotient, remainder } = ProbUtils.mulDiv(prob, factor, PRECISION);
-        return { result: quotient, remainder };
-    },
+    scale: (prob: bigint, factor: bigint): bigint => ProbUtils.roundDiv(prob * factor, PRECISION),
 
     /**
      * Performs (a * b) / c and returns the remainder.

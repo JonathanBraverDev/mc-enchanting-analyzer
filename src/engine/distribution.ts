@@ -1,4 +1,4 @@
-import { PRECISION } from '../utils/index.js';
+import { PRECISION, ProbUtils } from '../utils/index.js';
 import { ENGINE_DEFAULTS } from '../core/config.js';
 import { RegistryState } from '../types/index.js';
 
@@ -22,37 +22,48 @@ export class DistributionService {
 
         const N = Math.floor(enchantability / div) + 1;
         
-        const baseDist: { [val: number]: bigint } = {};
-        const nBig = BigInt(N);
-        const nSq = nBig * nBig;
-        
-        // Sum of two discrete uniforms U[0, N-1] is a triangular distribution
+        // 1. Base enchantability bonus distribution (Triangular U[0, N-1] + U[0, N-1])
+        const baseValues: number[] = [];
+        const baseWeights: bigint[] = [];
         for (let k = 0; k <= 2 * N - 2; k++) {
-            const val = xp + k + 1;
-            const count = k < N ? (k + 1) : (2 * N - 1 - k);
-            // Division before multiplication preserves integer truncation behavior
-            baseDist[val] = (baseDist[val] || 0n) + (PRECISION / nSq) * BigInt(count);
+            baseValues.push(xp + k + 1);
+            baseWeights.push(BigInt(k < N ? (k + 1) : (2 * N - 1 - k)));
         }
+        const totalBaseWeight = BigInt(N * N);
+        const { parts: baseParts, remainder: baseRemainder } = ProbUtils.distributeDetailed(PRECISION, baseWeights, totalBaseWeight);
+        
+        const baseDistMap = new Map<number, bigint>();
+        for (let i = 0; i < baseValues.length; i++) {
+            baseDistMap.set(baseValues[i], baseParts[i]);
+        }
+        // Attribute sub-atomic remainder of distribution to the most probable (peak) level
+        const peakLevel = xp + N;
+        baseDistMap.set(peakLevel, (baseDistMap.get(peakLevel) || 0n) + baseRemainder);
 
+        // 2. Random multiplier bonus distribution (Triangular Centered)
         const finalDist: { [modVal: number]: bigint } = {};
         const steps = ENGINE_DEFAULTS.RNG_STEPS_FOR_DISTRIBUTION;
         const totalTriSteps = 2 * steps - 1;
-        const triSq = BigInt(steps * steps);
-        
-        for (let [baseStr, bProb] of Object.entries(baseDist)) {
-            const base = Number(baseStr);
-            // Sum of two continuous uniforms U[0, rngRange] is a triangular distribution on [0, 2*rngRange]
-            // We shift it by -rngRange to get a centered triangular distribution on [-rngRange, rngRange]
-            const halfRange = rngRange; 
-            const unitStep = halfRange / (steps - 1);
+        const triWeights: bigint[] = [];
+        for (let k = 0; k < totalTriSteps; k++) {
+            triWeights.push(BigInt(k < steps ? (k + 1) : (totalTriSteps - k)));
+        }
+        const totalTriWeight = BigInt(steps * steps);
 
+        const halfRange = rngRange; 
+        const unitStep = halfRange / (steps - 1);
+
+        for (const [base, bProb] of baseDistMap.entries()) {
+            const { parts: modParts, remainder: modRemainder } = ProbUtils.distributeDetailed(bProb, triWeights, totalTriWeight);
+            
             for (let k = 0; k < totalTriSteps; k++) {
                 const bonus = (k * unitStep) - halfRange;
-                const count = k < steps ? (k + 1) : (totalTriSteps - k);
                 const modVal = Math.max(1, Math.floor(base * (1 + bonus) + 0.5));
-                // Division before multiplication preserves integer truncation behavior
-                finalDist[modVal] = (finalDist[modVal] || 0n) + (bProb / triSq) * BigInt(count);
+                finalDist[modVal] = (finalDist[modVal] || 0n) + modParts[k];
             }
+            // Attribute remainder of this sub-distribution to the central (unmodified) peak
+            const centralModVal = Math.max(1, Math.floor(base + 0.5));
+            finalDist[centralModVal] = (finalDist[centralModVal] || 0n) + modRemainder;
         }
 
         cache?.set(key, finalDist);
