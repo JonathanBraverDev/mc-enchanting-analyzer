@@ -118,6 +118,7 @@ export interface SearchFrontier {
     mass: MassBookkeeping;
     threshold: bigint;
     iterations: number;
+    nodesProcessed: number;
     checkpoints: MassCheckpoint[];  // per-call output; not carried over on resume
     exitReason?: EngineExitReason;  // per-call output; not carried over on resume
 }

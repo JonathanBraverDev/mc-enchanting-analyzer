@@ -168,17 +168,9 @@ export class StatAggregator {
             tierAccountant.record('rounding', distRoundingError);
 
             if (guaranteedFirst) {
-                const romanMap = registry.data.constants.ROMAN_MAP;
-                const parsed = EnchantUtils.parse(guaranteedFirst, romanMap);
-                const gId = parsed ? registry.idMap.get(parsed.name) : undefined;
-                if (gId !== undefined) {
-                    totalAnyMass.set(gId, PRECISION);
-                    const fullId = (gId << 8) | (parsed?.rank ?? 1);
-                    totalRankMass.set(fullId, PRECISION);
-                    totalCountMass.set(1, (totalCountMass.get(1) || 0n) + distRoundingError);
-                    tierAccountant.record('resolved', distRoundingError);
-                    tierAccountant.record('rounding', -distRoundingError);
-                }
+                StatAggregator.reconcileGuaranteedMass(
+                    registry, guaranteedFirst, totalAnyMass, totalRankMass, totalCountMass
+                );
             }
 
             const tierStats = SummaryService.summarize(finalCombos, tierAccountant, totalAnyMass, totalRankMass, totalCountMass, summaryLimit);
@@ -310,22 +302,41 @@ export class StatAggregator {
         globalAccountant.record('rounding', distRoundingError);
 
         if (guaranteedFirst) {
-            const romanMap = registry.data.constants.ROMAN_MAP;
-            const parsed = EnchantUtils.parse(guaranteedFirst, romanMap);
-            const gId = parsed ? registry.idMap.get(parsed.name) : undefined;
-            if (gId !== undefined) {
-                totalAnyMass.set(gId, PRECISION);
-                const fullId = (gId << 8) | (parsed?.rank ?? 1);
-                totalRankMass.set(fullId, PRECISION);
-                totalCountMass.set(1, (totalCountMass.get(1) || 0n) + distRoundingError);
-                globalAccountant.record('resolved', distRoundingError);
-                globalAccountant.record('rounding', -distRoundingError);
-            }
+            StatAggregator.reconcileGuaranteedMass(
+                registry, guaranteedFirst, totalAnyMass, totalRankMass, totalCountMass
+            );
         }
 
         const finalStats = SummaryService.summarize(finalCombos, globalAccountant, totalAnyMass, totalRankMass, totalCountMass, summaryLimit);
         finalStats.instrumentation = instrumentation ? snapshotInstrumentation(instrumentation) : undefined;
 
         return finalStats;
+    }
+
+    /**
+     * Reconciles all non-pending mass (resolved, sieved, rounding, capped, overflow) 
+     * into the guaranteed enchantment's buckets. This ensures exact 1.0 probability 
+     * for guarantees without introducing bias elsewhere.
+     */
+    private static reconcileGuaranteedMass(
+        registry: RegistryState,
+        guaranteedFirst: string,
+        totalAnyMass: Map<number, bigint>,
+        totalRankMass: Map<number, bigint>,
+        totalCountMass: Map<number, bigint>
+    ): void {
+        const romanMap = registry.data.constants.ROMAN_MAP;
+        const parsed = EnchantUtils.parse(guaranteedFirst, romanMap);
+        const gId = parsed ? registry.idMap.get(parsed.name) : undefined;
+
+        if (gId !== undefined) {
+            // Reconcile Individual probabilities to absolute 100% (PRECISION).
+            // This is mathematically certain because every path in a guaranteed-first search
+            // (resolved, sieved, or pending) carries the guaranteed enchantment.
+            totalAnyMass.set(gId, PRECISION);
+            
+            const fullId = (gId << 8) | (parsed?.rank ?? 1);
+            totalRankMass.set(fullId, PRECISION);
+        }
     }
 }

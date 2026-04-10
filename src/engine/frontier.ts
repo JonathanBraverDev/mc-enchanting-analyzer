@@ -61,7 +61,8 @@ export class FrontierFactory {
                 rounding: 0n 
             },
             threshold,
-            iterations: 0, 
+            iterations: 0,
+            nodesProcessed: 0,
             checkpoints: []
         };
     }
