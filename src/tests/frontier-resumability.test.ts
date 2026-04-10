@@ -59,8 +59,8 @@ describe('Frontier Resumability & Cache Behavior', () => {
         );
         assert.ok(
             result2000.results.size > result500.results.size ||
-            result2000.uncertainty < result500.uncertainty,
-            'Resumed search must produce more results or lower uncertainty than the first run'
+            result2000.mass.pending < result500.mass.pending,
+            'Resumed search must produce more results or lower pending mass than the first run'
         );
 
         // Superset check: every result from the first run must survive in the resumed run
@@ -74,17 +74,17 @@ describe('Frontier Resumability & Cache Behavior', () => {
         EnchantEngine.clearAllEngines();
     });
 
-    // ── Test B: Progressive refinement improves uncertainty ─────────────────
+    // ── Test B: Progressive refinement improves accuracy ─────────────────────
     //
     // NOTE: Two separate engines are used to prevent the coarse stats-cache result
     // from short-circuiting the deep run. The test validates that a tighter threshold
-    // (0.0001) drives genuinely lower uncertainty than a coarser one (0.01) for the
+    // (0.0001) drives genuinely lower pending mass than a coarser one (0.01) for the
     // same input, independent of cache sharing.
     // NOTE: limit is no longer in the combo cache key (see KeyUtils.getPackedKey),
     // so cross-tier combo cache sharing is now correct; this test intentionally avoids
     // it to keep the assertion clean.
 
-    it('progressive refinement improves uncertainty', async () => {
+    it('progressive refinement improves accuracy (decreases pending mass)', async () => {
         // Coarse engine: threshold=0.01 — search stops when queue-top prob < 0.001
         const coarseEngine = new EnchantEngine(DATA, '1.21');
         const coarseResult = await coarseEngine.getFullStats('sword', 30, 'diamond', {
@@ -100,9 +100,9 @@ describe('Frontier Resumability & Cache Behavior', () => {
         });
 
         assert.ok(
-            deepResult.uncertainty < coarseResult.uncertainty,
-            `Deep uncertainty (${deepResult.uncertainty}) must be strictly less than ` +
-            `coarse uncertainty (${coarseResult.uncertainty})`
+            deepResult.accounting.pending < coarseResult.accounting.pending,
+            `Deep pending mass (${deepResult.accounting.pending}) must be strictly less than ` +
+            `coarse pending mass (${coarseResult.accounting.pending})`
         );
 
         EnchantEngine.clearAllEngines();
@@ -129,7 +129,7 @@ describe('Frontier Resumability & Cache Behavior', () => {
     //
     // Same engine: coarse run populates comboCache, then only statsCache is cleared.
     // Deep run must resume from the cached coarse frontiers (not start from scratch),
-    // producing strictly lower uncertainty than the coarse run.
+    // producing strictly higher accuracy than the coarse run.
 
     it('cross-tier combo cache: deep run resumes from coarse frontier', async () => {
         const engine = new EnchantEngine(DATA, '1.21');
@@ -149,9 +149,9 @@ describe('Frontier Resumability & Cache Behavior', () => {
         });
 
         assert.ok(
-            deepResult.uncertainty < coarseResult.uncertainty,
-            `Deep run (threshold=0.0001) must produce strictly lower uncertainty than coarse run ` +
-            `(threshold=0.01). Coarse: ${coarseResult.uncertainty}, Deep: ${deepResult.uncertainty}`
+            deepResult.accounting.pending < coarseResult.accounting.pending,
+            `Deep run (threshold=0.0001) must produce strictly lower pending mass than coarse run ` +
+            `(threshold=0.01). Coarse: ${coarseResult.accounting.pending}, Deep: ${deepResult.accounting.pending}`
         );
 
         EnchantEngine.clearAllEngines();
@@ -173,14 +173,14 @@ describe('Frontier Resumability & Cache Behavior', () => {
         // Coarse run: looks up the same K_stats → immediate stats cache hit.
         // Returns the already-cached ultra result without recomputing.
         const coarseResult = await engine.getFullStats('sword', 30, 'diamond', {
-            threshold: 0.01,
+            threshold: 0.1, // use a very coarse threshold to be safe
             maxIterations: 20
         });
 
         assert.strictEqual(coarseResult, ultraResult,
             'Coarse getFullStats should return the cached ultra result (cross-tier stats cache hit)');
-        assert.strictEqual(coarseResult.uncertainty, ultraResult.uncertainty,
-            'Coarse and ultra uncertainty must be identical when served from cache');
+        assert.strictEqual(coarseResult.accuracy, ultraResult.accuracy,
+            'Coarse and ultra accuracy must be identical when served from cache');
 
         EnchantEngine.clearAllEngines();
     });

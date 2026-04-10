@@ -1,12 +1,12 @@
 export const constants = {
-  "ROMAN_MAP": { "I": 1, "II": 2, "III": 3, "IV": 4, "V": 5 },
+  "ROMAN_MAP": { "I": 1, "II": 2, "III": 3, "IV": 4, "V": 5, "VI": 6, "VII": 7, "VIII": 8, "IX": 9, "X": 10 },
   "ARMOR_CATS": ["helmet", "chestplate", "leggings", "boots"],
   "MATERIAL_PRIORITY": ["netherite", "diamond", "gold", "iron", "stone", "wood", "leather", "chain"],
   "ITEM_SPECIFIC_CATS": ["bow", "crossbow", "fishing_rod", "trident", "mace", "spear", "brush", "shield", "book"]
 };
 
 export const cosmetics = {
-  "RANK_LIGHTNESS_BOOST": { "I": 0, "II": 5, "III": 10, "IV": 15, "V": 20 },
+  "RANK_LIGHTNESS_BOOST": { "I": 0, "II": 5, "III": 10, "IV": 15, "V": 20, "VI": 25, "VII": 30, "VIII": 35, "IX": 40, "X": 45 },
   "ENCHANT_COLORS": {
     "Efficiency": "hsl(200, 70%, 60%)",
     "Unbreaking": "hsl(0, 70%, 60%)",

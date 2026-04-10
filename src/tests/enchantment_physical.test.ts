@@ -10,7 +10,7 @@ describe('Enchantment Physical Rules Test Suite', () => {
         const engine = new EnchantEngine(DATA, '1.20');
 
         it('Silk Touch and Fortune should NEVER coexist', async () => {
-            const stats = await engine.getFullStats('pickaxe', 30, 'diamond', { threshold: 0.0001 });
+            await engine.getFullStats('pickaxe', 30, 'diamond', { threshold: 0.0001 });
             const human = await EngineTestUtils.getHumanStats(engine, 'pickaxe', 30, 'diamond');
             
             for (const combo of Object.keys(human.combos)) {

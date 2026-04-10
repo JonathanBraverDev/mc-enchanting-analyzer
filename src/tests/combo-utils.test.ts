@@ -22,7 +22,7 @@ describe('ComboUtils', () => {
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     let SHARP4: number, UNBR3: number, FIRE2: number, FORT3: number;
-    let SHARP_ID: number, UNBR_ID: number, FIRE_ID: number;
+    let SHARP_ID: number, UNBR_ID: number;
 
     before(() => {
         SHARP4  = pe('Sharpness', 4);
@@ -32,7 +32,6 @@ describe('ComboUtils', () => {
 
         SHARP_ID = reg.idMap.get('Sharpness')!;
         UNBR_ID  = reg.idMap.get('Unbreaking')!;
-        FIRE_ID  = reg.idMap.get('Fire Aspect')!;
     });
 
     // ── getEnchantId / getEnchantRank ─────────────────────────────────────
