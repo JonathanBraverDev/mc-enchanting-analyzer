@@ -2,7 +2,6 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { EnchantEngine } from '../engine/index.js';
 import { DATA } from '../data/index.js';
-import { EngineTestUtils } from './test-utils.js';
 import { getCategoryPool } from '../core/registry.js';
 
 describe('Book Mechanics Test Suite', () => {

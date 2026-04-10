@@ -33,6 +33,8 @@ export class RefinementService {
     private sweep: SweepData[] = [];
     private isSweepRunning: boolean = false;
     private targetThreshold: number = 0;
+    private sweepAbortController: AbortController | null = null;
+    private activeChartLevel: Exclude<SearchLevel, 'done'> = 'coarse';
 
     public get currentSweep(): SweepData[] {
         return this.sweep;
@@ -47,7 +49,6 @@ export class RefinementService {
         callbacks: RefinementCallbacks
     ): Promise<void> {
         const currentId = ++this.activeId;
-        this.isSweepRunning = false;
         this.sweep = new Array(UI_DEFAULTS.MAX_XP_LEVEL).fill(null);
 
         const basePayload = {
@@ -57,6 +58,17 @@ export class RefinementService {
             guaranteedFirst: payload.guaranteedFirst
         };
         const isBook = payload.category === "book";
+
+        // Update shared pointers immediately and abort any running chart search
+        this.sweepAbortController?.abort();
+
+        // Flush both worker queues to ensure immediate priority for this run and clear any staleness
+        if (typeof Worker !== 'undefined') {
+            await Promise.all([
+                WorkerClient.resetWorker('main', payload.version),
+                WorkerClient.resetWorker('chart', payload.version)
+            ]);
+        }
 
         const levels: Exclude<SearchLevel, 'done'>[] = ['coarse', 'standard', 'deep', 'ultra'];
         const tiers = levels.map(level => {
@@ -69,32 +81,27 @@ export class RefinementService {
         let tierIndex = 0;
         let converged = false;
 
-        const finalVal = await WorkerClient.request(
+        await WorkerClient.request(
             'getFullStatsProgressive',
             { ...basePayload, source: 'main', tiers },
             (partial) => {
                 if (currentId !== this.activeId || converged) return;
-                const hasResults = (partial.stats?.combos && Object.keys(partial.stats.combos).length > 0);
-                const isZero = (partial.stats?.uncertainty ?? 1) === 0;
-                converged = (partial.stats?.uncertainty ?? 1) < 1e-9 && (hasResults || tierIndex > 0 || isZero);
+                converged = (partial.stats?.accounting?.pending ?? 1) < 1e-9;
                 const isFinal = tierIndex === tiers.length - 1 || converged;
                 callbacks.onStats(partial.stats, isFinal);
                 
                 const level = levels[tierIndex];
-                if (level) {
-                   callbacks.onStatus(getParamsForMode(level, isBook).status, level);
-                }
-                
+                this.activeChartLevel = level;
                 this.refreshChart(basePayload, getParamsForMode(level, isBook).threshold, registry, currentId, callbacks);
                 tierIndex++;
+                if (!converged && tierIndex < levels.length) {
+                    callbacks.onStatus(getParamsForMode(levels[tierIndex], isBook).status, levels[tierIndex]);
+                }
             },
             'main'
         );
 
         if (currentId !== this.activeId) return;
-
-        // Final catch-up update to ensure the UI settles on the most precise result
-        callbacks.onStats(finalVal.stats, true);
 
         callbacks.onStatus(UI_TEXTS.STATUS_COMPLETE, "done");
     }
@@ -102,57 +109,71 @@ export class RefinementService {
     private async refreshChart(
         payload: BaseSearchPayload,
         threshold: number,
-        registry: RegistryState,
+        _registry: RegistryState,
         currentId: number,
         callbacks: RefinementCallbacks
     ): Promise<void> {
         this.targetThreshold = threshold;
+        // In case refinement tier starts faster than run() completes its reset
+
         if (this.isSweepRunning) return;
 
         this.isSweepRunning = true;
         try {
             while (true) {
-                if (currentId !== this.activeId) break;
-                
-                const activeThreshold = this.targetThreshold;
+                if (this.activeId !== currentId) break;
+
+                // Capture the threshold for THIS pass
+                const currentPassThreshold = this.targetThreshold;
                 const labels = Array.from({ length: UI_DEFAULTS.MAX_XP_LEVEL }, (_, i) => i + 1);
                 
-                if (callbacks.onChartStatus) {
-                    callbacks.onChartStatus(UI_TEXTS.STATUS_CHART_PREPARING);
-                }
+                const passName = getParamsForMode(this.activeChartLevel, payload.cat === "book").status;
+                const statusBase = passName + " probabilities";
                 
+                callbacks.onChartStatus?.(statusBase);
                 for (const l of labels) {
-                    if (currentId !== this.activeId) break;
+                    // Pre-empt loop ONLY IF a new run (activeId change) was triggered
+                    if (this.activeId !== currentId) break;
 
-                    let response: { stats: CalculationStats };
+                    const ctrl = new AbortController();
+                    this.sweepAbortController = ctrl;
+
+                    const abortPromise = new Promise<never>((_, reject) => {
+                        ctrl.signal.addEventListener('abort', () => reject(new Error('AbortError')), { once: true });
+                    });
+
                     try {
-                        response = await WorkerClient.request(
-                            'getFullStats',
-                            { ...payload, xp: l, threshold: activeThreshold, source: 'chart' },
-                            undefined,
-                            'chart'
-                        );
-                    } catch {
-                        break; // worker was re-initialized; exit sweep cleanly
+                        const response = await Promise.race([
+                            WorkerClient.request(
+                                'getFullStats',
+                                { ...payload, xp: l, threshold: currentPassThreshold, source: 'chart' },
+                                undefined,
+                                'chart'
+                            ),
+                            abortPromise
+                        ]) as { stats: CalculationStats };
+
+                        if (this.activeId !== currentId) break;
+                        
+                        // Overwrite existing index for "zeroing-in" look
+                        this.sweep[l - 1] = { l, s: response.stats };
+                        callbacks.onChartStatus?.(statusBase, l / UI_DEFAULTS.MAX_XP_LEVEL);
+                        callbacks.onChart(this.sweep);
+                    } catch (e: any) {
+                        if (e.message === 'AbortError') break;
+                        throw e;
                     }
 
-                    if (currentId !== this.activeId) break;
-                    
-                    this.sweep[l - 1] = { l, s: response.stats };
-                    if (callbacks.onChartStatus) {
-                        callbacks.onChartStatus(UI_TEXTS.STATUS_CHART_SWEEPING, l / UI_DEFAULTS.MAX_XP_LEVEL);
-                    }
-                    callbacks.onChart(this.sweep);
-                    
                     await AsyncUtils.yield();
                 }
                 
-                if (callbacks.onChartStatus) {
-                    callbacks.onChartStatus(""); // Hide on completion
-                }
+                callbacks.onChartStatus?.(this.activeChartLevel === 'ultra' ? UI_TEXTS.STATUS_CHART_COMPLETE : "");
 
-                // If no higher precision was requested while we were sweeping, we are done
-                if (currentId !== this.activeId || this.targetThreshold === activeThreshold) break;
+                // Termination & Restart conditions
+                if (this.activeId !== currentId) break;
+                // If targetThreshold is still the same or LARGER (worse), we are done with this tier-loop.
+                // If it is SMALLER (better), we loop back to restart the sweep with the better threshold.
+                if (this.targetThreshold >= currentPassThreshold) break;
             }
         } finally {
             this.isSweepRunning = false;

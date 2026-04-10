@@ -12,28 +12,33 @@ import { SerializationService } from '../services/SerializationService.js';
 import { HumanizationService } from '../services/HumanizationService.js';
 import { DistributionService } from '../engine/distribution.js';
 import { EnchantEngine } from '../engine/index.js';
+import { MassAccountant } from '../engine/MassAccountant.js';
 import { DATA } from '../data/index.js';
-import type { CalculationStats } from '../types/index.js';
+import type { CalculationStats, MassAccounting } from '../types/index.js';
 
 // ── SummaryService ────────────────────────────────────────────────────────────
 
 describe('SummaryService', () => {
     it('empty combos map yields empty combos output', () => {
-        const result = SummaryService.summarize(new Map(), 0n);
+        const acc = new MassAccountant();
+        const result = SummaryService.summarize(new Map(), acc);
         assert.deepStrictEqual(result.combos, {});
     });
 
-    it('converts uncertainty bigint to float correctly', () => {
-        const uncertainty = PRECISION / 4n; // represents 0.25
-        const result = SummaryService.summarize(new Map(), uncertainty);
-        assert.ok(Math.abs(result.uncertainty - 0.25) < 1e-12, `got ${result.uncertainty}`);
+    it('converts pending mass bigint to float correctly', () => {
+        const pending = PRECISION / 4n; // represents 0.25
+        const acc = new MassAccountant();
+        acc.record('pending', pending);
+        const result = SummaryService.summarize(new Map(), acc);
+        assert.ok(Math.abs(result.accounting.pending - 0.25) < 1e-12, `got ${result.accounting.pending}`);
     });
 
     it('converts anyMass, rankMass, and countMass to float probabilities', () => {
         const anyMass   = new Map([[5, PRECISION / 2n]]);          // id 5 → 0.5
         const rankMass  = new Map([[0x0501, PRECISION / 4n]]);     // idAndRank 0x501 → 0.25
         const countMass = new Map([[3, PRECISION / 5n]]);          // count 3 → 0.2
-        const result = SummaryService.summarize(new Map(), 0n, 0n, anyMass, rankMass, countMass);
+        const acc = new MassAccountant();
+        const result = SummaryService.summarize(new Map(), acc, anyMass, rankMass, countMass);
         assert.ok(Math.abs(result.any[5]         - 0.5)  < 1e-12);
         assert.ok(Math.abs(result.ranks[0x0501]  - 0.25) < 1e-12);
         assert.ok(Math.abs(result.count[3]       - 0.2)  < 1e-10);
@@ -42,7 +47,8 @@ describe('SummaryService', () => {
     it('comboLimit=0 yields empty combos even when data is present', () => {
         const combos = new Map<number, bigint>();
         for (let i = 1; i <= 10; i++) combos.set(i, BigInt(i) * (PRECISION / 100n));
-        const result = SummaryService.summarize(combos, 0n, 0n, undefined, undefined, undefined, 0);
+        const acc = new MassAccountant();
+        const result = SummaryService.summarize(combos, acc, undefined, undefined, undefined, 0);
         assert.deepStrictEqual(result.combos, {});
     });
 
@@ -51,7 +57,8 @@ describe('SummaryService', () => {
         const combos = new Map<number, bigint>();
         for (let i = 1; i <= 10; i++) combos.set(i, BigInt(i) * (PRECISION / 1000n));
 
-        const result = SummaryService.summarize(combos, 0n, 0n, undefined, undefined, undefined, 3);
+        const acc = new MassAccountant();
+        const result = SummaryService.summarize(combos, acc, undefined, undefined, undefined, 3);
         const numericKeys = Object.keys(result.combos).map(k => parseInt(k, 16));
 
         assert.strictEqual(numericKeys.length, 3, 'should return exactly 3 combos');
@@ -67,7 +74,8 @@ describe('SummaryService', () => {
         const combos = new Map<number, bigint>();
         for (let i = 1; i <= 300; i++) combos.set(i, BigInt(i) * (PRECISION / 100000n));
 
-        const result = SummaryService.summarize(combos, 0n, 0n, undefined, undefined, undefined, 250);
+        const acc = new MassAccountant();
+        const result = SummaryService.summarize(combos, acc, undefined, undefined, undefined, 250);
         const numericKeys = Object.keys(result.combos).map(k => parseInt(k, 16));
 
         assert.strictEqual(numericKeys.length, 250, 'should return exactly 250 combos');
@@ -80,7 +88,8 @@ describe('SummaryService', () => {
 
     it('stores combo keys as lowercase hex strings', () => {
         const combos = new Map<number, bigint>([[255, PRECISION / 2n]]);
-        const result = SummaryService.summarize(combos, 0n);
+        const acc = new MassAccountant();
+        const result = SummaryService.summarize(combos, acc);
         assert.ok(
             Object.keys(result.combos).includes('ff'),
             'key 255 should be stored as hex "ff"'
@@ -90,7 +99,8 @@ describe('SummaryService', () => {
     it('when combos.size <= comboLimit all combos are kept', () => {
         const combos = new Map<number, bigint>();
         for (let i = 1; i <= 5; i++) combos.set(i, BigInt(i) * (PRECISION / 100n));
-        const result = SummaryService.summarize(combos, 0n, 0n, undefined, undefined, undefined, 10);
+        const acc = new MassAccountant();
+        const result = SummaryService.summarize(combos, acc, undefined, undefined, undefined, 10);
         assert.strictEqual(Object.keys(result.combos).length, 5);
     });
 
@@ -101,7 +111,8 @@ describe('SummaryService', () => {
         combos.set(0xb, PRECISION / 2n);  // 0.5
         combos.set(0xc, PRECISION / 4n);  // 0.25
         
-        const result = SummaryService.summarize(combos, 0n, 0n, undefined, undefined, undefined, 10);
+        const acc = new MassAccountant();
+        const result = SummaryService.summarize(combos, acc, undefined, undefined, undefined, 10);
         const probs = Object.values(result.combos);
         
         // Expected order: 0.5 (b), 0.25 (c), 0.1 (a)
@@ -114,15 +125,23 @@ describe('SummaryService', () => {
 // ── SerializationService ───────────────────────────────────────────────────
 
 describe('SerializationService', () => {
-    const makeStats = (overrides: Partial<CalculationStats> = {}): CalculationStats => ({
-        ranks: {}, any: {}, count: {}, combos: {}, uncertainty: 0, ...overrides
-    });
+    const makeStats = (overrides: Partial<CalculationStats> = {}): CalculationStats => {
+        const accuracy = overrides.accuracy ?? 1.0;
+        const accounting = overrides.accounting ?? { resolved: accuracy, pending: 0, sieved: 0, overflow: 0, capped: 0, rounding: 0 };
+        return {
+            ranks: {}, any: {}, count: {}, combos: {}, 
+            accuracy, accounting,
+            ...overrides
+        };
+    };
 
-    it('roundtrip preserves uncertainty and pruned fields', () => {
-        const { compact } = SerializationService.serialize(makeStats({ uncertainty: 0.123, pruned: 0.456 }));
+    it('roundtrip preserves accuracy and accounting fields', () => {
+        const acc: MassAccounting = { resolved: 0.5, pending: 0.1, sieved: 0.2, overflow: 0.1, capped: 0, rounding: 0.1 };
+        const stats = makeStats({ accuracy: 0.5, accounting: acc });
+        const { compact } = SerializationService.serialize(stats);
         const recovered = SerializationService.deserialize(compact);
-        assert.strictEqual(recovered.uncertainty, 0.123);
-        assert.strictEqual(recovered.pruned, 0.456);
+        assert.strictEqual(recovered.accuracy, 0.5);
+        assert.deepStrictEqual(recovered.accounting, acc);
     });
 
     it('roundtrip preserves combo entries (hex keys)', () => {
@@ -196,8 +215,10 @@ describe('HumanizationService', () => {
 
     it('resolves enchantment names in the any map', () => {
         const effId = reg.idMap.get('Efficiency')!;
+        const acc: MassAccounting = { resolved: 0.85, pending: 0.15, sieved: 0, overflow: 0, capped: 0, rounding: 0 };
         const rawStats: CalculationStats = {
-            ranks: {}, any: { [effId]: 0.85 }, count: {}, combos: {}, uncertainty: 0
+            ranks: {}, any: { [effId]: 0.85 }, count: {}, combos: {}, 
+            accuracy: 0.85, accounting: acc
         };
         const result = HumanizationService.humanize(rawStats, reg, 'prob');
         assert.ok(Object.keys(result.any).includes('Efficiency'), 'Efficiency should appear by name');
@@ -207,24 +228,28 @@ describe('HumanizationService', () => {
     it('resolves full enchantment names (with rank) in the ranks map', () => {
         const effId   = reg.idMap.get('Efficiency')!;
         const idRank4 = (effId << 8) | 4; // Efficiency IV
+        const acc: MassAccounting = { resolved: 0.6, pending: 0.4, sieved: 0, overflow: 0, capped: 0, rounding: 0 };
         const rawStats: CalculationStats = {
-            ranks: { [idRank4]: 0.6 }, any: {}, count: {}, combos: {}, uncertainty: 0
+            ranks: { [idRank4]: 0.6 }, any: {}, count: {}, combos: {},
+            accuracy: 0.6, accounting: acc
         };
         const result = HumanizationService.humanize(rawStats, reg, 'prob');
         assert.ok(Object.keys(result.ranks).includes('Efficiency IV'), 'Efficiency IV should appear');
         assert.ok(Math.abs((result.ranks['Efficiency IV'] as number) - 0.6) < 1e-10);
     });
 
-    it('passes through count, uncertainty, and pruned unchanged', () => {
+    it('passes through count, accuracy, and accounting data unchanged', () => {
+        const acc: MassAccounting = { resolved: 0.9, pending: 0.05, sieved: 0.05, overflow: 0, capped: 0, rounding: 0 };
         const rawStats: CalculationStats = {
             ranks: {}, any: {}, count: { 1: 0.6, 2: 0.3 }, combos: {},
-            uncertainty: 0.05, pruned: 0.01
+            accuracy: 0.9, accounting: acc
         };
         const result = HumanizationService.humanize(rawStats, reg, 'prob');
         assert.ok(Math.abs((result.count[1] as number) - 0.6) < 1e-10);
         assert.ok(Math.abs((result.count[2] as number) - 0.3) < 1e-10);
-        assert.strictEqual(result.uncertainty, 0.05);
-        assert.strictEqual(result.pruned, 0.01);
+        assert.strictEqual(result.accuracy, 0.9);
+        assert.strictEqual(result.accounting.pending, 0.05);
+        assert.deepStrictEqual(result.accounting, acc);
     });
 
     it('combo keys use "+" to separate enchantment names', () => {

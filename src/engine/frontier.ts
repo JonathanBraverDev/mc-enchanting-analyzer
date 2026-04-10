@@ -16,18 +16,10 @@ export class FrontierFactory {
         threshold: bigint = 0n
     ): SearchFrontier {
         if (existing) {
-            return {
-                queue: existing.queue.clone(),
-                results: new Map(existing.results),
-                anyMass: new Map(existing.anyMass),
-                rankMass: new Map(existing.rankMass),
-                countMass: new Map(existing.countMass),
-                uncertainty: existing.uncertainty,
-                cumulativeAccountedMass: existing.cumulativeAccountedMass,
-                prunedMass: existing.prunedMass || 0n,
-                roundingError: existing.roundingError || 0n,
-                threshold: existing.threshold
-            };
+            existing.threshold = threshold;
+            existing.iterations = 0;
+            existing.checkpoints = [];
+            return existing;
         }
 
         const results = new Map<PackedCombo, bigint>();
@@ -60,7 +52,17 @@ export class FrontierFactory {
 
         return {
             queue, results, anyMass, rankMass, countMass,
-            uncertainty: 0n, cumulativeAccountedMass: 0n, prunedMass: 0n, roundingError: 0n, threshold
+            mass: { 
+                resolved: 0n, 
+                pending: PRECISION, 
+                sieved: 0n, 
+                overflow: 0n,
+                capped: 0n,
+                rounding: 0n 
+            },
+            threshold,
+            iterations: 0, 
+            checkpoints: []
         };
     }
 

@@ -14,7 +14,7 @@ export class SerializationService {
         const comboProbs = new Float64Array(comboEntries.length);
         for (let i = 0; i < comboEntries.length; i++) {
             comboKeys[i] = parseInt(comboEntries[i][0] as string, 16);
-            comboProbs[i] = Number(comboEntries[i][1]);
+            comboProbs[i] = comboEntries[i][1] as number;
         }
 
         const rankEntries = Object.entries(stats.ranks);
@@ -22,7 +22,7 @@ export class SerializationService {
         const rankProbs = new Float64Array(rankEntries.length);
         for (let i = 0; i < rankEntries.length; i++) {
             rankKeys[i] = Number(rankEntries[i][0]);
-            rankProbs[i] = Number(rankEntries[i][1]);
+            rankProbs[i] = rankEntries[i][1] as number;
         }
 
         const anyEntries = Object.entries(stats.any);
@@ -30,7 +30,7 @@ export class SerializationService {
         const anyProbs = new Float64Array(anyEntries.length);
         for (let i = 0; i < anyEntries.length; i++) {
             anyKeys[i] = Number(anyEntries[i][0]);
-            anyProbs[i] = Number(anyEntries[i][1]);
+            anyProbs[i] = anyEntries[i][1] as number;
         }
 
         const counts = new Float64Array(ENGINE_DEFAULTS.MAX_COUNT_STATS);
@@ -40,8 +40,9 @@ export class SerializationService {
             comboKeys, comboProbs,
             rankKeys, rankProbs,
             anyKeys, anyProbs,
-            counts, uncertainty: stats.uncertainty,
-            pruned: stats.pruned
+            counts, 
+            accuracy: stats.accuracy,
+            accounting: stats.accounting
         };
 
         return {
@@ -59,16 +60,14 @@ export class SerializationService {
      * Reconstructs statistics from a CompactStats object.
      */
     public static deserialize(compact: CompactStats): CalculationStats {
-        if (!compact || !compact.comboKeys) {
-             return { ranks: {}, any: {}, count: {}, combos: {}, uncertainty: 1, pruned: 0 };
-        }
-        const stats: CalculationStats = { ranks: {}, any: {}, count: {}, combos: {}, uncertainty: compact.uncertainty, pruned: compact.pruned };
+        const stats: CalculationStats = { 
+            ranks: {}, any: {}, count: {}, combos: {}, 
+            accuracy: compact.accuracy,
+            accounting: compact.accounting
+        };
         
         for (let i = 0; i < compact.comboKeys.length; i++) {
-            const keyNum = compact.comboKeys[i];
-            if (keyNum > 0) {
-                stats.combos[keyNum.toString(16)] = compact.comboProbs[i];
-            }
+            stats.combos[compact.comboKeys[i].toString(16)] = compact.comboProbs[i];
         }
         for (let i = 0; i < compact.rankKeys.length; i++) {
             stats.ranks[compact.rankKeys[i]] = compact.rankProbs[i];

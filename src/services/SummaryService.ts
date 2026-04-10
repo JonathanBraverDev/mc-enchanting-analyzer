@@ -1,6 +1,7 @@
 import { ProbUtils } from '../utils/math/ProbUtils.js';
 import { ENGINE_DEFAULTS } from '../core/config.js';
 import { CalculationStats } from '../types/index.js';
+import { MassAccountant } from '../engine/MassAccountant.js';
 
 /**
  * Service for summarizing raw engine results into a standard JSON format.
@@ -11,20 +12,20 @@ export class SummaryService {
      */
     public static summarize(
         combos: Map<number, bigint>,
-        uncertainty: bigint,
-        roundingError: bigint = 0n,
+        accountant: MassAccountant,
         anyMass?: Map<number, bigint>,
         rankMass?: Map<number, bigint>,
         countMass?: Map<number, bigint>,
         comboLimit: number = ENGINE_DEFAULTS.MAX_RESULTS_SUMMARY
     ): CalculationStats {
+        const accounting = accountant.toPublic();
         const stats: CalculationStats = {
             ranks: {},
             any: {},
             count: {},
             combos: {},
-            uncertainty: ProbUtils.toNumber(uncertainty),
-            roundingError: ProbUtils.toNumber(roundingError)
+            accuracy: accounting.resolved,
+            accounting
         };
 
         if (anyMass) {

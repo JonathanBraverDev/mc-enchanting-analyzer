@@ -10,10 +10,11 @@ import assert from 'node:assert';
 import { EnchantEngine } from '../engine/index.js';
 import { StatAggregator } from '../engine/aggregator.js';
 import { DATA } from '../data/index.js';
-const CAT = 'sword';
+import { TEST_DATA } from './test-data.js';
+const CAT = TEST_DATA.ITEMS.SWORD;
 const XP = 30;
-const MAT = 'diamond';
-const VERSION = '1.21';
+const MAT = TEST_DATA.MATERIALS.DIAMOND;
+const VERSION = TEST_DATA.VERSIONS.MODERN;
 
 describe('Tiered Aggregation: StatAggregator.getFullStatsTiered', () => {
     afterEach(() => {
@@ -28,7 +29,7 @@ describe('Tiered Aggregation: StatAggregator.getFullStatsTiered', () => {
         // Sequential: single getFullStats call with fine parameters
         const seqStats = await StatAggregator.getFullStats(
             engine.registry, CAT, XP, MAT, null,
-            { threshold: 0.0001, resultsLimit: 10000, distCache: new Map(), poolCache: undefined }
+            { threshold: TEST_DATA.THRESHOLDS.PROB_MIN, resultsLimit: 10000, distCache: new Map(), poolCache: undefined }
         );
 
         // Tiered: two tiers ending at the same fine parameters
@@ -36,24 +37,24 @@ describe('Tiered Aggregation: StatAggregator.getFullStatsTiered', () => {
             engine.registry, CAT, XP, MAT, null,
             [
                 { threshold: 0.01,   limit: 500 },
-                { threshold: 0.0001, limit: 10000 },
+                { threshold: TEST_DATA.THRESHOLDS.PROB_MIN, limit: 10000 },
             ],
             () => {},
-            { threshold: 0.0001, resultsLimit: 10000, distCache: new Map(), poolCache: undefined }
+            { threshold: TEST_DATA.THRESHOLDS.PROB_MIN, resultsLimit: 10000, distCache: new Map(), poolCache: undefined }
         );
 
         // sword/30/diamond converges fully — combo sets must be identical,
-        // and uncertainties must agree within integer-rounding tolerance (< 0.001)
+        // and accuracy must agree within float tolerance
         assert.strictEqual(
             Object.keys(tieredStats.combos).length,
             Object.keys(seqStats.combos).length,
             'Tiered and sequential must produce the same number of combos'
         );
-        const uncertaintyDiff = Math.abs(tieredStats.uncertainty - seqStats.uncertainty);
+        const accuracyDiff = Math.abs(tieredStats.accuracy - seqStats.accuracy);
         assert.ok(
-            uncertaintyDiff < 0.001,
-            `Tiered uncertainty (${tieredStats.uncertainty}) and sequential (${seqStats.uncertainty}) ` +
-            `must agree within 0.001; got diff ${uncertaintyDiff}`
+            accuracyDiff < 0.001,
+            `Tiered accuracy (${tieredStats.accuracy}) and sequential (${seqStats.accuracy}) ` +
+            `must agree within 0.001; got diff ${accuracyDiff}`
         );
     });
 
@@ -64,7 +65,7 @@ describe('Tiered Aggregation: StatAggregator.getFullStatsTiered', () => {
         const tiers = [
             { threshold: 0.01,   limit: 200 },
             { threshold: 0.001,  limit: 500 },
-            { threshold: 0.0001, limit: 2000 },
+            { threshold: TEST_DATA.THRESHOLDS.PROB_MIN, limit: 2000 },
         ];
         const callbackIndices: number[] = [];
 
@@ -83,37 +84,37 @@ describe('Tiered Aggregation: StatAggregator.getFullStatsTiered', () => {
 
     // ── Test 3: each tier improves on the previous ─────────────────────────────
 
-    it('each tier improves on the previous (uncertainty decreases monotonically)', async () => {
+    it('each tier improves on the previous (accuracy increases monotonically)', async () => {
         // Use book/30/book: millions of combinations guarantee the search never
         // fully converges within small iteration limits, so each deeper tier
-        // produces strictly lower uncertainty than the previous.
+        // produces strictly higher accuracy than the previous.
         const engine = new EnchantEngine(DATA, VERSION);
-        const uncertainties: number[] = [];
+        const accuracies: number[] = [];
 
         await StatAggregator.getFullStatsTiered(
-            engine.registry, 'book', 30, 'book', null,
+            engine.registry, TEST_DATA.ITEMS.BOOK, 30, TEST_DATA.MATERIALS.BOOK, null,
             [
                 { threshold: 0.1,    limit: 100 },
                 { threshold: 0.01,   limit: 500 },
                 { threshold: 0.001,  limit: 2000 },
             ],
-            (stats) => { uncertainties.push(stats.uncertainty); },
+            (stats) => { accuracies.push(stats.accuracy); },
             { distCache: new Map(), poolCache: undefined }
         );
 
-        assert.ok(uncertainties.length === 3, `Expected 3 tier callbacks, got ${uncertainties.length}`);
+        assert.ok(accuracies.length === 3, `Expected 3 tier callbacks, got ${accuracies.length}`);
 
-        for (let i = 1; i < uncertainties.length; i++) {
+        for (let i = 1; i < accuracies.length; i++) {
             assert.ok(
-                uncertainties[i] <= uncertainties[i - 1],
-                `Tier ${i} uncertainty (${uncertainties[i]}) must be ≤ tier ${i - 1} (${uncertainties[i - 1]})`
+                accuracies[i] >= accuracies[i - 1],
+                `Tier ${i} accuracy (${accuracies[i]}) must be >= tier ${i - 1} (${accuracies[i - 1]})`
             );
         }
 
         // At least one tier must strictly improve
         assert.ok(
-            uncertainties[uncertainties.length - 1] < uncertainties[0],
-            `Final tier uncertainty (${uncertainties[uncertainties.length - 1]}) must be strictly less than first tier (${uncertainties[0]})`
+            accuracies[accuracies.length - 1] > accuracies[0],
+            `Final tier accuracy (${accuracies[accuracies.length - 1]}) must be strictly greater than first tier (${accuracies[0]})`
         );
     });
 
@@ -125,19 +126,19 @@ describe('Tiered Aggregation: StatAggregator.getFullStatsTiered', () => {
 
         const singleTierStats = await StatAggregator.getFullStatsTiered(
             engine.registry, CAT, XP, MAT, null,
-            [{ threshold: 0.0001, limit: 5000 }],
+            [{ threshold: TEST_DATA.THRESHOLDS.PROB_MIN, limit: 10000 }],
             () => {},
-            { threshold: 0.0001, resultsLimit: 10000, distCache: new Map(), poolCache: undefined }
+            { threshold: TEST_DATA.THRESHOLDS.PROB_MIN, resultsLimit: 10000, distCache: new Map(), poolCache: undefined }
         );
 
         const fullStats = await StatAggregator.getFullStats(
             engine.registry, CAT, XP, MAT, null,
-            { threshold: 0.0001, resultsLimit: 10000, distCache: new Map(), poolCache: undefined }
+            { threshold: TEST_DATA.THRESHOLDS.PROB_MIN, resultsLimit: 10000, distCache: new Map(), poolCache: undefined }
         );
 
         assert.strictEqual(
-            singleTierStats.uncertainty, fullStats.uncertainty,
-            `Single-tier uncertainty (${singleTierStats.uncertainty}) must equal getFullStats (${fullStats.uncertainty})`
+            singleTierStats.accuracy, fullStats.accuracy,
+            `Single-tier accuracy (${singleTierStats.accuracy}) must equal getFullStats (${fullStats.accuracy})`
         );
         assert.strictEqual(
             Object.keys(singleTierStats.combos).length,
@@ -159,7 +160,7 @@ describe('EnchantEngine.getFullStatsProgressive', () => {
             CAT, XP, MAT, null,
             [
                 { threshold: 0.01,   limit: 500 },
-                { threshold: 0.0001, limit: 10000 },
+                { threshold: TEST_DATA.THRESHOLDS.PROB_MIN, limit: 10000 },
             ],
             () => {}
         );
@@ -168,7 +169,7 @@ describe('EnchantEngine.getFullStatsProgressive', () => {
         engine.resetCaches();
 
         const fullStats = await engine.getFullStats(CAT, XP, MAT, {
-            threshold: 0.0001,
+            threshold: TEST_DATA.THRESHOLDS.PROB_MIN,
             resultsLimit: 10000
         });
 
@@ -177,11 +178,11 @@ describe('EnchantEngine.getFullStatsProgressive', () => {
             Object.keys(fullStats.combos).length,
             'Progressive and getFullStats must produce the same number of combos'
         );
-        const uncertaintyDiff = Math.abs(progressiveStats.uncertainty - fullStats.uncertainty);
+        const accuracyDiff = Math.abs(progressiveStats.accuracy - fullStats.accuracy);
         assert.ok(
-            uncertaintyDiff < 0.001,
-            `Progressive uncertainty (${progressiveStats.uncertainty}) and getFullStats (${fullStats.uncertainty}) ` +
-            `must agree within 0.001; got diff ${uncertaintyDiff}`
+            accuracyDiff < 0.001,
+            `Progressive accuracy (${progressiveStats.accuracy}) and getFullStats (${fullStats.accuracy}) ` +
+            `must agree within 0.001; got diff ${accuracyDiff}`
         );
     });
 
@@ -192,7 +193,7 @@ describe('EnchantEngine.getFullStatsProgressive', () => {
             CAT, XP, MAT, null,
             [
                 { threshold: 0.01,   limit: 500 },
-                { threshold: 0.0001, limit: 10000 },
+                { threshold: TEST_DATA.THRESHOLDS.PROB_MIN, limit: 10000 },
             ],
             () => {}
         );
@@ -201,8 +202,8 @@ describe('EnchantEngine.getFullStatsProgressive', () => {
         const cachedStats = await engine.getFullStats(CAT, XP, MAT, { threshold: 0.01 });
 
         assert.strictEqual(
-            cachedStats.uncertainty,
-            progressiveStats.uncertainty,
+            cachedStats.accuracy,
+            progressiveStats.accuracy,
             'getFullStats should return the ultra-precision result cached by getFullStatsProgressive'
         );
     });
@@ -211,14 +212,14 @@ describe('EnchantEngine.getFullStatsProgressive', () => {
         const engine = new EnchantEngine(DATA, VERSION);
 
         // Populate stats cache via getFullStats
-        await engine.getFullStats(CAT, XP, MAT, { threshold: 0.0001 });
+        await engine.getFullStats(CAT, XP, MAT, { threshold: TEST_DATA.THRESHOLDS.PROB_MIN });
 
         let callbackFired = false;
         await engine.getFullStatsProgressive(
             CAT, XP, MAT, null,
             [
                 { threshold: 0.01,   limit: 500 },
-                { threshold: 0.0001, limit: 10000 },
+                { threshold: TEST_DATA.THRESHOLDS.PROB_MIN, limit: 10000 },
             ],
             () => { callbackFired = true; }
         );
@@ -237,50 +238,50 @@ describe('EnchantEngine.getFullStatsProgressive', () => {
             CAT, XP, MAT, null,
             [
                 { threshold: 0.01,   limit: 500 },
-                { threshold: 0.0001, limit: 10000 },
+                { threshold: TEST_DATA.THRESHOLDS.PROB_MIN, limit: 10000 },
             ],
             () => {}
         );
 
         // statsCache should contain a result; getFullStats must return it without recomputing
-        const cachedResult = await engine.getFullStats(CAT, XP, MAT, { threshold: 0.0001 });
+        const cachedResult = await engine.getFullStats(CAT, XP, MAT, { threshold: TEST_DATA.THRESHOLDS.PROB_MIN });
 
         assert.strictEqual(
-            cachedResult.uncertainty,
-            progressiveStats.uncertainty,
+            cachedResult.accuracy,
+            progressiveStats.accuracy,
             'statsCache should contain the progressive result; getFullStats must return it'
         );
     });
 
     it('best intermediate result survives for future calls', async () => {
         const engine = new EnchantEngine(DATA, VERSION);
-        const tierUncertainties: number[] = [];
+        const tierAccuracies: number[] = [];
 
         await engine.getFullStatsProgressive(
             CAT, XP, MAT, null,
             [
                 { threshold: 0.1,    limit: 100 },
                 { threshold: 0.01,   limit: 500 },
-                { threshold: 0.0001, limit: 10000 },
+                { threshold: TEST_DATA.THRESHOLDS.PROB_MIN, limit: 10000 },
             ],
-            (stats) => { tierUncertainties.push(stats.uncertainty); }
+            (stats) => { tierAccuracies.push(stats.accuracy); }
         );
 
         assert.ok(
-            tierUncertainties.length === 3,
-            `Expected 3 tier callbacks, got ${tierUncertainties.length}`
+            tierAccuracies.length === 3,
+            `Expected 3 tier callbacks, got ${tierAccuracies.length}`
         );
 
-        // The ultra (finest) tier has the lowest uncertainty
-        const ultraUncertainty = tierUncertainties[2];
+        // The ultra (finest) tier has the highest accuracy
+        const ultraAccuracy = tierAccuracies[2];
 
         // A subsequent getFullStats call must return the ultra-tier cached result
-        const futureStats = await engine.getFullStats(CAT, XP, MAT, { threshold: 0.0001 });
+        const futureStats = await engine.getFullStats(CAT, XP, MAT, { threshold: TEST_DATA.THRESHOLDS.PROB_MIN });
 
         assert.strictEqual(
-            futureStats.uncertainty,
-            ultraUncertainty,
-            `getFullStats should return the ultra-tier cached result (uncertainty ${ultraUncertainty})`
+            futureStats.accuracy,
+            ultraAccuracy,
+            `getFullStats should return the ultra-tier cached result (accuracy ${ultraAccuracy})`
         );
     });
 });

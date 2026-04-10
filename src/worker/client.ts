@@ -102,5 +102,12 @@ export const WorkerClient = {
 
             worker.postMessage({ type, id, payload });
         });
+    },
+
+    /**
+     * Terminate and immediately restart a worker to flush its message queue.
+     */
+    async resetWorker(type: 'main' | 'chart', version: string): Promise<void> {
+        await this.initWorker(type, version);
     }
 };

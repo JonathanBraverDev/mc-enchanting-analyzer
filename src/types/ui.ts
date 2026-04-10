@@ -1,4 +1,5 @@
 import type { CalculationStats } from './engine.js';
+import type { MassAccounting } from './mass.js';
 
 /**
  * Human-readable enchantment calculation statistics.
@@ -8,9 +9,11 @@ export interface EnchantInsights {
     any: Record<string, number>;
     count: Record<number, number>;
     combos: Record<string, number>;
-    uncertainty: number;
-    pruned?: number;
-    roundingError?: number;
+    
+    /** Reliability of the results (Resolved mass: 0.0 to 1.0). */
+    accuracy: number;
+    /** Complete diagnostic breakdown of all mass states. */
+    accounting: MassAccounting;
 }
 
 export interface NameResolver {

@@ -18,60 +18,61 @@ import { describe, it, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { EnchantEngine } from '../engine/index.js';
 import { DATA } from '../data/index.js';
+import { TEST_DATA } from './test-data.js';
 
 // Matches the tolerance used in engine.test.ts "Frontier Mass Tracking" test.
-const TOLERANCE = 1e-4;
+const TOLERANCE = TEST_DATA.THRESHOLDS.PROB_MIN;
 
 afterEach(() => {
     EnchantEngine.clearAllEngines();
 });
 
-/** sum of per-count probabilities (not truncated, unlike stats.combos) */
-function countSum(stats: any): number {
-    return Object.values(stats.count as Record<string, number>).reduce((a, b) => a + b, 0);
+/** sum of all mass buckets from the accounting object */
+function massTotal(stats: any): number {
+    const acc = stats.accounting;
+    return acc.resolved + acc.pending + acc.sieved + acc.overflow + acc.capped + acc.rounding;
 }
 
 describe('Probability Conservation', () => {
 
-    it('uncertainty is non-negative for a partially-converged search', async () => {
-        const engine = new EnchantEngine(DATA, '1.21');
+    it('pending mass is non-negative for a partially-converged search', async () => {
+        const engine = new EnchantEngine(DATA, TEST_DATA.VERSIONS.MODERN);
         const stats  = await engine.getFullStats('chestplate', 15, 'iron', { threshold: 0.01 });
 
         assert.ok(
-            stats.uncertainty >= 0,
-            `uncertainty should be >= 0, got ${stats.uncertainty}`
+            stats.accounting.pending >= 0,
+            `pending mass should be >= 0, got ${stats.accounting.pending}`
         );
     });
 
-    it('sum(count) + uncertainty ≈ 1.0 for a partially-converged search', async () => {
+    it('sum(buckets) ≈ 1.0 for a partially-converged search', async () => {
         const engine = new EnchantEngine(DATA, '1.21');
-        // threshold=0.01 → meaningful uncertainty left in the frontier
         const stats  = await engine.getFullStats('chestplate', 15, 'iron', { threshold: 0.01 });
 
-        const total = countSum(stats) + stats.uncertainty;
+        const total = massTotal(stats);
         assert.ok(
             Math.abs(total - 1.0) < TOLERANCE,
-            `sum(count) + uncertainty = ${total}, expected ≈ 1.0`
+            `sum(buckets) = ${total}, expected ≈ 1.0. Breakdown: ${JSON.stringify(stats.accounting)}`
         );
     });
 
-    it('sum(count) + uncertainty ≈ 1.0 for a fully-converged book search (1.20)', async () => {
-        const engine = new EnchantEngine(DATA, '1.20');
-        const stats  = await engine.getFullStats('book', 30, 'book', { threshold: 0.0001 });
+    it('sum(buckets) ≈ 1.0 for a fully-converged book search (modern)', async () => {
+        const engine = new EnchantEngine(DATA, TEST_DATA.VERSIONS.MODERN);
+        const stats  = await engine.getFullStats(TEST_DATA.ITEMS.BOOK, 30, TEST_DATA.MATERIALS.BOOK, { threshold: TEST_DATA.THRESHOLDS.PROB_MIN });
 
-        const total = countSum(stats) + stats.uncertainty;
+        const total = massTotal(stats);
         assert.ok(
             Math.abs(total - 1.0) < TOLERANCE,
-            `sum(count) + uncertainty = ${total}, expected ≈ 1.0`
+            `sum(buckets) = ${total}, expected ≈ 1.0. Breakdown: ${JSON.stringify(stats.accounting)}`
         );
     });
 
-    it('uncertainty >= 0 and sum(count) + uncertainty ≈ 1.0 across items/versions', async () => {
+    it('accuracy >= 0 and sum(buckets) ≈ 1.0 across items/versions', async () => {
         const cases: Array<{ version: string; cat: string; level: number; mat: string }> = [
-            { version: '1.8',    cat: 'sword',      level: 30, mat: 'diamond'   },
-            { version: '1.14.3', cat: 'chestplate', level: 30, mat: 'netherite' },
-            { version: '1.21',   cat: 'mace',       level: 15, mat: 'mace'      },
-            { version: '1.7.2',  cat: 'book',       level: 30, mat: 'book'      },
+            { version: TEST_DATA.VERSIONS.CLASSIC, cat: TEST_DATA.ITEMS.SWORD, level: 30, mat: TEST_DATA.MATERIALS.DIAMOND },
+            { version: '1.14.3', cat: 'chestplate', level: 30, mat: TEST_DATA.MATERIALS.NETHERITE }, // Custom boundary
+            { version: TEST_DATA.VERSIONS.MODERN,  cat: TEST_DATA.ITEMS.MACE, level: 15, mat: TEST_DATA.MATERIALS.MACE },
+            { version: TEST_DATA.VERSIONS.BOOK_MULTI_LIMIT, cat: TEST_DATA.ITEMS.BOOK, level: 30, mat: TEST_DATA.MATERIALS.BOOK },
         ];
 
         for (const { version, cat, level, mat } of cases) {
@@ -80,26 +81,31 @@ describe('Probability Conservation', () => {
             const label  = `${version} ${cat}@${level} ${mat}`;
 
             assert.ok(
-                stats.uncertainty >= 0,
-                `uncertainty < 0 for ${label}: got ${stats.uncertainty}`
+                stats.accuracy >= 0,
+                `accuracy < 0 for ${label}: got ${stats.accuracy}`
             );
 
-            const total = countSum(stats) + stats.uncertainty;
+            const total = massTotal(stats);
             assert.ok(
                 Math.abs(total - 1.0) < TOLERANCE,
-                `sum(count)+uncertainty = ${total} ≠ 1.0 for ${label}`
+                `sum(buckets) = ${total} ≠ 1.0 for ${label}. Breakdown: ${JSON.stringify(stats.accounting)}`
             );
         }
     });
 
-    it('guaranteed enchant anyMass = 1.0 for bow (Power IV)', async () => {
-        const engine  = new EnchantEngine(DATA, '1.21');
+    it('guaranteed enchant accuracy is 1.0 for bow (Power IV)', async () => {
+        const engine  = new EnchantEngine(DATA, TEST_DATA.VERSIONS.MODERN);
         const stats   = await engine.getFullStats('bow', 30, 'bow', {
             guaranteedFirst: 'Power IV',
-            threshold: 0.0001,
+            threshold: TEST_DATA.THRESHOLDS.PROB_MIN,
         });
-        const powerId = engine.registry.idMap.get('Power')!;
 
+        assert.ok(
+            stats.accuracy >= 1.0 - TOLERANCE,
+            `Guaranteed enchant accuracy should be ≈ 1.0, got ${stats.accuracy}. Breakdown: ${JSON.stringify(stats.accounting)}`
+        );
+        
+        const powerId = engine.registry.idMap.get('Power')!;
         assert.strictEqual(
             stats.any[powerId],
             1.0,

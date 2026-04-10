@@ -1,4 +1,4 @@
-import { EnchantmentData, VersionManifest, Enchantment, ResolvedRegistry, MergedItems, MergedOverrides, RegistryState } from '../types/index.js';
+import { EnchantmentData, VersionManifest, Enchantment, ResolvedRegistry, MergedItems, MergedOverrides as _MergedOverrides, RegistryState } from '../types/index.js';
 import { VersionUtils } from '../utils/index.js';
 
 
