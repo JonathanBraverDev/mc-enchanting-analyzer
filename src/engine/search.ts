@@ -5,9 +5,6 @@ import { PackedNode, PackedCombo, PackedEnchant, SearchFrontier, RegistryState, 
 import { FrontierFactory } from './frontier.js';
 import { MassAccountant } from './MassAccountant.js';
 
-function addTo(map: Map<number, bigint>, key: number, value: bigint): void {
-    map.set(key, (map.get(key) || 0n) + value);
-}
 
 /**
  * Service for the Best-First search of enchantment combinations.
@@ -259,8 +256,8 @@ export class SearchService {
             const nextId = ComboUtils.getEnchantId(eligible[i]);
 
             // Add new enchant to Rank and Any mass of this path
-            addTo(anyMass, nextId, pNext);
-            addTo(rankMass, eligible[i], pNext);
+            ProbUtils.addItemMass(anyMass, nextId, pNext);
+            ProbUtils.addItemMass(rankMass, eligible[i], pNext);
 
             accountant.record('pending', pNext);
             queue.push({
@@ -298,8 +295,8 @@ export class SearchService {
             const { rem } = this.redistributeBookProb(packedChosen, currentEnchants, prob, currentCount, guaranteedFirstId, enchantToIndex, indexToEnchant, results, countMass, anyMass, rankMass);
             return rem;
         } else {
-            addTo(results, packedChosen, prob);
-            addTo(countMass, currentCount, prob);
+            ProbUtils.addItemMass(results, packedChosen, prob);
+            ProbUtils.addItemMass(countMass, currentCount, prob);
             return 0n;
         }
     }
@@ -333,10 +330,10 @@ export class SearchService {
         const { parts: splits, remainder: splitRemainder } = ProbUtils.distributeDetailed(prob, redistributed.map(() => 1n), nOutcomes);
 
         for (let i = 0; i < redistributed.length; i++) {
-            addTo(results, redistributed[i], splits[i]);
+            ProbUtils.addItemMass(results, redistributed[i], splits[i]);
         }
         const finalCount = currentCount - 1;
-        addTo(countMass, finalCount, prob - splitRemainder);
+        ProbUtils.addItemMass(countMass, finalCount, prob - splitRemainder);
 
         for (const e of originalEnchants) {
             const id = ComboUtils.getEnchantId(e);
@@ -374,8 +371,8 @@ export class SearchService {
             const pNext = splits[i];
             const nextId = ComboUtils.getEnchantId(pool[i]);
 
-            addTo(anyMass, nextId, pNext);
-            addTo(rankMass, pool[i], pNext);
+            ProbUtils.addItemMass(anyMass, nextId, pNext);
+            ProbUtils.addItemMass(rankMass, pool[i], pNext);
 
             accountant.record('pending', pNext);
             queue.push({
