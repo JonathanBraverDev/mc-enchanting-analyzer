@@ -93,5 +93,39 @@ export const ProbUtils = {
         }
         
         return { parts, remainders, remainder: rem };
+    },
+
+    /**
+     * Scales 'val' by 'multiplier' and divides by 'divisor' using Banker's Rounding.
+     */
+    roundScale: (val: bigint, multiplier: bigint, divisor: bigint): bigint => {
+        return ProbUtils.roundDiv(val * multiplier, divisor);
+    },
+
+    /**
+     * Minecraft specific rounding: (int)(final_level + 0.5f).
+     * Rounds to nearest integer, with ties rounding towards positive infinity.
+     */
+    mcRound: (val: number): number => {
+        return Math.floor(val + 0.5);
+    },
+
+    /**
+     * Safely adds probability mass to a Map-based bucket.
+     */
+    addItemMass: <K>(map: Map<K, bigint>, key: K, prob: bigint): void => {
+        map.set(key, (map.get(key) || 0n) + prob);
+    },
+
+    /**
+     * Merges 'source' map into 'target', optionally scaling values by 'factor' with Banker's Rounding.
+     */
+    addMapMass: <K>(target: Map<K, bigint>, source: Map<K, bigint>, factor?: bigint): void => {
+        for (const [key, mass] of source) {
+            const added = (factor !== undefined && factor !== PRECISION)
+                ? ProbUtils.scale(mass, factor)
+                : mass;
+            target.set(key, (target.get(key) || 0n) + added);
+        }
     }
 };

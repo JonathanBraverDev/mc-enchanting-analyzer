@@ -54,11 +54,6 @@ function snapshotInstrumentation(instr: EngineInstrumentation): EngineInstrument
  * Service for aggregating enchantment statistics across multiple modified levels.
  */
 export class StatAggregator {
-    private static addMass(target: Map<number, bigint>, source: Map<number, bigint>, mProb: bigint): void {
-        for (const [id, mass] of source) {
-            target.set(id, (target.get(id) || 0n) + ProbUtils.scale(mass, mProb));
-        }
-    }
 
     /**
      * Aggregates statistics across tiers of increasing search depth.
@@ -146,14 +141,10 @@ export class StatAggregator {
                     instrumentation.fullyResolved = instrumentation.levelsFullyResolved === instrumentation.levelsProcessed;
                 }
 
-                for (const [key, prob] of result.results) {
-                    const totalProb = ProbUtils.scale(prob, mProb);
-                    finalCombos.set(key, (finalCombos.get(key) || 0n) + totalProb);
-                }
-
-                StatAggregator.addMass(totalAnyMass, result.anyMass, mProb);
-                StatAggregator.addMass(totalRankMass, result.rankMass, mProb);
-                StatAggregator.addMass(totalCountMass, result.countMass, mProb);
+                ProbUtils.addMapMass(finalCombos, result.results, mProb);
+                ProbUtils.addMapMass(totalAnyMass, result.anyMass, mProb);
+                ProbUtils.addMapMass(totalRankMass, result.rankMass, mProb);
+                ProbUtils.addMapMass(totalCountMass, result.countMass, mProb);
 
                 const levelAcc = new MassAccountant(result.mass);
                 tierAccountant.addScaled(levelAcc, mProb);
@@ -275,14 +266,10 @@ export class StatAggregator {
 
             if (useCache && setExtendedCache) setExtendedCache(ml, result);
 
-            for (const [key, prob] of result.results) {
-                const totalProb = ProbUtils.scale(prob, mProb);
-                finalCombos.set(key, (finalCombos.get(key) || 0n) + totalProb);
-            }
-
-            StatAggregator.addMass(totalAnyMass, result.anyMass, mProb);
-            StatAggregator.addMass(totalRankMass, result.rankMass, mProb);
-            StatAggregator.addMass(totalCountMass, result.countMass, mProb);
+            ProbUtils.addMapMass(finalCombos, result.results, mProb);
+            ProbUtils.addMapMass(totalAnyMass, result.anyMass, mProb);
+            ProbUtils.addMapMass(totalRankMass, result.rankMass, mProb);
+            ProbUtils.addMapMass(totalCountMass, result.countMass, mProb);
 
             const levelAcc = new MassAccountant(result.mass);
             globalAccountant.addScaled(levelAcc, mProb);

@@ -24,11 +24,9 @@ export class DistributionService {
         
         // 1. Base enchantability bonus distribution (Triangular U[0, N-1] + U[0, N-1])
         const baseValues: number[] = [];
-        const baseWeights: bigint[] = [];
-        for (let k = 0; k <= 2 * N - 2; k++) {
-            baseValues.push(xp + k + 1);
-            baseWeights.push(BigInt(k < N ? (k + 1) : (2 * N - 1 - k)));
-        }
+        for (let k = 0; k <= 2 * N - 2; k++) baseValues.push(xp + k + 1);
+        
+        const baseWeights = this.getTriangularWeights(N);
         const totalBaseWeight = BigInt(N * N);
         const { parts: baseParts, remainder: baseRemainder } = ProbUtils.distributeDetailed(PRECISION, baseWeights, totalBaseWeight);
         
@@ -38,16 +36,12 @@ export class DistributionService {
         }
         // Attribute sub-atomic remainder of distribution to the most probable (peak) level
         const peakLevel = xp + N;
-        baseDistMap.set(peakLevel, (baseDistMap.get(peakLevel) || 0n) + baseRemainder);
+        ProbUtils.addItemMass(baseDistMap, peakLevel, baseRemainder);
 
         // 2. Random multiplier bonus distribution (Triangular Centered)
         const finalDist: { [modVal: number]: bigint } = {};
         const steps = ENGINE_DEFAULTS.RNG_STEPS_FOR_DISTRIBUTION;
-        const totalTriSteps = 2 * steps - 1;
-        const triWeights: bigint[] = [];
-        for (let k = 0; k < totalTriSteps; k++) {
-            triWeights.push(BigInt(k < steps ? (k + 1) : (totalTriSteps - k)));
-        }
+        const triWeights = this.getTriangularWeights(steps);
         const totalTriWeight = BigInt(steps * steps);
 
         const halfRange = rngRange; 
@@ -56,17 +50,27 @@ export class DistributionService {
         for (const [base, bProb] of baseDistMap.entries()) {
             const { parts: modParts, remainder: modRemainder } = ProbUtils.distributeDetailed(bProb, triWeights, totalTriWeight);
             
-            for (let k = 0; k < totalTriSteps; k++) {
+            for (let k = 0; k < modParts.length; k++) {
                 const bonus = (k * unitStep) - halfRange;
-                const modVal = Math.max(1, Math.floor(base * (1 + bonus) + 0.5));
+                const modVal = Math.max(1, ProbUtils.mcRound(base * (1 + bonus)));
                 finalDist[modVal] = (finalDist[modVal] || 0n) + modParts[k];
             }
             // Attribute remainder of this sub-distribution to the central (unmodified) peak
-            const centralModVal = Math.max(1, Math.floor(base + 0.5));
+            const centralModVal = Math.max(1, ProbUtils.mcRound(base));
             finalDist[centralModVal] = (finalDist[centralModVal] || 0n) + modRemainder;
         }
 
         cache?.set(key, finalDist);
         return finalDist;
+    }
+
+    /** Helper for generating triangular probability weights. */
+    private static getTriangularWeights(N: number): bigint[] {
+        const weights: bigint[] = [];
+        const count = 2 * N - 1;
+        for (let k = 0; k < count; k++) {
+            weights.push(BigInt(k < N ? (k + 1) : (count - k)));
+        }
+        return weights;
     }
 }
