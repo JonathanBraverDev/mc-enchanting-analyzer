@@ -69,6 +69,7 @@ export class SearchService {
                 mass: rootAcc.getBookkeeping(),
                 threshold,
                 iterations: 0,
+                nodesProcessed: 0,
                 checkpoints: [],
                 exitReason: 'empty'
             };
@@ -112,6 +113,7 @@ export class SearchService {
             }
 
             iterations++;
+            frontier.nodesProcessed++;
             const current = queue.pop()!;
             accountant.subtract('pending', current.prob);
             const currentCount = ComboUtils.getCount(current.packedChosen);
@@ -333,20 +335,23 @@ export class SearchService {
         rankMass: Map<number, bigint>
     ): { rem: bigint } {
         const redistributed = ComboUtils.removeAdditional(packedChosen, guaranteedFirstId, enchantToIndex, indexToEnchant, originalEnchants);
-        const nOutcomes = BigInt(redistributed.length);
-        const rem = prob % nOutcomes;
-        const pChunk = prob / nOutcomes;
-        for (const r of redistributed) {
-            addTo(results, r, pChunk);
-        }
-        addTo(countMass, currentCount - 1, prob - rem);
+        const nOutcomes = redistributed.length;
+        // Use detailed distribution for Honest Accounting of mass across outcomes
+        const { parts: splits, remainder: splitRemainder } = ProbUtils.distributeDetailed(prob, redistributed.map(() => 1n), nOutcomes);
 
-        // Correct anyMass/rankMass: deduct mass lost per enchant based on survival probability.
+        for (let i = 0; i < redistributed.length; i++) {
+            addTo(results, redistributed[i], splits[i]);
+        }
+        const finalCount = currentCount - 1;
+        addTo(countMass, finalCount, prob - splitRemainder);
+
         for (const e of originalEnchants) {
             const id = ComboUtils.getEnchantId(e);
             const isGuaranteed = guaranteedFirstId !== null && id === guaranteedFirstId;
-            const nOccurrences = isGuaranteed ? nOutcomes : nOutcomes - 1n;
-            const survivorMass = nOccurrences * pChunk;
+            const nSurvivors = isGuaranteed ? nOutcomes : nOutcomes - 1;
+            
+            // Precise survivor mass: (prob * count) / total
+            const { quotient: survivorMass } = ProbUtils.mulDiv(prob, BigInt(nSurvivors), BigInt(nOutcomes));
             const loss = prob - survivorMass;
             if (loss > 0n) {
                 anyMass.set(id, (anyMass.get(id) || 0n) - loss);
@@ -354,7 +359,7 @@ export class SearchService {
             }
         }
 
-        return { rem };
+        return { rem: splitRemainder };
     }
 
     private static processInitialNode(
