@@ -122,9 +122,9 @@ export interface PackedNode {
 export interface SearchFrontier {
     queue: BinaryHeap<PackedNode>;
     results: Map<PackedCombo, bigint>;
-    anyMass: Map<number, bigint>;
-    rankMass: Map<number, bigint>;
-    countMass: Map<number, bigint>;
+    anyMass: BigUint64Array;
+    rankMass: BigUint64Array;
+    countMass: BigUint64Array;
     mass: MassBookkeeping;
     threshold: bigint;
     iterations: number;
