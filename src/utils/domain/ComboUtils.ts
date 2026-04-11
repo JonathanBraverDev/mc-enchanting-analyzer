@@ -128,29 +128,27 @@ export class ComboUtils {
      * For books: returns all possible combinations after removing one "selected at random" enchantment.
      * Based on Minecraft Wiki: "If multiple enchantments were generated, then one selected at random is removed."
      *
-     * Player perspective: if a player SEES an enchantment in the tooltip, it was NOT the one removed.
-     * So when a guaranteed enchant is present, outcomes where it was removed are filtered out.
+     * OPTIMIZED BITWISE VERSION: Avoids unpack/sort/pack cycle and array allocations.
      */
-    private static readonly _removeScratch: PackedEnchant[] = [];
-
-    static removeAdditional(packed: PackedCombo, guaranteedFirstId: number | null, enchantToIndex: Map<number, number>, indexToEnchant: number[], precomputedEnchants?: PackedEnchant[]): PackedCombo[] {
-        const enchants = precomputedEnchants ?? this.unpack(packed, indexToEnchant);
-        if (enchants.length <= 1) return [packed];
+    static removeAdditional(packed: PackedCombo, guaranteedFirstId: number | null, indexToEnchant: number[]): PackedCombo[] {
+        const count = this.getCount(packed);
+        if (count <= 1) return [packed];
 
         const possibleResults: PackedCombo[] = [];
-        const s = this._removeScratch;
-        // Generate all possible N combinations of size N-1 by removing one at random
-        for (let i = 0; i < enchants.length; i++) {
-            s.length = 0;
-            for (let j = 0; j < enchants.length; j++) {
-                if (j !== i) s.push(enchants[j]);
-            }
-            possibleResults.push(this.pack(s, guaranteedFirstId, enchantToIndex));
-        }
+        for (let i = 0; i < count; i++) {
+            const packedEnchant = Math.floor(packed / this.BYTE_MULTIPLIERS[i]) % 256;
+            const enchantId = indexToEnchant[packedEnchant] >> 8;
 
-        if (guaranteedFirstId !== null) {
-            // Keep only outcomes where the guaranteed enchant was not the one removed.
-            return possibleResults.filter((_, i) => (enchants[i] >> 8) !== guaranteedFirstId);
+            // Strategy: filter out outcomes where the guaranteed enchant was the one removed.
+            if (guaranteedFirstId !== null && enchantId === guaranteedFirstId) continue;
+
+            // Mathematically remove the i-th byte by zeroing it and shifting the upper bytes down
+            const lowerPart = packed % this.BYTE_MULTIPLIERS[i];
+            const nextPacked = (i + 1 < count)
+                ? lowerPart + (Math.floor(packed / this.BYTE_MULTIPLIERS[i+1]) * this.BYTE_MULTIPLIERS[i])
+                : lowerPart;
+            
+            possibleResults.push(nextPacked);
         }
 
         return possibleResults;
