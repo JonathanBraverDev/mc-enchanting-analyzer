@@ -13,11 +13,10 @@ export class BinaryHeap<T extends { prob: bigint }> {
     push(item: T) {
         if (this.idSelector) {
             const id = this.idSelector(item);
-            if (this.indexMap.has(id)) {
-                const idx = this.indexMap.get(id)!;
+            const idx = this.indexMap.get(id);
+            if (idx !== undefined) {
                 this.heap[idx].prob += item.prob;
                 this.bubbleUp(idx);
-                this.sinkDown(idx);
                 return;
             }
             this.indexMap.set(id, this.heap.length);
@@ -26,19 +25,51 @@ export class BinaryHeap<T extends { prob: bigint }> {
         this.bubbleUp(this.heap.length - 1);
     }
 
+    /**
+     * High-performance alternative to push() that avoids object allocation if node exists.
+     */
+    pushOrMerge(id: bigint, prob: bigint, dataFactory: () => T) {
+        if (!this.idSelector) {
+            const item = dataFactory();
+            this.heap.push(item);
+            this.bubbleUp(this.heap.length - 1);
+            return;
+        }
+
+        const idx = this.indexMap.get(id);
+        if (idx !== undefined) {
+            this.heap[idx].prob += prob;
+            this.bubbleUp(idx);
+            return;
+        }
+
+        const item = dataFactory();
+        this.indexMap.set(id, this.heap.length);
+        this.heap.push(item);
+        this.bubbleUp(this.heap.length - 1);
+    }
+
+
     pop(): T | undefined {
-        if (this.size() === 0) return undefined;
+        const length = this.heap.length;
+        if (length === 0) return undefined;
+        
         const top = this.heap[0];
-        if (this.idSelector) this.indexMap.delete(this.idSelector(top));
+        if (this.idSelector) {
+            this.indexMap.delete(this.idSelector(top));
+        }
 
         const bottom = this.heap.pop();
-        if (this.size() > 0 && bottom !== undefined) {
+        if (this.heap.length > 0 && bottom !== undefined) {
             this.heap[0] = bottom;
-            if (this.idSelector) this.indexMap.set(this.idSelector(bottom), 0);
+            if (this.idSelector) {
+                this.indexMap.set(this.idSelector(bottom), 0);
+            }
             this.sinkDown(0);
         }
         return top;
     }
+
 
     size(): number {
         return this.heap.length;
@@ -58,67 +89,74 @@ export class BinaryHeap<T extends { prob: bigint }> {
 
     private bubbleUp(idx: number) {
         const element = this.heap[idx];
-        const id = this.idSelector ? this.idSelector(element) : null;
+        const prob = element.prob;
+        const idSelector = this.idSelector;
+        const id = idSelector ? idSelector(element) : null;
 
         while (idx > 0) {
-            let parentIdx = Math.floor((idx - 1) / 2);
-            let parent = this.heap[parentIdx];
-            if (element.prob <= parent.prob) break;
+            const parentIdx = (idx - 1) >>> 1;
+            const parent = this.heap[parentIdx];
             
-            this.heap[parentIdx] = element;
+            if (prob <= parent.prob) break;
+
             this.heap[idx] = parent;
-            
-            if (this.idSelector && id !== null) {
-                this.indexMap.set(id, parentIdx);
-                this.indexMap.set(this.idSelector(parent), idx);
+            if (idSelector) {
+                this.indexMap.set(idSelector(parent), idx);
             }
-            
             idx = parentIdx;
         }
+
+        this.heap[idx] = element;
+        if (idSelector && id !== null) {
+            this.indexMap.set(id, idx);
+        }
     }
+
 
     private sinkDown(idx: number) {
         const length = this.heap.length;
         const element = this.heap[idx];
-        const id = this.idSelector ? this.idSelector(element) : null;
+        const prob = element.prob;
+        const idSelector = this.idSelector;
+        const id = idSelector ? idSelector(element) : null;
 
         while (true) {
-            let leftChildIdx = 2 * idx + 1;
-            let rightChildIdx = 2 * idx + 2;
-            let leftChild, rightChild;
-            let swap = null;
+            let leftChildIdx = (idx << 1) + 1;
+            let rightChildIdx = (idx << 1) + 2;
+            let swapIdx = -1;
+            let maxProb = prob;
 
             if (leftChildIdx < length) {
-                leftChild = this.heap[leftChildIdx];
-                if (leftChild.prob > element.prob) {
-                    swap = leftChildIdx;
+                const leftChild = this.heap[leftChildIdx];
+                if (leftChild.prob > maxProb) {
+                    maxProb = leftChild.prob;
+                    swapIdx = leftChildIdx;
                 }
             }
 
             if (rightChildIdx < length) {
-                rightChild = this.heap[rightChildIdx];
-                if (
-                    (swap === null && rightChild.prob > element.prob) ||
-                    (swap !== null && rightChild.prob > (leftChild as T).prob)
-                ) {
-                    swap = rightChildIdx;
+                const rightChild = this.heap[rightChildIdx];
+                if (rightChild.prob > maxProb) {
+                    swapIdx = rightChildIdx;
                 }
             }
 
-            if (swap === null) break;
-            
-            const swapElement = this.heap[swap];
+            if (swapIdx === -1) break;
+
+            const swapElement = this.heap[swapIdx];
             this.heap[idx] = swapElement;
-            this.heap[swap] = element;
-            
-            if (this.idSelector && id !== null) {
-                this.indexMap.set(this.idSelector(swapElement), idx);
-                this.indexMap.set(id, swap);
+            if (idSelector) {
+                this.indexMap.set(idSelector(swapElement), idx);
             }
-            
-            idx = swap;
+            idx = swapIdx;
+        }
+
+        this.heap[idx] = element;
+        if (idSelector && id !== null) {
+            this.indexMap.set(id, idx);
         }
     }
+
 
     clone(): BinaryHeap<T> {
         const newHeap = new BinaryHeap<T>(this.idSelector);

@@ -95,9 +95,10 @@ export class StatAggregator {
             const activeFloor = ProbUtils.toBigInt(ENGINE_DEFAULTS.SYSTEM_THRESHOLD_FLOOR);
 
             const finalCombos = new Map<PackedCombo, bigint>();
-            const totalAnyMass = new Map<number, bigint>();
-            const totalRankMass = new Map<number, bigint>();
-            const totalCountMass = new Map<number, bigint>();
+            const totalAnyMass = new BigUint64Array(256);
+            const totalRankMass = new BigUint64Array(16384);
+            const totalCountMass = new BigUint64Array(16);
+
             let tierAccountant = new MassAccountant();
 
             let processedMProb = 0n;
@@ -211,9 +212,10 @@ export class StatAggregator {
         const levels = Object.keys(modDist).map(Number).sort((a, b) => b - a);
 
         const finalCombos = new Map<PackedCombo, bigint>();
-        const totalAnyMass = new Map<number, bigint>();
-        const totalRankMass = new Map<number, bigint>();
-        const totalCountMass = new Map<number, bigint>();
+        const totalAnyMass = new BigUint64Array(256);
+        const totalRankMass = new BigUint64Array(16384);
+        const totalCountMass = new BigUint64Array(16);
+
         let globalAccountant = new MassAccountant();
 
         let processedMProb = 0n;
@@ -310,9 +312,10 @@ export class StatAggregator {
     private static reconcileGuaranteedMass(
         registry: RegistryState,
         guaranteedFirst: string,
-        totalAnyMass: Map<number, bigint>,
-        totalRankMass: Map<number, bigint>,
-        totalCountMass: Map<number, bigint>
+        totalAnyMass: BigUint64Array,
+        totalRankMass: BigUint64Array,
+        totalCountMass: BigUint64Array
+
     ): void {
         const romanMap = registry.data.constants.ROMAN_MAP;
         const parsed = EnchantUtils.parse(guaranteedFirst, romanMap);
@@ -322,10 +325,10 @@ export class StatAggregator {
             // Reconcile Individual probabilities to absolute 100% (PRECISION).
             // This is mathematically certain because every path in a guaranteed-first search
             // (resolved, sieved, or pending) carries the guaranteed enchantment.
-            totalAnyMass.set(gId, PRECISION);
+            totalAnyMass[gId] = PRECISION;
             
             const fullId = (gId << 8) | (parsed?.rank ?? 1);
-            totalRankMass.set(fullId, PRECISION);
+            totalRankMass[fullId] = PRECISION;
         }
     }
 }

@@ -13,9 +13,9 @@ export class SummaryService {
     public static summarize(
         combos: Map<number, bigint>,
         accountant: MassAccountant,
-        anyMass?: Map<number, bigint>,
-        rankMass?: Map<number, bigint>,
-        countMass?: Map<number, bigint>,
+        anyMass?: Map<number, bigint> | BigUint64Array,
+        rankMass?: Map<number, bigint> | BigUint64Array,
+        countMass?: Map<number, bigint> | BigUint64Array,
         comboLimit: number = ENGINE_DEFAULTS.MAX_RESULTS_SUMMARY
     ): CalculationStats {
         const accounting = accountant.toPublic();
@@ -28,23 +28,12 @@ export class SummaryService {
             accounting
         };
 
-        if (anyMass) {
-            for (const [id, mass] of anyMass) {
-                stats.any[id] = ProbUtils.toNumber(mass);
-            }
-        }
-        if (rankMass) {
-            for (const [id, mass] of rankMass) {
-                stats.ranks[id] = ProbUtils.toNumber(mass);
-            }
-        }
-        if (countMass) {
-            for (const [c, mass] of countMass) {
-                stats.count[Number(c)] = ProbUtils.toNumber(mass);
-            }
-        }
+        if (anyMass) SummaryService.populateStats(stats.any, anyMass);
+        if (rankMass) SummaryService.populateStats(stats.ranks, rankMass);
+        if (countMass) SummaryService.populateStats(stats.count, countMass);
 
         // Limit the number of combinations serialized for transfer
+
         // Ensure we always return sorted results if a limit is set > 0
         let comboSource: Iterable<[number, bigint]> = [];
         const compareProbDesc = (a: [any, bigint], b: [any, bigint]) => a[1] > b[1] ? -1 : (a[1] < b[1] ? 1 : 0);
@@ -84,4 +73,20 @@ export class SummaryService {
 
         return stats;
     }
+
+    private static populateStats(target: { [key: number]: number }, source: Map<number, bigint> | BigUint64Array): void {
+        if (source instanceof BigUint64Array) {
+            for (let i = 0; i < source.length; i++) {
+                const mass = source[i];
+                if (mass > 0n) {
+                    target[i] = ProbUtils.toNumber(mass);
+                }
+            }
+        } else {
+            for (const [id, mass] of source) {
+                target[id] = ProbUtils.toNumber(mass);
+            }
+        }
+    }
 }
+

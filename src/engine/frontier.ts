@@ -24,9 +24,9 @@ export class FrontierFactory {
 
         const results = new Map<PackedCombo, bigint>();
         const queue = new BinaryHeap<PackedNode>((item) => item.meta);
-        const anyMass = new Map<number, bigint>();
-        const rankMass = new Map<number, bigint>();
-        const countMass = new Map<number, bigint>();
+        const anyMass = new BigUint64Array(256);
+        const rankMass = new BigUint64Array(16384);
+        const countMass = new BigUint64Array(16);
 
         const romanMap = registry.data.constants.ROMAN_MAP;
         const parsed = EnchantUtils.parse(guaranteedFirst, romanMap);
@@ -40,8 +40,8 @@ export class FrontierFactory {
         const initialBitset = hasGuaranteed ? (1n << BigInt(guaranteedId)) : 0n;
 
         if (full !== null && hasGuaranteed) {
-            anyMass.set(guaranteedId, PRECISION);
-            rankMass.set(full, PRECISION);
+            anyMass[guaranteedId] = PRECISION;
+            rankMass[full] = PRECISION;
         }
 
         queue.push({

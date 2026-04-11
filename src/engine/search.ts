@@ -63,6 +63,8 @@ export class SearchService {
         void BK;
 
         let iterations = 0;
+        const expandedIds = new Set<bigint>();
+        let redundantExpansions = 0;
 
         const guaranteedFirstId = FrontierFactory.getGuaranteedFirstId(registry, guaranteedFirst);
 
@@ -70,12 +72,17 @@ export class SearchService {
         if (initialPool.length === 0) {
             const rootAcc = new MassAccountant();
             rootAcc.record('resolved', PRECISION);
+            const anyMass = new BigUint64Array(256);
+            const rankMass = new BigUint64Array(16384);
+            const countMass = new BigUint64Array(16);
+            countMass[0] = PRECISION;
+
             return {
                 queue: new BinaryHeap(),
                 results: new Map(),
-                anyMass: new Map(),
-                rankMass: new Map(),
-                countMass: new Map([[0, PRECISION]]),
+                anyMass,
+                rankMass,
+                countMass,
                 mass: rootAcc.getBookkeeping(),
                 threshold,
                 iterations: 0,
@@ -130,6 +137,12 @@ export class SearchService {
             const current = queue.pop()!;
             if (timing) timing.heapMs += performance.now() - popStart;
 
+            if (expandedIds.has(current.meta)) {
+                redundantExpansions++;
+            } else {
+                expandedIds.add(current.meta);
+            }
+
             accountant.subtract('pending', current.prob);
             const currentCount = ComboUtils.getCount(current.packedChosen);
 
@@ -144,6 +157,7 @@ export class SearchService {
                     frontier.anyMass, frontier.rankMass, frontier.countMass, resultsLimit, accountant, instrumentation, timing
                 );
             }
+
             if (timing) timing.searchMs += performance.now() - procStart;
 
             // Checkpoints: record after processing — current.prob is the minimum threshold
@@ -181,6 +195,10 @@ export class SearchService {
             timingResult.heapMs += timing.heapMs;
         }
 
+        if (redundantExpansions > 0) {
+            console.log(`Redundant expansions: ${redundantExpansions} / ${iterations} (${(redundantExpansions/iterations*100).toFixed(1)}%)`);
+        }
+        
         return { ...frontier, mass: accountant.getBookkeeping(), iterations, checkpoints: localCheckpoints, exitReason };
     }
 
@@ -195,14 +213,15 @@ export class SearchService {
         threshold: bigint,
         results: Map<PackedCombo, bigint>,
         queue: BinaryHeap<PackedNode>,
-        anyMass: Map<number, bigint>,
-        rankMass: Map<number, bigint>,
-        countMass: Map<number, bigint>,
+        anyMass: BigUint64Array,
+        rankMass: BigUint64Array,
+        countMass: BigUint64Array,
         resultsLimit: number,
         accountant: MassAccountant,
         instrumentation?: EngineInstrumentation,
         timing?: SearchTiming
     ): void {
+
         const { enchantToIndex, indexToEnchant } = registry;
         const currentBitset = current.meta >> 8n;
         const currentLevel = Number(current.meta & 0xFFn);
@@ -303,18 +322,20 @@ export class SearchService {
             const pNext = splits[i];
             const nextPacked = ComboUtils.packAppend(current.packedChosen, eligible[i], guaranteedFirstId, guaranteedInCombo, enchantToIndex);
             const nextId = ComboUtils.getEnchantId(eligible[i]);
+            const nextMeta = ((currentBitset | (1n << BigInt(nextId))) << 8n) | BigInt(nextLevel);
 
             // Add new enchant to Rank and Any mass of this path
             ProbUtils.addItemMass(anyMass, nextId, pNext);
             ProbUtils.addItemMass(rankMass, eligible[i], pNext);
 
             accountant.record('pending', pNext);
-            queue.push({
+            queue.pushOrMerge(nextMeta, pNext, () => ({
                 packedChosen: nextPacked,
-                meta: ((currentBitset | (1n << BigInt(nextId))) << 8n) | BigInt(nextLevel),
+                meta: nextMeta,
                 prob: pNext
-            });
+            }));
         }
+
         if (timing) timing.heapMs += performance.now() - startHeap;
 
         const scaleRoundingLoss = current.prob - (probStop + probForward);
@@ -337,10 +358,11 @@ export class SearchService {
         enchantToIndex: Map<number, number>,
         indexToEnchant: number[],
         results: Map<PackedCombo, bigint>,
-        countMass: Map<number, bigint>,
-        anyMass: Map<number, bigint>,
-        rankMass: Map<number, bigint>
+        countMass: BigUint64Array,
+        anyMass: BigUint64Array,
+        rankMass: BigUint64Array
     ): bigint {
+
         if (isBook && currentCount > 1) {
             const { rem } = this.redistributeBookProb(packedChosen, currentEnchants, prob, currentCount, guaranteedFirstId, enchantToIndex, indexToEnchant, results, countMass, anyMass, rankMass);
             return rem;
@@ -370,10 +392,11 @@ export class SearchService {
         _enchantToIndex: Map<number, number>,
         indexToEnchant: number[],
         results: Map<PackedCombo, bigint>,
-        countMass: Map<number, bigint>,
-        anyMass: Map<number, bigint>,
-        rankMass: Map<number, bigint>
+        countMass: BigUint64Array,
+        anyMass: BigUint64Array,
+        rankMass: BigUint64Array
     ): { rem: bigint } {
+
         const redistributed = ComboUtils.removeAdditional(packedChosen, guaranteedFirstId, indexToEnchant);
         const nOutcomes = redistributed.length;
         
@@ -418,11 +441,12 @@ export class SearchService {
         weights: number[],
         totalWeight: number,
         queue: BinaryHeap<PackedNode>,
-        anyMass: Map<number, bigint>,
-        rankMass: Map<number, bigint>,
+        anyMass: BigUint64Array,
+        rankMass: BigUint64Array,
         accountant: MassAccountant,
         timing?: SearchTiming
     ): void {
+
         const { enchantToIndex } = registry;
         let startDist = 0;
         if (timing) startDist = performance.now();
@@ -434,17 +458,20 @@ export class SearchService {
         for (let i = 0; i < pool.length; i++) {
             const pNext = splits[i];
             const nextId = ComboUtils.getEnchantId(pool[i]);
+            const nextMeta = ((1n << BigInt(nextId)) << 8n) | BigInt(modLevel);
+            const nextPacked = ComboUtils.pack([pool[i]], guaranteedId, enchantToIndex);
 
             ProbUtils.addItemMass(anyMass, nextId, pNext);
             ProbUtils.addItemMass(rankMass, pool[i], pNext);
 
             accountant.record('pending', pNext);
-            queue.push({
-                packedChosen: ComboUtils.pack([pool[i]], guaranteedId, enchantToIndex),
-                meta: ((1n << BigInt(nextId)) << 8n) | BigInt(modLevel),
+            queue.pushOrMerge(nextMeta, pNext, () => ({
+                packedChosen: nextPacked,
+                meta: nextMeta,
                 prob: pNext
-            });
+            }));
         }
+
         if (timing) timing.heapMs += performance.now() - startHeap;
         accountant.record('sieved', splitRemainder);
     }
