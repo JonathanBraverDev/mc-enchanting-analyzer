@@ -157,7 +157,8 @@ export class EnchantEngine {
             summaryLimit = ENGINE_DEFAULTS.MAX_RESULTS_SUMMARY,
             resultsLimit = ENGINE_DEFAULTS.MAX_RESULTS_SIZE,
             useCache = true,
-            instrumentation
+            instrumentation,
+            timing
         } = config ?? {};
 
         const catId = getCategoryId(this.registry, cat);
@@ -185,7 +186,8 @@ export class EnchantEngine {
             useCache,
             distCache: this.distCache,
             poolCache: this.poolCache,
-            instrumentation
+            instrumentation,
+            timing
         };
 
         // Wrap onTierComplete to cache each tier's result as it completes
@@ -258,7 +260,8 @@ export class EnchantEngine {
             summaryLimit = ENGINE_DEFAULTS.MAX_RESULTS_SUMMARY,
             resultsLimit = ENGINE_DEFAULTS.MAX_RESULTS_SIZE,
             useCache = true,
-            instrumentation
+            instrumentation,
+            timing
         } = config;
 
         // Pre-resolve IDs once so closure only varies `ml`
@@ -293,6 +296,7 @@ export class EnchantEngine {
             distCache: this.distCache,
             poolCache: this.poolCache,
             instrumentation,
+            timing,
             getCacheMetrics: () => this.getCacheMetrics()
         };
         const finalStats = await StatAggregator.getFullStats(

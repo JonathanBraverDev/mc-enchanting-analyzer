@@ -19,6 +19,7 @@ export interface CalculationStats {
   accounting: MassAccounting;
   
   instrumentation?: EngineInstrumentation;
+  timing?: SearchTiming;
 }
 
 export interface CacheStats {
@@ -43,6 +44,15 @@ export interface CheckpointSummary {
   worstCaseIterations: number;
   /** The modified level that was the bottleneck */
   bottleneckLevel: number;
+}
+
+export interface SearchTiming {
+  totalMs: number;
+  searchMs: number;
+  filteringMs: number;
+  distributionMs: number;
+  settlingMs: number;
+  heapMs: number;
 }
 
 export type EngineExitReason = 'threshold' | 'iterations' | 'mass' | 'aborted' | 'empty' | 'exhausted';
@@ -163,6 +173,7 @@ export interface SearchConfig {
     resultsLimit?: number;
     useCache?: boolean;
     instrumentation?: EngineInstrumentation;
+    timing?: SearchTiming;
 }
 
 /**
@@ -175,5 +186,6 @@ export interface InternalSearchConfig extends SearchConfig {
     distCache?: Map<string, { [level: number]: bigint }>;
     poolCache?: LRUCache<string, PackedEnchant[]>;
     instrumentation?: EngineInstrumentation;
+    timing?: SearchTiming;
     getCacheMetrics?: () => { cacheNodes: number; cacheResults: number };
 }
