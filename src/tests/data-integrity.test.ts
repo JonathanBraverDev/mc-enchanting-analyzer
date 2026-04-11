@@ -20,6 +20,9 @@ import { global_enchantments, enchantment_groups } from '../data/enchantments.js
 import { EnchantEngine } from '../engine/index.js';
 import { DATA } from '../data/index.js';
 import { hasConflict, getEnchantId } from '../core/registry.js';
+import { versions } from '../data/versions.js';
+import { material_values } from '../data/materials.js';
+import { MaterialService } from '../core/RegistryMaterials.js';
 
 const enchantNames = Object.keys(global_enchantments);
 
@@ -188,5 +191,70 @@ describe('Data integrity: conflict symmetry after RegistryFactory.build()', () =
         const unbrId = getEnchantId(reg, 'Unbreaking');
         assert.ok(!hasConflict(reg, effId,  unbrId), 'Efficiency should not conflict with Unbreaking');
         assert.ok(!hasConflict(reg, unbrId, effId),  'Unbreaking should not conflict with Efficiency');
+    });
+});
+
+// ── Material coverage ─────────────────────────────────────────────────────────
+
+describe('Data integrity: material enchantability coverage', () => {
+    it('every material declared in any version has an enchantability entry', () => {
+        const allMaterials = new Set<string>();
+        for (const ver of Object.values(versions)) {
+            for (const mat of (ver as any).materials ?? []) {
+                allMaterials.add(mat as string);
+            }
+        }
+
+        const toolMats  = new Set(Object.keys(material_values.tools));
+        const armorMats = new Set(Object.keys(material_values.armor));
+
+        const missing: string[] = [];
+        for (const mat of allMaterials) {
+            if (!toolMats.has(mat) && !armorMats.has(mat)) {
+                missing.push(mat);
+            }
+        }
+
+        assert.deepStrictEqual(
+            missing, [],
+            `Materials missing enchantability entry: ${missing.join(', ')}`
+        );
+    });
+
+    it('every category+material in the latest version resolves enchantability without throwing', () => {
+        const latestVersion = '1.21.11';
+        const engine = new EnchantEngine(DATA, latestVersion);
+        const reg = engine.registry;
+        const cats = [...reg.versionPool.keys()];
+        const armorCats = DATA.constants.ARMOR_CATS as readonly string[];
+        const bad: string[] = [];
+
+        // For each category, get only the materials valid for that version
+        // by checking against the version's flat materials list
+        const versionEntry = (versions as any)[latestVersion];
+        const validMaterials = new Set<string>();
+        // Walk the version chain to collect all materials
+        let cur: any = versionEntry;
+        while (cur) {
+            for (const mat of cur.materials ?? []) validMaterials.add(mat);
+            cur = cur.extends ? (versions as any)[cur.extends] : null;
+        }
+
+        for (const cat of cats) {
+            // Only test materials that make sense for this category type
+            const candidateMats = cat === 'book' ? ['book']
+                : armorCats.includes(cat) ? [...validMaterials].filter(m => m in material_values.armor)
+                : [...validMaterials].filter(m => m in material_values.tools);
+
+            for (const mat of candidateMats) {
+                try {
+                    MaterialService.getEnchantability(DATA, mat, cat);
+                } catch (e: any) {
+                    bad.push(`${cat}/${mat}: ${e.message}`);
+                }
+            }
+        }
+
+        assert.deepStrictEqual(bad, [], `Enchantability lookup failures:\n${bad.join('\n')}`);
     });
 });

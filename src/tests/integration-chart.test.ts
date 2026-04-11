@@ -7,15 +7,18 @@
  */
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
+import { MassAccounting } from '../types/mass.js';
 import { RefinementService } from '../ui/refinement.js';
 import { WorkerClient } from '../worker/client.js';
+import { TEST_DATA } from './test-data.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function makeStats(uncertainty: number): any {
-    return { uncertainty, ranks: {}, any: {}, count: {}, combos: {}, pruned: 0, roundingError: 0 };
+function makeStats(accuracy: number): any {
+    const acc: MassAccounting = { resolved: accuracy, pending: 1 - accuracy, sieved: 0, overflow: 0, capped: 0, rounding: 0 };
+    return { accuracy, accounting: acc, ranks: {}, any: {}, count: {}, combos: {} };
 }
 
 /** Flush pending macrotasks (AsyncUtils.yield uses setTimeout 0). */
@@ -23,13 +26,7 @@ function flush(): Promise<void> {
     return new Promise(r => setTimeout(r, 20));
 }
 
-const BASE_PAYLOAD = {
-    category: 'sword',
-    material: 'diamond',
-    guaranteedFirst: null as null,
-    xpLevel: 30,
-    version: '1.21',
-};
+const BASE_PAYLOAD = TEST_DATA.PAYLOADS.BASE_SWORD;
 
 // ---------------------------------------------------------------------------
 // Suite
@@ -37,13 +34,18 @@ const BASE_PAYLOAD = {
 
 describe('Integration: Chart sweep with mocked WorkerClient', () => {
     let originalRequest: typeof WorkerClient.request;
+    let originalReset: typeof WorkerClient.resetWorker;
 
     beforeEach(() => {
         originalRequest = WorkerClient.request;
+        originalReset = WorkerClient.resetWorker;
+        // Default mock that does nothing
+        WorkerClient.resetWorker = async () => {};
     });
 
     afterEach(() => {
         WorkerClient.request = originalRequest;
+        WorkerClient.resetWorker = originalReset;
     });
 
     // -----------------------------------------------------------------------
@@ -53,7 +55,7 @@ describe('Integration: Chart sweep with mocked WorkerClient', () => {
         type QueueEntry = { onProgress?: (v: any) => void; resolve: (v: any) => void };
         const mainQueue: QueueEntry[] = [];
 
-        WorkerClient.request = (type: string, payload: any, onProgress?: any): Promise<any> => {
+        WorkerClient.request = (_type: string, payload: any, onProgress?: any): Promise<any> => {
             if (payload.source === 'chart') {
                 // Resolve immediately with dummy stats
                 return Promise.resolve({ stats: makeStats(0.01) });
@@ -65,7 +67,7 @@ describe('Integration: Chart sweep with mocked WorkerClient', () => {
         let lastSweep: (any | null)[] = new Array(30).fill(null);
         const chartPopulatedLog: number[] = [];
 
-        service.run(BASE_PAYLOAD, null as any, {
+        service.run(BASE_PAYLOAD, {} as any, {
             onStatus: () => {},
             onStats: () => {},
             onChart: (sweep) => {
@@ -118,7 +120,7 @@ describe('Integration: Chart sweep with mocked WorkerClient', () => {
         type QueueEntry = { onProgress?: (v: any) => void; resolve: (v: any) => void };
         const mainQueue: QueueEntry[] = [];
 
-        WorkerClient.request = (type: string, payload: any, onProgress?: any): Promise<any> => {
+        WorkerClient.request = (_type: string, payload: any, onProgress?: any): Promise<any> => {
             if (payload.source === 'chart') {
                 return Promise.resolve({ stats: makeStats(0.01) });
             }
@@ -126,12 +128,12 @@ describe('Integration: Chart sweep with mocked WorkerClient', () => {
         };
 
         // Use 'book' for highest complexity (matches original Playwright test)
-        const bookPayload = { ...BASE_PAYLOAD, category: 'book', material: 'book' };
+        const bookPayload = TEST_DATA.PAYLOADS.MODERN_BOOK;
         const service = new RefinementService();
         let lastSweep: (any | null)[] = new Array(30).fill(null);
         const chartPopulatedLog: number[] = [];
 
-        service.run(bookPayload, null as any, {
+        service.run(bookPayload, {} as any, {
             onStatus: () => {},
             onStats: () => {},
             onChart: (sweep) => {
@@ -189,23 +191,21 @@ describe('Integration: Chart sweep with mocked WorkerClient', () => {
         type QueueEntry = { onProgress?: (v: any) => void; resolve: (v: any) => void };
         const mainQueue: QueueEntry[] = [];
 
-        // Simulate accuracy improvement: finer threshold returns lower uncertainty
-        // sword coarse threshold = 0.01, standard threshold = 0.0005
-        WorkerClient.request = (type: string, payload: any, onProgress?: any): Promise<any> => {
+        WorkerClient.request = (_type: string, payload: any, onProgress?: any): Promise<any> => {
             if (payload.source === 'chart') {
                 const threshold = payload.threshold as number;
-                const uncertainty = threshold >= 0.005 ? 0.1 : 0.001;
-                return Promise.resolve({ stats: makeStats(uncertainty) });
+                const accuracy = threshold >= 0.005 ? 0.9 : 0.999;
+                return Promise.resolve({ stats: makeStats(accuracy) });
             }
             return new Promise(resolve => mainQueue.push({ onProgress, resolve }));
         };
 
         const service = new RefinementService();
         let lastSweep: (any | null)[] = new Array(30).fill(null);
-        let coarseSweepSnap: { uncertainty: number }[] | null = null;
-        let finalSweepSnap: { uncertainty: number }[] | null = null;
+        let coarseSweepSnap: { accuracy: number }[] | null = null;
+        let finalSweepSnap: { accuracy: number }[] | null = null;
 
-        service.run(BASE_PAYLOAD, null as any, {
+        service.run(BASE_PAYLOAD, {} as any, {
             onStatus: () => {},
             onStats: () => {},
             onChart: (sweep) => {
@@ -213,7 +213,7 @@ describe('Integration: Chart sweep with mocked WorkerClient', () => {
                 // Capture a snapshot whenever level 30 (index 29) is the just-updated entry,
                 // i.e., a full sweep just finished.
                 if (updatedIdx === 29) {
-                    const snap = sweep.map(s => ({ uncertainty: s?.s?.uncertainty ?? -1 }));
+                    const snap = sweep.map(s => ({ accuracy: s?.s?.accuracy ?? -1 }));
                     if (coarseSweepSnap === null) {
                         coarseSweepSnap = snap;
                     } else {
@@ -238,17 +238,19 @@ describe('Integration: Chart sweep with mocked WorkerClient', () => {
         assert.ok(coarseSweepSnap !== null, 'Should have captured a coarse sweep snapshot');
         assert.ok(finalSweepSnap !== null, 'Should have captured a final sweep snapshot (requires >= 2 sweeps)');
 
-        // At least some levels should show reduced uncertainty in the final pass
-        let refinedLevels = 0;
+        // At least some levels should show increased accuracy in the final pass
+        let improved = false;
+        const final = finalSweepSnap as any[];
+        const coarse = coarseSweepSnap as any[];
         for (let i = 0; i < 30; i++) {
-            if (finalSweepSnap![i].uncertainty < coarseSweepSnap![i].uncertainty - 0.00001) {
-                refinedLevels++;
+            if (final[i].accuracy > coarse[i].accuracy + 0.00001) {
+                improved = true;
+                break;
             }
         }
-        assert.ok(
-            refinedLevels > 0,
-            `Expected the final sweep to reduce uncertainty for at least one level. ` +
-            `Coarse[0]: ${coarseSweepSnap![0].uncertainty}, Final[0]: ${finalSweepSnap![0].uncertainty}`
+        assert.ok(improved, 
+            `Expected the final sweep to increase accuracy for at least one level. ` +
+            `Coarse[0]: ${coarse[0].accuracy}, Final[0]: ${final[0].accuracy}`
         );
 
         // Clean up

@@ -52,6 +52,10 @@ export class BinaryHeap<T extends { prob: bigint }> {
         return this.heap;
     }
 
+    get indexMapSize(): number {
+        return this.idSelector ? this.indexMap.size : 0;
+    }
+
     private bubbleUp(idx: number) {
         const element = this.heap[idx];
         const id = this.idSelector ? this.idSelector(element) : null;

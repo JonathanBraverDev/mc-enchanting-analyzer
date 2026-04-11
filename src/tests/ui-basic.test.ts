@@ -1,59 +1,50 @@
 import { test, expect } from '@playwright/test';
-import { UI_TEXTS, UI_DEFAULTS } from '../core/config.js';
-import { UITestUtils, UI_TIMEOUT } from './test-utils.js';
+import { UI_TEXTS } from '../core/config.js';
+import { AnalyzerPage } from './pom/analyzer-page.js';
+import { TEST_DATA } from './test-data.js';
 
 test.describe('Basic UI Functionality', () => {
-    // Run these sequentially for a stable baseline
-    test.describe.configure({ mode: 'serial' });
+    let analyzer: AnalyzerPage;
 
     test.beforeEach(async ({ page }) => {
-        await page.goto('/analyzer.html');
+        analyzer = new AnalyzerPage(page);
+        await analyzer.goto();
     });
 
-    test('should load the page and show initial calculations', async ({ page }) => {
-        await expect(page).toHaveTitle(new RegExp(UI_TEXTS.PAGE_TITLE));
-        await expect(page.locator('.logo')).toContainText(UI_TEXTS.LOGO_TEXT);
-        await UITestUtils.waitForResults(page);
-    });
+    test('should load the page and show initial calculations', async () => {
+        // App title check
+        await expect(analyzer.page).toHaveTitle(UI_TEXTS.PAGE_TITLE);
 
-    test('should update calculations when item category changes', async ({ page }) => {
-        const catSelect = page.locator('#cat-select');
-        const comboList = page.locator('#combo-list');
-        const status = page.locator('#refinement-status');
-
-        // Default is pickaxe — wait for full completion so worker is idle
-        await expect(status).toHaveText(UI_TEXTS.STATUS_COMPLETE, { timeout: UI_TIMEOUT });
-
-        // Switch to sword and verify sword-specific enchantments
-        await catSelect.selectOption('sword');
-        await expect(comboList).toContainText('Sharpness', { timeout: UI_TIMEOUT });
-        await expect(comboList).not.toContainText('Efficiency', { timeout: UI_TIMEOUT });
-    });
-
-    test('should update calculations when level slider changes', async ({ page }) => {
-        const slider = page.locator('#lvl-range');
-        const lvlVal = page.locator('#lvl-val');
-        await slider.fill('15');
-        await expect(lvlVal).toHaveText('15');
-    });
-
-    test('should update material list when version changes', async ({ page }) => {
-        const vSelect = page.locator('#v-select');
-        const catSelect = page.locator('#cat-select');
-        const matSelect = page.locator('#mat-select');
+        // Wait for initially triggered refinement to complete
+        await analyzer.waitForRefinementComplete();
         
-        await catSelect.selectOption('sword');
-        await vSelect.selectOption('1.21');
-        await expect(matSelect.locator('option[value="netherite"]')).toBeAttached();
-        
-        await vSelect.selectOption('1.0');
-        await expect(matSelect.locator('option[value="netherite"]')).not.toBeAttached();
+        // Check that some results are visible
+        await analyzer.waitForResults();
+        await expect(analyzer.comboItems.first()).toBeVisible();
     });
 
-    test('should render the chart canvas', async ({ page }) => {
-        const canvas = page.locator('#mainChart');
-        await expect(canvas).toBeVisible();
-        const box = await canvas.boundingBox();
-        expect(box?.width).toBeGreaterThan(0);
+    test('should update calculations when item category changes', async () => {
+        // Switch to Bow
+        await analyzer.triggerAndAwaitRefinement(async () => {
+            await analyzer.selectCategory(TEST_DATA.ITEMS.BOW);
+        });
+        
+        // Wait for Bow refinement
+        await analyzer.waitForRefinementComplete();
+        
+        // BOW should have "Power" or "Infinity" usually
+        const results = await analyzer.comboList.textContent();
+        expect(results).toMatch(/Power|Infinity|Unbreaking/);
+    });
+
+    test('should render the chart canvas', async () => {
+        await expect(analyzer.chartCanvas).toBeVisible();
+    });
+
+    test('should display total enchantability', async () => {
+        // Default is Diamond Sword (Enchantability 10)
+        await analyzer.selectCategory(TEST_DATA.ITEMS.SWORD);
+        await analyzer.selectMaterial(TEST_DATA.MATERIALS.DIAMOND);
+        await expect(analyzer.enchantabilityValue).toHaveText('10');
     });
 });

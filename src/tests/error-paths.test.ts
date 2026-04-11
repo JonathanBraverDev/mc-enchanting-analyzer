@@ -51,35 +51,53 @@ describe('Error Path Tests', () => {
         });
     });
 
-    describe('2. Unknown enchant names in guaranteedFirst', () => {
-        it('completely unknown enchant name returns empty stats with uncertainty 1.0', async () => {
+    describe('2. Invalid guaranteedFirst inputs', () => {
+        it('completely unknown enchant name throws clear error', async () => {
             const engine = new EnchantEngine(DATA, '1.21');
-            const stats = await engine.getFullStats('sword', 30, 'diamond', {
-                guaranteedFirst: 'FakeEnchant X'
-            });
-            assert.deepStrictEqual(stats.combos, {});
-            assert.deepStrictEqual(stats.any, {});
-            assert.strictEqual(stats.uncertainty, 1.0);
+            await assert.rejects(
+                () => engine.getFullStats('sword', 30, 'diamond', { guaranteedFirst: 'FakeEnchant X' }),
+                (err: Error) => {
+                    assert.ok(err.message.includes('Unknown enchantment'), `Expected "Unknown enchantment" in: ${err.message}`);
+                    return true;
+                }
+            );
         });
 
-        it('valid enchant name not applicable to category returns empty stats', async () => {
+        it('valid enchant name not applicable to category throws clear error', async () => {
             const engine = new EnchantEngine(DATA, '1.21');
             // Aqua Affinity is helmet-only, not applicable to swords
-            const stats = await engine.getFullStats('sword', 30, 'diamond', {
-                guaranteedFirst: 'Aqua Affinity I'
-            });
-            assert.deepStrictEqual(stats.combos, {});
-            assert.strictEqual(stats.uncertainty, 1.0);
+            await assert.rejects(
+                () => engine.getFullStats('sword', 30, 'diamond', { guaranteedFirst: 'Aqua Affinity I' }),
+                (err: Error) => {
+                    assert.ok(err.message.includes('not applicable to category'), `Got: ${err.message}`);
+                    return true;
+                }
+            );
         });
 
-        it('enchant name with wrong roman numeral returns empty stats', async () => {
+        it('enchant name with wrong roman numeral throws clear error', async () => {
             const engine = new EnchantEngine(DATA, '1.21');
             // Sharpness only goes to V, VI is invalid
-            const stats = await engine.getFullStats('sword', 30, 'diamond', {
-                guaranteedFirst: 'Sharpness VI'
-            });
-            assert.deepStrictEqual(stats.combos, {});
-            assert.strictEqual(stats.uncertainty, 1.0);
+            await assert.rejects(
+                () => engine.getFullStats('sword', 30, 'diamond', { guaranteedFirst: 'Sharpness VI' }),
+                (err: Error) => {
+                    assert.ok(err.message.includes('Invalid rank'), `Got: ${err.message}`);
+                    assert.ok(err.message.includes('exceeds max level of V'), `Got: ${err.message}`);
+                    return true;
+                }
+            );
+        });
+
+        it('impossible enchantment for XP level throws clear error', async () => {
+            const engine = new EnchantEngine(DATA, '1.21');
+            // Sharpness V is impossible at level 1
+            await assert.rejects(
+                () => engine.getFullStats('sword', 1, 'diamond', { guaranteedFirst: 'Sharpness V' }),
+                (err: Error) => {
+                    assert.ok(err.message.includes('impossible to obtain'), `Got: ${err.message}`);
+                    return true;
+                }
+            );
         });
     });
 

@@ -25,6 +25,7 @@ src/types/           ← type definitions only (no runtime deps)
   engine.ts
   serialization.ts
   ui.ts
+  mass.ts            ← MassBookkeeping & MassAccounting types
   index.ts           ← re-exports all types
 
 src/utils/           ← stateless math/format helpers
@@ -51,7 +52,8 @@ src/engine/          ← calculation pipeline
   distribution.ts    (imports: utils, config, types)
   frontier.ts        (imports: utils, config, registry, types)
   search.ts          (imports: utils, registry, config, frontier, types)
-  aggregator.ts      (imports: utils, services, registry, config, types, distribution, search, frontier)
+  MassAccountant.ts  (imports: types, utils)
+  aggregator.ts      (imports: utils, services, registry, config, types, distribution, search, frontier, MassAccountant)
   index.ts           (imports: types, utils, registry, factory, config, distribution, search, aggregator)
 
 src/services/        ← post-processing, serialization
@@ -95,7 +97,7 @@ Worker (src/worker/worker.ts)
     │
     ▼
 EnchantEngine.getFullStats  (src/engine/index.ts)
-  ├─ validates inputs (xp range, known category/material)
+  ├─ validates inputs (xp range, known category/material, guaranteed-first validity)
   ├─ checks statsCache
   └─ StatAggregator.getFullStats(registry, cat, xp, mat, guaranteedFirst, config)
         │
@@ -108,12 +110,12 @@ EnchantEngine.getFullStats  (src/engine/index.ts)
                ├─ best-first search loop:
                │    getEligiblePool()        → PackedEnchant[] for (cat, level, mat)
                │    processInitialNode()     → expand root into first enchants
-               │    processSearchNode()      → branch, conflict-prune, merge duplicates
-               │    redistributeBookProb()   → split prob for multi-enchant books
-               └─ returns SearchFrontier { results, anyMass, rankMass, countMass, uncertainty }
+                  ├─ processSearchNode()      → branch, conflict-prune, merge duplicates
+                ├─ redistributeBookProb()   → split prob for multi-enchant books
+                └─ returns SearchFrontier { results, anyMass, rankMass, countMass, mass (MassBookkeeping) }
 
         ↓ accumulate frontier results weighted by modLevel probabilities
-        SummaryService.summarize()   → CalculationStats { ranks, any, count, combos, uncertainty }
+        SummaryService.summarize()   → CalculationStats { ..., accuracy, accounting (MassAccounting) }
     │
     ▼
 SerializationService.serialize()   → CompactStats (TypedArrays for transferable transfer)
@@ -137,7 +139,7 @@ UI (HumanizationService.humanize + ResultsView.render + ChartController.update)
 | Signature | What it does |
 |---|---|
 | `constructor(data, version)` | Builds registry from DATA + version string; throws for invalid inputs |
-| `getFullStats(cat, xp, mat, config?) → Promise<CalculationStats>` | Main public API: validates inputs, aggregates stats across all modified levels |
+| `getFullStats(cat, xp, mat, config?) → Promise<CalculationStats>` | Main public API: validates inputs (non-starter check), aggregates stats |
 | `calculateCombinations(cat, modLevel, mat, guaranteedFirst?, threshold?, maxIterations?, resultsLimit?) → SearchFrontier` | Runs best-first search for a single modified level; wraps SearchService with cache |
 | `getModifiedLevelDist(xp, enchantability) → {[level]: bigint}` | Returns probability distribution over modified enchantment levels |
 | `getEligibleListNumeric(cat, level, mat, bitset?) → number[]` | Returns packed enchant IDs eligible at a level, excluding the given bitset |
@@ -158,7 +160,7 @@ UI (HumanizationService.humanize + ResultsView.render + ChartController.update)
 ### `src/engine/search.ts` — `SearchService`
 | Signature | What it does |
 |---|---|
-| `static calculateCombinations(registry, cat, modLevel, mat, guaranteedFirst?, threshold?, limit, existingFrontier?, resultsLimit?, poolCache?) → SearchFrontier` | Best-first iterative search; resumes from existing frontier if provided |
+| `static calculateCombinations(registry, cat, modLevel, mat, guaranteedFirst?, threshold?, limit, existingFrontier?, resultsLimit?, poolCache?, instrumentation?, floor?) → SearchFrontier` | Best-first iterative search; resumes from existing frontier if provided; uses MassAccountant for bookkeeping |
 
 ### `src/engine/frontier.ts` — `FrontierFactory`
 | Signature | What it does |
@@ -185,7 +187,7 @@ UI (HumanizationService.humanize + ResultsView.render + ChartController.update)
 ### `src/services/SummaryService.ts`
 | Signature | What it does |
 |---|---|
-| `static summarize(combos, uncertainty, roundingError?, anyMass?, rankMass?, countMass?, comboLimit?) → CalculationStats` | Converts raw BigInt mass maps into a number-based CalculationStats object |
+| `static summarize(combos, accountant, anyMass?, rankMass?, countMass?, comboLimit?) → CalculationStats` | Converts raw BigInt mass maps and MassAccountant into a number-based CalculationStats object |
 
 ### `src/services/HumanizationService.ts`
 | Signature | What it does |
@@ -236,13 +238,37 @@ statsCache     LRUCache<number, CalculationStats>  getStatsKey  (no limit, no th
 
 **statsCache semantics**
 - Key: `getStatsKey(catId, matId, xp, guaranteedId)` — no threshold, no limit, no resultsLimit in key
-- Read: return cached entry unconditionally (no quality gate)
-- Write: overwrite only if the new result has strictly lower uncertainty than the cached entry
+- Read: Accuracy is defined strictly as `Resolved / (Resolved + Pending + Capped + Sieved + Overflow)`. In practice, the denominator is always 1.0 (PRECISION), so `Accuracy = Resolved`.
+
+## Search Termination & Invariants
+
+The best-first search maintains strict invariants to ensure stability and accuracy:
+- **`floor < threshold`**: The engine maintains a system-level `floor` (lower limit) and a user-level `threshold`. Nodes are only branched if `prob > threshold`, but they may be settled into the results map even if below `threshold` as long as they are above `floor`. This ensures that guaranteed enchantments (which may have low probability branches) are still accounted for correctly.
+- **Mass Conservation**: Every call to `StatAggregator.addScaled` ensures that the sum of all buckets matches the input probability, with discrepancies handled by `rounding`.
+
+## Performance & Caching
 
 **comboCache / bookComboCache semantics**
 - Key: `getPackedKey(catId, matId, modLevel, guaranteedId)` — `limit` is NOT in the key, enabling cross-tier resumability (a deep tier can resume the frontier cached by a coarser tier)
 - Read: if `cached.threshold <= requested threshold`, return cached entry directly; otherwise pass as `existingFrontier` to continue the search
 - Write: always overwrite with the latest (more-explored) frontier
+
+### Probability Accounting
+
+The engine uses a rigorous probability accounting system to ensure no probability mass is "lost" during the search. Every possible outcome is categorized into one of the following buckets:
+
+- **Resolved**: Success! The search reached a natural leaf node.
+- **Pending**: Uncertain. These are nodes still in the search queue that haven't been processed yet.
+- **Sieved**: Discarded. These nodes had a probability below the minimum resolution threshold.
+- **Overflow**: Discarded by technical limits. These are outcomes that exceeded the 6-enchantment cap supported by the engine.
+- **Capped**: Discarded by engine limits. These are outcomes that were not explored because the results map or search queue reached their maximum allowed size (an engine-resource constraint).
+- **Rounding**: Compensation. This bucket tracks the cumulative rounding error from fixed-point (BigInt) arithmetic, ensuring the sum of all buckets is always exactly 1.0 (indexed to `10^12`).
+
+This categorization allows us to distinguish between losses due to game rules (`overflow`) and losses due to engine performance optimizations (`capped` and `sieved`), providing a clear "accuracy" metric (the `resolved` mass).
+
+The `MassAccountant` class manages these buckets and provides an `addScaled` method to combine results from multiple tiers or levels while maintaining perfect conservation.
+
+---
 
 **Bit layout of packed keys**
 
