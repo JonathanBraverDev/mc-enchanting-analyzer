@@ -1,3 +1,4 @@
+import { SearchHeap } from '../utils/collections/SearchHeap.js';
 import { BinaryHeap, PRECISION, ComboUtils, EnchantUtils } from '../utils/index.js';
 import { ENGINE_DEFAULTS } from '../core/config.js';
 import { getEnchantId } from '../core/registry.js';
@@ -23,7 +24,7 @@ export class FrontierFactory {
         }
 
         const results = new Map<PackedCombo, bigint>();
-        const queue = new BinaryHeap<PackedNode>((item) => item.meta);
+        const queue = new SearchHeap();
         const anyMass = new BigUint64Array(256);
         const rankMass = new BigUint64Array(16384);
         const countMass = new BigUint64Array(16);
@@ -44,11 +45,7 @@ export class FrontierFactory {
             rankMass[full] = PRECISION;
         }
 
-        queue.push({
-            packedChosen: initialPacked,
-            meta: (initialBitset << 8n) | BigInt(modLevel),
-            prob: PRECISION
-        });
+        queue.pushOrMerge((initialBitset << 8n) | BigInt(modLevel), PRECISION, modLevel, initialPacked);
 
         return {
             queue, results, anyMass, rankMass, countMass,

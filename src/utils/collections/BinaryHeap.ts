@@ -55,15 +55,16 @@ export class BinaryHeap<T extends { prob: bigint }> {
         if (length === 0) return undefined;
         
         const top = this.heap[0];
-        if (this.idSelector) {
-            this.indexMap.delete(this.idSelector(top));
+        const idSelector = this.idSelector;
+        if (idSelector) {
+            this.indexMap.delete(idSelector(top));
         }
 
         const bottom = this.heap.pop();
         if (this.heap.length > 0 && bottom !== undefined) {
             this.heap[0] = bottom;
-            if (this.idSelector) {
-                this.indexMap.set(this.idSelector(bottom), 0);
+            if (idSelector) {
+                this.indexMap.set(idSelector(bottom), 0);
             }
             this.sinkDown(0);
         }
