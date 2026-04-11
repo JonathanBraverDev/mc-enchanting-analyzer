@@ -1,7 +1,7 @@
 import { BinaryHeap, PRECISION, ProbUtils, ComboUtils, LRUCache, AsyncUtils } from '../utils/index.js';
 import { getEligiblePool } from '../core/registry.js';
 import { ENGINE_DEFAULTS } from '../core/config.js';
-import { PackedNode, PackedCombo, PackedEnchant, SearchFrontier, RegistryState, EngineInstrumentation, MassCheckpoint, EngineExitReason } from '../types/index.js';
+import { PackedNode, PackedCombo, PackedEnchant, SearchFrontier, RegistryState, EngineInstrumentation, MassCheckpoint, EngineExitReason, SearchTiming } from '../types/index.js';
 import { FrontierFactory } from './frontier.js';
 import { MassAccountant } from './MassAccountant.js';
 
@@ -37,8 +37,21 @@ export class SearchService {
         poolCache?: LRUCache<string, PackedEnchant[]>,
         signal?: AbortSignal,
         instrumentation?: EngineInstrumentation,
-        floor: bigint = threshold
+        floor: bigint = threshold,
+        timingResult?: SearchTiming
     ): Promise<SearchFrontier> {
+        let startTime = 0;
+        if (timingResult) startTime = performance.now();
+        
+        const timing = timingResult ? {
+            totalMs: 0,
+            searchMs: 0,
+            filteringMs: 0,
+            distributionMs: 0,
+            settlingMs: 0,
+            heapMs: 0
+        } : undefined;
+
         const frontier = FrontierFactory.create(registry, cat, modLevel, guaranteedFirst, existingFrontier, threshold);
         const { results, queue } = frontier;
         // Initialize accountant and ALWAYS reset pending mass
@@ -111,18 +124,27 @@ export class SearchService {
 
             iterations++;
             frontier.nodesProcessed++;
+            
+            let popStart = 0;
+            if (timing) popStart = performance.now();
             const current = queue.pop()!;
+            if (timing) timing.heapMs += performance.now() - popStart;
+
             accountant.subtract('pending', current.prob);
             const currentCount = ComboUtils.getCount(current.packedChosen);
 
+            let procStart = 0;
+            if (timing) procStart = performance.now();
+
             if (currentCount === 0) {
-                this.processInitialNode(registry, current, modLevel, guaranteedFirstId, initialPool, poolWeights, initialTotalWeight, queue, frontier.anyMass, frontier.rankMass, accountant);
+                this.processInitialNode(registry, current, modLevel, guaranteedFirstId, initialPool, poolWeights, initialTotalWeight, queue, frontier.anyMass, frontier.rankMass, accountant, timing);
             } else {
                 this.processSearchNode(
                     registry, current, currentCount, cat, guaranteedFirstId, initialPool, poolWeights, floor, results, queue,
-                    frontier.anyMass, frontier.rankMass, frontier.countMass, resultsLimit, accountant, instrumentation
+                    frontier.anyMass, frontier.rankMass, frontier.countMass, resultsLimit, accountant, instrumentation, timing
                 );
             }
+            if (timing) timing.searchMs += performance.now() - procStart;
 
             // Checkpoints: record after processing — current.prob is the minimum threshold
             // needed to have processed this node (and thus reached this mass coverage).
@@ -149,7 +171,15 @@ export class SearchService {
             else exitReason = 'threshold';
         }
 
-        // Pending mass is already up-to-date via incremental push/pop
+        if (timingResult && timing) {
+            timing.totalMs = performance.now() - startTime;
+            timingResult.totalMs += timing.totalMs;
+            timingResult.searchMs += timing.searchMs;
+            timingResult.filteringMs += timing.filteringMs;
+            timingResult.distributionMs += timing.distributionMs;
+            timingResult.settlingMs += timing.settlingMs;
+            timingResult.heapMs += timing.heapMs;
+        }
 
         return { ...frontier, mass: accountant.getBookkeeping(), iterations, checkpoints: localCheckpoints, exitReason };
     }
@@ -170,7 +200,8 @@ export class SearchService {
         countMass: Map<number, bigint>,
         resultsLimit: number,
         accountant: MassAccountant,
-        instrumentation?: EngineInstrumentation
+        instrumentation?: EngineInstrumentation,
+        timing?: SearchTiming
     ): void {
         const { enchantToIndex, indexToEnchant } = registry;
         const currentBitset = current.meta >> 8n;
@@ -182,7 +213,8 @@ export class SearchService {
             : [] as PackedEnchant[];
 
         const probContinue = SearchService.PROB_CONTINUE_TABLE[currentLevel] || 0n;
-
+        let startSettling = 0;
+        if (timing) startSettling = performance.now();
         const probStop = ProbUtils.scale(current.prob, (PRECISION - probContinue));
         const remStop = this.settleMass(registry, isBook, currentCount, current.packedChosen, currentEnchants, probStop, guaranteedFirstId, enchantToIndex, indexToEnchant, results, countMass, anyMass, rankMass);
 
@@ -195,6 +227,8 @@ export class SearchService {
 
         if (isLimitReached || isTooSmall || isMapFull) {
             const remForward = this.settleMass(registry, isBook, currentCount, current.packedChosen, currentEnchants, probForward, guaranteedFirstId, enchantToIndex, indexToEnchant, results, countMass, anyMass, rankMass);
+            if (timing) timing.settlingMs += performance.now() - startSettling;
+            
             // In Banker's Rounding land, stop + forward approx current.prob.
             // Any discrepency is recorded as rounding error.
             const localRounding = remStop + remForward + (current.prob - (probStop + probForward));
@@ -215,7 +249,11 @@ export class SearchService {
             return;
         }
 
+        if (timing) timing.settlingMs += performance.now() - startSettling;
+
         // Branching
+        let startFiltering = 0;
+        if (timing) startFiltering = performance.now();
         let totalWeight = 0;
         if (pool.length > SearchService._eligible.length) {
             SearchService._eligible = new Array(pool.length);
@@ -235,9 +273,14 @@ export class SearchService {
             eligibleCount++;
             totalWeight += poolWeights[i];
         }
+        if (timing) timing.filteringMs += performance.now() - startFiltering;
 
         if (totalWeight === 0) {
+            let startEndSettling = 0;
+            if (timing) startEndSettling = performance.now();
             const remForward = this.settleMass(registry, isBook, currentCount, current.packedChosen, currentEnchants, probForward, guaranteedFirstId, enchantToIndex, indexToEnchant, results, countMass, anyMass, rankMass);
+            if (timing) timing.settlingMs += performance.now() - startEndSettling;
+
             const localRounding = remStop + remForward + (current.prob - (probStop + probForward));
 
             accountant.record('resolved', (probStop + probForward) - (remStop + remForward));
@@ -247,9 +290,15 @@ export class SearchService {
         }
 
         const nextLevel = currentCount >= 1 ? Math.floor(currentLevel / 2) : currentLevel;
+        let startDist = 0;
+        if (timing) startDist = performance.now();
         const { parts: splits, remainder: splitRemainder } = ProbUtils.distributeDetailed(probForward, weights, totalWeight, eligibleCount);
+        if (timing) timing.distributionMs += performance.now() - startDist;
+
         const guaranteedInCombo = guaranteedFirstId !== null && (currentBitset & (1n << BigInt(guaranteedFirstId))) !== 0n;
 
+        let startHeap = 0;
+        if (timing) startHeap = performance.now();
         for (let i = 0; i < eligibleCount; i++) {
             const pNext = splits[i];
             const nextPacked = ComboUtils.packAppend(current.packedChosen, eligible[i], guaranteedFirstId, guaranteedInCombo, enchantToIndex);
@@ -266,6 +315,7 @@ export class SearchService {
                 prob: pNext
             });
         }
+        if (timing) timing.heapMs += performance.now() - startHeap;
 
         const scaleRoundingLoss = current.prob - (probStop + probForward);
         accountant.record('resolved', probStop - remStop);
@@ -370,10 +420,17 @@ export class SearchService {
         queue: BinaryHeap<PackedNode>,
         anyMass: Map<number, bigint>,
         rankMass: Map<number, bigint>,
-        accountant: MassAccountant
+        accountant: MassAccountant,
+        timing?: SearchTiming
     ): void {
         const { enchantToIndex } = registry;
+        let startDist = 0;
+        if (timing) startDist = performance.now();
         const { parts: splits, remainder: splitRemainder } = ProbUtils.distributeDetailed(current.prob, weights, totalWeight);
+        if (timing) timing.distributionMs += performance.now() - startDist;
+
+        let startHeap = 0;
+        if (timing) startHeap = performance.now();
         for (let i = 0; i < pool.length; i++) {
             const pNext = splits[i];
             const nextId = ComboUtils.getEnchantId(pool[i]);
@@ -388,6 +445,7 @@ export class SearchService {
                 prob: pNext
             });
         }
+        if (timing) timing.heapMs += performance.now() - startHeap;
         accountant.record('sieved', splitRemainder);
     }
 }

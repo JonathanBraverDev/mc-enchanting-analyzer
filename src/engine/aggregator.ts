@@ -117,7 +117,7 @@ export class StatAggregator {
                     registry, cat, ml, mat, guaranteedFirst,
                     activeThreshold, tier.limit,
                     existingFrontier, resultsLimit, poolCache, signal, instrumentation,
-                    activeFloor
+                    activeFloor, config.timing
                 );
 
                 frontierMap.set(ml, result);
@@ -166,6 +166,7 @@ export class StatAggregator {
 
             const tierStats = SummaryService.summarize(finalCombos, tierAccountant, totalAnyMass, totalRankMass, totalCountMass, summaryLimit);
             tierStats.instrumentation = instrumentation ? snapshotInstrumentation(instrumentation) : undefined;
+            tierStats.timing = config.timing ? { ...config.timing } : undefined;
 
             if (abortedMidTier) return tierStats;
 
@@ -222,7 +223,6 @@ export class StatAggregator {
         if (instrumentation) {
             instrumentation.checkpoints = instrumentation.checkpoints || [];
             instrumentation.totalIterations = 0;
-            instrumentation.levelsProcessed = 0;
             instrumentation.levelsFullyResolved = 0;
             instrumentation.frontierCache = instrumentation.frontierCache || { hits: 0, misses: 0 };
         }
@@ -239,7 +239,7 @@ export class StatAggregator {
 
             const result = await SearchService.calculateCombinations(
                 registry, cat, ml, mat, guaranteedFirst, bThreshold, limit, cached, resultsLimit, poolCache, signal, instrumentation,
-                bFloor
+                bFloor, config.timing
             );
 
             if (instrumentation) {
@@ -279,6 +279,7 @@ export class StatAggregator {
                 if (onProgress) {
                     const partialStats = SummaryService.summarize(finalCombos, globalAccountant, totalAnyMass, totalRankMass, totalCountMass, 0);
                     partialStats.instrumentation = instrumentation ? snapshotInstrumentation(instrumentation) : undefined;
+                    partialStats.timing = config.timing ? { ...config.timing } : undefined;
                     onProgress(partialStats);
                 }
                 await AsyncUtils.yield();
@@ -296,6 +297,7 @@ export class StatAggregator {
 
         const finalStats = SummaryService.summarize(finalCombos, globalAccountant, totalAnyMass, totalRankMass, totalCountMass, summaryLimit);
         finalStats.instrumentation = instrumentation ? snapshotInstrumentation(instrumentation) : undefined;
+        finalStats.timing = config.timing ? { ...config.timing } : undefined;
 
         return finalStats;
     }
