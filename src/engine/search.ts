@@ -1,4 +1,5 @@
-import { BinaryHeap, PRECISION, ProbUtils, ComboUtils, LRUCache, AsyncUtils } from '../utils/index.js';
+import { SearchHeap } from '../utils/collections/SearchHeap.js';
+import { PRECISION, ProbUtils, ComboUtils, LRUCache, AsyncUtils } from '../utils/index.js';
 import { getEligiblePool } from '../core/registry.js';
 import { ENGINE_DEFAULTS } from '../core/config.js';
 import { PackedNode, PackedCombo, PackedEnchant, SearchFrontier, RegistryState, EngineInstrumentation, MassCheckpoint, EngineExitReason, SearchTiming } from '../types/index.js';
@@ -78,7 +79,7 @@ export class SearchService {
             countMass[0] = PRECISION;
 
             return {
-                queue: new BinaryHeap(),
+                queue: new SearchHeap(),
                 results: new Map(),
                 anyMass,
                 rankMass,
@@ -101,16 +102,17 @@ export class SearchService {
         let checkpointIdx = 0;
         let exitReason: EngineExitReason | undefined;
 
+        // Reusable node for popFast to avoid allocations
+        const current = { meta: 0n, prob: 0n, level: 0, combo: 0 };
+
         while (queue.size() > 0 && iterations < limit) {
-            const next = queue.peek()!;
+            const nextProb = queue.peekProb();
 
             if (iterations > 0 && iterations % 1000 === 0) {
                 if (instrumentation) {
                     instrumentation.queueSize = queue.size();
                     instrumentation.indexMapSize = queue.indexMapSize;
                     instrumentation.resultsSize = results.size;
-                    // Skip process.memoryUsage in browser environment
-                    //instrumentation.memoryMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024)
                 }
                 await AsyncUtils.yield();
                 if (signal?.aborted) {
@@ -119,7 +121,7 @@ export class SearchService {
                 }
             }
 
-            if (next.prob < threshold) {
+            if (nextProb < threshold) {
                 exitReason = 'threshold';
                 break;
             }
@@ -134,7 +136,7 @@ export class SearchService {
             
             let popStart = 0;
             if (timing) popStart = performance.now();
-            const current = queue.pop()!;
+            if (!queue.popFast(current)) break;
             if (timing) timing.heapMs += performance.now() - popStart;
 
             if (expandedIds.has(current.meta)) {
@@ -144,16 +146,16 @@ export class SearchService {
             }
 
             accountant.subtract('pending', current.prob);
-            const currentCount = ComboUtils.getCount(current.packedChosen);
+            const currentCount = ComboUtils.getCount(current.combo);
 
             let procStart = 0;
             if (timing) procStart = performance.now();
 
             if (currentCount === 0) {
-                this.processInitialNode(registry, current, modLevel, guaranteedFirstId, initialPool, poolWeights, initialTotalWeight, queue, frontier.anyMass, frontier.rankMass, accountant, timing);
+                this.processInitialNode(registry, current.prob, current.meta, modLevel, guaranteedFirstId, initialPool, poolWeights, initialTotalWeight, queue, frontier.anyMass, frontier.rankMass, accountant, timing);
             } else {
                 this.processSearchNode(
-                    registry, current, currentCount, cat, guaranteedFirstId, initialPool, poolWeights, floor, results, queue,
+                    registry, current.prob, current.meta, current.combo, currentCount, cat, guaranteedFirstId, initialPool, poolWeights, floor, results, queue,
                     frontier.anyMass, frontier.rankMass, frontier.countMass, resultsLimit, accountant, instrumentation, timing
                 );
             }
@@ -204,7 +206,9 @@ export class SearchService {
 
     private static processSearchNode(
         registry: RegistryState,
-        current: PackedNode,
+        currentProb: bigint,
+        currentMeta: bigint,
+        currentCombo: number,
         currentCount: number,
         cat: string,
         guaranteedFirstId: number | null,
@@ -212,7 +216,7 @@ export class SearchService {
         poolWeights: number[],
         threshold: bigint,
         results: Map<PackedCombo, bigint>,
-        queue: BinaryHeap<PackedNode>,
+        queue: SearchHeap,
         anyMass: BigUint64Array,
         rankMass: BigUint64Array,
         countMass: BigUint64Array,
@@ -223,34 +227,34 @@ export class SearchService {
     ): void {
 
         const { enchantToIndex, indexToEnchant } = registry;
-        const currentBitset = current.meta >> 8n;
-        const currentLevel = Number(current.meta & 0xFFn);
+        const currentBitset = currentMeta >> 8n;
+        const currentLevel = Number(currentMeta & 0xFFn);
         const isBook = cat === "book";
         // Unpack once for reuse.
         const currentEnchants = (isBook && currentCount > 1)
-            ? ComboUtils.unpack(current.packedChosen, indexToEnchant)
+            ? ComboUtils.unpack(currentCombo, indexToEnchant)
             : [] as PackedEnchant[];
 
         const probContinue = SearchService.PROB_CONTINUE_TABLE[currentLevel] || 0n;
         let startSettling = 0;
         if (timing) startSettling = performance.now();
-        const probStop = ProbUtils.scale(current.prob, (PRECISION - probContinue));
-        const remStop = this.settleMass(registry, isBook, currentCount, current.packedChosen, currentEnchants, probStop, guaranteedFirstId, enchantToIndex, indexToEnchant, results, countMass, anyMass, rankMass);
+        const probStop = ProbUtils.scale(currentProb, (PRECISION - probContinue));
+        const remStop = this.settleMass(registry, isBook, currentCount, currentCombo, currentEnchants, probStop, guaranteedFirstId, enchantToIndex, indexToEnchant, results, countMass, anyMass, rankMass);
 
-        const probForward = ProbUtils.scale(current.prob, probContinue);
+        const probForward = ProbUtils.scale(currentProb, probContinue);
 
         // Safety checks
         const isLimitReached = currentCount >= (isBook && !registry.multiEnchantBooks ? 1 : ENGINE_DEFAULTS.MAX_ENCHANTS_PER_ITEM);
         const isTooSmall = probForward < threshold;
-        const isMapFull = results.size >= resultsLimit && !results.has(current.packedChosen);
+        const isMapFull = results.size >= resultsLimit && !results.has(currentCombo);
 
         if (isLimitReached || isTooSmall || isMapFull) {
-            const remForward = this.settleMass(registry, isBook, currentCount, current.packedChosen, currentEnchants, probForward, guaranteedFirstId, enchantToIndex, indexToEnchant, results, countMass, anyMass, rankMass);
+            const remForward = this.settleMass(registry, isBook, currentCount, currentCombo, currentEnchants, probForward, guaranteedFirstId, enchantToIndex, indexToEnchant, results, countMass, anyMass, rankMass);
             if (timing) timing.settlingMs += performance.now() - startSettling;
             
-            // In Banker's Rounding land, stop + forward approx current.prob.
+            // In Banker's Rounding land, stop + forward approx currentProb.
             // Any discrepency is recorded as rounding error.
-            const localRounding = remStop + remForward + (current.prob - (probStop + probForward));
+            const localRounding = remStop + remForward + (currentProb - (probStop + probForward));
             
             accountant.record('resolved', probStop - remStop);
             accountant.record('rounding', localRounding);
@@ -297,10 +301,10 @@ export class SearchService {
         if (totalWeight === 0) {
             let startEndSettling = 0;
             if (timing) startEndSettling = performance.now();
-            const remForward = this.settleMass(registry, isBook, currentCount, current.packedChosen, currentEnchants, probForward, guaranteedFirstId, enchantToIndex, indexToEnchant, results, countMass, anyMass, rankMass);
+            const remForward = this.settleMass(registry, isBook, currentCount, currentCombo, currentEnchants, probForward, guaranteedFirstId, enchantToIndex, indexToEnchant, results, countMass, anyMass, rankMass);
             if (timing) timing.settlingMs += performance.now() - startEndSettling;
 
-            const localRounding = remStop + remForward + (current.prob - (probStop + probForward));
+            const localRounding = remStop + remForward + (currentProb - (probStop + probForward));
 
             accountant.record('resolved', (probStop + probForward) - (remStop + remForward));
             accountant.record('rounding', localRounding);
@@ -320,7 +324,7 @@ export class SearchService {
         if (timing) startHeap = performance.now();
         for (let i = 0; i < eligibleCount; i++) {
             const pNext = splits[i];
-            const nextPacked = ComboUtils.packAppend(current.packedChosen, eligible[i], guaranteedFirstId, guaranteedInCombo, enchantToIndex);
+            const nextPacked = ComboUtils.packAppend(currentCombo, eligible[i], guaranteedFirstId, guaranteedInCombo, enchantToIndex);
             const nextId = ComboUtils.getEnchantId(eligible[i]);
             const nextMeta = ((currentBitset | (1n << BigInt(nextId))) << 8n) | BigInt(nextLevel);
 
@@ -329,16 +333,12 @@ export class SearchService {
             ProbUtils.addItemMass(rankMass, eligible[i], pNext);
 
             accountant.record('pending', pNext);
-            queue.pushOrMerge(nextMeta, pNext, () => ({
-                packedChosen: nextPacked,
-                meta: nextMeta,
-                prob: pNext
-            }));
+            queue.pushOrMerge(nextMeta, pNext, nextLevel, nextPacked);
         }
 
         if (timing) timing.heapMs += performance.now() - startHeap;
 
-        const scaleRoundingLoss = current.prob - (probStop + probForward);
+        const scaleRoundingLoss = currentProb - (probStop + probForward);
         accountant.record('resolved', probStop - remStop);
         accountant.record('rounding', remStop + scaleRoundingLoss);
         accountant.record('sieved', splitRemainder);
@@ -434,13 +434,14 @@ export class SearchService {
 
     private static processInitialNode(
         registry: RegistryState,
-        current: PackedNode,
+        currentProb: bigint,
+        currentMeta: bigint,
         modLevel: number,
         guaranteedId: number | null,
         pool: PackedEnchant[],
         weights: number[],
         totalWeight: number,
-        queue: BinaryHeap<PackedNode>,
+        queue: SearchHeap,
         anyMass: BigUint64Array,
         rankMass: BigUint64Array,
         accountant: MassAccountant,
@@ -450,7 +451,7 @@ export class SearchService {
         const { enchantToIndex } = registry;
         let startDist = 0;
         if (timing) startDist = performance.now();
-        const { parts: splits, remainder: splitRemainder } = ProbUtils.distributeDetailed(current.prob, weights, totalWeight);
+        const { parts: splits, remainder: splitRemainder } = ProbUtils.distributeDetailed(currentProb, weights, totalWeight);
         if (timing) timing.distributionMs += performance.now() - startDist;
 
         let startHeap = 0;
@@ -465,11 +466,7 @@ export class SearchService {
             ProbUtils.addItemMass(rankMass, pool[i], pNext);
 
             accountant.record('pending', pNext);
-            queue.pushOrMerge(nextMeta, pNext, () => ({
-                packedChosen: nextPacked,
-                meta: nextMeta,
-                prob: pNext
-            }));
+            queue.pushOrMerge(nextMeta, pNext, modLevel, nextPacked);
         }
 
         if (timing) timing.heapMs += performance.now() - startHeap;

@@ -1,5 +1,5 @@
 import { Enchantment, EnchantmentData } from './domain.js';
-import { BinaryHeap } from '../utils/collections/BinaryHeap.js';
+import { SearchHeap } from '../utils/collections/SearchHeap.js';
 import { LRUCache } from '../utils/collections/LRUCache.js';
 
 import { MassAccounting, MassBookkeeping } from './mass.js';
@@ -120,7 +120,7 @@ export interface PackedNode {
  * State of a search for enchantment combinations.
  */
 export interface SearchFrontier {
-    queue: BinaryHeap<PackedNode>;
+    queue: SearchHeap;
     results: Map<PackedCombo, bigint>;
     anyMass: BigUint64Array;
     rankMass: BigUint64Array;
