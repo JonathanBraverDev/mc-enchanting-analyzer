@@ -132,13 +132,13 @@ describe('ComboUtils', () => {
 
     it('removeAdditional on single-enchant combo returns same combo', () => {
         const packed  = ComboUtils.pack([SHARP4], null, reg.enchantToIndex);
-        const results = ComboUtils.removeAdditional(packed, null, reg.enchantToIndex, reg.indexToEnchant);
+        const results = ComboUtils.removeAdditional(packed, null, reg.indexToEnchant);
         assert.strictEqual(results.length, 1);
         assert.strictEqual(results[0], packed);
     });
 
     it('removeAdditional on empty combo returns [0]', () => {
-        const results = ComboUtils.removeAdditional(0, null, reg.enchantToIndex, reg.indexToEnchant);
+        const results = ComboUtils.removeAdditional(0, null, reg.indexToEnchant);
         assert.strictEqual(results.length, 1);
         assert.strictEqual(results[0], 0);
     });
@@ -146,7 +146,7 @@ describe('ComboUtils', () => {
     it('removeAdditional without guarantee returns N results for N-enchant input', () => {
         const input   = [SHARP4, UNBR3, FIRE2];
         const packed  = ComboUtils.pack(input, null, reg.enchantToIndex);
-        const results = ComboUtils.removeAdditional(packed, null, reg.enchantToIndex, reg.indexToEnchant);
+        const results = ComboUtils.removeAdditional(packed, null, reg.indexToEnchant);
 
         assert.strictEqual(results.length, 3);
         // Each result has exactly 2 enchants
@@ -158,7 +158,7 @@ describe('ComboUtils', () => {
     it('removeAdditional without guarantee: each original enchant is absent from exactly one result', () => {
         const input   = [SHARP4, UNBR3, FIRE2];
         const packed  = ComboUtils.pack(input, null, reg.enchantToIndex);
-        const results = ComboUtils.removeAdditional(packed, null, reg.enchantToIndex, reg.indexToEnchant);
+        const results = ComboUtils.removeAdditional(packed, null, reg.indexToEnchant);
 
         // Each of the 3 input enchants should be absent from exactly 1 of the 3 results
         for (const enchant of input) {
@@ -171,7 +171,7 @@ describe('ComboUtils', () => {
     it('removeAdditional with guaranteedFirstId returns only results containing the guaranteed enchant', () => {
         const input   = [SHARP4, UNBR3, FIRE2];
         const packed  = ComboUtils.pack(input, null, reg.enchantToIndex);
-        const results = ComboUtils.removeAdditional(packed, SHARP_ID, reg.enchantToIndex, reg.indexToEnchant);
+        const results = ComboUtils.removeAdditional(packed, SHARP_ID, reg.indexToEnchant);
 
         // Every result must contain SHARPNESS
         for (const r of results) {
@@ -187,11 +187,11 @@ describe('ComboUtils', () => {
         const packed  = ComboUtils.pack(input, null, reg.enchantToIndex);
 
         // Without guarantee: 2 results (one with only UNBR, one with only SHARP)
-        const noGuarantee = ComboUtils.removeAdditional(packed, null, reg.enchantToIndex, reg.indexToEnchant);
+        const noGuarantee = ComboUtils.removeAdditional(packed, null, reg.indexToEnchant);
         assert.strictEqual(noGuarantee.length, 2);
 
         // With guarantee=SHARP: only 1 result (the one that still has SHARP)
-        const withGuarantee = ComboUtils.removeAdditional(packed, SHARP_ID, reg.enchantToIndex, reg.indexToEnchant);
+        const withGuarantee = ComboUtils.removeAdditional(packed, SHARP_ID, reg.indexToEnchant);
         assert.strictEqual(withGuarantee.length, 1);
 
         const ids = ComboUtils.unpack(withGuarantee[0], reg.indexToEnchant).map(e => e >> 8);

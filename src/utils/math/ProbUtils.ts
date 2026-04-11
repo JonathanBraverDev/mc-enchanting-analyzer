@@ -96,6 +96,16 @@ export const ProbUtils = {
     },
 
     /**
+     * Specialized zero-allocation version of distributeDetailed for equal splits.
+     * Returns the base quotient and the total remainder to be settled manually.
+     */
+    distributeEqual: (prob: bigint, n: number): { quotient: bigint; remainder: bigint } => {
+        if (n <= 0) return { quotient: 0n, remainder: prob };
+        const bigN = BigInt(n);
+        return { quotient: prob / bigN, remainder: prob % bigN };
+    },
+
+    /**
      * Scales 'val' by 'multiplier' and divides by 'divisor' using Banker's Rounding.
      */
     roundScale: (val: bigint, multiplier: bigint, divisor: bigint): bigint => {

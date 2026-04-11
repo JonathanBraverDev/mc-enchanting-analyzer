@@ -317,23 +317,30 @@ export class SearchService {
         prob: bigint,
         currentCount: number,
         guaranteedFirstId: number | null,
-        enchantToIndex: Map<number, number>,
+        _enchantToIndex: Map<number, number>,
         indexToEnchant: number[],
         results: Map<PackedCombo, bigint>,
         countMass: Map<number, bigint>,
         anyMass: Map<number, bigint>,
         rankMass: Map<number, bigint>
     ): { rem: bigint } {
-        const redistributed = ComboUtils.removeAdditional(packedChosen, guaranteedFirstId, enchantToIndex, indexToEnchant, originalEnchants);
+        const redistributed = ComboUtils.removeAdditional(packedChosen, guaranteedFirstId, indexToEnchant);
         const nOutcomes = redistributed.length;
-        // Use detailed distribution for Honest Accounting of mass across outcomes
-        const { parts: splits, remainder: splitRemainder } = ProbUtils.distributeDetailed(prob, redistributed.map(() => 1n), nOutcomes);
+        
+        // Zero-allocation equal split for Honest Accounting
+        const { quotient, remainder: splitRemainder } = ProbUtils.distributeEqual(prob, nOutcomes);
+        const settledMass = prob - splitRemainder;
 
-        for (let i = 0; i < redistributed.length; i++) {
-            ProbUtils.addItemMass(results, redistributed[i], splits[i]);
+        for (let i = 0; i < nOutcomes; i++) {
+            ProbUtils.addItemMass(results, redistributed[i], quotient);
         }
+        // Attributing total redistribution remainder to the first outcome to keep it in 'resolved' mass
+        if (nOutcomes > 0 && splitRemainder > 0n) {
+            ProbUtils.addItemMass(results, redistributed[0], splitRemainder);
+        }
+
         const finalCount = currentCount - 1;
-        ProbUtils.addItemMass(countMass, finalCount, prob - splitRemainder);
+        ProbUtils.addItemMass(countMass, finalCount, prob); // Total mass settled into the N-1 count bucket
 
         for (const e of originalEnchants) {
             const id = ComboUtils.getEnchantId(e);
@@ -341,15 +348,15 @@ export class SearchService {
             const nSurvivors = isGuaranteed ? nOutcomes : nOutcomes - 1;
             
             // Precise survivor mass: (prob * count) / total using Banker's Rounding
-            const survivorMass = ProbUtils.roundDiv(prob * BigInt(nSurvivors), BigInt(nOutcomes));
+            const survivorMass = ProbUtils.roundScale(prob, BigInt(nSurvivors), BigInt(nOutcomes));
             const loss = prob - survivorMass;
             if (loss > 0n) {
-                anyMass.set(id, (anyMass.get(id) || 0n) - loss);
-                rankMass.set(e, (rankMass.get(e) || 0n) - loss);
+                ProbUtils.addItemMass(anyMass, id, -loss);
+                ProbUtils.addItemMass(rankMass, e, -loss);
             }
         }
 
-        return { rem: splitRemainder };
+        return { rem: 0n }; // Remainder was attributed to the first outcome
     }
 
     private static processInitialNode(
