@@ -11,7 +11,18 @@ import { MassAccountant } from './MassAccountant.js';
  * Service for the Best-First search of enchantment combinations.
  */
 export class SearchService {
-    private static _splitsBuffer = new BigUint64Array(128);
+    /** 
+     * Shared memory pool for probability distributions. 
+     * 8 levels of depth (covers the engine's 6-enchant limit) x 128 outcomes.
+     */
+    private static _poolBuffer = new BigUint64Array(8 * 128);
+
+    private static getPoolBuffer(depth: number): BigUint64Array {
+        // Return a subarray view into the shared pool to avoid allocations while ensuring
+        // that recursive calls (harvesting) don't clobber parent distributions.
+        const start = (depth % 8) * 128;
+        return SearchService._poolBuffer.subarray(start, start + 128);
+    }
 
     private static readonly PROB_CONTINUE_TABLE: bigint[] = Array.from({ length: 65 }, (_, ml) => {
         const val = Math.min((ml + 1) / ENGINE_DEFAULTS.MAX_MODIFIED_LEVEL_FOR_CONTINUING, 1.0);
@@ -347,8 +358,8 @@ export class SearchService {
 
         let startDist = 0;
         if (timing) startDist = performance.now();
-        const splitRemainder = ProbUtils.distributeDetailed(probForward, weights, totalWeight, SearchService._splitsBuffer, eligibleCount);
-        const splits = SearchService._splitsBuffer;
+        const splits = this.getPoolBuffer(0);
+        const splitRemainder = ProbUtils.distributeDetailed(probForward, weights, totalWeight, splits, eligibleCount);
         if (timing) timing.distributionMs += performance.now() - startDist;
 
         const guaranteedInCombo = guaranteedFirstId !== null && (currentBitset & (1n << BigInt(guaranteedFirstId))) !== 0n;
@@ -489,8 +500,8 @@ export class SearchService {
         const { enchantToIndex } = registry;
         let startDist = 0;
         if (timing) startDist = performance.now();
-        const splitRemainder = ProbUtils.distributeDetailed(currentProb, weights, totalWeight, SearchService._splitsBuffer);
-        const splits = SearchService._splitsBuffer;
+        const splits = this.getPoolBuffer(0);
+        const splitRemainder = ProbUtils.distributeDetailed(currentProb, weights, totalWeight, splits);
         if (timing) timing.distributionMs += performance.now() - startDist;
 
         let startHeap = 0;
