@@ -134,6 +134,24 @@ export interface ExpansionBlueprint {
 }
 
 /**
+ * Shared context for mass distribution and forwarding operations.
+ * Bundles search state to reduce parameter ceremony.
+ */
+export interface ForwardingContext {
+    registry: RegistryState;
+    harvester: IResidualMassHarvester;
+    results: Map<PackedCombo, bigint>;
+    queue: SearchHeap;
+    anyMass: BigUint64Array;
+    rankMass: BigUint64Array;
+    countMass: BigUint64Array;
+    resultsLimit: number;
+    accountant: any; // Typed as any to avoid circular dependency with MassAccountant
+    instrumentation?: EngineInstrumentation;
+    timing?: SearchTiming;
+}
+
+/**
  * Interface for the Residual Mass Harvester which handles recursive forwarding
  * of probability mass for already-expanded nodes.
  */
@@ -145,20 +163,11 @@ export interface IResidualMassHarvester {
         incomingMass: bigint,
         meta: bigint,
         combo: number,
-        registry: RegistryState,
         cat: string,
         guaranteedFirstId: number | null,
         pool: PackedEnchant[],
         poolWeights: number[],
-        results: Map<number, bigint>,
-        queue: SearchHeap,
-        anyMass: BigUint64Array,
-        rankMass: BigUint64Array,
-        countMass: BigUint64Array,
-        resultsLimit: number,
-        accountant: any, // MassAccountant to avoid circularity
-        instrumentation?: EngineInstrumentation,
-        timing?: SearchTiming,
+        ctx: ForwardingContext,
         depth?: number
     ): bigint;
     clone(): IResidualMassHarvester;
