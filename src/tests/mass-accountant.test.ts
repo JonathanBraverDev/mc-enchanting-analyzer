@@ -1,61 +1,63 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { MassAccountant } from '../engine/MassAccountant.js';
+import { ProbabilityMassTracker } from '../engine/ProbabilityMassTracker.js';
 import { PRECISION } from '../utils/math/ProbUtils.js';
 
-describe('MassAccountant Diagnostic Buckets (Phase 1)', () => {
+describe('ProbabilityMassTracker (Consolidated Mass Handling)', () => {
 
     it('Invariant: Diagnostic buckets are non-additive', () => {
-        const acc = new MassAccountant();
+        const tracker = new ProbabilityMassTracker();
         
         // Populate standard buckets
-        acc.record('resolved', 50n);
-        acc.record('pending', 50n);
+        tracker.record('resolved', 50n);
+        tracker.record('pending', 50n);
         
         // Populate diagnostic buckets
-        acc.record('recoveredRounding', 1000n);
-        acc.record('recoveredSieved', 2000n);
+        tracker.record('recoveredRounding', 1000n);
+        tracker.record('recoveredSieved', 2000n);
         
         // Total should only be resolved + pending
-        assert.strictEqual(acc.getTotalMass(), 100n, 'Diagnostic mass must not affect getTotalMass()');
+        assert.strictEqual(tracker.getTotalMass(), 100n, 'Diagnostic mass must not affect getTotalMass()');
         
-        const bookkeeping = acc.getBookkeeping();
+        const bookkeeping = tracker.getBookkeeping();
         assert.strictEqual(bookkeeping.recoveredRounding, 1000n);
         assert.strictEqual(bookkeeping.recoveredSieved, 2000n);
     });
 
     it('Invariant: Sum remains 100% (PRECISION) after complex operations', () => {
-        const acc = new MassAccountant();
+        const tracker = new ProbabilityMassTracker();
         
         // Simulate a full search
-        acc.record('pending', PRECISION);
-        acc.subtract('pending', 1000n);
-        acc.record('resolved', 900n);
-        acc.record('rounding', 100n);
+        tracker.record('pending', PRECISION);
+        tracker.subtract('pending', 1000n);
+        tracker.record('resolved', 900n);
+        tracker.record('rounding', 100n);
         
         // Add some diagnostic "recovery" noise
-        acc.record('recoveredRounding', 50n);
+        tracker.record('recoveredRounding', 50n);
         
-        assert.strictEqual(acc.getTotalMass(), PRECISION, 'Total mass must remain exactly PRECISION');
+        assert.strictEqual(tracker.getTotalMass(), PRECISION, 'Total mass must remain exactly PRECISION');
     });
 
     it('Serialization: Diagnostic buckets pass through to public stats', () => {
-        const acc = new MassAccountant();
-        acc.record('recoveredRounding', PRECISION / 2n);
+        const tracker = new ProbabilityMassTracker();
+        tracker.record('recoveredRounding', PRECISION / 2n);
         
-        const publicAcc = acc.toPublic();
+        const publicAcc = tracker.toPublic();
         assert.strictEqual(publicAcc.recoveredRounding, 0.5, 'Recovered mass should be visible as 0.5 in public stats');
     });
 
-    it('Aggregation: Diagnostic buckets are summed correctly', () => {
-        const a1 = new MassAccountant();
-        const a2 = new MassAccountant();
+    it('Aggregation: addScaled maintains conservation invariants', () => {
+        const t1 = new ProbabilityMassTracker();
+        const t2 = new ProbabilityMassTracker();
         
-        a1.record('recoveredSieved', 100n);
-        a2.record('recoveredSieved', 200n);
+        t2.record('resolved', PRECISION);
         
-        const total = MassAccountant.aggregate([a1, a2]);
-        assert.strictEqual(total.getBookkeeping().recoveredSieved, 300n, 'Aggregated recovered mass should be 300');
+        // Add 50% of t2 to t1
+        t1.addScaled(t2, PRECISION / 2n);
+        
+        assert.strictEqual(t1.getTotalMass(), PRECISION / 2n, 'Mass should be scaled correctly');
+        assert.strictEqual(t1.getBookkeeping().resolved, PRECISION / 2n);
     });
 
 });

@@ -1,12 +1,13 @@
 import { PRECISION, ProbUtils, AsyncUtils, ComboUtils, EnchantUtils } from '../utils/index.js';
 import { SummaryService } from '../services/index.js';
-import { getEnchantability, isEnchantmentAchievable } from '../core/registry.js';
-import { ENGINE_DEFAULTS, getSearchLimit } from '../core/config.js';
+import { getEnchantability } from '../core/registry.js';
+import { ENGINE_LIMITS } from '../constants/engine.js';
+import { getSearchLimit } from '../core/config.js';
 import { CalculationStats, PackedCombo, SearchFrontier, RegistryState, InternalSearchConfig, EngineInstrumentation, MassCheckpoint, CheckpointSummary } from '../types/index.js';
 import { DistributionService } from './distribution.js';
 import { SearchService } from './search.js';
 import { FrontierFactory } from './frontier.js';
-import { MassAccountant } from './MassAccountant.js';
+import { ProbabilityMassTracker } from './ProbabilityMassTracker.js';
 
 /** Build a checkpointSummary from the raw flat checkpoints array. */
 function buildCheckpointSummary(checkpoints: MassCheckpoint[]): CheckpointSummary[] {
@@ -70,8 +71,8 @@ export class StatAggregator {
     ): Promise<CalculationStats> {
         const {
             signal,
-            summaryLimit = ENGINE_DEFAULTS.MAX_RESULTS_SUMMARY,
-            resultsLimit = ENGINE_DEFAULTS.MAX_RESULTS_SIZE,
+            summaryLimit = ENGINE_LIMITS.MAX_RESULTS_SUMMARY,
+            resultsLimit = ENGINE_LIMITS.MAX_RESULTS_SIZE,
             distCache,
             poolCache,
             instrumentation
@@ -82,24 +83,22 @@ export class StatAggregator {
         const levels = Object.keys(modDist).map(Number).sort((a, b) => b - a);
 
         const frontierMap = new Map<number, SearchFrontier>();
-        const initialAcc = new MassAccountant();
-        initialAcc.record('pending', PRECISION);
-        let lastStats: CalculationStats = { ranks: {}, any: {}, count: {}, combos: {}, accuracy: 0, accounting: initialAcc.toPublic() };
+        const initialTracker = new ProbabilityMassTracker();
+        initialTracker.record('pending', PRECISION);
+        let lastStats: CalculationStats = { ranks: {}, any: {}, count: {}, combos: {}, accuracy: 0, accounting: initialTracker.toPublic() };
 
         for (let tierIndex = 0; tierIndex < tiers.length; tierIndex++) {
             if (signal?.aborted) return lastStats;
 
             const tier = tiers[tierIndex];
-            const finalTier = tiers[tiers.length - 1];
             const activeThreshold = ProbUtils.toBigInt(tier.threshold);
-            const activeFloor = ProbUtils.toBigInt(ENGINE_DEFAULTS.SYSTEM_THRESHOLD_FLOOR);
 
             const finalCombos = new Map<PackedCombo, bigint>();
             const totalAnyMass = new BigUint64Array(256);
             const totalRankMass = new BigUint64Array(16384);
             const totalCountMass = new BigUint64Array(16);
 
-            let tierAccountant = new MassAccountant();
+            let tierTracker = new ProbabilityMassTracker();
 
             let processedMProb = 0n;
             let abortedMidTier = false;
@@ -118,7 +117,7 @@ export class StatAggregator {
                     registry, cat, ml, mat, guaranteedFirst,
                     activeThreshold, tier.limit,
                     existingFrontier, resultsLimit, poolCache, signal, instrumentation,
-                    activeFloor, config.timing
+                    activeThreshold, config.timing
                 );
 
                 frontierMap.set(ml, result);
@@ -147,8 +146,7 @@ export class StatAggregator {
                 ProbUtils.addMapMass(totalRankMass, result.rankMass, mProb);
                 ProbUtils.addMapMass(totalCountMass, result.countMass, mProb);
 
-                const levelAcc = new MassAccountant(result.mass);
-                tierAccountant.addScaled(levelAcc, mProb);
+                tierTracker.addScaled(result.tracker, mProb);
 
                 processedMProb += mProb;
                 await AsyncUtils.yield();
@@ -157,7 +155,7 @@ export class StatAggregator {
             if (abortedMidTier && processedMProb === 0n) return lastStats;
 
             const distRoundingError = PRECISION - processedMProb;
-            tierAccountant.record('rounding', distRoundingError);
+            tierTracker.record('rounding', distRoundingError);
 
             if (guaranteedFirst) {
                 StatAggregator.reconcileGuaranteedMass(
@@ -165,7 +163,7 @@ export class StatAggregator {
                 );
             }
 
-            const tierStats = SummaryService.summarize(finalCombos, tierAccountant, totalAnyMass, totalRankMass, totalCountMass, summaryLimit);
+            const tierStats = SummaryService.summarize(finalCombos, tierTracker, totalAnyMass, totalRankMass, totalCountMass, summaryLimit);
             tierStats.instrumentation = instrumentation ? snapshotInstrumentation(instrumentation) : undefined;
             tierStats.timing = config.timing ? { ...config.timing } : undefined;
 
@@ -194,8 +192,8 @@ export class StatAggregator {
             signal,
             onProgress,
             maxIterations,
-            summaryLimit = ENGINE_DEFAULTS.MAX_RESULTS_SUMMARY,
-            resultsLimit = ENGINE_DEFAULTS.MAX_RESULTS_SIZE,
+            summaryLimit = ENGINE_LIMITS.MAX_RESULTS_SUMMARY,
+            resultsLimit = ENGINE_LIMITS.MAX_RESULTS_SIZE,
             getExtendedCache,
             setExtendedCache,
             useCache = true,
@@ -206,7 +204,6 @@ export class StatAggregator {
         } = config;
 
         const bThreshold = ProbUtils.toBigInt(threshold);
-        const bFloor = ProbUtils.toBigInt(ENGINE_DEFAULTS.SYSTEM_THRESHOLD_FLOOR);
         const enchantability = getEnchantability(registry, mat, cat);
         const modDist = DistributionService.getModifiedLevelDist(xp, enchantability, registry, distCache);
         const levels = Object.keys(modDist).map(Number).sort((a, b) => b - a);
@@ -216,7 +213,7 @@ export class StatAggregator {
         const totalRankMass = new BigUint64Array(16384);
         const totalCountMass = new BigUint64Array(16);
 
-        let globalAccountant = new MassAccountant();
+        let globalTracker = new ProbabilityMassTracker();
 
         let processedMProb = 0n;
         let iterCount = 0;
@@ -241,7 +238,7 @@ export class StatAggregator {
 
             const result = await SearchService.calculateCombinations(
                 registry, cat, ml, mat, guaranteedFirst, bThreshold, limit, cached, resultsLimit, poolCache, signal, instrumentation,
-                bFloor, config.timing
+                bThreshold, config.timing
             );
 
             if (instrumentation) {
@@ -273,13 +270,12 @@ export class StatAggregator {
             ProbUtils.addMapMass(totalRankMass, result.rankMass, mProb);
             ProbUtils.addMapMass(totalCountMass, result.countMass, mProb);
 
-            const levelAcc = new MassAccountant(result.mass);
-            globalAccountant.addScaled(levelAcc, mProb);
+            globalTracker.addScaled(result.tracker, mProb);
 
             processedMProb += mProb;
             if (++iterCount % 3 === 0) {
                 if (onProgress) {
-                    const partialStats = SummaryService.summarize(finalCombos, globalAccountant, totalAnyMass, totalRankMass, totalCountMass, 0);
+                    const partialStats = SummaryService.summarize(finalCombos, globalTracker, totalAnyMass, totalRankMass, totalCountMass, 0);
                     partialStats.instrumentation = instrumentation ? snapshotInstrumentation(instrumentation) : undefined;
                     partialStats.timing = config.timing ? { ...config.timing } : undefined;
                     onProgress(partialStats);
@@ -289,7 +285,7 @@ export class StatAggregator {
         }
 
         const distRoundingError = PRECISION - processedMProb;
-        globalAccountant.record('rounding', distRoundingError);
+        globalTracker.record('rounding', distRoundingError);
 
         if (guaranteedFirst) {
             StatAggregator.reconcileGuaranteedMass(
@@ -297,7 +293,7 @@ export class StatAggregator {
             );
         }
 
-        const finalStats = SummaryService.summarize(finalCombos, globalAccountant, totalAnyMass, totalRankMass, totalCountMass, summaryLimit);
+        const finalStats = SummaryService.summarize(finalCombos, globalTracker, totalAnyMass, totalRankMass, totalCountMass, summaryLimit);
         finalStats.instrumentation = instrumentation ? snapshotInstrumentation(instrumentation) : undefined;
         finalStats.timing = config.timing ? { ...config.timing } : undefined;
 
@@ -306,8 +302,7 @@ export class StatAggregator {
 
     /**
      * Reconciles all non-pending mass (resolved, sieved, rounding, capped, overflow) 
-     * into the guaranteed enchantment's buckets. This ensures exact 1.0 probability 
-     * for guarantees without introducing bias elsewhere.
+     * into the guaranteed enchantment's buckets.
      */
     private static reconcileGuaranteedMass(
         registry: RegistryState,
@@ -315,18 +310,13 @@ export class StatAggregator {
         totalAnyMass: BigUint64Array,
         totalRankMass: BigUint64Array,
         totalCountMass: BigUint64Array
-
     ): void {
         const romanMap = registry.data.constants.ROMAN_MAP;
         const parsed = EnchantUtils.parse(guaranteedFirst, romanMap);
         const gId = parsed ? registry.idMap.get(parsed.name) : undefined;
 
         if (gId !== undefined) {
-            // Reconcile Individual probabilities to absolute 100% (PRECISION).
-            // This is mathematically certain because every path in a guaranteed-first search
-            // (resolved, sieved, or pending) carries the guaranteed enchantment.
             totalAnyMass[gId] = PRECISION;
-            
             const fullId = (gId << 8) | (parsed?.rank ?? 1);
             totalRankMass[fullId] = PRECISION;
         }

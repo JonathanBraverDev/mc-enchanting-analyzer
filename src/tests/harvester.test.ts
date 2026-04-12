@@ -1,16 +1,14 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { ResidualMassHarvester } from '../engine/ResidualMassHarvester.js';
-import { MassAccountant } from '../engine/MassAccountant.js';
-import { SearchHeap } from '../utils/collections/SearchHeap.js';
+import { ProbabilityMassTracker } from '../engine/ProbabilityMassTracker.js';
 import { PRECISION } from '../utils/math/ProbUtils.js';
-import { ExpansionBlueprint, RegistryState } from '../types/index.js';
+import { ExpansionBlueprint } from '../types/index.js';
 
-describe('ResidualMassHarvester (Engine Core Refactor)', () => {
+describe('ProbabilityMassTracker (Cache Functionality)', () => {
 
     it('should register expansions and report cache size', () => {
-        const harvester = new ResidualMassHarvester();
-        assert.strictEqual(harvester.getCacheSize(), 0);
+        const tracker = new ProbabilityMassTracker();
+        assert.strictEqual(tracker.getCacheSize(), 0);
 
         const blueprint: ExpansionBlueprint = {
             probContinue: PRECISION / 2n,
@@ -20,32 +18,30 @@ describe('ResidualMassHarvester (Engine Core Refactor)', () => {
             eligibleWeights: new Int32Array([10]),
             nextLevel: 30,
             currentCount: 1,
-            currentCombo: 0,
+            currentCombo: 0 as any,
             currentEnchants: [],
             residue: 0n
         };
 
-        harvester.registerExpansion(123n, blueprint);
-        assert.strictEqual(harvester.getCacheSize(), 1);
-        assert.strictEqual(harvester.has(123n), true);
-        assert.strictEqual(harvester.get(123n), blueprint);
+        tracker.registerExpansion(123n, blueprint);
+        assert.strictEqual(tracker.getCacheSize(), 1);
+        assert.strictEqual(tracker.has(123n), true);
+        assert.strictEqual(tracker.get(123n), blueprint);
     });
 
     it('should clone with its cache intact', () => {
-        const harvester = new ResidualMassHarvester();
+        const tracker = new ProbabilityMassTracker();
         const blueprint = { currentCount: 1 } as any;
-        harvester.registerExpansion(100n, blueprint);
+        tracker.registerExpansion(100n, blueprint);
 
-        const clone = harvester.clone();
+        const clone = tracker.clone();
         assert.strictEqual(clone.getCacheSize(), 1);
         assert.strictEqual(clone.has(100n), true);
         
         // Ensure isolation
         clone.registerExpansion(200n, blueprint);
         assert.strictEqual(clone.getCacheSize(), 2);
-        assert.strictEqual(harvester.getCacheSize(), 1);
+        assert.strictEqual(tracker.getCacheSize(), 1);
     });
 
-    // forwardMass test is deferred to integration tests due to heavy dependency on RegistryState
-    // and SearchService.settleMass which requires a fully populated registry.
 });

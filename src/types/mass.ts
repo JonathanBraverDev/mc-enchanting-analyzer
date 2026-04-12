@@ -36,3 +36,5 @@ export interface MassBookkeeping {
     recoveredRounding: bigint;
     recoveredSieved: bigint;
 }
+
+export type MassEventType = keyof MassBookkeeping;

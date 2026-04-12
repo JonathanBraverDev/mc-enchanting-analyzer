@@ -59,7 +59,7 @@ describe('Frontier Resumability & Cache Behavior', () => {
         );
         assert.ok(
             result2000.results.size > result500.results.size ||
-            result2000.mass.pending < result500.mass.pending,
+            result2000.tracker.getBookkeeping().pending < result500.tracker.getBookkeeping().pending,
             'Resumed search must produce more results or lower pending mass than the first run'
         );
 
