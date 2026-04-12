@@ -4,7 +4,7 @@ import { ProbUtils } from '../utils/math/ProbUtils.js';
 /**
  * Type of termination event that causes probability mass to be settled into a specific bucket.
  */
-export type MassEventType = 'resolved' | 'pending' | 'sieved' | 'overflow' | 'capped' | 'rounding';
+export type MassEventType = 'resolved' | 'pending' | 'sieved' | 'overflow' | 'capped' | 'rounding' | 'recoveredRounding' | 'recoveredSieved';
 
 /**
  * Dedicated class for enchantment engine probability bookkeeping.
@@ -25,6 +25,8 @@ export class MassAccountant {
     private overflow: bigint = 0n;
     private capped: bigint = 0n;
     private rounding: bigint = 0n;
+    private recoveredRounding: bigint = 0n;
+    private recoveredSieved: bigint = 0n;
 
     constructor(initial?: MassBookkeeping) {
         if (initial) {
@@ -34,6 +36,8 @@ export class MassAccountant {
             this.overflow = initial.overflow;
             this.capped = initial.capped;
             this.rounding = initial.rounding;
+            this.recoveredRounding = initial.recoveredRounding || 0n;
+            this.recoveredSieved = initial.recoveredSieved || 0n;
         }
     }
 
@@ -45,6 +49,8 @@ export class MassAccountant {
             overflow: ProbUtils.toBigInt(publicAcc.overflow),
             capped: ProbUtils.toBigInt(publicAcc.capped),
             rounding: ProbUtils.toBigInt(publicAcc.rounding),
+            recoveredRounding: ProbUtils.toBigInt(publicAcc.recoveredRounding || 0),
+            recoveredSieved: ProbUtils.toBigInt(publicAcc.recoveredSieved || 0),
         });
     }
 
@@ -56,10 +62,12 @@ export class MassAccountant {
             case 'overflow': this.overflow += prob; break;
             case 'capped':   this.capped += prob;   break;
             case 'rounding': this.rounding += prob; break;
+            case 'recoveredRounding': this.recoveredRounding += prob; break;
+            case 'recoveredSieved':   this.recoveredSieved += prob;   break;
         }
     }
 
-    public subtract(type: MassEventType, prob: bigint): void {
+    public subtract(type: MassEventType | 'recoveredRounding' | 'recoveredSieved', prob: bigint): void {
         switch (type) {
             case 'resolved': this.resolved -= prob; break;
             case 'pending':  this.pending -= prob;  break;
@@ -67,10 +75,12 @@ export class MassAccountant {
             case 'overflow': this.overflow -= prob; break;
             case 'capped':   this.capped -= prob;   break;
             case 'rounding': this.rounding -= prob; break;
+            case 'recoveredRounding': this.recoveredRounding -= prob; break;
+            case 'recoveredSieved':   this.recoveredSieved -= prob;   break;
         }
     }
 
-    public reset(type: MassEventType): void {
+    public reset(type: MassEventType | 'recoveredRounding' | 'recoveredSieved'): void {
         switch (type) {
             case 'resolved': this.resolved = 0n; break;
             case 'pending':  this.pending = 0n;  break;
@@ -78,6 +88,8 @@ export class MassAccountant {
             case 'overflow': this.overflow = 0n; break;
             case 'capped':   this.capped = 0n;   break;
             case 'rounding': this.rounding = 0n; break;
+            case 'recoveredRounding': this.recoveredRounding = 0n; break;
+            case 'recoveredSieved':   this.recoveredSieved = 0n;   break;
         }
     }
 
@@ -94,9 +106,14 @@ export class MassAccountant {
         this.overflow += ProbUtils.scale(b.overflow, factor);
         this.capped   += ProbUtils.scale(b.capped, factor);
         this.rounding += ProbUtils.scale(b.rounding, factor);
+
+        // Recovered buckets are also scaled to maintain diagnostic accuracy
+        this.recoveredRounding += ProbUtils.scale(b.recoveredRounding, factor);
+        this.recoveredSieved   += ProbUtils.scale(b.recoveredSieved, factor);
     }
 
     public getTotalMass(): bigint {
+        // Recovered buckets are diagnostic subsets, NOT additive to the total 100% mass.
         return this.resolved + this.pending + this.sieved + this.overflow + this.capped + this.rounding;
     }
 
@@ -111,7 +128,9 @@ export class MassAccountant {
             sieved: this.sieved,
             overflow: this.overflow,
             capped: this.capped,
-            rounding: this.rounding
+            rounding: this.rounding,
+            recoveredRounding: this.recoveredRounding,
+            recoveredSieved: this.recoveredSieved
         };
     }
 
@@ -122,7 +141,9 @@ export class MassAccountant {
             sieved: ProbUtils.toNumber(this.sieved),
             overflow: ProbUtils.toNumber(this.overflow),
             capped: ProbUtils.toNumber(this.capped),
-            rounding: ProbUtils.toNumber(this.rounding)
+            rounding: ProbUtils.toNumber(this.rounding),
+            recoveredRounding: ProbUtils.toNumber(this.recoveredRounding),
+            recoveredSieved: ProbUtils.toNumber(this.recoveredSieved)
         };
     }
 
@@ -138,6 +159,8 @@ export class MassAccountant {
             result.overflow += acc.overflow;
             result.capped += acc.capped;
             result.rounding += acc.rounding;
+            result.recoveredRounding += acc.recoveredRounding;
+            result.recoveredSieved += acc.recoveredSieved;
         }
         return result;
     }
