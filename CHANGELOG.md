@@ -1,5 +1,13 @@
 # Changelog
 
+## v3.2.0 (2026-04-12)
+
+### Improved
+- **Accuracy for Rare Results**: Implemented a "Mass Forwarding" system to prevent tiny probabilities from being accidentally discarded during deep calculations. This ensures that rare enchantment combinations and high-enchantment items are represented with near-perfect accuracy, even when they occupy a tiny fraction of the total results.
+- **Reliable Deep Searches**: Optimized the engine to handle the accumulation of tiny values across complex searches (up to 6 concurrent enchantments), eliminating "rounding errors" that could previously occur at extreme search depths.
+- **Honest Confidence Metrics**: Refined the way the app reports search progress, providing a more transparent view of exactly how much of the total probability space has been successfully analyzed.
+
+
 ## v3.1.0 (2026-04-11)
 
 ### Improved

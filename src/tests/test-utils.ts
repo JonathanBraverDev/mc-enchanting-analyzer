@@ -42,13 +42,24 @@ export const SnapshotUtils = {
         let hasMismatches = false;
         const sections: string[] = [];
 
-        // Check top-level metadata (e.g., accuracy)
-        if (actual.accuracy !== expected.accuracy) {
+        // 1. Check top-level accuracy
+        const aAcc = actual.accuracy || 0;
+        const eAcc = expected.accuracy || 0;
+        if (Math.abs(aAcc - eAcc) > 1e-12) {
             hasMismatches = true;
-            sections.push(`[metadata]: Accuracy mismatch. Expected ${expected.accuracy}, got ${actual.accuracy}`);
+            sections.push(`[metadata]: Accuracy mismatch. Expected ${eAcc}, got ${aAcc}`);
         }
 
-        // Check probability categories
+        // 2. Check accounting buckets
+        if (actual.accounting && expected.accounting) {
+            const report = this.compareAccounting(actual.accounting, expected.accounting);
+            if (report.hasMismatches) {
+                hasMismatches = true;
+                sections.push(report.text);
+            }
+        }
+
+        // 3. Check probability categories (Fixed: Restored the missing categories loop)
         const categories = ['ranks', 'any', 'count', 'combos'];
         for (const cat of categories) {
             const report = this.compareProbabilityMap(actual[cat] || {}, expected[cat] || {}, cat);
@@ -62,6 +73,46 @@ export const SnapshotUtils = {
             hasMismatches,
             report: sections.join('\n\n')
         };
+    },
+
+    /**
+     * Compares two mass accounting objects.
+     */
+    compareAccounting(actual: any, expected: any) {
+        let hasMismatches = false;
+        const lines: string[] = ['Category [accounting]:'];
+        
+        const buckets = ['resolved', 'pending', 'sieved', 'overflow', 'capped', 'rounding', 'recoveredRounding', 'recoveredSieved'];
+        for (const bucket of buckets) {
+            const aVal = actual[bucket] || 0;
+            const eVal = expected[bucket] || 0;
+            const delta = Math.abs(aVal - eVal);
+            
+            // Allow microscopic drift in floating point reporting, but strictly check significant shifts
+            if (delta > 1e-15) {
+                hasMismatches = true;
+                lines.push(`  - ${bucket}: exp ${eVal.toExponential(4)}, got ${aVal.toExponential(4)} (Δ ${delta.toExponential(2)})`);
+            }
+        }
+        
+        // Deep bit-perfect comparison for units if available
+        if (actual.units && expected.units) {
+            for (const bucket of buckets) {
+                const aUnit = actual.units[bucket];
+                const eUnit = expected.units[bucket];
+                if (aUnit !== eUnit) {
+                    hasMismatches = true;
+                    lines.push(`  - ${bucket} (units): exp ${eUnit}, got ${aUnit}`);
+                }
+            }
+        } else if (actual.units !== expected.units) { // Fixed structural check
+            if (actual.units || expected.units) {
+                hasMismatches = true;
+                lines.push(`  - Structural: "units" block ${actual.units ? 'added' : 'missing'}`);
+            }
+        }
+
+        return { hasMismatches, text: lines.join('\n') };
     },
 
     /**
@@ -147,17 +198,32 @@ export const SnapshotUtils = {
      */
     sanitize(stats: any): any {
         const round = (val: number) => Math.round(val * 1e12) / 1e12;
-        const roundMap = (obj: any) => {
+        
+        const sortMap = (obj: any) => {
+            if (!obj) return {};
+            const keys = Object.keys(obj);
+            keys.sort((a, b) => {
+                const probA = obj[a];
+                const probB = obj[b];
+                // Primary: Probability descending
+                const delta = probB - probA;
+                if (Math.abs(delta) > 1e-15) return delta;
+                // Secondary: Key ascending (alphabetical)
+                return a.localeCompare(b);
+            });
+            
             const res: any = {};
-            for (const k in obj) res[k] = round(obj[k]);
+            for (const k of keys) {
+                res[k] = round(obj[k]);
+            }
             return res;
         };
 
         return {
-            ranks: roundMap(stats.ranks),
-            any: roundMap(stats.any),
-            count: roundMap(stats.count),
-            combos: roundMap(stats.combos),
+            ranks: sortMap(stats.ranks),
+            any: sortMap(stats.any),
+            count: sortMap(stats.count),
+            combos: sortMap(stats.combos),
             accuracy: round(stats.accuracy),
             accounting: stats.accounting
         };

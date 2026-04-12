@@ -95,9 +95,10 @@ export class StatAggregator {
             const activeFloor = ProbUtils.toBigInt(ENGINE_DEFAULTS.SYSTEM_THRESHOLD_FLOOR);
 
             const finalCombos = new Map<PackedCombo, bigint>();
-            const totalAnyMass = new Map<number, bigint>();
-            const totalRankMass = new Map<number, bigint>();
-            const totalCountMass = new Map<number, bigint>();
+            const totalAnyMass = new BigUint64Array(256);
+            const totalRankMass = new BigUint64Array(16384);
+            const totalCountMass = new BigUint64Array(16);
+
             let tierAccountant = new MassAccountant();
 
             let processedMProb = 0n;
@@ -117,7 +118,7 @@ export class StatAggregator {
                     registry, cat, ml, mat, guaranteedFirst,
                     activeThreshold, tier.limit,
                     existingFrontier, resultsLimit, poolCache, signal, instrumentation,
-                    activeFloor
+                    activeFloor, config.timing
                 );
 
                 frontierMap.set(ml, result);
@@ -166,6 +167,7 @@ export class StatAggregator {
 
             const tierStats = SummaryService.summarize(finalCombos, tierAccountant, totalAnyMass, totalRankMass, totalCountMass, summaryLimit);
             tierStats.instrumentation = instrumentation ? snapshotInstrumentation(instrumentation) : undefined;
+            tierStats.timing = config.timing ? { ...config.timing } : undefined;
 
             if (abortedMidTier) return tierStats;
 
@@ -210,9 +212,10 @@ export class StatAggregator {
         const levels = Object.keys(modDist).map(Number).sort((a, b) => b - a);
 
         const finalCombos = new Map<PackedCombo, bigint>();
-        const totalAnyMass = new Map<number, bigint>();
-        const totalRankMass = new Map<number, bigint>();
-        const totalCountMass = new Map<number, bigint>();
+        const totalAnyMass = new BigUint64Array(256);
+        const totalRankMass = new BigUint64Array(16384);
+        const totalCountMass = new BigUint64Array(16);
+
         let globalAccountant = new MassAccountant();
 
         let processedMProb = 0n;
@@ -222,7 +225,6 @@ export class StatAggregator {
         if (instrumentation) {
             instrumentation.checkpoints = instrumentation.checkpoints || [];
             instrumentation.totalIterations = 0;
-            instrumentation.levelsProcessed = 0;
             instrumentation.levelsFullyResolved = 0;
             instrumentation.frontierCache = instrumentation.frontierCache || { hits: 0, misses: 0 };
         }
@@ -239,7 +241,7 @@ export class StatAggregator {
 
             const result = await SearchService.calculateCombinations(
                 registry, cat, ml, mat, guaranteedFirst, bThreshold, limit, cached, resultsLimit, poolCache, signal, instrumentation,
-                bFloor
+                bFloor, config.timing
             );
 
             if (instrumentation) {
@@ -279,6 +281,7 @@ export class StatAggregator {
                 if (onProgress) {
                     const partialStats = SummaryService.summarize(finalCombos, globalAccountant, totalAnyMass, totalRankMass, totalCountMass, 0);
                     partialStats.instrumentation = instrumentation ? snapshotInstrumentation(instrumentation) : undefined;
+                    partialStats.timing = config.timing ? { ...config.timing } : undefined;
                     onProgress(partialStats);
                 }
                 await AsyncUtils.yield();
@@ -296,6 +299,7 @@ export class StatAggregator {
 
         const finalStats = SummaryService.summarize(finalCombos, globalAccountant, totalAnyMass, totalRankMass, totalCountMass, summaryLimit);
         finalStats.instrumentation = instrumentation ? snapshotInstrumentation(instrumentation) : undefined;
+        finalStats.timing = config.timing ? { ...config.timing } : undefined;
 
         return finalStats;
     }
@@ -308,9 +312,10 @@ export class StatAggregator {
     private static reconcileGuaranteedMass(
         registry: RegistryState,
         guaranteedFirst: string,
-        totalAnyMass: Map<number, bigint>,
-        totalRankMass: Map<number, bigint>,
-        totalCountMass: Map<number, bigint>
+        totalAnyMass: BigUint64Array,
+        totalRankMass: BigUint64Array,
+        totalCountMass: BigUint64Array
+
     ): void {
         const romanMap = registry.data.constants.ROMAN_MAP;
         const parsed = EnchantUtils.parse(guaranteedFirst, romanMap);
@@ -320,10 +325,10 @@ export class StatAggregator {
             // Reconcile Individual probabilities to absolute 100% (PRECISION).
             // This is mathematically certain because every path in a guaranteed-first search
             // (resolved, sieved, or pending) carries the guaranteed enchantment.
-            totalAnyMass.set(gId, PRECISION);
+            totalAnyMass[gId] = PRECISION;
             
             const fullId = (gId << 8) | (parsed?.rank ?? 1);
-            totalRankMass.set(fullId, PRECISION);
+            totalRankMass[fullId] = PRECISION;
         }
     }
 }

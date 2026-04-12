@@ -17,7 +17,7 @@ import { TEST_DATA } from './test-data.js';
 // ---------------------------------------------------------------------------
 
 function makeStats(accuracy: number): any {
-    const acc: MassAccounting = { resolved: accuracy, pending: 1 - accuracy, sieved: 0, overflow: 0, capped: 0, rounding: 0 };
+    const acc: MassAccounting = { resolved: accuracy, pending: 1 - accuracy, sieved: 0, overflow: 0, capped: 0, rounding: 0, recoveredRounding: 0, recoveredSieved: 0 };
     return { accuracy, accounting: acc, ranks: {}, any: {}, count: {}, combos: {} };
 }
 

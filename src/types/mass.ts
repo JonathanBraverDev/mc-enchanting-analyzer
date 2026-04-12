@@ -15,6 +15,12 @@ export interface MassAccounting {
   capped: number;
   /** Cumulative mass lost to floating point precision or integer division. */
   rounding: number;
+  /** Diagnostic: Mass recovered from the rounding bucket via residual promotion. (Non-additive) */
+  recoveredRounding: number;
+  /** Diagnostic: Mass recovered from sieved branches via aggregation. (Non-additive) */
+  recoveredSieved: number;
+  /** Diagnostic: Precise mass counts as strings to preserve BigInt precision in JSON. */
+  units?: { [K in keyof MassBookkeeping]: string };
 }
 
 /**
@@ -27,4 +33,6 @@ export interface MassBookkeeping {
     overflow: bigint;
     capped: bigint;
     rounding: bigint;
+    recoveredRounding: bigint;
+    recoveredSieved: bigint;
 }

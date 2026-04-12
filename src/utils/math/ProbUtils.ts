@@ -29,18 +29,6 @@ export const ProbUtils = {
     scale: (prob: bigint, factor: bigint): bigint => ProbUtils.roundDiv(prob * factor, PRECISION),
 
     /**
-     * Performs (a * b) / c and returns the remainder.
-     * @param a Multiplicand (must be non-negative)
-     * @param b Multiplier (must be non-negative)
-     * @param c Divisor (must be positive)
-     */
-    mulDiv: (a: bigint, b: bigint, c: bigint): { quotient: bigint; remainder: bigint } => {
-        if (c === 0n) throw new Error("Division by zero in mulDiv");
-        const prod = a * b;
-        return { quotient: prod / c, remainder: prod % c };
-    },
-
-    /**
      * Performs integer division with Banker's Rounding (Round-to-Nearest-Even).
      * Uses the (r * 2) vs b comparison to handle odd denominators symmetrically.
      * @param a Dividend (must be non-negative)
@@ -61,50 +49,83 @@ export const ProbUtils = {
     },
 
     /**
-     * Splits a probability mass across multiple weights and returns the per-slot remainders.
+     * Splits a probability mass across multiple weights into the provided output array.
      * Following the "Honest Accounting" principle, the remainder is NOT redistributed.
      * @param prob The mass to divide
      * @param weights The weight for each slot
      * @param totalWeight The sum of all weights
-     * @returns { parts, remainders, remainder } where 'remainder' is the total lost mass
+     * @param outParts The output array to store the distributed mass parts
+     * @returns The total lost mass (remainder)
      */
-    distributeDetailed: (prob: bigint, weights: number[] | bigint[], totalWeight: number | bigint, count?: number): { parts: bigint[]; remainders: bigint[]; remainder: bigint } => {
+    distributeDetailed: (
+        prob: bigint, 
+        weights: ArrayLike<number | bigint>, 
+        totalWeight: number | bigint, 
+        outParts: bigint[] | BigUint64Array,
+        count?: number
+    ): bigint => {
         const total = BigInt(totalWeight);
         const len = count ?? weights.length;
 
-        // If no weight exists, mass is entirely unattributable (captured in aggregate remainder)
-        if (total === 0n) return { 
-            parts: new Array(len).fill(0n), 
-            remainders: new Array(len).fill(0n), 
-            remainder: prob 
-        };
+        if (total === 0n) {
+            for (let i = 0; i < len; i++) outParts[i] = 0n;
+            return prob;
+        }
 
-        const parts = new Array<bigint>(len);
-        const remainders = new Array<bigint>(len);
         let rem = prob;
-        
         for (let i = 0; i < len; i++) {
-            const w = weights[i];
+            const w = weights[i] as number | bigint;
             const bigW = typeof w === 'bigint' ? w : BigInt(w!);
-            const { quotient, remainder } = ProbUtils.mulDiv(prob, bigW, total);
-            parts[i] = quotient;
-            remainders[i] = remainder;
+            const quotient = (prob * bigW) / total;
+            outParts[i] = quotient;
             rem -= quotient;
         }
         
-        return { parts, remainders, remainder: rem };
+        return rem;
     },
 
     /**
-     * Specialized zero-allocation version of distributeDetailed for equal splits.
-     * Returns the base quotient and the total remainder to be settled manually.
+     * Splits probability mass across multiple weights using a stateful residue accumulator.
+     * This allows "recovering" fragmented mass by combining remainders from successive arrivals.
+     * @returns { recovered: bigint } The amount of mass recovered from previous rounding losses.
      */
-    distributeEqual: (prob: bigint, n: number): { quotient: bigint; remainder: bigint } => {
-        if (n <= 0) return { quotient: 0n, remainder: prob };
-        const bigN = BigInt(n);
-        return { quotient: prob / bigN, remainder: prob % bigN };
-    },
+    distributeWithResidue: (
+        prob: bigint,
+        weights: ArrayLike<number | bigint>,
+        totalWeight: number | bigint,
+        outParts: bigint[] | BigUint64Array,
+        context: { residue: bigint },
+        count?: number
+    ): { recovered: bigint } => {
+        const total = BigInt(totalWeight);
+        const len = count ?? weights.length;
 
+        if (total === 0n) {
+            for (let i = 0; i < len; i++) outParts[i] = 0n;
+            return { recovered: 0n };
+        }
+
+        const oldResidue = context.residue;
+        const totalToDistribute = prob + oldResidue;
+        
+        let rem = totalToDistribute;
+        for (let i = 0; i < len; i++) {
+            const w = weights[i] as number | bigint;
+            const bigW = typeof w === 'bigint' ? w : BigInt(w!);
+            const quotient = (totalToDistribute * bigW) / total;
+            outParts[i] = quotient;
+            rem -= quotient;
+        }
+        
+        context.residue = rem;
+
+        // The 'recovered' mass is the difference between what WOULD have been 
+        // the standalone remainder vs the new residue delta.
+        const individualRemainder = prob % total;
+        const recovered = individualRemainder - (rem - oldResidue);
+
+        return { recovered: recovered > 0n ? recovered : 0n };
+    },
     /**
      * Scales 'val' by 'multiplier' and divides by 'divisor' using Banker's Rounding.
      */
@@ -121,21 +142,51 @@ export const ProbUtils = {
     },
 
     /**
-     * Safely adds probability mass to a Map-based bucket.
+     * Safely adds probability mass to a Map or BigUint64Array bucket.
      */
-    addItemMass: <K>(map: Map<K, bigint>, key: K, prob: bigint): void => {
-        map.set(key, (map.get(key) || 0n) + prob);
+    addItemMass: (target: Map<number, bigint> | BigUint64Array, key: number, prob: bigint): void => {
+        if (target instanceof BigUint64Array) {
+            target[key] += prob;
+        } else {
+            target.set(key, (target.get(key) || 0n) + prob);
+        }
     },
 
     /**
-     * Merges 'source' map into 'target', optionally scaling values by 'factor' with Banker's Rounding.
+     * Merges 'source' map/array into 'target', optionally scaling values by 'factor' with Banker's Rounding.
      */
-    addMapMass: <K>(target: Map<K, bigint>, source: Map<K, bigint>, factor?: bigint): void => {
-        for (const [key, mass] of source) {
-            const added = (factor !== undefined && factor !== PRECISION)
-                ? ProbUtils.scale(mass, factor)
-                : mass;
-            target.set(key, (target.get(key) || 0n) + added);
+    addMapMass: (
+        target: Map<number, bigint> | BigUint64Array, 
+        source: Map<number, bigint> | BigUint64Array, 
+        factor?: bigint
+    ): void => {
+        const hasFactor = factor !== undefined && factor !== PRECISION;
+
+        if (source instanceof BigUint64Array) {
+            const targetIsArray = target instanceof BigUint64Array;
+            for (let i = 0; i < source.length; i++) {
+                const mass = source[i];
+                if (mass === 0n) continue;
+                
+                const added = hasFactor ? ProbUtils.scale(mass, factor!) : mass;
+                if (targetIsArray) {
+                    (target as BigUint64Array)[i] += added;
+                } else {
+                    const t = target as Map<number, bigint>;
+                    t.set(i, (t.get(i) || 0n) + added);
+                }
+            }
+        } else {
+            const targetIsArray = target instanceof BigUint64Array;
+            for (const [key, mass] of source) {
+                const added = hasFactor ? ProbUtils.scale(mass, factor!) : mass;
+                if (targetIsArray) {
+                    (target as BigUint64Array)[key] += added;
+                } else {
+                    const t = target as Map<number, bigint>;
+                    t.set(key, (t.get(key) || 0n) + added);
+                }
+            }
         }
     }
 };
