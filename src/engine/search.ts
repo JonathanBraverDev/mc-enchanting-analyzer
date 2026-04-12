@@ -11,8 +11,7 @@ import { MassAccountant } from './MassAccountant.js';
  * Service for the Best-First search of enchantment combinations.
  */
 export class SearchService {
-    private static _eligible: PackedEnchant[] = new Array(64);
-    private static _weights: number[] = new Array(64);
+    private static _splitsBuffer = new BigUint64Array(128);
 
     private static readonly PROB_CONTINUE_TABLE: bigint[] = Array.from({ length: 65 }, (_, ml) => {
         const val = Math.min((ml + 1) / ENGINE_DEFAULTS.MAX_MODIFIED_LEVEL_FOR_CONTINUING, 1.0);
@@ -88,6 +87,7 @@ export class SearchService {
                 threshold,
                 iterations: 0,
                 nodesProcessed: 0,
+                expansionCache: new Map(),
                 checkpoints: [],
                 exitReason: 'empty'
             };
@@ -155,8 +155,8 @@ export class SearchService {
                 this.processInitialNode(registry, current.prob, current.meta, modLevel, guaranteedFirstId, initialPool, poolWeights, initialTotalWeight, queue, frontier.anyMass, frontier.rankMass, accountant, timing);
             } else {
                 this.processSearchNode(
-                    registry, current.prob, current.meta, current.combo, currentCount, cat, guaranteedFirstId, initialPool, poolWeights, floor, results, queue,
-                    frontier.anyMass, frontier.rankMass, frontier.countMass, resultsLimit, accountant, instrumentation, timing
+                    registry, current.prob, current.meta, current.combo, currentCount, cat, guaranteedFirstId, initialPool, poolWeights, results, queue,
+                    frontier.anyMass, frontier.rankMass, frontier.countMass, resultsLimit, accountant, frontier.expansionCache, instrumentation, timing
                 );
             }
 
@@ -214,7 +214,6 @@ export class SearchService {
         guaranteedFirstId: number | null,
         pool: PackedEnchant[],
         poolWeights: number[],
-        threshold: bigint,
         results: Map<PackedCombo, bigint>,
         queue: SearchHeap,
         anyMass: BigUint64Array,
@@ -222,6 +221,7 @@ export class SearchService {
         countMass: BigUint64Array,
         resultsLimit: number,
         accountant: MassAccountant,
+        expansionCache: Map<bigint, import('../types/engine.js').ExpansionBlueprint>,
         instrumentation?: EngineInstrumentation,
         timing?: SearchTiming
     ): void {
@@ -235,7 +235,10 @@ export class SearchService {
             ? ComboUtils.unpack(currentCombo, indexToEnchant)
             : [] as PackedEnchant[];
 
-        const probContinue = SearchService.PROB_CONTINUE_TABLE[currentLevel] || 0n;
+        const probContinue = (isBook && !registry.multiEnchantBooks && currentCount >= 1)
+            ? 0n
+            : (SearchService.PROB_CONTINUE_TABLE[currentLevel] || 0n);
+
         let startSettling = 0;
         if (timing) startSettling = performance.now();
         const probStop = ProbUtils.scale(currentProb, (PRECISION - probContinue));
@@ -244,8 +247,9 @@ export class SearchService {
         const probForward = ProbUtils.scale(currentProb, probContinue);
 
         // Safety checks
+        const floor = ProbUtils.toBigInt(ENGINE_DEFAULTS.SYSTEM_THRESHOLD_FLOOR);
         const isLimitReached = currentCount >= (isBook && !registry.multiEnchantBooks ? 1 : ENGINE_DEFAULTS.MAX_ENCHANTS_PER_ITEM);
-        const isTooSmall = probForward < threshold;
+        const isTooSmall = probForward < floor;
         const isMapFull = results.size >= resultsLimit && !results.has(currentCombo);
 
         if (isLimitReached || isTooSmall || isMapFull) {
@@ -274,28 +278,57 @@ export class SearchService {
 
         if (timing) timing.settlingMs += performance.now() - startSettling;
 
-        // Branching
+        // Branching & Expansion Cache
         let startFiltering = 0;
         if (timing) startFiltering = performance.now();
-        let totalWeight = 0;
-        if (pool.length > SearchService._eligible.length) {
-            SearchService._eligible = new Array(pool.length);
-            SearchService._weights = new Array(pool.length);
-        }
-        const eligible = SearchService._eligible;
-        const weights = SearchService._weights;
-        let eligibleCount = 0;
+        
+        let eligible: Int32Array;
+        let weights: Int32Array;
+        let eligibleCount: number;
+        let totalWeight: number;
+        let nextLevel: number;
+        
+        const cached = expansionCache.get(currentMeta);
+        if (cached) {
+            eligible = cached.eligibleEnchants;
+            weights = cached.eligibleWeights;
+            eligibleCount = cached.eligibleCount;
+            totalWeight = cached.totalWeight;
+            nextLevel = cached.nextLevel;
+        } else {
+            const tempEligible = new Int32Array(pool.length);
+            const tempWeights = new Int32Array(pool.length);
+            eligibleCount = 0;
+            totalWeight = 0;
 
-        for (let i = 0; i < pool.length; i++) {
-            const e = pool[i];
-            const id = ComboUtils.getEnchantId(e);
-            if ((currentBitset & (1n << BigInt(id))) !== 0n) continue;
-            if ((currentBitset & registry.conflictBitsets[id]) !== 0n) continue;
-            eligible[eligibleCount] = e;
-            weights[eligibleCount] = poolWeights[i];
-            eligibleCount++;
-            totalWeight += poolWeights[i];
+            for (let i = 0; i < pool.length; i++) {
+                const e = pool[i];
+                const id = ComboUtils.getEnchantId(e);
+                if ((currentBitset & (1n << BigInt(id))) !== 0n) continue;
+                if ((currentBitset & registry.conflictBitsets[id]) !== 0n) continue;
+                tempEligible[eligibleCount] = e;
+                tempWeights[eligibleCount] = poolWeights[i];
+                eligibleCount++;
+                totalWeight += poolWeights[i];
+            }
+            
+            nextLevel = currentCount >= 1 ? Math.floor(currentLevel / 2) : currentLevel;
+            eligible = tempEligible.slice(0, eligibleCount);
+            weights = tempWeights.slice(0, eligibleCount);
+            
+            expansionCache.set(currentMeta, {
+                probContinue,
+                totalWeight,
+                eligibleCount,
+                eligibleEnchants: eligible,
+                eligibleWeights: weights,
+                nextLevel,
+                currentCount,
+                currentCombo,
+                currentEnchants
+            });
         }
+        
         if (timing) timing.filteringMs += performance.now() - startFiltering;
 
         if (totalWeight === 0) {
@@ -312,10 +345,10 @@ export class SearchService {
             return;
         }
 
-        const nextLevel = currentCount >= 1 ? Math.floor(currentLevel / 2) : currentLevel;
         let startDist = 0;
         if (timing) startDist = performance.now();
-        const { parts: splits, remainder: splitRemainder } = ProbUtils.distributeDetailed(probForward, weights, totalWeight, eligibleCount);
+        const splitRemainder = ProbUtils.distributeDetailed(probForward, weights, totalWeight, SearchService._splitsBuffer, eligibleCount);
+        const splits = SearchService._splitsBuffer;
         if (timing) timing.distributionMs += performance.now() - startDist;
 
         const guaranteedInCombo = guaranteedFirstId !== null && (currentBitset & (1n << BigInt(guaranteedFirstId))) !== 0n;
@@ -340,8 +373,7 @@ export class SearchService {
 
         const scaleRoundingLoss = currentProb - (probStop + probForward);
         accountant.record('resolved', probStop - remStop);
-        accountant.record('rounding', remStop + scaleRoundingLoss);
-        accountant.record('sieved', splitRemainder);
+        accountant.record('rounding', remStop + scaleRoundingLoss + splitRemainder);
 
         if ((remStop + scaleRoundingLoss + splitRemainder) > 0n && instrumentation) instrumentation.roundingErrorEvents++;
     }
@@ -401,7 +433,13 @@ export class SearchService {
         const nOutcomes = redistributed.length;
         
         // Zero-allocation equal split for Honest Accounting
-        const { quotient, remainder: splitRemainder } = ProbUtils.distributeEqual(prob, nOutcomes);
+        let quotient = 0n;
+        let splitRemainder = prob;
+        if (nOutcomes > 0) {
+            const bigN = BigInt(nOutcomes);
+            quotient = prob / bigN;
+            splitRemainder = prob % bigN;
+        }
         const settledMass = prob - splitRemainder;
 
         for (let i = 0; i < nOutcomes; i++) {
@@ -451,7 +489,8 @@ export class SearchService {
         const { enchantToIndex } = registry;
         let startDist = 0;
         if (timing) startDist = performance.now();
-        const { parts: splits, remainder: splitRemainder } = ProbUtils.distributeDetailed(currentProb, weights, totalWeight);
+        const splitRemainder = ProbUtils.distributeDetailed(currentProb, weights, totalWeight, SearchService._splitsBuffer);
+        const splits = SearchService._splitsBuffer;
         if (timing) timing.distributionMs += performance.now() - startDist;
 
         let startHeap = 0;

@@ -117,6 +117,21 @@ export interface PackedNode {
 }
 
 /**
+ * Blueprint caching for already-expanded nodes.
+ */
+export interface ExpansionBlueprint {
+    probContinue: bigint;
+    totalWeight: number;
+    eligibleCount: number;
+    eligibleEnchants: Int32Array;
+    eligibleWeights: Int32Array;
+    nextLevel: number;
+    currentCount: number;
+    currentCombo: number;
+    currentEnchants: PackedEnchant[];
+}
+
+/**
  * State of a search for enchantment combinations.
  */
 export interface SearchFrontier {
@@ -129,6 +144,7 @@ export interface SearchFrontier {
     threshold: bigint;
     iterations: number;
     nodesProcessed: number;
+    expansionCache: Map<bigint, ExpansionBlueprint>;
     checkpoints: MassCheckpoint[];  // per-call output; not carried over on resume
     exitReason?: EngineExitReason;  // per-call output; not carried over on resume
 }
