@@ -32,7 +32,7 @@ export class RefinementService {
     private activeId: number = 0;
     private sweep: SweepData[] = [];
     private isSweepRunning: boolean = false;
-    private targetThreshold: number = 0;
+    private nextPendingRedraw: { threshold: number; level: Exclude<SearchLevel, 'done'> } | null = null;
     private sweepAbortController: AbortController | null = null;
     private activeChartLevel: Exclude<SearchLevel, 'done'> = 'coarse';
 
@@ -61,6 +61,7 @@ export class RefinementService {
 
         // Update shared pointers immediately and abort any running chart search
         this.sweepAbortController?.abort();
+        this.nextPendingRedraw = null; // CRITICAL: Clear pending redraws from PREVIOUS items/categories
 
         // Flush both worker queues to ensure immediate priority for this run and clear any staleness
         if (typeof Worker !== 'undefined') {
@@ -106,6 +107,11 @@ export class RefinementService {
         callbacks.onStatus(UI_TEXTS.STATUS_COMPLETE, "done");
     }
 
+    /**
+     * Internal coordinator for chart redraws. 
+     * COMPRESSING QUEUE: We ensure EVERY started redraw completes a full pass (1-30).
+     * If multiple redraw requests arrive during a sweep, we only keep the LATEST one.
+     */
     private async refreshChart(
         payload: BaseSearchPayload,
         threshold: number,
@@ -113,26 +119,31 @@ export class RefinementService {
         currentId: number,
         callbacks: RefinementCallbacks
     ): Promise<void> {
-        this.targetThreshold = threshold;
-        // In case refinement tier starts faster than run() completes its reset
+        // Enqueue/Overwrite the latest tier request
+        this.nextPendingRedraw = { threshold, level: this.activeChartLevel };
 
         if (this.isSweepRunning) return;
 
         this.isSweepRunning = true;
         try {
-            while (true) {
+            while (this.nextPendingRedraw !== null) {
+                // Pre-empt loop ONLY IF a new run (activeId change) was triggered
                 if (this.activeId !== currentId) break;
 
-                // Capture the threshold for THIS pass
-                const currentPassThreshold = this.targetThreshold;
+                // Capture the LATEST pending request and clear the slot
+                const currentPass = this.nextPendingRedraw;
+                this.nextPendingRedraw = null;
+                
+                const currentPassThreshold = currentPass.threshold;
                 const labels = Array.from({ length: UI_DEFAULTS.MAX_XP_LEVEL }, (_, i) => i + 1);
                 
-                const passName = getParamsForMode(this.activeChartLevel, payload.cat === "book").status;
+                const passName = getParamsForMode(currentPass.level, payload.cat === "book").status;
                 const statusBase = passName + " probabilities";
                 
+                // IMPORTANT: We do a FULL PASS for every STARTED redraw. 
+                // Aborting mid-sweep is forbidden as it causes UI progress "jitter" and test failures.
                 callbacks.onChartStatus?.(statusBase);
                 for (const l of labels) {
-                    // Pre-empt loop ONLY IF a new run (activeId change) was triggered
                     if (this.activeId !== currentId) break;
 
                     const ctrl = new AbortController();
@@ -155,7 +166,6 @@ export class RefinementService {
 
                         if (this.activeId !== currentId) break;
                         
-                        // Overwrite existing index for "zeroing-in" look
                         this.sweep[l - 1] = { l, s: response.stats };
                         callbacks.onChartStatus?.(statusBase, l / UI_DEFAULTS.MAX_XP_LEVEL);
                         callbacks.onChart(this.sweep);
@@ -167,13 +177,9 @@ export class RefinementService {
                     await AsyncUtils.yield();
                 }
                 
-                callbacks.onChartStatus?.(this.activeChartLevel === 'ultra' ? UI_TEXTS.STATUS_CHART_COMPLETE : "");
-
-                // Termination & Restart conditions
-                if (this.activeId !== currentId) break;
-                // If targetThreshold is still the same or LARGER (worse), we are done with this tier-loop.
-                // If it is SMALLER (better), we loop back to restart the sweep with the better threshold.
-                if (this.targetThreshold >= currentPassThreshold) break;
+                // Final status for THIS pass (unless a new one was queued or it was ultra)
+                const isTerminal = currentPass.level === 'ultra' && this.nextPendingRedraw === null;
+                callbacks.onChartStatus?.(isTerminal ? UI_TEXTS.STATUS_CHART_COMPLETE : "");
             }
         } finally {
             this.isSweepRunning = false;
