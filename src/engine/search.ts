@@ -30,6 +30,25 @@ export class SearchService {
         return ProbUtils.toBigInt(val);
     });
 
+    public static getBitsetFromMeta(meta: bigint): bigint {
+        return meta >> 8n;
+    }
+
+    public static getLevelFromMeta(meta: bigint): number {
+        return Number(meta & 0xFFn);
+    }
+
+    /**
+     * Executes a function and records its duration to the specified timing bucket.
+     */
+    public static withTiming<T>(timing: SearchTiming | undefined, bucket: keyof Omit<SearchTiming, 'totalMs'>, fn: () => T): T {
+        if (!timing) return fn();
+        const start = performance.now();
+        const result = fn();
+        timing[bucket] += performance.now() - start;
+        return result;
+    }
+
     private static readonly CHECKPOINT_TARGETS_BIGINT: bigint[] = [
         0.1, 0.25, 0.5, 0.75, 0.8, 0.85, 0.9, 0.95, 0.99, 0.999
     ].map(t => ProbUtils.toBigInt(t));
@@ -74,6 +93,20 @@ export class SearchService {
         const BK = accountant.getBookkeeping();
         void BK;
 
+        const ctx: import('../types/engine.js').ForwardingContext = {
+            registry,
+            harvester: frontier.harvester,
+            results,
+            queue,
+            anyMass: frontier.anyMass,
+            rankMass: frontier.rankMass,
+            countMass: frontier.countMass,
+            resultsLimit,
+            accountant,
+            instrumentation,
+            timing
+        };
+
         let iterations = 0;
         const expandedIds = new Set<bigint>();
         let redundantExpansions = 0;
@@ -113,7 +146,6 @@ export class SearchService {
         const localCheckpoints: MassCheckpoint[] = [];
         let checkpointIdx = 0;
         let exitReason: EngineExitReason | undefined;
-
         // Reusable node for popFast to avoid allocations
         const current = { meta: 0n, prob: 0n, level: 0, combo: 0 };
 
@@ -146,10 +178,7 @@ export class SearchService {
             iterations++;
             frontier.nodesProcessed++;
             
-            let popStart = 0;
-            if (timing) popStart = performance.now();
-            if (!queue.popFast(current)) break;
-            if (timing) timing.heapMs += performance.now() - popStart;
+            if (!SearchService.withTiming(timing, 'heapMs', () => queue.popFast(current))) break;
 
             if (expandedIds.has(current.meta)) {
                 redundantExpansions++;
@@ -160,19 +189,15 @@ export class SearchService {
             accountant.subtract('pending', current.prob);
             const currentCount = ComboUtils.getCount(current.combo);
 
-            let procStart = 0;
-            if (timing) procStart = performance.now();
-
-            if (currentCount === 0) {
-                this.processInitialNode(registry, current.prob, current.meta, modLevel, guaranteedFirstId, initialPool, poolWeights, initialTotalWeight, queue, frontier.anyMass, frontier.rankMass, accountant, timing);
-            } else {
-                this.processSearchNode(
-                    registry, current.prob, current.meta, current.combo, currentCount, cat, guaranteedFirstId, initialPool, poolWeights, results, queue,
-                    frontier.anyMass, frontier.rankMass, frontier.countMass, resultsLimit, accountant, frontier, instrumentation, timing
-                );
-            }
-
-            if (timing) timing.searchMs += performance.now() - procStart;
+            SearchService.withTiming(timing, 'searchMs', () => {
+                if (currentCount === 0) {
+                    this.processInitialNode(current.prob, current.meta, modLevel, guaranteedFirstId, initialPool, poolWeights, initialTotalWeight, ctx);
+                } else {
+                    this.processSearchNode(
+                        current.prob, current.meta, current.combo, currentCount, cat, guaranteedFirstId, initialPool, poolWeights, ctx
+                    );
+                }
+            });
 
             // Checkpoints: record after processing — current.prob is the minimum threshold
             // needed to have processed this node (and thus reached this mass coverage).
@@ -217,7 +242,6 @@ export class SearchService {
     }
 
     private static processSearchNode(
-        registry: RegistryState,
         currentProb: bigint,
         currentMeta: bigint,
         currentCombo: number,
@@ -226,22 +250,13 @@ export class SearchService {
         guaranteedFirstId: number | null,
         pool: PackedEnchant[],
         poolWeights: number[],
-        results: Map<PackedCombo, bigint>,
-        queue: SearchHeap,
-        anyMass: BigUint64Array,
-        rankMass: BigUint64Array,
-        countMass: BigUint64Array,
-        resultsLimit: number,
-        accountant: MassAccountant,
-        frontier: SearchFrontier,
-        instrumentation?: EngineInstrumentation,
-        timing?: SearchTiming
+        ctx: import('../types/engine.js').ForwardingContext
     ): void {
 
-        const harvester = frontier.harvester;
+        const { registry, harvester, timing } = ctx;
         const { indexToEnchant } = registry;
-        const currentBitset = currentMeta >> 8n;
-        const currentLevel = Number(currentMeta & 0xFFn);
+        const currentBitset = SearchService.getBitsetFromMeta(currentMeta);
+        const currentLevel = SearchService.getLevelFromMeta(currentMeta);
         const isBook = cat === "book";
 
         const currentEnchants = (isBook && currentCount > 1)
@@ -253,47 +268,71 @@ export class SearchService {
             : (SearchService.PROB_CONTINUE_TABLE[currentLevel] || 0n);
 
         if (!harvester.has(currentMeta)) {
-            let startFiltering = 0;
-            if (timing) startFiltering = performance.now();
+            SearchService.withTiming(timing, 'filteringMs', () => {
+                const tempEligible = new Int32Array(pool.length);
+                const tempWeights = new Int32Array(pool.length);
+                let eligibleCount = 0;
+                let totalWeight = 0;
 
-            const tempEligible = new Int32Array(pool.length);
-            const tempWeights = new Int32Array(pool.length);
-            let eligibleCount = 0;
-            let totalWeight = 0;
-
-            for (let i = 0; i < pool.length; i++) {
-                const e = pool[i];
-                const id = ComboUtils.getEnchantId(e);
-                if ((currentBitset & (1n << BigInt(id))) !== 0n) continue;
-                if ((currentBitset & registry.conflictBitsets[id]) !== 0n) continue;
-                tempEligible[eligibleCount] = e;
-                tempWeights[eligibleCount] = poolWeights[i];
-                eligibleCount++;
-                totalWeight += poolWeights[i];
-            }
-            
-            const nextLevel = currentCount >= 1 ? Math.floor(currentLevel / 2) : currentLevel;
-            const blueprint: import('../types/engine.js').ExpansionBlueprint = {
-                probContinue,
-                totalWeight,
-                eligibleCount,
-                eligibleEnchants: tempEligible.slice(0, eligibleCount),
-                eligibleWeights: tempWeights.slice(0, eligibleCount),
-                nextLevel,
-                currentCount,
-                currentCombo,
-                currentEnchants,
-                residue: 0n
-            };
-            harvester.registerExpansion(currentMeta, blueprint);
-            if (timing) timing.filteringMs += performance.now() - startFiltering;
+                for (let i = 0; i < pool.length; i++) {
+                    const e = pool[i];
+                    const id = ComboUtils.getEnchantId(e);
+                    if ((currentBitset & (1n << BigInt(id))) !== 0n) continue;
+                    if ((currentBitset & registry.conflictBitsets[id]) !== 0n) continue;
+                    tempEligible[eligibleCount] = e;
+                    tempWeights[eligibleCount] = poolWeights[i];
+                    eligibleCount++;
+                    totalWeight += poolWeights[i];
+                }
+                
+                const nextLevel = currentCount >= 1 ? Math.floor(currentLevel / 2) : currentLevel;
+                const blueprint: import('../types/engine.js').ExpansionBlueprint = {
+                    probContinue,
+                    totalWeight,
+                    eligibleCount,
+                    eligibleEnchants: tempEligible.slice(0, eligibleCount),
+                    eligibleWeights: tempWeights.slice(0, eligibleCount),
+                    nextLevel,
+                    currentCount,
+                    currentCombo,
+                    currentEnchants,
+                    residue: 0n
+                };
+                harvester.registerExpansion(currentMeta, blueprint);
+            });
         }
 
         harvester.forwardMass(
-            currentProb, currentMeta, currentCombo, registry, cat, guaranteedFirstId,
-            pool, poolWeights, results, queue, anyMass, rankMass, countMass,
-            resultsLimit, accountant, instrumentation, timing
+            currentProb, currentMeta, currentCombo, cat, guaranteedFirstId,
+            pool, poolWeights, ctx
         );
+    }
+
+    /**
+     * Reusable terminal check for mass distribution.
+     * Returns true if expansion should stop (limit reached, threshold too low, or results map full).
+     */
+    public static isTerminalCondition(
+        currentCount: number,
+        isBook: boolean,
+        probForward: bigint,
+        resultsSize: number,
+        resultsLimit: number,
+        currentCombo: number,
+        hasCombo: boolean,
+        multiEnchantBooks: boolean,
+        floor: bigint
+    ): { isLimitReached: boolean; isTooSmall: boolean; isMapFull: boolean; isTerminal: boolean } {
+        const isLimitReached = currentCount >= (isBook && !multiEnchantBooks ? 1 : ENGINE_DEFAULTS.MAX_ENCHANTS_PER_ITEM);
+        const isTooSmall = probForward < floor;
+        const isMapFull = resultsSize >= resultsLimit && !hasCombo;
+        
+        return {
+            isLimitReached,
+            isTooSmall,
+            isMapFull,
+            isTerminal: isLimitReached || isTooSmall || isMapFull
+        };
     }
 
     /** Settles `prob` into results/countMass, via book redistribution when applicable, and returns rem. */
@@ -389,7 +428,6 @@ export class SearchService {
     }
 
     private static processInitialNode(
-        registry: RegistryState,
         currentProb: bigint,
         currentMeta: bigint,
         modLevel: number,
@@ -397,36 +435,32 @@ export class SearchService {
         pool: PackedEnchant[],
         weights: number[],
         totalWeight: number,
-        queue: SearchHeap,
-        anyMass: BigUint64Array,
-        rankMass: BigUint64Array,
-        accountant: MassAccountant,
-        timing?: SearchTiming
+        ctx: import('../types/engine.js').ForwardingContext
     ): void {
 
+        const { registry, timing, accountant, queue } = ctx;
         const { enchantToIndex } = registry;
-        let startDist = 0;
-        if (timing) startDist = performance.now();
-        const splits = this.getPoolBuffer(0);
-        const splitRemainder = ProbUtils.distributeDetailed(currentProb, weights, totalWeight, splits);
-        if (timing) timing.distributionMs += performance.now() - startDist;
+        
+        const splits = SearchService.withTiming(timing, 'distributionMs', () => {
+            const buffer = this.getPoolBuffer(0);
+            const splitRemainder = ProbUtils.distributeDetailed(currentProb, weights, totalWeight, buffer);
+            accountant.record('sieved', splitRemainder);
+            return buffer;
+        });
 
-        let startHeap = 0;
-        if (timing) startHeap = performance.now();
-        for (let i = 0; i < pool.length; i++) {
-            const pNext = splits[i];
-            const nextId = ComboUtils.getEnchantId(pool[i]);
-            const nextMeta = ((1n << BigInt(nextId)) << 8n) | BigInt(modLevel);
-            const nextPacked = ComboUtils.pack([pool[i]], guaranteedId, enchantToIndex);
+        SearchService.withTiming(timing, 'heapMs', () => {
+            for (let i = 0; i < pool.length; i++) {
+                const pNext = splits[i];
+                const nextId = ComboUtils.getEnchantId(pool[i]);
+                const nextMeta = ((1n << BigInt(nextId)) << 8n) | BigInt(modLevel);
+                const nextPacked = ComboUtils.pack([pool[i]], guaranteedId, enchantToIndex);
 
-            ProbUtils.addItemMass(anyMass, nextId, pNext);
-            ProbUtils.addItemMass(rankMass, pool[i], pNext);
+                ProbUtils.addItemMass(ctx.anyMass, nextId, pNext);
+                ProbUtils.addItemMass(ctx.rankMass, pool[i], pNext);
 
-            accountant.record('pending', pNext);
-            queue.pushOrMerge(nextMeta, pNext, modLevel, nextPacked);
-        }
-
-        if (timing) timing.heapMs += performance.now() - startHeap;
-        accountant.record('sieved', splitRemainder);
+                accountant.record('pending', pNext);
+                queue.pushOrMerge(nextMeta, pNext, modLevel, nextPacked);
+            }
+        });
     }
 }
