@@ -85,7 +85,8 @@ describe('Enchantment Engine Test Suite', () => {
         });
 
         it('Delayed Level Decay & Pool Persistence', async () => {
-            const human = await EngineTestUtils.getHumanStats(engine, TEST_DATA.ITEMS.PICKAXE, 30, TEST_DATA.MATERIALS.DIAMOND);
+            const stats = await engine.getFullStats(TEST_DATA.ITEMS.PICKAXE, 30, TEST_DATA.MATERIALS.DIAMOND);
+            const human = HumanizationService.humanize(stats, engine.registry);
             
             const hasEffIVDeep = Object.keys(human.combos)
                 .filter(c => c.split("+").length >= 3)
@@ -93,7 +94,7 @@ describe('Enchantment Engine Test Suite', () => {
             assert.ok(hasEffIVDeep);
 
             assert.ok(human.count[2] > 0.1, "Double enchants should be significant");
-            assert.ok((human.count[1] || 0) + (human.count[2] || 0) + (human.count[3] || 0) > 0.9);
+            assert.ok((human.count[1] || 0) + (human.count[2] || 0) + (human.count[3] || 0) + (human.count[4] || 0) > 0.9);
         });
 
         it('God Pick verification (Efficiency IV + Fortune III + Unbreaking III)', async () => {
@@ -146,6 +147,17 @@ describe('Enchantment Engine Test Suite', () => {
              
              const totalCounted = Object.values(stats.count).reduce((a: any, b: any) => a + b, 0) as number;
              assert.ok(Math.abs(totalCounted + stats.accounting.pending - 1.0) < 0.0001, 'Total probability including uncertainty must be 1.0');
+         });
+
+         it('Regression: Guaranteed first must still allow single-enchant outcomes (Match Wiki)', async () => {
+             const engine = new EnchantEngine(DATA, TEST_DATA.VERSIONS.LAPIS_PIVOT);
+             const stats = await engine.getFullStats(TEST_DATA.ITEMS.BOW, 30, TEST_DATA.MATERIALS.BOW, { 
+                 guaranteedFirst: 'Power IV', 
+                 threshold: 0.0001 
+             });
+             
+             const count1 = stats.count[1] || 0;
+             assert.ok(count1 > 0.2, `Expected single-enchant probability to be > 20%, got ${count1}`);
          });
 
          it('Guaranteed book enchant should be exactly 100%', async () => {

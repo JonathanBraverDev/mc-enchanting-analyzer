@@ -293,24 +293,12 @@ export class SearchService {
         let startFiltering = 0;
         if (timing) startFiltering = performance.now();
         
-        let eligible: Int32Array;
-        let weights: Int32Array;
-        let eligibleCount: number;
-        let totalWeight: number;
-        let nextLevel: number;
-        
-        const cached = expansionCache.get(currentMeta);
-        if (cached) {
-            eligible = cached.eligibleEnchants;
-            weights = cached.eligibleWeights;
-            eligibleCount = cached.eligibleCount;
-            totalWeight = cached.totalWeight;
-            nextLevel = cached.nextLevel;
-        } else {
+        let blueprint = expansionCache.get(currentMeta);
+        if (!blueprint) {
             const tempEligible = new Int32Array(pool.length);
             const tempWeights = new Int32Array(pool.length);
-            eligibleCount = 0;
-            totalWeight = 0;
+            let eligibleCount = 0;
+            let totalWeight = 0;
 
             for (let i = 0; i < pool.length; i++) {
                 const e = pool[i];
@@ -323,24 +311,28 @@ export class SearchService {
                 totalWeight += poolWeights[i];
             }
             
-            nextLevel = currentCount >= 1 ? Math.floor(currentLevel / 2) : currentLevel;
-            eligible = tempEligible.slice(0, eligibleCount);
-            weights = tempWeights.slice(0, eligibleCount);
-            
-            expansionCache.set(currentMeta, {
+            const nextLevel = currentCount >= 1 ? Math.floor(currentLevel / 2) : currentLevel;
+            blueprint = {
                 probContinue,
                 totalWeight,
                 eligibleCount,
-                eligibleEnchants: eligible,
-                eligibleWeights: weights,
+                eligibleEnchants: tempEligible.slice(0, eligibleCount),
+                eligibleWeights: tempWeights.slice(0, eligibleCount),
                 nextLevel,
                 currentCount,
                 currentCombo,
-                currentEnchants
-            });
+                currentEnchants,
+                residue: 0n
+            };
+            expansionCache.set(currentMeta, blueprint);
         }
         
         if (timing) timing.filteringMs += performance.now() - startFiltering;
+
+        const totalWeight = blueprint.totalWeight;
+        const eligibleCount = blueprint.eligibleCount;
+        const nextLevel = blueprint.nextLevel;
+        const eligible = blueprint.eligibleEnchants;
 
         if (totalWeight === 0) {
             let startEndSettling = 0;
@@ -359,7 +351,20 @@ export class SearchService {
         let startDist = 0;
         if (timing) startDist = performance.now();
         const splits = this.getPoolBuffer(0);
-        const splitRemainder = ProbUtils.distributeDetailed(probForward, weights, totalWeight, splits, eligibleCount);
+
+        // Honest Accounting: record the natural remainder first as rounding error.
+        const individualRemainder = probForward % BigInt(totalWeight);
+        accountant.record('rounding', individualRemainder);
+
+        // Harvester: use the blueprint residue to attempt recovery.
+        const { recovered } = ProbUtils.distributeWithResidue(probForward, blueprint.eligibleWeights, totalWeight, splits, blueprint, eligibleCount);
+        
+        if (recovered > 0n) {
+            accountant.subtract('rounding', recovered);
+            accountant.record('recoveredRounding', recovered);
+            if (instrumentation) instrumentation.roundingErrorEvents++;
+        }
+
         if (timing) timing.distributionMs += performance.now() - startDist;
 
         const guaranteedInCombo = guaranteedFirstId !== null && (currentBitset & (1n << BigInt(guaranteedFirstId))) !== 0n;
@@ -384,9 +389,9 @@ export class SearchService {
 
         const scaleRoundingLoss = currentProb - (probStop + probForward);
         accountant.record('resolved', probStop - remStop);
-        accountant.record('rounding', remStop + scaleRoundingLoss + splitRemainder);
+        accountant.record('rounding', remStop + scaleRoundingLoss);
 
-        if ((remStop + scaleRoundingLoss + splitRemainder) > 0n && instrumentation) instrumentation.roundingErrorEvents++;
+        if ((remStop + scaleRoundingLoss) > 0n && instrumentation) instrumentation.roundingErrorEvents++;
     }
 
     /** Settles `prob` into results/countMass, via book redistribution when applicable, and returns rem. */

@@ -143,7 +143,17 @@ export class MassAccountant {
             capped: ProbUtils.toNumber(this.capped),
             rounding: ProbUtils.toNumber(this.rounding),
             recoveredRounding: ProbUtils.toNumber(this.recoveredRounding),
-            recoveredSieved: ProbUtils.toNumber(this.recoveredSieved)
+            recoveredSieved: ProbUtils.toNumber(this.recoveredSieved),
+            units: {
+                resolved: this.resolved.toString(),
+                pending: this.pending.toString(),
+                sieved: this.sieved.toString(),
+                overflow: this.overflow.toString(),
+                capped: this.capped.toString(),
+                rounding: this.rounding.toString(),
+                recoveredRounding: this.recoveredRounding.toString(),
+                recoveredSieved: this.recoveredSieved.toString()
+            }
         };
     }
 

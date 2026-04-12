@@ -129,6 +129,8 @@ export interface ExpansionBlueprint {
     currentCount: number;
     currentCombo: number;
     currentEnchants: PackedEnchant[];
+    /** Rounding residue accumulated from previous arrivals at this node. */
+    residue: bigint;
 }
 
 /**
