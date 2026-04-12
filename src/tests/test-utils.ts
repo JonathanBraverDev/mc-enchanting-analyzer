@@ -198,17 +198,32 @@ export const SnapshotUtils = {
      */
     sanitize(stats: any): any {
         const round = (val: number) => Math.round(val * 1e12) / 1e12;
-        const roundMap = (obj: any) => {
+        
+        const sortMap = (obj: any) => {
+            if (!obj) return {};
+            const keys = Object.keys(obj);
+            keys.sort((a, b) => {
+                const probA = obj[a];
+                const probB = obj[b];
+                // Primary: Probability descending
+                const delta = probB - probA;
+                if (Math.abs(delta) > 1e-15) return delta;
+                // Secondary: Key ascending (alphabetical)
+                return a.localeCompare(b);
+            });
+            
             const res: any = {};
-            for (const k in obj) res[k] = round(obj[k]);
+            for (const k of keys) {
+                res[k] = round(obj[k]);
+            }
             return res;
         };
 
         return {
-            ranks: roundMap(stats.ranks),
-            any: roundMap(stats.any),
-            count: roundMap(stats.count),
-            combos: roundMap(stats.combos),
+            ranks: sortMap(stats.ranks),
+            any: sortMap(stats.any),
+            count: sortMap(stats.count),
+            combos: sortMap(stats.combos),
             accuracy: round(stats.accuracy),
             accounting: stats.accounting
         };

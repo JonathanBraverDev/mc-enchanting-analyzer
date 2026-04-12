@@ -5,6 +5,7 @@ import { ENGINE_DEFAULTS } from '../core/config.js';
 import { PackedNode, PackedCombo, PackedEnchant, SearchFrontier, RegistryState, EngineInstrumentation, MassCheckpoint, EngineExitReason, SearchTiming } from '../types/index.js';
 import { FrontierFactory } from './frontier.js';
 import { MassAccountant } from './MassAccountant.js';
+import { ResidualMassHarvester } from './ResidualMassHarvester.js';
 
 
 /**
@@ -98,7 +99,7 @@ export class SearchService {
                 threshold,
                 iterations: 0,
                 nodesProcessed: 0,
-                expansionCache: new Map(),
+                harvester: new ResidualMassHarvester(),
                 checkpoints: [],
                 exitReason: 'empty'
             };
@@ -167,7 +168,7 @@ export class SearchService {
             } else {
                 this.processSearchNode(
                     registry, current.prob, current.meta, current.combo, currentCount, cat, guaranteedFirstId, initialPool, poolWeights, results, queue,
-                    frontier.anyMass, frontier.rankMass, frontier.countMass, resultsLimit, accountant, frontier.expansionCache, instrumentation, timing
+                    frontier.anyMass, frontier.rankMass, frontier.countMass, resultsLimit, accountant, frontier, instrumentation, timing
                 );
             }
 
@@ -232,16 +233,17 @@ export class SearchService {
         countMass: BigUint64Array,
         resultsLimit: number,
         accountant: MassAccountant,
-        expansionCache: Map<bigint, import('../types/engine.js').ExpansionBlueprint>,
+        frontier: SearchFrontier,
         instrumentation?: EngineInstrumentation,
         timing?: SearchTiming
     ): void {
 
-        const { enchantToIndex, indexToEnchant } = registry;
+        const harvester = frontier.harvester;
+        const { indexToEnchant } = registry;
         const currentBitset = currentMeta >> 8n;
         const currentLevel = Number(currentMeta & 0xFFn);
         const isBook = cat === "book";
-        // Unpack once for reuse.
+
         const currentEnchants = (isBook && currentCount > 1)
             ? ComboUtils.unpack(currentCombo, indexToEnchant)
             : [] as PackedEnchant[];
@@ -250,51 +252,10 @@ export class SearchService {
             ? 0n
             : (SearchService.PROB_CONTINUE_TABLE[currentLevel] || 0n);
 
-        let startSettling = 0;
-        if (timing) startSettling = performance.now();
-        const probStop = ProbUtils.scale(currentProb, (PRECISION - probContinue));
-        const remStop = this.settleMass(registry, isBook, currentCount, currentCombo, currentEnchants, probStop, guaranteedFirstId, enchantToIndex, indexToEnchant, results, countMass, anyMass, rankMass);
+        if (!harvester.has(currentMeta)) {
+            let startFiltering = 0;
+            if (timing) startFiltering = performance.now();
 
-        const probForward = ProbUtils.scale(currentProb, probContinue);
-
-        // Safety checks
-        const floor = ProbUtils.toBigInt(ENGINE_DEFAULTS.SYSTEM_THRESHOLD_FLOOR);
-        const isLimitReached = currentCount >= (isBook && !registry.multiEnchantBooks ? 1 : ENGINE_DEFAULTS.MAX_ENCHANTS_PER_ITEM);
-        const isTooSmall = probForward < floor;
-        const isMapFull = results.size >= resultsLimit && !results.has(currentCombo);
-
-        if (isLimitReached || isTooSmall || isMapFull) {
-            const remForward = this.settleMass(registry, isBook, currentCount, currentCombo, currentEnchants, probForward, guaranteedFirstId, enchantToIndex, indexToEnchant, results, countMass, anyMass, rankMass);
-            if (timing) timing.settlingMs += performance.now() - startSettling;
-            
-            // In Banker's Rounding land, stop + forward approx currentProb.
-            // Any discrepency is recorded as rounding error.
-            const localRounding = remStop + remForward + (currentProb - (probStop + probForward));
-            
-            accountant.record('resolved', probStop - remStop);
-            accountant.record('rounding', localRounding);
-            
-            if (isTooSmall) {
-                if (instrumentation) instrumentation.totalPrunedNodes++;
-                accountant.record('sieved', probForward - remForward);
-            } else if (isLimitReached) {
-                accountant.record('overflow', probForward - remForward);
-            } else {
-                accountant.record('capped', probForward - remForward);
-            }
-
-            if (localRounding > 0n && instrumentation) instrumentation.roundingErrorEvents++;
-            return;
-        }
-
-        if (timing) timing.settlingMs += performance.now() - startSettling;
-
-        // Branching & Expansion Cache
-        let startFiltering = 0;
-        if (timing) startFiltering = performance.now();
-        
-        let blueprint = expansionCache.get(currentMeta);
-        if (!blueprint) {
             const tempEligible = new Int32Array(pool.length);
             const tempWeights = new Int32Array(pool.length);
             let eligibleCount = 0;
@@ -312,7 +273,7 @@ export class SearchService {
             }
             
             const nextLevel = currentCount >= 1 ? Math.floor(currentLevel / 2) : currentLevel;
-            blueprint = {
+            const blueprint: import('../types/engine.js').ExpansionBlueprint = {
                 probContinue,
                 totalWeight,
                 eligibleCount,
@@ -324,74 +285,15 @@ export class SearchService {
                 currentEnchants,
                 residue: 0n
             };
-            expansionCache.set(currentMeta, blueprint);
-        }
-        
-        if (timing) timing.filteringMs += performance.now() - startFiltering;
-
-        const totalWeight = blueprint.totalWeight;
-        const eligibleCount = blueprint.eligibleCount;
-        const nextLevel = blueprint.nextLevel;
-        const eligible = blueprint.eligibleEnchants;
-
-        if (totalWeight === 0) {
-            let startEndSettling = 0;
-            if (timing) startEndSettling = performance.now();
-            const remForward = this.settleMass(registry, isBook, currentCount, currentCombo, currentEnchants, probForward, guaranteedFirstId, enchantToIndex, indexToEnchant, results, countMass, anyMass, rankMass);
-            if (timing) timing.settlingMs += performance.now() - startEndSettling;
-
-            const localRounding = remStop + remForward + (currentProb - (probStop + probForward));
-
-            accountant.record('resolved', (probStop + probForward) - (remStop + remForward));
-            accountant.record('rounding', localRounding);
-            if (localRounding > 0n && instrumentation) instrumentation.roundingErrorEvents++;
-            return;
+            harvester.registerExpansion(currentMeta, blueprint);
+            if (timing) timing.filteringMs += performance.now() - startFiltering;
         }
 
-        let startDist = 0;
-        if (timing) startDist = performance.now();
-        const splits = this.getPoolBuffer(0);
-
-        // Honest Accounting: record the natural remainder first as rounding error.
-        const individualRemainder = probForward % BigInt(totalWeight);
-        accountant.record('rounding', individualRemainder);
-
-        // Harvester: use the blueprint residue to attempt recovery.
-        const { recovered } = ProbUtils.distributeWithResidue(probForward, blueprint.eligibleWeights, totalWeight, splits, blueprint, eligibleCount);
-        
-        if (recovered > 0n) {
-            accountant.subtract('rounding', recovered);
-            accountant.record('recoveredRounding', recovered);
-            if (instrumentation) instrumentation.roundingErrorEvents++;
-        }
-
-        if (timing) timing.distributionMs += performance.now() - startDist;
-
-        const guaranteedInCombo = guaranteedFirstId !== null && (currentBitset & (1n << BigInt(guaranteedFirstId))) !== 0n;
-
-        let startHeap = 0;
-        if (timing) startHeap = performance.now();
-        for (let i = 0; i < eligibleCount; i++) {
-            const pNext = splits[i];
-            const nextPacked = ComboUtils.packAppend(currentCombo, eligible[i], guaranteedFirstId, guaranteedInCombo, enchantToIndex);
-            const nextId = ComboUtils.getEnchantId(eligible[i]);
-            const nextMeta = ((currentBitset | (1n << BigInt(nextId))) << 8n) | BigInt(nextLevel);
-
-            // Add new enchant to Rank and Any mass of this path
-            ProbUtils.addItemMass(anyMass, nextId, pNext);
-            ProbUtils.addItemMass(rankMass, eligible[i], pNext);
-
-            accountant.record('pending', pNext);
-            queue.pushOrMerge(nextMeta, pNext, nextLevel, nextPacked);
-        }
-
-        if (timing) timing.heapMs += performance.now() - startHeap;
-
-        const scaleRoundingLoss = currentProb - (probStop + probForward);
-        accountant.record('resolved', probStop - remStop);
-        accountant.record('rounding', remStop + scaleRoundingLoss);
-
-        if ((remStop + scaleRoundingLoss) > 0n && instrumentation) instrumentation.roundingErrorEvents++;
+        harvester.forwardMass(
+            currentProb, currentMeta, currentCombo, registry, cat, guaranteedFirstId,
+            pool, poolWeights, results, queue, anyMass, rankMass, countMass,
+            resultsLimit, accountant, instrumentation, timing
+        );
     }
 
     /** Settles `prob` into results/countMass, via book redistribution when applicable, and returns rem. */
