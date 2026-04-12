@@ -19,6 +19,8 @@ export interface MassAccounting {
   recoveredRounding: number;
   /** Diagnostic: Mass recovered from sieved branches via aggregation. (Non-additive) */
   recoveredSieved: number;
+  /** Diagnostic: Precise mass counts as strings to preserve BigInt precision in JSON. */
+  units?: { [K in keyof MassBookkeeping]: string };
 }
 
 /**

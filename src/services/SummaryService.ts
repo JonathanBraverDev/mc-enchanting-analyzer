@@ -36,7 +36,11 @@ export class SummaryService {
 
         // Ensure we always return sorted results if a limit is set > 0
         let comboSource: Iterable<[number, bigint]> = [];
-        const compareProbDesc = (a: [any, bigint], b: [any, bigint]) => a[1] > b[1] ? -1 : (a[1] < b[1] ? 1 : 0);
+        // Sort by probability (descending), then by ID (descending) as a stable tie-breaker.
+        const compareProbDesc = (a: [any, bigint], b: [any, bigint]) => {
+            if (a[1] !== b[1]) return a[1] > b[1] ? -1 : 1;
+            return a[0] < b[0] ? 1 : (a[0] > b[0] ? -1 : 0);
+        };
 
         if (comboLimit > 0) {
             if (combos.size <= comboLimit) {

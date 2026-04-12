@@ -127,7 +127,10 @@ describe('SummaryService', () => {
 describe('SerializationService', () => {
     const makeStats = (overrides: Partial<CalculationStats> = {}): CalculationStats => {
         const accuracy = overrides.accuracy ?? 1.0;
-        const accounting = overrides.accounting ?? { resolved: accuracy, pending: 0, sieved: 0, overflow: 0, capped: 0, rounding: 0 };
+        const accounting = overrides.accounting ?? { 
+            resolved: accuracy, pending: 0, sieved: 0, overflow: 0, 
+            capped: 0, rounding: 0, recoveredRounding: 0, recoveredSieved: 0 
+        };
         return {
             ranks: {}, any: {}, count: {}, combos: {}, 
             accuracy, accounting,
