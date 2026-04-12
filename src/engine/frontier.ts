@@ -3,6 +3,7 @@ import { BinaryHeap, PRECISION, ComboUtils, EnchantUtils } from '../utils/index.
 import { ENGINE_DEFAULTS } from '../core/config.js';
 import { getEnchantId } from '../core/registry.js';
 import { PackedNode, PackedCombo, SearchFrontier, RegistryState } from '../types/index.js';
+import { ResidualMassHarvester } from './ResidualMassHarvester.js';
 
 export class FrontierFactory {
     /**
@@ -55,12 +56,14 @@ export class FrontierFactory {
                 sieved: 0n, 
                 overflow: 0n,
                 capped: 0n,
-                rounding: 0n 
+                rounding: 0n,
+                recoveredRounding: 0n,
+                recoveredSieved: 0n
             },
             threshold,
             iterations: 0,
             nodesProcessed: 0,
-            expansionCache: new Map(),
+            harvester: new ResidualMassHarvester(),
             checkpoints: []
         };
     }

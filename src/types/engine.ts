@@ -134,6 +134,37 @@ export interface ExpansionBlueprint {
 }
 
 /**
+ * Interface for the Residual Mass Harvester which handles recursive forwarding
+ * of probability mass for already-expanded nodes.
+ */
+export interface IResidualMassHarvester {
+    registerExpansion(key: bigint, blueprint: ExpansionBlueprint): void;
+    has(key: bigint): boolean;
+    getCacheSize(): number;
+    forwardMass(
+        incomingMass: bigint,
+        meta: bigint,
+        combo: number,
+        registry: RegistryState,
+        cat: string,
+        guaranteedFirstId: number | null,
+        pool: PackedEnchant[],
+        poolWeights: number[],
+        results: Map<number, bigint>,
+        queue: SearchHeap,
+        anyMass: BigUint64Array,
+        rankMass: BigUint64Array,
+        countMass: BigUint64Array,
+        resultsLimit: number,
+        accountant: any, // MassAccountant to avoid circularity
+        instrumentation?: EngineInstrumentation,
+        timing?: SearchTiming,
+        depth?: number
+    ): bigint;
+    clone(): IResidualMassHarvester;
+}
+
+/**
  * State of a search for enchantment combinations.
  */
 export interface SearchFrontier {
@@ -146,7 +177,7 @@ export interface SearchFrontier {
     threshold: bigint;
     iterations: number;
     nodesProcessed: number;
-    expansionCache: Map<bigint, ExpansionBlueprint>;
+    harvester: IResidualMassHarvester;
     checkpoints: MassCheckpoint[];  // per-call output; not carried over on resume
     exitReason?: EngineExitReason;  // per-call output; not carried over on resume
 }
