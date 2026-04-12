@@ -60,6 +60,7 @@ export class FrontierFactory {
             threshold,
             iterations: 0,
             nodesProcessed: 0,
+            expansionCache: new Map(),
             checkpoints: []
         };
     }

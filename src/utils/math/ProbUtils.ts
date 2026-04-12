@@ -29,18 +29,6 @@ export const ProbUtils = {
     scale: (prob: bigint, factor: bigint): bigint => ProbUtils.roundDiv(prob * factor, PRECISION),
 
     /**
-     * Performs (a * b) / c and returns the remainder.
-     * @param a Multiplicand (must be non-negative)
-     * @param b Multiplier (must be non-negative)
-     * @param c Divisor (must be positive)
-     */
-    mulDiv: (a: bigint, b: bigint, c: bigint): { quotient: bigint; remainder: bigint } => {
-        if (c === 0n) throw new Error("Division by zero in mulDiv");
-        const prod = a * b;
-        return { quotient: prod / c, remainder: prod % c };
-    },
-
-    /**
      * Performs integer division with Banker's Rounding (Round-to-Nearest-Even).
      * Uses the (r * 2) vs b comparison to handle odd denominators symmetrically.
      * @param a Dividend (must be non-negative)
@@ -61,50 +49,40 @@ export const ProbUtils = {
     },
 
     /**
-     * Splits a probability mass across multiple weights and returns the per-slot remainders.
+     * Splits a probability mass across multiple weights into the provided output array.
      * Following the "Honest Accounting" principle, the remainder is NOT redistributed.
      * @param prob The mass to divide
      * @param weights The weight for each slot
      * @param totalWeight The sum of all weights
-     * @returns { parts, remainders, remainder } where 'remainder' is the total lost mass
+     * @param outParts The output array to store the distributed mass parts
+     * @returns The total lost mass (remainder)
      */
-    distributeDetailed: (prob: bigint, weights: number[] | bigint[], totalWeight: number | bigint, count?: number): { parts: bigint[]; remainders: bigint[]; remainder: bigint } => {
+    distributeDetailed: (
+        prob: bigint, 
+        weights: ArrayLike<number | bigint>, 
+        totalWeight: number | bigint, 
+        outParts: bigint[] | BigUint64Array,
+        count?: number
+    ): bigint => {
         const total = BigInt(totalWeight);
         const len = count ?? weights.length;
 
-        // If no weight exists, mass is entirely unattributable (captured in aggregate remainder)
-        if (total === 0n) return { 
-            parts: new Array(len).fill(0n), 
-            remainders: new Array(len).fill(0n), 
-            remainder: prob 
-        };
+        if (total === 0n) {
+            for (let i = 0; i < len; i++) outParts[i] = 0n;
+            return prob;
+        }
 
-        const parts = new Array<bigint>(len);
-        const remainders = new Array<bigint>(len);
         let rem = prob;
-        
         for (let i = 0; i < len; i++) {
-            const w = weights[i];
+            const w = weights[i] as number | bigint;
             const bigW = typeof w === 'bigint' ? w : BigInt(w!);
-            const { quotient, remainder } = ProbUtils.mulDiv(prob, bigW, total);
-            parts[i] = quotient;
-            remainders[i] = remainder;
+            const quotient = (prob * bigW) / total;
+            outParts[i] = quotient;
             rem -= quotient;
         }
         
-        return { parts, remainders, remainder: rem };
+        return rem;
     },
-
-    /**
-     * Specialized zero-allocation version of distributeDetailed for equal splits.
-     * Returns the base quotient and the total remainder to be settled manually.
-     */
-    distributeEqual: (prob: bigint, n: number): { quotient: bigint; remainder: bigint } => {
-        if (n <= 0) return { quotient: 0n, remainder: prob };
-        const bigN = BigInt(n);
-        return { quotient: prob / bigN, remainder: prob % bigN };
-    },
-
     /**
      * Scales 'val' by 'multiplier' and divides by 'divisor' using Banker's Rounding.
      */
