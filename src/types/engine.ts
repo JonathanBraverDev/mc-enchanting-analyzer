@@ -149,10 +149,17 @@ export interface ForwardingContext {
     accountant: any; // Typed as any to avoid circular dependency with MassAccountant
     instrumentation?: EngineInstrumentation;
     timing?: SearchTiming;
+    
+    // Search-global parameters
+    cat: string;
+    guaranteedFirstId: number | null;
+    pool: PackedEnchant[];
+    poolWeights: number[];
+    initialTotalWeight: number;
 }
 
 /**
- * Interface for the Residual Mass Harvester which handles recursive forwarding
+ * Interface for the Residual Mass Harvester which handles high-speed forwarding
  * of probability mass for already-expanded nodes.
  */
 export interface IResidualMassHarvester {
@@ -163,12 +170,7 @@ export interface IResidualMassHarvester {
         incomingMass: bigint,
         meta: bigint,
         combo: number,
-        cat: string,
-        guaranteedFirstId: number | null,
-        pool: PackedEnchant[],
-        poolWeights: number[],
-        ctx: ForwardingContext,
-        depth?: number
+        ctx: ForwardingContext
     ): bigint;
     clone(): IResidualMassHarvester;
 }
