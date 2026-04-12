@@ -1,18 +1,8 @@
 import { PRECISION, ProbUtils, ComboUtils } from '../utils/index.js';
 import { ENGINE_DEFAULTS } from '../core/config.js';
-import { 
-    ExpansionBlueprint, 
-    RegistryState, 
-    EngineInstrumentation, 
-    SearchTiming, 
-    PackedCombo, 
-    PackedEnchant,
-    MassBookkeeping,
-    ForwardingContext
-} from '../types/index.js';
-import { MassAccountant } from './MassAccountant.js';
-import { SearchHeap } from '../utils/collections/SearchHeap.js';
+import { ExpansionBlueprint, ForwardingContext } from '../types/index.js';
 import { SearchService } from './search.js';
+import { DistributionPool } from './DistributionPool.js';
 
 export class ResidualMassHarvester {
     private static readonly MAX_RECURSION_DEPTH = 10;
@@ -41,62 +31,82 @@ export class ResidualMassHarvester {
     }
 
     /**
-     * Recursively forwards probability mass to cached children, bypassing the priority queue.
-     * Returns the total mass successfully settled into results.
+     * Forwards probability mass to cached children, bypassing the priority queue.
+     * Uses an iterative stack-based approach to avoid recursion limit issues and maintain
+     * linear memory flow.
+     * 
+     * The process follows:
+     * 1. Check if node is cached.
+     * 2. Split mass between 'stop' (settle now) and 'forward' (continue to children).
+     * 3. If terminal condition reached or no children, settle all mass.
+     * 4. Otherwise, distribute mass to children using residue-aware accounting.
+     * 5. For each child: if cached and depth limit not reached, push to stack for next iteration.
+     *    Otherwise, push to the main search priority queue.
+     * 
+     * Returns the total mass successfully settled into results across the entire subtree.
      */
     public forwardMass(
-        incomingMass: bigint,
-        meta: bigint,
-        combo: number,
-        cat: string,
-        guaranteedFirstId: number | null,
-        pool: PackedEnchant[],
-        poolWeights: number[],
-        ctx: ForwardingContext,
-        depth: number = 0
+        initialMass: bigint,
+        initialMeta: bigint,
+        initialCombo: number,
+        ctx: ForwardingContext
     ): bigint {
-        const blueprint = this.expansionCache.get(meta);
-        if (!blueprint) return 0n;
+        const stack: Array<{ mass: bigint, meta: bigint, combo: number, depth: number }> = [
+            { mass: initialMass, meta: initialMeta, combo: initialCombo, depth: 0 }
+        ];
 
-        const { registry, timing, accountant, instrumentation } = ctx;
-        const { enchantToIndex, indexToEnchant } = registry;
-        const currentBitset = SearchService.getBitsetFromMeta(meta);
-        const currentCount = blueprint.currentCount;
-        const currentCombo = blueprint.currentCombo;
-        const currentEnchants = blueprint.currentEnchants;
-        const isBook = cat === "book";
+        let totalResolvedFromTrees = 0n;
 
-        const probContinue = blueprint.probContinue;
-        
-        // Split mass into stop vs forward
-        const { probStop, probForward, localRounding: scaleRoundingLoss } = SearchService.withTiming(timing, 'settlingMs', () => {
-            const pStop = ProbUtils.scale(incomingMass, (PRECISION - probContinue));
-            const pForward = ProbUtils.scale(incomingMass, probContinue);
-            const loss = incomingMass - (pStop + pForward);
-            return { probStop: pStop, probForward: pForward, localRounding: loss };
-        });
+        while (stack.length > 0) {
+            const { mass: incomingMass, meta, combo, depth } = stack.pop()!;
+            
+            const blueprint = this.expansionCache.get(meta);
+            if (!blueprint) continue;
 
-        const remStop = SearchService.withTiming(timing, 'settlingMs', () => 
-            SearchService.settleMass(
-                registry, isBook, currentCount, currentCombo, currentEnchants, 
-                probStop, guaranteedFirstId, enchantToIndex, indexToEnchant, 
-                ctx.results, ctx.countMass, ctx.anyMass, ctx.rankMass
-            )
-        );
+            const { registry, timing, accountant, instrumentation, cat, guaranteedFirstId } = ctx;
+            const { enchantToIndex, indexToEnchant } = registry;
+            const currentBitset = SearchService.getBitsetFromMeta(meta);
+            const currentCount = blueprint.currentCount;
+            const currentCombo = blueprint.currentCombo;
+            const currentEnchants = blueprint.currentEnchants;
+            const isBook = cat === "book";
 
-        // Terminal Check (Limit reached, too small, or results full)
-        const floor = ProbUtils.toBigInt(ENGINE_DEFAULTS.SYSTEM_THRESHOLD_FLOOR);
-        const term = SearchService.isTerminalCondition(
-            currentCount, isBook, probForward, ctx.results.size, ctx.resultsLimit, 
-            currentCombo, ctx.results.has(currentCombo), registry.multiEnchantBooks, floor
-        );
+            const probContinue = blueprint.probContinue;
+            
+            // Split mass into stop vs forward
+            const { probStop, probForward, localRounding: scaleRoundingLoss } = SearchService.withTiming(timing, 'settlingMs', () => {
+                const pStop = ProbUtils.scale(incomingMass, (PRECISION - probContinue));
+                const pForward = ProbUtils.scale(incomingMass, probContinue);
+                const loss = incomingMass - (pStop + pForward);
+                return { probStop: pStop, probForward: pForward, localRounding: loss };
+            });
 
-        if (term.isTerminal || blueprint.totalWeight === 0) {
-            return this.handleTerminal(incomingMass, probStop, probForward, remStop, scaleRoundingLoss, blueprint, term, cat, guaranteedFirstId, ctx);
+            const remStop = SearchService.withTiming(timing, 'settlingMs', () => 
+                SearchService.settleMass(
+                    registry, isBook, currentCount, currentCombo, currentEnchants, 
+                    probStop, guaranteedFirstId, enchantToIndex, indexToEnchant, 
+                    ctx.results, ctx.countMass, ctx.anyMass, ctx.rankMass
+                )
+            );
+
+            // Terminal Check (Limit reached, too small, or results full)
+            const floor = ProbUtils.toBigInt(ENGINE_DEFAULTS.SYSTEM_THRESHOLD_FLOOR);
+            const term = SearchService.isTerminalCondition(
+                currentCount, isBook, probForward, ctx.results.size, ctx.resultsLimit, 
+                currentCombo, ctx.results.has(currentCombo), registry.multiEnchantBooks, floor
+            );
+
+            if (term.isTerminal || blueprint.totalWeight === 0) {
+                totalResolvedFromTrees += this.handleTerminal(incomingMass, probStop, probForward, remStop, scaleRoundingLoss, blueprint, term, ctx);
+                continue;
+            }
+
+            // Standard expansion path
+            const resolvedSub = this.processExpansionStep(probStop, probForward, remStop, scaleRoundingLoss, currentBitset, blueprint, ctx, depth, stack);
+            totalResolvedFromTrees += resolvedSub;
         }
 
-        // Standard expansion path
-        return this.processExpansion(incomingMass, probStop, probForward, remStop, scaleRoundingLoss, meta, currentBitset, blueprint, cat, guaranteedFirstId, pool, poolWeights, ctx, depth);
+        return totalResolvedFromTrees;
     }
 
     private handleTerminal(
@@ -107,11 +117,9 @@ export class ResidualMassHarvester {
         scaleRoundingLoss: bigint,
         blueprint: ExpansionBlueprint,
         term: { isLimitReached: boolean; isTooSmall: boolean; isMapFull: boolean },
-        cat: string,
-        guaranteedFirstId: number | null,
         ctx: ForwardingContext
     ): bigint {
-        const { registry, timing, accountant, instrumentation } = ctx;
+        const { registry, timing, accountant, instrumentation, cat, guaranteedFirstId } = ctx;
         const isBook = cat === "book";
         
         const remForward = SearchService.withTiming(timing, 'settlingMs', () => 
@@ -143,28 +151,23 @@ export class ResidualMassHarvester {
         return (probStop - remStop) + (blueprint.totalWeight === 0 ? (probForward - remForward) : 0n);
     }
 
-    private processExpansion(
-        incomingMass: bigint,
+    private processExpansionStep(
         probStop: bigint,
         probForward: bigint,
         remStop: bigint,
         scaleRoundingLoss: bigint,
-        meta: bigint,
         currentBitset: bigint,
         blueprint: ExpansionBlueprint,
-        cat: string,
-        guaranteedFirstId: number | null,
-        pool: PackedEnchant[],
-        poolWeights: number[],
         ctx: ForwardingContext,
-        depth: number
+        depth: number,
+        stack: Array<{ mass: bigint, meta: bigint, combo: number, depth: number }>
     ): bigint {
-        const { registry, timing, accountant, instrumentation, queue } = ctx;
+        const { registry, timing, accountant, instrumentation, queue, guaranteedFirstId } = ctx;
         const { enchantToIndex } = registry;
 
-        // Residue-aware distribution
+        // Residue-aware distribution using multiplexed shared buffer
         const eligibleCount = blueprint.eligibleCount;
-        const splits = new BigUint64Array(eligibleCount);
+        const splits = DistributionPool.getBuffer(depth);
 
         SearchService.withTiming(timing, 'distributionMs', () => {
             const individualRemainder = probForward % BigInt(blueprint.totalWeight);
@@ -182,7 +185,6 @@ export class ResidualMassHarvester {
         });
 
         const guaranteedInCombo = guaranteedFirstId !== null && (currentBitset & (1n << BigInt(guaranteedFirstId))) !== 0n;
-        let totalResolvedFromChildren = 0n;
 
         for (let i = 0; i < eligibleCount; i++) {
             const pNext = splits[i];
@@ -195,19 +197,15 @@ export class ResidualMassHarvester {
             ProbUtils.addItemMass(ctx.anyMass, nextId, pNext);
             ProbUtils.addItemMass(ctx.rankMass, blueprint.eligibleEnchants[i], pNext);
 
-            // RECURSIVE FORWARDING
-            const resolved = (depth < ResidualMassHarvester.MAX_RECURSION_DEPTH) 
-                ? this.forwardMass(
-                    pNext, nextMeta, nextPacked, cat, guaranteedFirstId, 
-                    pool, poolWeights, ctx, depth + 1
-                )
-                : 0n;
-
-            if (resolved === 0n) {
+            // BRANCHING
+            const isCached = this.expansionCache.has(nextMeta);
+            if (isCached && depth < ResidualMassHarvester.MAX_RECURSION_DEPTH) {
+                // Iterative push: replace recursion with stack visit
+                stack.push({ mass: pNext, meta: nextMeta, combo: nextPacked, depth: depth + 1 });
+            } else {
+                // Not cached or reached depth limit, push to main search queue
                 accountant.record('pending', pNext);
                 queue.pushOrMerge(nextMeta, pNext, blueprint.nextLevel, nextPacked);
-            } else {
-                totalResolvedFromChildren += resolved;
             }
         }
 
@@ -215,7 +213,7 @@ export class ResidualMassHarvester {
         accountant.record('rounding', remStop + scaleRoundingLoss);
         if ((remStop + scaleRoundingLoss) > 0n && instrumentation) instrumentation.roundingErrorEvents++;
         
-        return (probStop - remStop) + totalResolvedFromChildren;
+        return (probStop - remStop);
     }
 
     /**

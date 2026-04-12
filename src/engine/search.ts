@@ -2,33 +2,25 @@ import { SearchHeap } from '../utils/collections/SearchHeap.js';
 import { PRECISION, ProbUtils, ComboUtils, LRUCache, AsyncUtils } from '../utils/index.js';
 import { getEligiblePool } from '../core/registry.js';
 import { ENGINE_DEFAULTS } from '../core/config.js';
-import { PackedNode, PackedCombo, PackedEnchant, SearchFrontier, RegistryState, EngineInstrumentation, MassCheckpoint, EngineExitReason, SearchTiming } from '../types/index.js';
+import { PackedCombo, PackedEnchant, SearchFrontier, RegistryState, EngineInstrumentation, MassCheckpoint, EngineExitReason, SearchTiming } from '../types/index.js';
 import { FrontierFactory } from './frontier.js';
 import { MassAccountant } from './MassAccountant.js';
 import { ResidualMassHarvester } from './ResidualMassHarvester.js';
+import { DistributionPool } from './DistributionPool.js';
 
 
 /**
  * Service for the Best-First search of enchantment combinations.
  */
 export class SearchService {
-    /** 
-     * Shared memory pool for probability distributions. 
-     * 8 levels of depth (covers the engine's 6-enchant limit) x 128 outcomes.
-     */
-    private static _poolBuffer = new BigUint64Array(8 * 128);
-
-    private static getPoolBuffer(depth: number): BigUint64Array {
-        // Return a subarray view into the shared pool to avoid allocations while ensuring
-        // that recursive calls (harvesting) don't clobber parent distributions.
-        const start = (depth % 8) * 128;
-        return SearchService._poolBuffer.subarray(start, start + 128);
-    }
-
-    private static readonly PROB_CONTINUE_TABLE: bigint[] = Array.from({ length: 65 }, (_, ml) => {
+    public static readonly PROB_CONTINUE_TABLE: bigint[] = Array.from({ length: 65 }, (_, ml) => {
         const val = Math.min((ml + 1) / ENGINE_DEFAULTS.MAX_MODIFIED_LEVEL_FOR_CONTINUING, 1.0);
         return ProbUtils.toBigInt(val);
     });
+
+    public static readonly CHECKPOINT_TARGETS: bigint[] = [
+        0.1, 0.25, 0.5, 0.75, 0.8, 0.85, 0.9, 0.95, 0.99, 0.999
+    ].map(t => ProbUtils.toBigInt(t));
 
     public static getBitsetFromMeta(meta: bigint): bigint {
         return meta >> 8n;
@@ -48,10 +40,6 @@ export class SearchService {
         timing[bucket] += performance.now() - start;
         return result;
     }
-
-    private static readonly CHECKPOINT_TARGETS_BIGINT: bigint[] = [
-        0.1, 0.25, 0.5, 0.75, 0.8, 0.85, 0.9, 0.95, 0.99, 0.999
-    ].map(t => ProbUtils.toBigInt(t));
     /**
      * Iteratively calculates enchantment combinations using a Best-First approach.
      */
@@ -90,8 +78,10 @@ export class SearchService {
         const accountant = new MassAccountant(frontier.mass);
         // Queue mass is already included in frontier.mass.pending.
         // Incremental updates will maintain it during push/pop.
-        const BK = accountant.getBookkeeping();
-        void BK;
+        const guaranteedFirstId = FrontierFactory.getGuaranteedFirstId(registry, guaranteedFirst);
+        const initialPool = getEligiblePool(registry, cat, modLevel, poolCache);
+        const poolWeights = initialPool.map(e => registry.weightMap[e >> 8]);
+        const initialTotalWeight = poolWeights.reduce((a, b) => a + b, 0);
 
         const ctx: import('../types/engine.js').ForwardingContext = {
             registry,
@@ -104,16 +94,18 @@ export class SearchService {
             resultsLimit,
             accountant,
             instrumentation,
-            timing
+            timing: timing ? { ...timing } : undefined,
+            cat,
+            guaranteedFirstId,
+            pool: initialPool,
+            poolWeights,
+            initialTotalWeight
         };
 
         let iterations = 0;
         const expandedIds = new Set<bigint>();
         let redundantExpansions = 0;
 
-        const guaranteedFirstId = FrontierFactory.getGuaranteedFirstId(registry, guaranteedFirst);
-
-        const initialPool = getEligiblePool(registry, cat, modLevel, poolCache);
         if (initialPool.length === 0) {
             const rootAcc = new MassAccountant();
             rootAcc.record('resolved', PRECISION);
@@ -137,11 +129,6 @@ export class SearchService {
                 exitReason: 'empty'
             };
         }
-
-        const poolWeights = initialPool.map(e => registry.weightMap[e >> 8]);
-        const initialTotalWeight = poolWeights.reduce((a, b) => a + b, 0);
-
-        // Removed redundant loop stub
 
         const localCheckpoints: MassCheckpoint[] = [];
         let checkpointIdx = 0;
@@ -191,19 +178,17 @@ export class SearchService {
 
             SearchService.withTiming(timing, 'searchMs', () => {
                 if (currentCount === 0) {
-                    this.processInitialNode(current.prob, current.meta, modLevel, guaranteedFirstId, initialPool, poolWeights, initialTotalWeight, ctx);
+                    this.processInitialNode(current.prob, current.meta, modLevel, ctx);
                 } else {
-                    this.processSearchNode(
-                        current.prob, current.meta, current.combo, currentCount, cat, guaranteedFirstId, initialPool, poolWeights, ctx
-                    );
+                    this.processSearchNode(current.prob, current.meta, current.combo, currentCount, ctx);
                 }
             });
 
             // Checkpoints: record after processing — current.prob is the minimum threshold
             // needed to have processed this node (and thus reached this mass coverage).
             const bk = accountant.getBookkeeping();
-            while (checkpointIdx < SearchService.CHECKPOINT_TARGETS_BIGINT.length) {
-                const targetMass = SearchService.CHECKPOINT_TARGETS_BIGINT[checkpointIdx];
+            while (checkpointIdx < SearchService.CHECKPOINT_TARGETS.length) {
+                const targetMass = SearchService.CHECKPOINT_TARGETS[checkpointIdx];
                 const currentSettledMass = bk.resolved + bk.sieved + bk.overflow;
                 if (currentSettledMass < targetMass) break;
                 localCheckpoints.push({
@@ -246,14 +231,10 @@ export class SearchService {
         currentMeta: bigint,
         currentCombo: number,
         currentCount: number,
-        cat: string,
-        guaranteedFirstId: number | null,
-        pool: PackedEnchant[],
-        poolWeights: number[],
         ctx: import('../types/engine.js').ForwardingContext
     ): void {
 
-        const { registry, harvester, timing } = ctx;
+        const { registry, harvester, timing, cat, pool } = ctx;
         const { indexToEnchant } = registry;
         const currentBitset = SearchService.getBitsetFromMeta(currentMeta);
         const currentLevel = SearchService.getLevelFromMeta(currentMeta);
@@ -280,9 +261,9 @@ export class SearchService {
                     if ((currentBitset & (1n << BigInt(id))) !== 0n) continue;
                     if ((currentBitset & registry.conflictBitsets[id]) !== 0n) continue;
                     tempEligible[eligibleCount] = e;
-                    tempWeights[eligibleCount] = poolWeights[i];
+                    tempWeights[eligibleCount] = ctx.poolWeights[i];
                     eligibleCount++;
-                    totalWeight += poolWeights[i];
+                    totalWeight += ctx.poolWeights[i];
                 }
                 
                 const nextLevel = currentCount >= 1 ? Math.floor(currentLevel / 2) : currentLevel;
@@ -303,8 +284,7 @@ export class SearchService {
         }
 
         harvester.forwardMass(
-            currentProb, currentMeta, currentCombo, cat, guaranteedFirstId,
-            pool, poolWeights, ctx
+            currentProb, currentMeta, currentCombo, ctx
         );
     }
 
@@ -430,20 +410,15 @@ export class SearchService {
     private static processInitialNode(
         currentProb: bigint,
         currentMeta: bigint,
-        modLevel: number,
-        guaranteedId: number | null,
-        pool: PackedEnchant[],
-        weights: number[],
-        totalWeight: number,
+        currentLevel: number,
         ctx: import('../types/engine.js').ForwardingContext
     ): void {
-
-        const { registry, timing, accountant, queue } = ctx;
+        const { registry, timing, accountant, queue, guaranteedFirstId, pool, poolWeights, initialTotalWeight } = ctx;
         const { enchantToIndex } = registry;
         
         const splits = SearchService.withTiming(timing, 'distributionMs', () => {
-            const buffer = this.getPoolBuffer(0);
-            const splitRemainder = ProbUtils.distributeDetailed(currentProb, weights, totalWeight, buffer);
+            const buffer = DistributionPool.getBuffer(0);
+            const splitRemainder = ProbUtils.distributeDetailed(currentProb, poolWeights, initialTotalWeight, buffer);
             accountant.record('sieved', splitRemainder);
             return buffer;
         });
@@ -451,15 +426,17 @@ export class SearchService {
         SearchService.withTiming(timing, 'heapMs', () => {
             for (let i = 0; i < pool.length; i++) {
                 const pNext = splits[i];
+                if (pNext === 0n) continue;
+                
                 const nextId = ComboUtils.getEnchantId(pool[i]);
-                const nextMeta = ((1n << BigInt(nextId)) << 8n) | BigInt(modLevel);
-                const nextPacked = ComboUtils.pack([pool[i]], guaranteedId, enchantToIndex);
+                const nextMeta = ((1n << BigInt(nextId)) << 8n) | BigInt(currentLevel);
+                const nextPacked = ComboUtils.pack([pool[i]], guaranteedFirstId, enchantToIndex);
 
                 ProbUtils.addItemMass(ctx.anyMass, nextId, pNext);
                 ProbUtils.addItemMass(ctx.rankMass, pool[i], pNext);
 
                 accountant.record('pending', pNext);
-                queue.pushOrMerge(nextMeta, pNext, modLevel, nextPacked);
+                queue.pushOrMerge(nextMeta, pNext, currentLevel, nextPacked);
             }
         });
     }

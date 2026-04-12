@@ -19,25 +19,27 @@ export type MassEventType = 'resolved' | 'pending' | 'sieved' | 'overflow' | 'ca
  * - Rounding: Lost to integer math or precision.
  */
 export class MassAccountant {
-    private resolved: bigint = 0n;
-    private pending: bigint = 0n;
-    private sieved: bigint = 0n;
-    private overflow: bigint = 0n;
-    private capped: bigint = 0n;
-    private rounding: bigint = 0n;
-    private recoveredRounding: bigint = 0n;
-    private recoveredSieved: bigint = 0n;
+    private buckets: Record<MassEventType, bigint> = {
+        resolved: 0n,
+        pending: 0n,
+        sieved: 0n,
+        overflow: 0n,
+        capped: 0n,
+        rounding: 0n,
+        recoveredRounding: 0n,
+        recoveredSieved: 0n
+    };
 
     constructor(initial?: MassBookkeeping) {
         if (initial) {
-            this.resolved = initial.resolved;
-            this.pending = initial.pending;
-            this.sieved = initial.sieved;
-            this.overflow = initial.overflow;
-            this.capped = initial.capped;
-            this.rounding = initial.rounding;
-            this.recoveredRounding = initial.recoveredRounding || 0n;
-            this.recoveredSieved = initial.recoveredSieved || 0n;
+            this.buckets.resolved = initial.resolved;
+            this.buckets.pending = initial.pending;
+            this.buckets.sieved = initial.sieved;
+            this.buckets.overflow = initial.overflow;
+            this.buckets.capped = initial.capped;
+            this.buckets.rounding = initial.rounding;
+            this.buckets.recoveredRounding = initial.recoveredRounding || 0n;
+            this.buckets.recoveredSieved = initial.recoveredSieved || 0n;
         }
     }
 
@@ -55,42 +57,15 @@ export class MassAccountant {
     }
 
     public record(type: MassEventType, prob: bigint): void {
-        switch (type) {
-            case 'resolved': this.resolved += prob; break;
-            case 'pending':  this.pending += prob;  break;
-            case 'sieved':   this.sieved += prob;   break;
-            case 'overflow': this.overflow += prob; break;
-            case 'capped':   this.capped += prob;   break;
-            case 'rounding': this.rounding += prob; break;
-            case 'recoveredRounding': this.recoveredRounding += prob; break;
-            case 'recoveredSieved':   this.recoveredSieved += prob;   break;
-        }
+        this.buckets[type] += prob;
     }
 
-    public subtract(type: MassEventType | 'recoveredRounding' | 'recoveredSieved', prob: bigint): void {
-        switch (type) {
-            case 'resolved': this.resolved -= prob; break;
-            case 'pending':  this.pending -= prob;  break;
-            case 'sieved':   this.sieved -= prob;   break;
-            case 'overflow': this.overflow -= prob; break;
-            case 'capped':   this.capped -= prob;   break;
-            case 'rounding': this.rounding -= prob; break;
-            case 'recoveredRounding': this.recoveredRounding -= prob; break;
-            case 'recoveredSieved':   this.recoveredSieved -= prob;   break;
-        }
+    public subtract(type: MassEventType, prob: bigint): void {
+        this.buckets[type] -= prob;
     }
 
-    public reset(type: MassEventType | 'recoveredRounding' | 'recoveredSieved'): void {
-        switch (type) {
-            case 'resolved': this.resolved = 0n; break;
-            case 'pending':  this.pending = 0n;  break;
-            case 'sieved':   this.sieved = 0n;   break;
-            case 'overflow': this.overflow = 0n; break;
-            case 'capped':   this.capped = 0n;   break;
-            case 'rounding': this.rounding = 0n; break;
-            case 'recoveredRounding': this.recoveredRounding = 0n; break;
-            case 'recoveredSieved':   this.recoveredSieved = 0n;   break;
-        }
+    public reset(type: MassEventType): void {
+        this.buckets[type] = 0n;
     }
 
     /**
@@ -98,23 +73,17 @@ export class MassAccountant {
      * Uses Banker's Rounding for statistically zero-drift conservation.
      */
     public addScaled(other: MassAccountant, factor: bigint): void {
-        const b = other.getBookkeeping();
-
-        this.resolved += ProbUtils.scale(b.resolved, factor);
-        this.pending  += ProbUtils.scale(b.pending, factor);
-        this.sieved   += ProbUtils.scale(b.sieved, factor);
-        this.overflow += ProbUtils.scale(b.overflow, factor);
-        this.capped   += ProbUtils.scale(b.capped, factor);
-        this.rounding += ProbUtils.scale(b.rounding, factor);
-
-        // Recovered buckets are also scaled to maintain diagnostic accuracy
-        this.recoveredRounding += ProbUtils.scale(b.recoveredRounding, factor);
-        this.recoveredSieved   += ProbUtils.scale(b.recoveredSieved, factor);
+        const b = other.buckets;
+        for (const key in b) {
+            const type = key as MassEventType;
+            this.buckets[type] += ProbUtils.scale(b[type], factor);
+        }
     }
 
     public getTotalMass(): bigint {
+        const b = this.buckets;
         // Recovered buckets are diagnostic subsets, NOT additive to the total 100% mass.
-        return this.resolved + this.pending + this.sieved + this.overflow + this.capped + this.rounding;
+        return b.resolved + b.pending + b.sieved + b.overflow + b.capped + b.rounding;
     }
 
     public copy(): MassAccountant {
@@ -122,37 +91,29 @@ export class MassAccountant {
     }
 
     public getBookkeeping(): MassBookkeeping {
-        return {
-            resolved: this.resolved,
-            pending: this.pending,
-            sieved: this.sieved,
-            overflow: this.overflow,
-            capped: this.capped,
-            rounding: this.rounding,
-            recoveredRounding: this.recoveredRounding,
-            recoveredSieved: this.recoveredSieved
-        };
+        return { ...this.buckets };
     }
 
     public toPublic(): MassAccounting {
+        const b = this.buckets;
         return {
-            resolved: ProbUtils.toNumber(this.resolved),
-            pending: ProbUtils.toNumber(this.pending),
-            sieved: ProbUtils.toNumber(this.sieved),
-            overflow: ProbUtils.toNumber(this.overflow),
-            capped: ProbUtils.toNumber(this.capped),
-            rounding: ProbUtils.toNumber(this.rounding),
-            recoveredRounding: ProbUtils.toNumber(this.recoveredRounding),
-            recoveredSieved: ProbUtils.toNumber(this.recoveredSieved),
+            resolved: ProbUtils.toNumber(b.resolved),
+            pending: ProbUtils.toNumber(b.pending),
+            sieved: ProbUtils.toNumber(b.sieved),
+            overflow: ProbUtils.toNumber(b.overflow),
+            capped: ProbUtils.toNumber(b.capped),
+            rounding: ProbUtils.toNumber(b.rounding),
+            recoveredRounding: ProbUtils.toNumber(b.recoveredRounding),
+            recoveredSieved: ProbUtils.toNumber(b.recoveredSieved),
             units: {
-                resolved: this.resolved.toString(),
-                pending: this.pending.toString(),
-                sieved: this.sieved.toString(),
-                overflow: this.overflow.toString(),
-                capped: this.capped.toString(),
-                rounding: this.rounding.toString(),
-                recoveredRounding: this.recoveredRounding.toString(),
-                recoveredSieved: this.recoveredSieved.toString()
+                resolved: b.resolved.toString(),
+                pending: b.pending.toString(),
+                sieved: b.sieved.toString(),
+                overflow: b.overflow.toString(),
+                capped: b.capped.toString(),
+                rounding: b.rounding.toString(),
+                recoveredRounding: b.recoveredRounding.toString(),
+                recoveredSieved: b.recoveredSieved.toString()
             }
         };
     }
@@ -163,14 +124,10 @@ export class MassAccountant {
     public static aggregate(accountants: MassAccountant[]): MassAccountant {
         const result = new MassAccountant();
         for (const acc of accountants) {
-            result.resolved += acc.resolved;
-            result.pending += acc.pending;
-            result.sieved += acc.sieved;
-            result.overflow += acc.overflow;
-            result.capped += acc.capped;
-            result.rounding += acc.rounding;
-            result.recoveredRounding += acc.recoveredRounding;
-            result.recoveredSieved += acc.recoveredSieved;
+            for (const key in acc.buckets) {
+                const type = key as MassEventType;
+                result.buckets[type] += acc.buckets[type];
+            }
         }
         return result;
     }
