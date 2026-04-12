@@ -1,7 +1,7 @@
 import { ProbUtils } from '../utils/math/ProbUtils.js';
-import { ENGINE_DEFAULTS } from '../core/config.js';
+import { ENGINE_LIMITS } from '../constants/engine.js';
 import { CalculationStats } from '../types/index.js';
-import { MassAccountant } from '../engine/MassAccountant.js';
+import { ProbabilityMassTracker } from '../engine/ProbabilityMassTracker.js';
 
 /**
  * Service for summarizing raw engine results into a standard JSON format.
@@ -12,13 +12,13 @@ export class SummaryService {
      */
     public static summarize(
         combos: Map<number, bigint>,
-        accountant: MassAccountant,
+        tracker: ProbabilityMassTracker,
         anyMass?: Map<number, bigint> | BigUint64Array,
         rankMass?: Map<number, bigint> | BigUint64Array,
         countMass?: Map<number, bigint> | BigUint64Array,
-        comboLimit: number = ENGINE_DEFAULTS.MAX_RESULTS_SUMMARY
+        comboLimit: number = ENGINE_LIMITS.MAX_RESULTS_SUMMARY
     ): CalculationStats {
-        const accounting = accountant.toPublic();
+        const accounting = tracker.toPublic();
         const stats: CalculationStats = {
             ranks: {},
             any: {},
@@ -32,11 +32,8 @@ export class SummaryService {
         if (rankMass) SummaryService.populateStats(stats.ranks, rankMass);
         if (countMass) SummaryService.populateStats(stats.count, countMass);
 
-        // Limit the number of combinations serialized for transfer
-
         // Ensure we always return sorted results if a limit is set > 0
         let comboSource: Iterable<[number, bigint]> = [];
-        // Sort by probability (descending), then by ID (descending) as a stable tie-breaker.
         const compareProbDesc = (a: [any, bigint], b: [any, bigint]) => {
             if (a[1] !== b[1]) return a[1] > b[1] ? -1 : 1;
             return a[0] < b[0] ? 1 : (a[0] > b[0] ? -1 : 0);
@@ -44,11 +41,8 @@ export class SummaryService {
 
         if (comboLimit > 0) {
             if (combos.size <= comboLimit) {
-                // Common case: everything fits, just sort the whole collection
                 comboSource = [...combos.entries()].sort(compareProbDesc);
-            } else if (comboLimit <= ENGINE_DEFAULTS.MAX_RESULTS_SUMMARY_OPTIMIZED_THRESHOLD) {
-                // Optimized Path: Top-K selection with Sorted Array + Binary Search insertion (Desc order)
-                // Complexity: O(N * (log K + K)) - extremely fast for K <= 250 in V8
+            } else if (comboLimit <= 250) { // Using absolute number instead of soft-coded limit for simplicity
                 const results: [number, bigint][] = [];
                 for (const entry of combos.entries()) {
                     const prob = entry[1];
@@ -65,8 +59,6 @@ export class SummaryService {
                 }
                 comboSource = results;
             } else {
-                // Fallback for large K (e.g. Snapshots or deep ultra mode): Full sort
-                // We avoid splice() for large K as O(N*K) would start to hurt
                 comboSource = [...combos.entries()].sort(compareProbDesc).slice(0, comboLimit);
             }
         }
@@ -93,4 +85,3 @@ export class SummaryService {
         }
     }
 }
-

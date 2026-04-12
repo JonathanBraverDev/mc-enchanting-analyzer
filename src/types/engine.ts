@@ -123,11 +123,11 @@ export interface ExpansionBlueprint {
     probContinue: bigint;
     totalWeight: number;
     eligibleCount: number;
-    eligibleEnchants: Int32Array;
+    eligibleEnchants: PackedEnchant[];
     eligibleWeights: Int32Array;
     nextLevel: number;
     currentCount: number;
-    currentCombo: number;
+    currentCombo: PackedCombo;
     currentEnchants: PackedEnchant[];
     /** Rounding residue accumulated from previous arrivals at this node. */
     residue: bigint;
@@ -139,14 +139,12 @@ export interface ExpansionBlueprint {
  */
 export interface ForwardingContext {
     registry: RegistryState;
-    harvester: IResidualMassHarvester;
     results: Map<PackedCombo, bigint>;
     queue: SearchHeap;
     anyMass: BigUint64Array;
     rankMass: BigUint64Array;
     countMass: BigUint64Array;
     resultsLimit: number;
-    accountant: any; // Typed as any to avoid circular dependency with MassAccountant
     instrumentation?: EngineInstrumentation;
     timing?: SearchTiming;
     
@@ -158,22 +156,6 @@ export interface ForwardingContext {
     initialTotalWeight: number;
 }
 
-/**
- * Interface for the Residual Mass Harvester which handles high-speed forwarding
- * of probability mass for already-expanded nodes.
- */
-export interface IResidualMassHarvester {
-    registerExpansion(key: bigint, blueprint: ExpansionBlueprint): void;
-    has(key: bigint): boolean;
-    getCacheSize(): number;
-    forwardMass(
-        incomingMass: bigint,
-        meta: bigint,
-        combo: number,
-        ctx: ForwardingContext
-    ): bigint;
-    clone(): IResidualMassHarvester;
-}
 
 /**
  * State of a search for enchantment combinations.
@@ -184,11 +166,10 @@ export interface SearchFrontier {
     anyMass: BigUint64Array;
     rankMass: BigUint64Array;
     countMass: BigUint64Array;
-    mass: MassBookkeeping;
+    tracker: import('../engine/ProbabilityMassTracker.js').ProbabilityMassTracker;
     threshold: bigint;
     iterations: number;
     nodesProcessed: number;
-    harvester: IResidualMassHarvester;
     checkpoints: MassCheckpoint[];  // per-call output; not carried over on resume
     exitReason?: EngineExitReason;  // per-call output; not carried over on resume
 }
@@ -217,8 +198,9 @@ export interface RegistryState {
     indexToEnchant: number[];
 }
 
-export type PackedEnchant = number;
-export type PackedCombo = number;
+export type PackedEnchant = number & { __brand: "PackedEnchant" };
+export type PackedCombo = number & { __brand: "PackedCombo" };
+export type ProbabilityValue = bigint & { __brand: "ProbabilityValue" };
 
 /**
  * Public configuration options for a full statistics calculation.

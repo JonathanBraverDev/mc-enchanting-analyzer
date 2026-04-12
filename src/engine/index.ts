@@ -2,7 +2,8 @@ import { EnchantmentData, CalculationStats, SearchFrontier, RegistryState, Searc
 import { LRUCache, ProbUtils, KeyUtils, EnchantUtils, RomanUtils } from '../utils/index.js';
 import { getCategoryId, getMaterialId, getEnchantId, getEligiblePool, isCategoryAvailable, getEnchantability } from '../core/registry.js';
 import { RegistryFactory } from '../core/factory.js';
-import { ENGINE_DEFAULTS, getSearchLimit } from '../core/config.js';
+import { ENGINE_LIMITS } from '../constants/engine.js';
+import { getSearchLimit } from '../core/config.js';
 import { DistributionService } from './distribution.js';
 import { SearchService } from './search.js';
 import { StatAggregator } from './aggregator.js';
@@ -19,9 +20,9 @@ export class EnchantEngine {
     get registry(): RegistryState { return this._registry; }
     private distCache = new Map<string, { [level: number]: bigint }>();
     private poolCache = new LRUCache<string, PackedEnchant[]>(200);
-    private comboCache = new LRUCache<number, SearchFrontier>(ENGINE_DEFAULTS.CACHE_SIZE_COMBO_OTHER);
-    private bookComboCache = new LRUCache<number, SearchFrontier>(ENGINE_DEFAULTS.CACHE_SIZE_COMBO_BOOK);
-    private statsCache = new LRUCache<number, CalculationStats>(ENGINE_DEFAULTS.CACHE_SIZE_STATS);
+    private comboCache = new LRUCache<number, SearchFrontier>(128); // Will be centralized in CacheManager
+    private bookComboCache = new LRUCache<number, SearchFrontier>(64);
+    private statsCache = new LRUCache<number, CalculationStats>(8);
 
     constructor(data: EnchantmentData, version: string) {
         this._registry = RegistryFactory.build(data, version);
@@ -43,7 +44,7 @@ export class EnchantEngine {
         const catId = getCategoryId(this.registry, cat);
         const matId = getMaterialId(this.registry, mat);
         const parsed = EnchantUtils.parse(guaranteedFirst, this.registry.data.constants.ROMAN_MAP);
-        const guaranteedId = parsed ? getEnchantId(this.registry, parsed.name) : ENGINE_DEFAULTS.UNKNOWN_ENCHANT_ID;
+        const guaranteedId = parsed ? getEnchantId(this.registry, parsed.name) : ENGINE_LIMITS.UNKNOWN_ENCHANT_ID;
 
         return KeyUtils.getPackedKey(catId, matId, modLevel, guaranteedId);
     }
@@ -86,7 +87,7 @@ export class EnchantEngine {
         }
     }
 
-    public getModifiedLevelDist(xp: number, enchantability: number, instrumentation?: EngineInstrumentation): { [level: number]: bigint } {
+    public getModifiedLevelDist(xp: number, enchantability: number, _instrumentation?: EngineInstrumentation): { [level: number]: bigint } {
         return DistributionService.getModifiedLevelDist(xp, enchantability, this._registry, this.distCache);
     }
 
@@ -105,7 +106,7 @@ export class EnchantEngine {
         guaranteedFirst: string | null = null,
         threshold: bigint = ProbUtils.toBigInt(0.0001),
         maxIterations?: number,
-        resultsLimit: number = ENGINE_DEFAULTS.MAX_RESULTS_SIZE,
+        resultsLimit: number = ENGINE_LIMITS.MAX_RESULTS_SIZE,
         instrumentation?: EngineInstrumentation
     ): Promise<SearchFrontier> {
         const limit = getSearchLimit(cat, ProbUtils.toNumber(threshold), maxIterations);
@@ -125,8 +126,6 @@ export class EnchantEngine {
 
     /**
      * Aggregates statistics using tiered progressive search, calling onTierComplete after each tier.
-     * Checks and updates the stats cache the same way as getFullStats, but delegates frontier
-     * management entirely to StatAggregator.getFullStatsTiered (no combo cache wiring).
      */
     public async getFullStatsProgressive(
         cat: string,
@@ -140,13 +139,13 @@ export class EnchantEngine {
         if (!Number.isFinite(xp) || xp <= 0) {
             throw new Error(`Invalid XP level: ${xp}. XP must be a positive integer.`);
         }
-        if (xp > ENGINE_DEFAULTS.MAX_XP_LEVEL) {
-            throw new Error(`XP level ${xp} exceeds the maximum of ${ENGINE_DEFAULTS.MAX_XP_LEVEL}.`);
+        if (xp > ENGINE_LIMITS.MAX_XP_LEVEL) {
+            throw new Error(`XP level ${xp} exceeds the maximum of ${ENGINE_LIMITS.MAX_XP_LEVEL}.`);
         }
         if (!isCategoryAvailable(this.registry, cat)) {
             throw new Error(`Unknown or unavailable category: "${cat}" in version ${this.registry.version}.`);
         }
-        if (getMaterialId(this.registry, mat) === ENGINE_DEFAULTS.UNKNOWN_MATERIAL_ID) {
+        if (getMaterialId(this.registry, mat) === ENGINE_LIMITS.UNKNOWN_MATERIAL_ID) {
             throw new Error(`Unknown material: "${mat}".`);
         }
         const {
@@ -154,8 +153,8 @@ export class EnchantEngine {
             signal,
             onProgress,
             maxIterations,
-            summaryLimit = ENGINE_DEFAULTS.MAX_RESULTS_SUMMARY,
-            resultsLimit = ENGINE_DEFAULTS.MAX_RESULTS_SIZE,
+            summaryLimit = ENGINE_LIMITS.MAX_RESULTS_SUMMARY,
+            resultsLimit = ENGINE_LIMITS.MAX_RESULTS_SIZE,
             useCache = true,
             instrumentation,
             timing
@@ -164,7 +163,7 @@ export class EnchantEngine {
         const catId = getCategoryId(this.registry, cat);
         const matId = getMaterialId(this.registry, mat);
         const parsedG = EnchantUtils.parse(guaranteedFirst, this.registry.data.constants.ROMAN_MAP);
-        const guaranteedId = parsedG ? getEnchantId(this.registry, parsedG.name) : ENGINE_DEFAULTS.UNKNOWN_ENCHANT_ID;
+        const guaranteedId = parsedG ? getEnchantId(this.registry, parsedG.name) : ENGINE_LIMITS.UNKNOWN_ENCHANT_ID;
 
         const cacheKey = KeyUtils.getStatsKey(catId, matId, xp, guaranteedId);
 
@@ -175,7 +174,6 @@ export class EnchantEngine {
             this.validateGuaranteedFirst(cat, xp, mat, guaranteedFirst);
         }
 
-        // Tiered aggregator manages frontiers locally — no combo cache wiring needed
         const internalConfig: InternalSearchConfig = {
             threshold,
             signal,
@@ -190,11 +188,9 @@ export class EnchantEngine {
             timing
         };
 
-        // Wrap onTierComplete to cache each tier's result as it completes
         const wrappedOnTierComplete = (stats: CalculationStats, tierIndex: number) => {
             onTierComplete(stats, tierIndex);
             const currentCached = this.statsCache.get(cacheKey);
-            // Replace if new result is more accurate
             if (!currentCached || stats.accuracy > currentCached.accuracy) {
                 this.statsCache.set(cacheKey, stats);
             }
@@ -204,7 +200,6 @@ export class EnchantEngine {
             this.registry, cat, xp, mat, guaranteedFirst, tiers, wrappedOnTierComplete, internalConfig
         );
 
-        // Only overwrite if new result is more accurate
         const currentCached = this.statsCache.get(cacheKey);
         if (!currentCached || finalStats.accuracy > currentCached.accuracy) {
             this.statsCache.set(cacheKey, finalStats);
@@ -241,13 +236,13 @@ export class EnchantEngine {
         if (!Number.isFinite(xp) || xp <= 0) {
             throw new Error(`Invalid XP level: ${xp}. XP must be a positive integer.`);
         }
-        if (xp > ENGINE_DEFAULTS.MAX_XP_LEVEL) {
-            throw new Error(`XP level ${xp} exceeds the maximum of ${ENGINE_DEFAULTS.MAX_XP_LEVEL}.`);
+        if (xp > ENGINE_LIMITS.MAX_XP_LEVEL) {
+            throw new Error(`XP level ${xp} exceeds the maximum of ${ENGINE_LIMITS.MAX_XP_LEVEL}.`);
         }
         if (!isCategoryAvailable(this.registry, cat)) {
             throw new Error(`Unknown or unavailable category: "${cat}" in version ${this.registry.version}.`);
         }
-        if (getMaterialId(this.registry, mat) === ENGINE_DEFAULTS.UNKNOWN_MATERIAL_ID) {
+        if (getMaterialId(this.registry, mat) === ENGINE_LIMITS.UNKNOWN_MATERIAL_ID) {
             throw new Error(`Unknown material: "${mat}".`);
         }
 
@@ -257,23 +252,20 @@ export class EnchantEngine {
             signal,
             onProgress,
             maxIterations,
-            summaryLimit = ENGINE_DEFAULTS.MAX_RESULTS_SUMMARY,
-            resultsLimit = ENGINE_DEFAULTS.MAX_RESULTS_SIZE,
+            summaryLimit = ENGINE_LIMITS.MAX_RESULTS_SUMMARY,
+            resultsLimit = ENGINE_LIMITS.MAX_RESULTS_SIZE,
             useCache = true,
             instrumentation,
             timing
         } = config;
 
-        // Pre-resolve IDs once so closure only varies `ml`
         const catId = getCategoryId(this.registry, cat);
         const matId = getMaterialId(this.registry, mat);
         const parsedG = EnchantUtils.parse(guaranteedFirst, this.registry.data.constants.ROMAN_MAP);
-        const guaranteedId = parsedG ? getEnchantId(this.registry, parsedG.name) : ENGINE_DEFAULTS.UNKNOWN_ENCHANT_ID;
+        const guaranteedId = parsedG ? getEnchantId(this.registry, parsedG.name) : ENGINE_LIMITS.UNKNOWN_ENCHANT_ID;
 
-        // Stats cache key is request-independent so results are reused across queries
         const cacheKey = KeyUtils.getStatsKey(catId, matId, xp, guaranteedId);
 
-        // Check unified stats cache
         const cachedStats = this.statsCache.get(cacheKey);
         if (cachedStats) return cachedStats;
 
@@ -283,7 +275,6 @@ export class EnchantEngine {
             this.validateGuaranteedFirst(cat, xp, mat, guaranteedFirst);
         }
 
-        // Delegate aggregation to service (InternalSearchConfig adds cache accessors)
         const internalConfig: InternalSearchConfig = {
             threshold,
             signal,
@@ -303,7 +294,6 @@ export class EnchantEngine {
             this.registry, cat, xp, mat, guaranteedFirst, internalConfig
         );
 
-        // Only overwrite if new result is more accurate
         const currentCached = this.statsCache.get(cacheKey);
         if (!currentCached || finalStats.accuracy > currentCached.accuracy) {
             this.statsCache.set(cacheKey, finalStats);
@@ -313,22 +303,25 @@ export class EnchantEngine {
     }
 
     /**
-     * Validates that the requested guaranteedFirst enchantment is possible for the given category and XP.
-     * Throws a descriptive error if the input is a "non-starter".
+     * Validates that the requested guaranteedFirst enchantment is possible.
      */
     private validateGuaranteedFirst(cat: string, xp: number, mat: string, guaranteedFirst: string): void {
         const romanMap = this.registry.data.constants.ROMAN_MAP;
         const parsed = EnchantUtils.parse(guaranteedFirst, romanMap);
         if (!parsed) {
-            throw new Error(`Invalid enchantment format: "${guaranteedFirst}". Expected "Name Rank" (e.g., "Sharpness V").`);
+            throw new Error(`Invalid enchantment format: "${guaranteedFirst}". Expected "Name Rank".`);
         }
 
         const id = getEnchantId(this.registry, parsed.name);
-        if (id === ENGINE_DEFAULTS.UNKNOWN_ENCHANT_ID) {
+        if (id === ENGINE_LIMITS.UNKNOWN_ENCHANT_ID) {
             throw new Error(`Unknown enchantment: "${parsed.name}".`);
         }
 
         const props = this.registry.resolvedRegistry[parsed.name];
+        if (!props) {
+            throw new Error(`Unknown enchantment: "${parsed.name}".`);
+        }
+        
         const maxLevel = Math.max(...Object.keys(props.levels).map(k => RomanUtils.getRomanValue(k, romanMap)));
         if (parsed.rank < 1 || parsed.rank > maxLevel) {
             const romanMax = RomanUtils.rankToRoman(maxLevel, romanMap);
@@ -340,7 +333,6 @@ export class EnchantEngine {
             throw new Error(`Enchantment "${parsed.name}" is not applicable to category "${cat}".`);
         }
 
-        // Verify achievability across all possible modified levels for this XP
         const enchantability = getEnchantability(this.registry, mat, cat);
         const dist = this.getModifiedLevelDist(xp, enchantability);
         const levels = Object.keys(dist).map(Number);
