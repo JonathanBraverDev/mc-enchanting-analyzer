@@ -27,9 +27,9 @@
     "build:standalone": "npm run build && node scripts/inline-assets.js",
     "test": "npm run test:all",
     "test:all": "npm run build && npm run test:engine && npm run test:ui",
-    "test:engine": "tsx --test tests/binary-heap.test.ts tests/combo-utils.test.ts tests/lru-cache.test.ts tests/utils.test.ts tests/services.test.ts tests/error-paths.test.ts tests/integration.test.ts tests/integration-chart.test.ts tests/frontier-resumability.test.ts tests/prob-conservation.test.ts tests/engine-invariants.test.ts tests/tiered-aggregation.test.ts tests/worker-protocol.test.ts tests/engine.test.ts tests/registry.test.ts tests/data-integrity.test.ts tests/enchantment_physical.test.ts tests/book_mechanics.test.ts tests/mechanics_rules.test.ts tests/harvester.test.ts tests/instrumentation.test.ts tests/mass-accountant.test.ts",
-    "test:snapshots": "tsx --test --test-name-pattern=\"Snapshot:\" tests/engine.test.ts",
-    "test:ui": "playwright test tests/ui-basic.test.ts tests/ui-performance.test.ts tests/ui-chart.test.ts tests/ui-regression.test.ts",
+    "test:engine": "tsx --test tests/unit/**/*.test.ts tests/integration/**/*.test.ts tests/diagnostics/**/*.test.ts tests/infra/*.test.ts",
+    "test:snapshots": "tsx --test --test-name-pattern=\"Snapshot:\" tests/unit/engine/engine.test.ts",
+    "test:ui": "playwright test",
     "update-snapshots": "tsx scripts/update-snapshots.ts",
     "release": "npm run test:all && npm run build:standalone"
   }
