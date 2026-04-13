@@ -159,7 +159,7 @@ describe('DistributionService', () => {
             mechanics: { enchantability_bonus_divisor: 4, random_bonus_range: 0.15 }
         } as any;
 
-        const dist = DistributionService.getModifiedLevelDist(30, 0, fakeRegistry);
+        const dist = DistributionService.getModifiedLevelDist('test-version', 30, 0, fakeRegistry);
         const keys = Object.keys(dist).map(Number);
         assert.deepStrictEqual(keys, [30], 'should have a single entry at xp=30');
         assert.strictEqual(dist[30], PRECISION);

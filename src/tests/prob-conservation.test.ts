@@ -17,6 +17,7 @@
 import { describe, it, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { EnchantEngine } from '../engine/index.js';
+import { cacheManager } from '../services/index.js';
 import { DATA } from '../data/index.js';
 import { TEST_DATA } from './test-data.js';
 
@@ -24,7 +25,7 @@ import { TEST_DATA } from './test-data.js';
 const TOLERANCE = TEST_DATA.THRESHOLDS.PROB_MIN;
 
 afterEach(() => {
-    EnchantEngine.clearAllEngines();
+    cacheManager.clearAll();
 });
 
 /** sum of all mass buckets from the accounting object */

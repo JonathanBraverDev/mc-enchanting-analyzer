@@ -49,12 +49,25 @@ export function getFullEnchantName(state: RegistryState, idAndRank: number): str
     return `${getEnchantName(state, id)} ${getRankRoman(state, rank)}`;
 }
 
-export function getEligiblePool(state: RegistryState, cat: string, level: number, cache?: LRUCache<string, PackedEnchant[]>): PackedEnchant[] {
-    return PoolService.getEligiblePool(state, cat, level, cache);
+export function getEligiblePool(
+    state: RegistryState, 
+    cat: string, 
+    level: number, 
+    cache?: { getPool(v: string, k: string): PackedEnchant[] | undefined; setPool(v: string, k: string, v: PackedEnchant[]): void },
+    version?: string
+): PackedEnchant[] {
+    return PoolService.getEligiblePool(state, cat, level, cache, version);
 }
 
-export function isEnchantmentAchievable(state: RegistryState, fullName: string, cat: string, levels: number[], cache?: LRUCache<string, PackedEnchant[]>): boolean {
-    return PoolService.isEnchantmentAchievable(state, fullName, cat, levels, state.data.constants.ROMAN_MAP, cache);
+export function isEnchantmentAchievable(
+    state: RegistryState, 
+    fullName: string, 
+    cat: string, 
+    levels: number[], 
+    cache?: { getPool(v: string, k: string): PackedEnchant[] | undefined; setPool(v: string, k: string, v: PackedEnchant[]): void },
+    version?: string
+): boolean {
+    return PoolService.isEnchantmentAchievable(state, fullName, cat, levels, state.data.constants.ROMAN_MAP, cache, version);
 }
 
 export function getEnchantability(state: RegistryState, mat: string, cat: string): number {

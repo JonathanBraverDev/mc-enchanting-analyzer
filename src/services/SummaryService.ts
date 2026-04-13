@@ -16,7 +16,8 @@ export class SummaryService {
         anyMass?: Map<number, bigint> | BigUint64Array,
         rankMass?: Map<number, bigint> | BigUint64Array,
         countMass?: Map<number, bigint> | BigUint64Array,
-        comboLimit: number = ENGINE_LIMITS.MAX_RESULTS_SUMMARY
+        comboLimit: number = ENGINE_LIMITS.MAX_RESULTS_SUMMARY,
+        threshold: number = 0
     ): CalculationStats {
         const accounting = tracker.toPublic();
         const stats: CalculationStats = {
@@ -24,6 +25,7 @@ export class SummaryService {
             any: {},
             count: {},
             combos: {},
+            threshold,
             accuracy: accounting.resolved,
             accounting
         };

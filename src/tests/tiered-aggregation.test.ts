@@ -9,6 +9,7 @@ import { describe, it, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { EnchantEngine } from '../engine/index.js';
 import { StatAggregator } from '../engine/aggregator.js';
+import { cacheManager } from '../services/index.js';
 import { DATA } from '../data/index.js';
 import { TEST_DATA } from './test-data.js';
 const CAT = TEST_DATA.ITEMS.SWORD;
@@ -18,7 +19,7 @@ const VERSION = TEST_DATA.VERSIONS.MODERN;
 
 describe('Tiered Aggregation: StatAggregator.getFullStatsTiered', () => {
     afterEach(() => {
-        EnchantEngine.clearAllEngines();
+        cacheManager.clearAll();
     });
 
     // ── Test 1: tiered produces same final result as sequential getFullStats calls ──
@@ -29,7 +30,7 @@ describe('Tiered Aggregation: StatAggregator.getFullStatsTiered', () => {
         // Sequential: single getFullStats call with fine parameters
         const seqStats = await StatAggregator.getFullStats(
             engine.registry, CAT, XP, MAT, null,
-            { threshold: TEST_DATA.THRESHOLDS.PROB_MIN, resultsLimit: 10000, distCache: new Map(), poolCache: undefined }
+            { threshold: TEST_DATA.THRESHOLDS.PROB_MIN, resultsLimit: 10000 }
         );
 
         // Tiered: two tiers ending at the same fine parameters
@@ -40,7 +41,7 @@ describe('Tiered Aggregation: StatAggregator.getFullStatsTiered', () => {
                 { threshold: TEST_DATA.THRESHOLDS.PROB_MIN, limit: 10000 },
             ],
             () => {},
-            { threshold: TEST_DATA.THRESHOLDS.PROB_MIN, resultsLimit: 10000, distCache: new Map(), poolCache: undefined }
+            { threshold: TEST_DATA.THRESHOLDS.PROB_MIN, resultsLimit: 10000 }
         );
 
         // sword/30/diamond converges fully — combo sets must be identical,
@@ -73,7 +74,7 @@ describe('Tiered Aggregation: StatAggregator.getFullStatsTiered', () => {
             engine.registry, CAT, XP, MAT, null,
             tiers,
             (_stats, tierIndex) => { callbackIndices.push(tierIndex); },
-            { distCache: new Map(), poolCache: undefined }
+            {}
         );
 
         assert.deepStrictEqual(
@@ -99,7 +100,7 @@ describe('Tiered Aggregation: StatAggregator.getFullStatsTiered', () => {
                 { threshold: 0.001,  limit: 2000 },
             ],
             (stats) => { accuracies.push(stats.accuracy); },
-            { distCache: new Map(), poolCache: undefined }
+            {}
         );
 
         assert.ok(accuracies.length === 3, `Expected 3 tier callbacks, got ${accuracies.length}`);
@@ -133,7 +134,7 @@ describe('Tiered Aggregation: StatAggregator.getFullStatsTiered', () => {
 
         const fullStats = await StatAggregator.getFullStats(
             engine.registry, CAT, XP, MAT, null,
-            { threshold: TEST_DATA.THRESHOLDS.PROB_MIN, resultsLimit: 10000, distCache: new Map(), poolCache: undefined }
+            { threshold: TEST_DATA.THRESHOLDS.PROB_MIN, resultsLimit: 10000 }
         );
 
         assert.strictEqual(
@@ -150,7 +151,7 @@ describe('Tiered Aggregation: StatAggregator.getFullStatsTiered', () => {
 
 describe('EnchantEngine.getFullStatsProgressive', () => {
     afterEach(() => {
-        EnchantEngine.clearAllEngines();
+        cacheManager.clearAll();
     });
 
     it('getFullStatsProgressive produces same result as getFullStats', async () => {

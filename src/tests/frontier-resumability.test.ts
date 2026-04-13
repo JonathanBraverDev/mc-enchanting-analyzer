@@ -23,6 +23,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { EnchantEngine } from '../engine/index.js';
 import { SearchService } from '../engine/search.js';
+import { cacheManager } from '../services/index.js';
 import { DATA } from '../data/index.js';
 import { ProbUtils } from '../utils/index.js';
 
@@ -71,7 +72,7 @@ describe('Frontier Resumability & Cache Behavior', () => {
             );
         }
 
-        EnchantEngine.clearAllEngines();
+        cacheManager.clearAll();
     });
 
     // ── Test B: Progressive refinement improves accuracy ─────────────────────
@@ -105,7 +106,7 @@ describe('Frontier Resumability & Cache Behavior', () => {
             `coarse pending mass (${coarseResult.accounting.pending})`
         );
 
-        EnchantEngine.clearAllEngines();
+        cacheManager.clearAll();
     });
 
     // ── Test C: Stats cache returns cached result immediately ───────────────
@@ -122,7 +123,7 @@ describe('Frontier Resumability & Cache Behavior', () => {
         assert.strictEqual(result1, result2,
             'Second getFullStats call with same params should return the exact same cached object');
 
-        EnchantEngine.clearAllEngines();
+        cacheManager.clearAll();
     });
 
     // ── Test E: Cross-tier resumption through combo cache ───────────────────
@@ -154,7 +155,7 @@ describe('Frontier Resumability & Cache Behavior', () => {
             `(threshold=0.01). Coarse: ${coarseResult.accounting.pending}, Deep: ${deepResult.accounting.pending}`
         );
 
-        EnchantEngine.clearAllEngines();
+        cacheManager.clearAll();
     });
 
     // ── Test D: Ultra result satisfies coarse request via stats cache ────────
@@ -182,6 +183,6 @@ describe('Frontier Resumability & Cache Behavior', () => {
         assert.strictEqual(coarseResult.accuracy, ultraResult.accuracy,
             'Coarse and ultra accuracy must be identical when served from cache');
 
-        EnchantEngine.clearAllEngines();
+        cacheManager.clearAll();
     });
 });

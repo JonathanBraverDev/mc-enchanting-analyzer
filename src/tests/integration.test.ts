@@ -10,6 +10,7 @@ import assert from 'node:assert';
 import { RefinementService } from '../ui/refinement.js';
 import { WorkerClient } from '../worker/client.js';
 import { EnchantEngine } from '../engine/index.js';
+import { cacheManager } from '../services/index.js';
 import { DATA } from '../data/index.js';
 import { isCategoryAvailable } from '../core/registry.js';
 import { MassAccounting } from '../types/mass.js';
@@ -352,7 +353,7 @@ describe('Integration: RefinementService with mocked WorkerClient', () => {
 
 describe('Integration: Version switch and book state reset', () => {
     afterEach(() => {
-        EnchantEngine.clearAllEngines();
+        cacheManager.clearAll();
     });
 
     it('engine re-initialization reflects new version registry (1.4.6 → 1.3.1)', () => {
@@ -419,7 +420,7 @@ describe('Integration: Version switch and book state reset', () => {
 
 describe('Integration: Guaranteed enchantment accuracy (engine direct)', () => {
     afterEach(() => {
-        EnchantEngine.clearAllEngines();
+        cacheManager.clearAll();
     });
 
     it('guaranteed enchantment (Sword): Sharpness probability >= 99.99% at level 30', async () => {

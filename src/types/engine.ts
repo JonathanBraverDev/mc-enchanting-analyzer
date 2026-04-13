@@ -13,6 +13,8 @@ export interface CalculationStats {
   count: { [count: number]: number };
   combos: { [packed: string]: number };    // Hex string of bit-packed BigInt
   
+  /** The search threshold used to generate these stats. */
+  threshold: number;
   /** Simplified Accuracy: Resolved mass. */
   accuracy: number;
   /** Complete diagnostic breakdown of all mass states. */
@@ -225,8 +227,6 @@ export interface SearchConfig {
 export interface InternalSearchConfig extends SearchConfig {
     getExtendedCache?: (ml: number) => SearchFrontier | undefined;
     setExtendedCache?: (ml: number, frontier: SearchFrontier) => void;
-    distCache?: Map<string, { [level: number]: bigint }>;
-    poolCache?: LRUCache<string, PackedEnchant[]>;
     instrumentation?: EngineInstrumentation;
     timing?: SearchTiming;
     getCacheMetrics?: () => { cacheNodes: number; cacheResults: number };

@@ -8,6 +8,7 @@ import { DistributionService } from './distribution.js';
 import { SearchService } from './search.js';
 import { FrontierFactory } from './frontier.js';
 import { ProbabilityMassTracker } from './ProbabilityMassTracker.js';
+import { cacheManager } from '../services/index.js';
 
 /** Build a checkpointSummary from the raw flat checkpoints array. */
 function buildCheckpointSummary(checkpoints: MassCheckpoint[]): CheckpointSummary[] {
@@ -73,19 +74,17 @@ export class StatAggregator {
             signal,
             summaryLimit = ENGINE_LIMITS.MAX_RESULTS_SUMMARY,
             resultsLimit = ENGINE_LIMITS.MAX_RESULTS_SIZE,
-            distCache,
-            poolCache,
             instrumentation
         } = config;
 
         const enchantability = getEnchantability(registry, mat, cat);
-        const modDist = DistributionService.getModifiedLevelDist(xp, enchantability, registry, distCache);
+        const modDist = DistributionService.getModifiedLevelDist(registry.version, xp, enchantability, registry, cacheManager);
         const levels = Object.keys(modDist).map(Number).sort((a, b) => b - a);
 
         const frontierMap = new Map<number, SearchFrontier>();
         const initialTracker = new ProbabilityMassTracker();
         initialTracker.record('pending', PRECISION);
-        let lastStats: CalculationStats = { ranks: {}, any: {}, count: {}, combos: {}, accuracy: 0, accounting: initialTracker.toPublic() };
+        let lastStats: CalculationStats = { ranks: {}, any: {}, count: {}, combos: {}, threshold: 0, accuracy: 0, accounting: initialTracker.toPublic() };
 
         for (let tierIndex = 0; tierIndex < tiers.length; tierIndex++) {
             if (signal?.aborted) return lastStats;
@@ -116,7 +115,7 @@ export class StatAggregator {
                 const result = await SearchService.calculateCombinations(
                     registry, cat, ml, mat, guaranteedFirst,
                     activeThreshold, tier.limit,
-                    existingFrontier, resultsLimit, poolCache, signal, instrumentation,
+                    existingFrontier, resultsLimit, signal, instrumentation,
                     activeThreshold, config.timing
                 );
 
@@ -163,7 +162,7 @@ export class StatAggregator {
                 );
             }
 
-            const tierStats = SummaryService.summarize(finalCombos, tierTracker, totalAnyMass, totalRankMass, totalCountMass, summaryLimit);
+            const tierStats = SummaryService.summarize(finalCombos, tierTracker, totalAnyMass, totalRankMass, totalCountMass, summaryLimit, tier.threshold);
             tierStats.instrumentation = instrumentation ? snapshotInstrumentation(instrumentation) : undefined;
             tierStats.timing = config.timing ? { ...config.timing } : undefined;
 
@@ -197,15 +196,13 @@ export class StatAggregator {
             getExtendedCache,
             setExtendedCache,
             useCache = true,
-            distCache,
-            poolCache,
             instrumentation,
             getCacheMetrics
         } = config;
 
         const bThreshold = ProbUtils.toBigInt(threshold);
         const enchantability = getEnchantability(registry, mat, cat);
-        const modDist = DistributionService.getModifiedLevelDist(xp, enchantability, registry, distCache);
+        const modDist = DistributionService.getModifiedLevelDist(registry.version, xp, enchantability, registry, cacheManager);
         const levels = Object.keys(modDist).map(Number).sort((a, b) => b - a);
 
         const finalCombos = new Map<PackedCombo, bigint>();
@@ -237,7 +234,7 @@ export class StatAggregator {
             }
 
             const result = await SearchService.calculateCombinations(
-                registry, cat, ml, mat, guaranteedFirst, bThreshold, limit, cached, resultsLimit, poolCache, signal, instrumentation,
+                registry, cat, ml, mat, guaranteedFirst, bThreshold, limit, cached, resultsLimit, signal, instrumentation,
                 bThreshold, config.timing
             );
 
@@ -256,9 +253,9 @@ export class StatAggregator {
                 if (instrumentation.trackGlobalMetrics) {
                     instrumentation.globalResultsSize = finalCombos.size;
                     if (getCacheMetrics) {
-                        const metrics = getCacheMetrics();
-                        instrumentation.globalCacheNodes = metrics.cacheNodes;
-                        instrumentation.globalCacheResults = metrics.cacheResults;
+                        const metrics = getCacheMetrics() as any;
+                        instrumentation.globalCacheNodes = metrics.cacheNodes ?? metrics.frontierCache?.hits; // Fallback or updated metrics
+                        instrumentation.globalCacheResults = metrics.cacheResults ?? metrics.frontierCache?.misses;
                     }
                 }
             }
@@ -275,7 +272,7 @@ export class StatAggregator {
             processedMProb += mProb;
             if (++iterCount % 3 === 0) {
                 if (onProgress) {
-                    const partialStats = SummaryService.summarize(finalCombos, globalTracker, totalAnyMass, totalRankMass, totalCountMass, 0);
+                    const partialStats = SummaryService.summarize(finalCombos, globalTracker, totalAnyMass, totalRankMass, totalCountMass, 0, threshold);
                     partialStats.instrumentation = instrumentation ? snapshotInstrumentation(instrumentation) : undefined;
                     partialStats.timing = config.timing ? { ...config.timing } : undefined;
                     onProgress(partialStats);
@@ -293,7 +290,7 @@ export class StatAggregator {
             );
         }
 
-        const finalStats = SummaryService.summarize(finalCombos, globalTracker, totalAnyMass, totalRankMass, totalCountMass, summaryLimit);
+        const finalStats = SummaryService.summarize(finalCombos, globalTracker, totalAnyMass, totalRankMass, totalCountMass, summaryLimit, threshold);
         finalStats.instrumentation = instrumentation ? snapshotInstrumentation(instrumentation) : undefined;
         finalStats.timing = config.timing ? { ...config.timing } : undefined;
 
