@@ -1,6 +1,6 @@
-import { SerializationService } from '../services/index.js';
+import { SerializationService } from '../lib/services/index.js';
 import type { WorkerResponse } from './protocol.js';
-import type { CalculationStats } from '../types/index.js';
+import type { CalculationStats } from '../lib/types/index.js';
 
 type WorkerResult = { stats: CalculationStats };
 type RequestEntry = { resolve: (data: WorkerResult) => void; reject: (err: unknown) => void };

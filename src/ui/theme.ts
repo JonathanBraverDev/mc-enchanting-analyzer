@@ -1,7 +1,7 @@
-import { DATA } from '../data/index.js';
-import { getFullEnchantName } from '../core/registry.js';
-import { RegistryState } from '../types/index.js';
-import { RomanUtils } from '../utils/index.js';
+import { DATA } from '../lib/data/index.js';
+import { getFullEnchantName } from '../lib/core/registry.js';
+import { RegistryState } from '../lib/types/index.js';
+import { RomanUtils } from '../lib/utils/index.js';
 
 /**
  * Manages UI colors and enchantment-specific styles.

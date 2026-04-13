@@ -1,6 +1,6 @@
-import { EnchantEngine } from '../src/engine/index.js';
-import { DATA as data } from '../src/data/index.js';
-import { EngineInstrumentation } from '../src/types/index.js';
+import { EnchantEngine } from '../src/lib/engine/index.js';
+import { DATA as data } from '../src/lib/data/index.js';
+import { EngineInstrumentation } from '../src/lib/types/index.js';
 
 async function run() {
     const version = '1.21.11';

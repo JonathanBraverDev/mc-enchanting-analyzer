@@ -1,6 +1,6 @@
-import { EnchantEngine, EngineFactory } from '../engine/index.js';
-import { DATA } from '../data/index.js';
-import { SerializationService } from '../services/index.js';
+import { EnchantEngine, EngineFactory } from '../lib/engine/index.js';
+import { DATA } from '../lib/data/index.js';
+import { SerializationService } from '../lib/services/index.js';
 import type { WorkerRequest } from './protocol.js';
 
 // TypeScript lib "DOM" types `self` as Window, but at runtime in a worker it's DedicatedWorkerGlobalScope.
