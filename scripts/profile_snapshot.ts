@@ -1,10 +1,19 @@
-
-import { EnchantEngine } from '../src/lib/engine/index.js';
+import { fileURLToPath } from 'url';
+import path from 'path';
+import { EngineFactory } from '../src/lib/engine/index.js';
 import { DATA } from '../src/lib/data/index.js';
 import { ENGINE_DEFAULTS } from '../src/lib/core/config.js';
 
 async function profile() {
-    const engine = new EnchantEngine(DATA, '1.21.11');
+    const args = process.argv.slice(2);
+    const findArg = (key: string) => {
+        const idx = args.indexOf(key);
+        return (idx !== -1 && args[idx + 1] && !args[idx + 1].startsWith('--')) ? args[idx + 1] : null;
+    };
+    const version = findArg('--version') ?? '1.21.11';
+    
+    console.log(`Profiling ${version} search performance...`);
+    const engine = EngineFactory.create(DATA, version);
     const SNAPSHOT_LIMIT = ENGINE_DEFAULTS.MAX_RESULTS_UNBOUNDED;
     const SNAPSHOT_ITERATIONS = ENGINE_DEFAULTS.MAX_ITERATIONS_UNBOUNDED;
     const SNAPSHOT_THRESHOLD = 0.00000001;

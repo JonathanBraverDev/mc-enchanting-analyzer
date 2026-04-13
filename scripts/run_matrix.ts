@@ -5,11 +5,13 @@
  *
  * Usage: npx tsx scripts/run_matrix.ts
  */
-import { EnchantEngine } from '../src/lib/engine/index.js';
+import { EnchantEngine, EngineFactory } from '../src/lib/engine/index.js';
 import { DATA } from '../src/lib/data/index.js';
 import { EngineInstrumentation } from '../src/lib/types/index.js';
 import * as fs from 'fs';
 import * as path from 'path';
+
+import { fileURLToPath } from 'url';
 
 const VERSION = '1.21.11';
 const XP_LEVELS = [10, 20, 30];
@@ -17,13 +19,56 @@ const THRESHOLD = 0.0001;
 const MAX_ITERATIONS = 50000;
 const RESULTS_LIMIT = 2000;
 
-const ARMOR_CATS = ['helmet', 'chestplate', 'leggings', 'boots'];
-const TOOL_CATS  = ['sword', 'pickaxe', 'axe', 'shovel', 'hoe', 'bow', 'crossbow', 'fishing_rod', 'trident', 'mace', 'spear'];
-const ARMOR_MATS = ['leather', 'chain', 'iron', 'diamond', 'gold', 'netherite', 'turtle_shell', 'copper'];
-const TOOL_MATS  = ['wood', 'stone', 'iron', 'diamond', 'gold', 'netherite', 'copper'];
-
-const OUT_DIR = path.join(path.dirname(new URL(import.meta.url).pathname), 'matrix-output');
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const OUT_DIR = path.join(__dirname, 'matrix-output');
 fs.mkdirSync(OUT_DIR, { recursive: true });
+
+function getJobs(engine: EnchantEngine): Array<{ cat: string; mat: string }> {
+    const registry = engine.registry;
+    const categories = Object.keys(registry.mergedItems);
+    const versionMaterials = registry.mergedMaterials;
+    
+    const { ARMOR_CATS, ITEM_SPECIFIC_CATS } = DATA.constants;
+    const armorMats = Object.keys(DATA.material_values.armor).filter(m => versionMaterials.has(m as any));
+    const toolMats = Object.keys(DATA.material_values.tools).filter(m => versionMaterials.has(m as any));
+
+    const jobs: Array<{ cat: string; mat: string }> = [];
+
+    for (const cat of categories) {
+        if (cat === 'book') {
+            jobs.push({ cat: 'book', mat: 'book' });
+            continue;
+        }
+
+        // 1. Item-specific items (bow, mace, etc.) usually have a single material matched to their name
+        if (ITEM_SPECIFIC_CATS.includes(cat)) {
+            if (versionMaterials.has(cat)) {
+                jobs.push({ cat, mat: cat });
+            } else if (cat === 'spear') {
+                // Special case: spear is item-specific but uses tool materials in 1.21.11
+                for (const mat of toolMats) jobs.push({ cat, mat });
+            }
+            continue;
+        }
+
+        // 2. Armor categories
+        if (ARMOR_CATS.includes(cat)) {
+            for (const mat of armorMats) {
+                if (mat === 'turtle_shell' && cat !== 'helmet') continue;
+                jobs.push({ cat, mat });
+            }
+            continue;
+        }
+
+        // 3. General tool categories (sword, pickaxe, etc.)
+        for (const mat of toolMats) {
+            jobs.push({ cat, mat });
+        }
+    }
+
+    return jobs;
+}
 
 function freshInstrumentation(): EngineInstrumentation {
     return {
@@ -62,9 +107,9 @@ async function runOne(engine: EnchantEngine, cat: string, mat: string, xp: numbe
         threshold: THRESHOLD,
         elapsedMs: Math.round(elapsed),
         error,
-        uncertainty: stats?.uncertainty ?? null,
-        pruned: stats?.pruned ?? null,
-        roundingError: stats?.roundingError ?? null,
+        uncertainty: stats?.accounting.pending ?? null,
+        pruned: stats?.accounting.sieved ?? null,
+        roundingError: stats?.accounting.rounding ?? null,
         comboCount: stats ? Object.keys(stats.combos).length : null,
         instrumentation: {
             poolCache: instr.poolCache,
@@ -86,12 +131,9 @@ async function main() {
     console.log(`Output: ${OUT_DIR}\n`);
 
     // One engine per version — reuse across all combos (benefits pool/dist cache)
-    const engine = new EnchantEngine(DATA, VERSION);
+    const engine = EngineFactory.create(DATA, VERSION);
 
-    const jobs: Array<{ cat: string; mat: string }> = [];
-    for (const cat of ARMOR_CATS) for (const mat of ARMOR_MATS) jobs.push({ cat, mat });
-    for (const cat of TOOL_CATS)  for (const mat of TOOL_MATS)  jobs.push({ cat, mat });
-    jobs.push({ cat: 'book', mat: 'book' });
+    const jobs = getJobs(engine);
 
     const total = jobs.length * XP_LEVELS.length;
     let done = 0;

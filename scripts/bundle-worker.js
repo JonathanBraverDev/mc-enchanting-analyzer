@@ -1,7 +1,11 @@
-import fs from 'fs';
+import { fileURLToPath } from 'url';
 import path from 'path';
+import fs from 'fs';
 
-const root = process.cwd();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const root = path.resolve(__dirname, '..');
+
 const uiPath = path.join(root, 'dist', 'ui.js');
 const workerPath = path.join(root, 'dist', 'worker.js');
 const outputPath = path.join(root, 'dist', 'bundle.js');
