@@ -24,9 +24,18 @@ export interface CalculationStats {
   timing?: SearchTiming;
 }
 
+export type LevelDistribution = { [level: number]: bigint };
+
 export interface CacheStats {
   hits: number;
   misses: number;
+}
+
+export interface CacheConfig {
+  comboOtherSize: number;
+  comboBookSize: number;
+  statsSize: number;
+  poolSize: number;
 }
 
 export interface MassCheckpoint {

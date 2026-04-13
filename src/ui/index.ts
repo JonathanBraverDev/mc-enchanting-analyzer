@@ -1,5 +1,5 @@
 import { DATA } from '../data/index.js';
-import { EnchantEngine } from '../engine/index.js';
+import { EnchantEngine, EngineFactory } from '../engine/index.js';
 import { UI_TEXTS } from '../core/config.js';
 import { WorkerClient } from '../worker/client.js';
 import { ParamsView } from './views/ParamsView.js';
@@ -56,9 +56,9 @@ class AppController {
         const { version } = this.params.getValues();
         if (!this.engine || this.engine.registry.version !== version) {
             if (this.engine) this.engine.destroy();
-            this.engine = new EnchantEngine(DATA, version);
+            this.engine = EngineFactory.create(DATA, version);
         }
-        return this.engine;
+        return this.engine!;
     }
 
     private onParamsChange(type: string): void {

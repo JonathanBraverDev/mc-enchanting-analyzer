@@ -3,112 +3,45 @@ import { ExpansionBlueprint, RegistryState, ForwardingContext, PackedCombo, Pack
 import { ProbUtils, ComboUtils, PRECISION } from '../utils/index.js';
 import { ENGINE_LIMITS, SEARCH_CONSTANTS } from '../constants/engine.js';
 import { DistributionPool } from './DistributionPool.js';
+import { MassAccountant } from './MassAccountant.js';
 
 /**
  * Unified state tracker for probability mass and expanded node blueprints.
- * Ensures strict conservation of mass while facilitating high-speed forwarding
- * through cached search subtrees.
+ * Facilitates high-speed forwarding through cached search subtrees.
  */
 export class ProbabilityMassTracker {
     private static readonly MAX_RECURSION_DEPTH = 10;
     
-    private buckets: Record<MassEventType, bigint> = {
-        resolved: 0n,
-        pending: 0n,
-        sieved: 0n,
-        overflow: 0n,
-        capped: 0n,
-        rounding: 0n,
-        recoveredRounding: 0n,
-        recoveredSieved: 0n
-    };
-
-    private expansionCache: Map<bigint, ExpansionBlueprint>;
+    private readonly accountant: MassAccountant;
+    private readonly expansionCache: Map<bigint, ExpansionBlueprint>;
 
     constructor(initialMass?: MassBookkeeping, initialCache?: Map<bigint, ExpansionBlueprint>) {
-        if (initialMass) {
-            this.buckets = { ...initialMass };
-        }
+        this.accountant = new MassAccountant(initialMass);
         this.expansionCache = initialCache || new Map();
     }
 
-    // --- Mass Accounting ---
-
-    public static fromPublic(publicAcc: MassAccounting): ProbabilityMassTracker {
-        return new ProbabilityMassTracker({
-            resolved: ProbUtils.toBigInt(publicAcc.resolved),
-            pending: ProbUtils.toBigInt(publicAcc.pending),
-            sieved: ProbUtils.toBigInt(publicAcc.sieved),
-            overflow: ProbUtils.toBigInt(publicAcc.overflow),
-            capped: ProbUtils.toBigInt(publicAcc.capped),
-            rounding: ProbUtils.toBigInt(publicAcc.rounding),
-            recoveredRounding: ProbUtils.toBigInt(publicAcc.recoveredRounding || 0),
-            recoveredSieved: ProbUtils.toBigInt(publicAcc.recoveredSieved || 0),
-        });
-    }
-
     public record(type: MassEventType, prob: bigint): void {
-        this.buckets[type] += prob;
+        this.accountant.record(type, prob);
     }
 
     public subtract(type: MassEventType, prob: bigint): void {
-        this.buckets[type] -= prob;
+        this.accountant.subtract(type, prob);
     }
 
-    /**
-     * Scales all buckets of another tracker and adds them to this one.
-     * Uses Banker's Rounding for statistically zero-drift conservation.
-     */
     public addScaled(other: ProbabilityMassTracker, factor: bigint): void {
-        const b = other.buckets;
-        for (const key in b) {
-            const type = key as MassEventType;
-            this.buckets[type] += ProbUtils.scale(b[type], factor);
-        }
+        this.accountant.addScaled(other.accountant, factor);
     }
 
     public getTotalMass(): bigint {
-        const b = this.buckets;
-        // Recovered buckets are diagnostic subsets, NOT additive to the total 100% mass.
-        return b.resolved + b.pending + b.sieved + b.overflow + b.capped + b.rounding;
+        return this.accountant.getTotalMass();
     }
 
     public getBookkeeping(): MassBookkeeping {
-        const b = this.buckets;
-        return {
-            resolved: b.resolved,
-            pending: b.pending,
-            sieved: b.sieved,
-            overflow: b.overflow,
-            capped: b.capped,
-            rounding: b.rounding,
-            recoveredRounding: b.recoveredRounding,
-            recoveredSieved: b.recoveredSieved
-        };
+        return this.accountant.getBookkeeping();
     }
 
     public toPublic(): MassAccounting {
-        const b = this.buckets;
-        return {
-            resolved: ProbUtils.toNumber(b.resolved),
-            pending: ProbUtils.toNumber(b.pending),
-            sieved: ProbUtils.toNumber(b.sieved),
-            overflow: ProbUtils.toNumber(b.overflow),
-            capped: ProbUtils.toNumber(b.capped),
-            rounding: ProbUtils.toNumber(b.rounding),
-            recoveredRounding: ProbUtils.toNumber(b.recoveredRounding),
-            recoveredSieved: ProbUtils.toNumber(b.recoveredSieved),
-            units: {
-                resolved: b.resolved.toString(),
-                pending: b.pending.toString(),
-                sieved: b.sieved.toString(),
-                overflow: b.overflow.toString(),
-                capped: b.capped.toString(),
-                rounding: b.rounding.toString(),
-                recoveredRounding: b.recoveredRounding.toString(),
-                recoveredSieved: b.recoveredSieved.toString()
-            }
-        };
+        return this.accountant.toPublic();
     }
 
     // --- Expansion Caching ---
@@ -224,18 +157,18 @@ export class ProbabilityMassTracker {
 
         const localRounding = remStop + remForward + scaleLoss;
         
-        this.record('resolved', probStop - remStop);
-        this.record('rounding', localRounding);
+        this.accountant.record('resolved', probStop - remStop);
+        this.accountant.record('rounding', localRounding);
         
         if (term.isTooSmall) {
             if (instrumentation) instrumentation.totalPrunedNodes++;
-            this.record('sieved', probForward - remForward);
+            this.accountant.record('sieved', probForward - remForward);
         } else if (term.isLimitReached) {
-            this.record('overflow', probForward - remForward);
+            this.accountant.record('overflow', probForward - remForward);
         } else if (term.isMapFull) {
-            this.record('capped', probForward - remForward);
+            this.accountant.record('capped', probForward - remForward);
         } else if (blueprint.totalWeight === 0) {
-            this.record('resolved', probForward - remForward);
+            this.accountant.record('resolved', probForward - remForward);
         }
 
         if (localRounding > 0n && instrumentation) instrumentation.roundingErrorEvents++;
@@ -261,15 +194,15 @@ export class ProbabilityMassTracker {
 
         searchProcessor.withTiming(timing, 'distributionMs', () => {
             const individualRemainder = probForward % BigInt(blueprint.totalWeight);
-            this.record('rounding', individualRemainder);
+            this.accountant.record('rounding', individualRemainder);
 
             const { recovered } = ProbUtils.distributeWithResidue(
                 probForward, blueprint.eligibleWeights, blueprint.totalWeight, splits, blueprint, eligibleCount
             );
             
             if (recovered > 0n) {
-                this.subtract('rounding', recovered);
-                this.record('recoveredRounding', recovered);
+                this.accountant.subtract('rounding', recovered);
+                this.accountant.record('recoveredRounding', recovered);
                 if (instrumentation) instrumentation.roundingErrorEvents++;
             }
         });
@@ -290,13 +223,13 @@ export class ProbabilityMassTracker {
             if (this.expansionCache.has(nextMeta) && depth < ProbabilityMassTracker.MAX_RECURSION_DEPTH) {
                 stack.push({ mass: pNext, meta: nextMeta, combo: nextPacked, depth: depth + 1 });
             } else {
-                this.record('pending', pNext);
+                this.accountant.record('pending', pNext);
                 queue.pushOrMerge(nextMeta, pNext, blueprint.nextLevel, nextPacked);
             }
         }
 
-        this.record('resolved', probStop - remStop);
-        this.record('rounding', remStop + scaleLoss);
+        this.accountant.record('resolved', probStop - remStop);
+        this.accountant.record('rounding', remStop + scaleLoss);
         
         return (probStop - remStop);
     }

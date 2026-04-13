@@ -23,7 +23,7 @@ export class ComboUtils {
      * Uses a flat byte-per-slot encoding with a prebuilt lookup table.
      */
     static pack(chosen: PackedEnchant[], guaranteedFirstId: number | null, enchantToIndex: Map<number, number>): PackedCombo {
-        if (chosen.length === 0) return 0;
+        if (chosen.length === 0) return 0 as PackedCombo;
 
         let firstPicked: number | null = null;
         const others: number[] = [];
@@ -48,20 +48,20 @@ export class ComboUtils {
             packed += others[i] * this.BYTE_MULTIPLIERS[i];
         }
 
-        return packed;
+        return packed as PackedCombo;
     }
 
     /**
      * Unpacks a number back into numeric enchantment IDs (id << 8 | rank).
      */
     static unpack(packed: PackedCombo, indexToEnchant: number[]): PackedEnchant[] {
-        if (packed === 0) return [];
+        if (Number(packed) === 0) return [];
 
         const out: PackedEnchant[] = [];
         for (let i = 0; i < 6; i++) {
             const idx = Math.floor(packed / this.BYTE_MULTIPLIERS[i]) % 256;
             if (idx === 0) break;
-            out.push(indexToEnchant[idx]);
+            out.push(indexToEnchant[idx] as PackedEnchant);
         }
         return out;
     }
@@ -86,7 +86,7 @@ export class ComboUtils {
         const isNewGuaranteed = guaranteedFirstId !== null && newId === guaranteedFirstId;
 
         if (count === 0) {
-            return newIdx * this.BYTE_MULTIPLIERS[0];
+            return (newIdx * this.BYTE_MULTIPLIERS[0]) as PackedCombo;
         }
 
         if (isNewGuaranteed) {
@@ -96,7 +96,7 @@ export class ComboUtils {
                 const b = Math.floor(existing / this.BYTE_MULTIPLIERS[i]) % 256;
                 packed += b * this.BYTE_MULTIPLIERS[i + 1];
             }
-            return packed;
+            return packed as PackedCombo;
         }
 
         // Non-guaranteed: insert in descending idx order, after guaranteed slot if present
@@ -121,7 +121,7 @@ export class ComboUtils {
             const b = Math.floor(existing / this.BYTE_MULTIPLIERS[i]) % 256;
             packed += b * this.BYTE_MULTIPLIERS[i + 1];
         }
-        return packed;
+        return packed as PackedCombo;
     }
 
     /**
@@ -148,7 +148,7 @@ export class ComboUtils {
                 ? lowerPart + (Math.floor(packed / this.BYTE_MULTIPLIERS[i+1]) * this.BYTE_MULTIPLIERS[i])
                 : lowerPart;
             
-            possibleResults.push(nextPacked);
+            possibleResults.push(nextPacked as PackedCombo);
         }
 
         return possibleResults;

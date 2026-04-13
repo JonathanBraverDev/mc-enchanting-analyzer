@@ -6,31 +6,47 @@ import { PackedCombo, SearchFrontier, RegistryState, EngineInstrumentation, Mass
 import { FrontierFactory } from './frontier.js';
 import { ProbabilityMassTracker } from './ProbabilityMassTracker.js';
 import { SearchProcessor } from './SearchProcessor.js';
-import { cacheManager } from '../services/index.js';
+import { CacheManager } from '../services/CacheManager.js';
+
+/**
+ * Shared context for a specific search execution.
+ */
+export interface SearchContext {
+    threshold: bigint;
+    limit: number;
+    resultsLimit: number;
+    signal?: AbortSignal;
+    instrumentation?: EngineInstrumentation;
+    timing?: SearchTiming;
+}
 
 /**
  * Service for the Best-First search of enchantment combinations.
- * Orchestrates the high-level search loop and checkpointing.
+ * Orchestrates the search loop and checkpointing with full DI.
  */
 export class SearchService {
+    constructor(private readonly cache: CacheManager) {}
+
     /**
      * Iteratively calculates enchantment combinations using a Best-First approach.
      */
-    public static async calculateCombinations(
+    public async calculateCombinations(
         registry: RegistryState,
         cat: string,
         modLevel: number,
-        _mat: string,
         guaranteedFirst: string | null = null,
-        threshold: bigint = ProbUtils.toBigInt(0.0001),
-        limit: number,
         existingFrontier?: SearchFrontier,
-        resultsLimit: number = ENGINE_LIMITS.MAX_RESULTS_SIZE,
-        signal?: AbortSignal,
-        instrumentation?: EngineInstrumentation,
-        _floor: bigint = threshold,
-        timingResult?: SearchTiming
+        config?: SearchContext
     ): Promise<SearchFrontier> {
+        const {
+            threshold = 0n,
+            limit = ENGINE_LIMITS.MAX_ITERATIONS_UNBOUNDED,
+            resultsLimit = ENGINE_LIMITS.MAX_RESULTS_SIZE,
+            signal,
+            instrumentation,
+            timing: timingResult
+        } = config ?? {};
+
         let startTime = 0;
         if (timingResult) startTime = performance.now();
         
@@ -47,7 +63,10 @@ export class SearchService {
         const { results, queue, tracker } = frontier;
         
         const guaranteedFirstId = FrontierFactory.getGuaranteedFirstId(registry, guaranteedFirst);
-        const initialPool = getEligiblePool(registry, cat, modLevel, cacheManager);
+        const initialPool = getEligiblePool(registry, cat, modLevel, this.cache, registry.version);
+        if (instrumentation) {
+            instrumentation.poolCache = this.cache.getEngineMetrics().poolCache;
+        }
         const poolWeights = initialPool.map(e => registry.weightMap[e >> 8]);
         const initialTotalWeight = poolWeights.reduce((a, b) => a + b, 0);
 
@@ -68,34 +87,13 @@ export class SearchService {
             initialTotalWeight
         };
 
-        let iterations = 0;
-        const expandedIds = new Set<bigint>();
-
         if (initialPool.length === 0) {
-            const rootTracker = new ProbabilityMassTracker();
-            rootTracker.record('resolved', PRECISION);
-            const anyMass = new BigUint64Array(256);
-            const rankMass = new BigUint64Array(16384);
-            const countMass = new BigUint64Array(16);
-            countMass[0] = PRECISION;
-
-            return {
-                queue: new SearchHeap(),
-                results: new Map(),
-                anyMass,
-                rankMass,
-                countMass,
-                tracker: rootTracker,
-                threshold,
-                iterations: 0,
-                nodesProcessed: 0,
-                checkpoints: [],
-                exitReason: 'empty'
-            };
+            return this.handleEmptyPool(threshold);
         }
 
-        const localCheckpoints: MassCheckpoint[] = [];
+        let iterations = 0;
         let checkpointIdx = 0;
+        const localCheckpoints: MassCheckpoint[] = [];
         let exitReason: EngineExitReason | undefined;
         const current = { meta: 0n, prob: 0n, level: 0, combo: 0 as any as PackedCombo };
 
@@ -110,7 +108,7 @@ export class SearchService {
                 }
                 await AsyncUtils.yield();
                 if (signal?.aborted) {
-                    if (instrumentation) instrumentation.exitReason = 'aborted';
+                    exitReason = 'aborted';
                     break;
                 }
             }
@@ -130,7 +128,6 @@ export class SearchService {
             
             if (!SearchProcessor.withTiming(timing, 'heapMs', () => queue.popFast(current as any))) break;
 
-            expandedIds.add(current.meta);
             tracker.subtract('pending', current.prob);
             const currentCount = ComboUtils.getCount(current.combo);
 
@@ -167,7 +164,8 @@ export class SearchService {
 
         if (timingResult && timing) {
             timing.totalMs = performance.now() - startTime;
-            timingResult.totalMs += timing.totalMs;
+            timingResult.totalMs += timing.totalMs; // Update passed timing object
+            // Also update the sub-buckets if we want cumulative
             timingResult.searchMs += timing.searchMs;
             timingResult.filteringMs += timing.filteringMs;
             timingResult.distributionMs += timing.distributionMs;
@@ -176,5 +174,28 @@ export class SearchService {
         }
         
         return { ...frontier, tracker, iterations, checkpoints: localCheckpoints, exitReason };
+    }
+
+    private handleEmptyPool(threshold: bigint): SearchFrontier {
+        const rootTracker = new ProbabilityMassTracker();
+        rootTracker.record('resolved', PRECISION);
+        const anyMass = new BigUint64Array(256);
+        const rankMass = new BigUint64Array(16384);
+        const countMass = new BigUint64Array(16);
+        countMass[0] = PRECISION;
+
+        return {
+            queue: new SearchHeap(),
+            results: new Map(),
+            anyMass,
+            rankMass,
+            countMass,
+            tracker: rootTracker,
+            threshold,
+            iterations: 0,
+            nodesProcessed: 0,
+            checkpoints: [],
+            exitReason: 'empty'
+        };
     }
 }

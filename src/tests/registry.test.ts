@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { EnchantEngine } from '../engine/index.js';
+import { EnchantEngine, EngineFactory } from '../engine/index.js';
 import { DATA } from '../data/index.js';
 import { isCategoryAvailable, getEligibleMaterials, getCategoryPool, getEnchantId, hasConflict, getCategoryId, getMaterialId } from '../core/registry.js';
 
@@ -8,35 +8,35 @@ describe('Registry & Data Rules Test Suite', () => {
 
     describe('1. Version Availability', () => {
         it('should correctly identify Mace availability (1.21+)', () => {
-            const v116 = new EnchantEngine(DATA, '1.16').registry;
+            const v116 = EngineFactory.create(DATA, '1.16').registry;
             assert.strictEqual(isCategoryAvailable(v116, 'mace'), false, '1.16 should NOT have mace');
 
-            const v121 = new EnchantEngine(DATA, '1.21').registry;
+            const v121 = EngineFactory.create(DATA, '1.21').registry;
             assert.strictEqual(isCategoryAvailable(v121, 'mace'), true, '1.21 SHOULD have mace');
         });
 
         it('should handle Book eligibility across versions (1.3.1 - 1.7.2)', () => {
-             const v131 = new EnchantEngine(DATA, '1.3.1').registry;
+             const v131 = EngineFactory.create(DATA, '1.3.1').registry;
              assert.ok(!getEligibleMaterials(v131, 'book').includes('book'), '1.3.1: Book should not be enchantable');
 
-             const v146 = new EnchantEngine(DATA, '1.4.6').registry;
+             const v146 = EngineFactory.create(DATA, '1.4.6').registry;
              assert.ok(getEligibleMaterials(v146, 'book').includes('book'), '1.4.6: Book SHOULD be enchantable');
              assert.strictEqual(v146.multiEnchantBooks, false, '1.4.6: Books should be single-only');
 
-             const v172 = new EnchantEngine(DATA, '1.7.2').registry;
+             const v172 = EngineFactory.create(DATA, '1.7.2').registry;
              assert.strictEqual(v172.multiEnchantBooks, true, '1.7.2: Books SHOULD allow multi-enchant');
         });
 
         it('should correctly handle Sweeping Edge availability (1.11.1+)', () => {
-            const v18 = new EnchantEngine(DATA, '1.8').registry;
+            const v18 = EngineFactory.create(DATA, '1.8').registry;
             assert.ok(!getCategoryPool(v18, 'sword').includes('Sweeping Edge'), '1.8: Sword pool should not include Sweeping Edge');
 
-            const v111 = new EnchantEngine(DATA, '1.11.1').registry;
+            const v111 = EngineFactory.create(DATA, '1.11.1').registry;
             assert.ok(getCategoryPool(v111, 'sword').includes('Sweeping Edge'), '1.11.1: Sword pool SHOULD include Sweeping Edge');
         });
 
         it('should correctly handle Protection conflicts (1.14 vs 1.14.3)', () => {
-            const reg114 = new EnchantEngine(DATA, '1.14').registry;
+            const reg114 = EngineFactory.create(DATA, '1.14').registry;
             const protId = getEnchantId(reg114, 'Protection')!;
             const fireProtId = getEnchantId(reg114, 'Fire Protection')!;
 
@@ -44,7 +44,7 @@ describe('Registry & Data Rules Test Suite', () => {
             assert.strictEqual(hasConflict(reg114, protId, fireProtId), false, '1.14: Protection vs Fire Protection should NOT conflict');
 
             // 1.14.3: ALL protections conflict
-            const reg1143 = new EnchantEngine(DATA, '1.14.3').registry;
+            const reg1143 = EngineFactory.create(DATA, '1.14.3').registry;
             const enchs = ["Protection", "Fire Protection", "Blast Protection", "Projectile Protection"];
             const ids = enchs.map(e => getEnchantId(reg1143, e)!);
 
@@ -57,7 +57,7 @@ describe('Registry & Data Rules Test Suite', () => {
     });
 
     describe('2. Item Categories & Materials', () => {
-        const reg = new EnchantEngine(DATA, '1.20').registry;
+        const reg = EngineFactory.create(DATA, '1.20').registry;
 
         it('should return correct materials for Swords', () => {
             const mats = getEligibleMaterials(reg, 'sword');
@@ -91,7 +91,7 @@ describe('Registry & Data Rules Test Suite', () => {
     });
     
     describe('3. Category & Material ID Mapping', () => {
-        const reg = new EnchantEngine(DATA, '1.20').registry;
+        const reg = EngineFactory.create(DATA, '1.20').registry;
 
         it('should assign unique Category IDs to common item types', () => {
             const categories = ["sword", "pickaxe", "axe", "shovel", "helmet", "chestplate", "leggings", "boots", "hoe", "bow"];

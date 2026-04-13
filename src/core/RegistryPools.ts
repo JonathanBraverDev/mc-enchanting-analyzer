@@ -33,7 +33,7 @@ export class PoolService {
             for (const [r, rankVal] of state.sortedRanks) {
                 const range = props.levels[r];
                 if (range && level >= range[0] && level <= range[1]) {
-                    out.push((id << 8) | rankVal);
+                    out.push(((id << 8) | rankVal) as PackedEnchant);
                     break;
                 }
             }

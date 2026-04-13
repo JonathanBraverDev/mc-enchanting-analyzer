@@ -11,7 +11,7 @@ import { SummaryService } from '../services/SummaryService.js';
 import { SerializationService } from '../services/SerializationService.js';
 import { HumanizationService } from '../services/HumanizationService.js';
 import { DistributionService } from '../engine/distribution.js';
-import { EnchantEngine } from '../engine/index.js';
+import { EnchantEngine, EngineFactory } from '../engine/index.js';
 import { ProbabilityMassTracker } from '../engine/ProbabilityMassTracker.js';
 import { DATA } from '../data/index.js';
 import type { CalculationStats, MassAccounting } from '../types/index.js';
@@ -104,7 +104,7 @@ describe('SerializationService', () => {
         };
         return {
             ranks: {}, any: {}, count: {}, combos: {}, 
-            accuracy, accounting,
+            accuracy, accounting, threshold: 0.1,
             ...overrides
         };
     };
@@ -131,7 +131,7 @@ describe('SerializationService', () => {
 // ── HumanizationService ────────────────────────────────────────────────────
 
 describe('HumanizationService', () => {
-    const engine = new EnchantEngine(DATA, '1.20');
+    const engine = EngineFactory.create(DATA, '1.20');
     const reg    = engine.registry;
 
     let stats: CalculationStats;
@@ -144,7 +144,7 @@ describe('HumanizationService', () => {
         const acc: MassAccounting = { resolved: 0.85, pending: 0.15, sieved: 0, overflow: 0, capped: 0, rounding: 0, recoveredRounding: 0, recoveredSieved: 0 };
         const rawStats: CalculationStats = {
             ranks: {}, any: { [effId]: 0.85 }, count: {}, combos: {}, 
-            accuracy: 0.85, accounting: acc
+            accuracy: 0.85, accounting: acc, threshold: 0.85
         };
         const result = HumanizationService.humanize(rawStats, reg, 'prob');
         assert.ok(Object.keys(result.any).includes('Efficiency'));
@@ -155,11 +155,13 @@ describe('HumanizationService', () => {
 
 describe('DistributionService', () => {
     it('enchantability <= 0 returns single entry at the XP level with PRECISION probability', () => {
+        const service = new DistributionService();
         const fakeRegistry = {
+            version: 'test-version',
             mechanics: { enchantability_bonus_divisor: 4, random_bonus_range: 0.15 }
         } as any;
 
-        const dist = DistributionService.getModifiedLevelDist('test-version', 30, 0, fakeRegistry);
+        const dist = service.getModifiedLevelDist(fakeRegistry, 30, 0);
         const keys = Object.keys(dist).map(Number);
         assert.deepStrictEqual(keys, [30], 'should have a single entry at xp=30');
         assert.strictEqual(dist[30], PRECISION);

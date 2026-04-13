@@ -8,59 +8,22 @@ import { DistributionService } from './distribution.js';
 import { SearchService } from './search.js';
 import { FrontierFactory } from './frontier.js';
 import { ProbabilityMassTracker } from './ProbabilityMassTracker.js';
-import { cacheManager } from '../services/index.js';
-
-/** Build a checkpointSummary from the raw flat checkpoints array. */
-function buildCheckpointSummary(checkpoints: MassCheckpoint[]): CheckpointSummary[] {
-    const TARGETS = [0.1, 0.25, 0.5, 0.75, 0.8, 0.85, 0.9, 0.95, 0.99, 0.999];
-    const byTarget = new Map<number, { threshold: number; iterations: number; level: number }[]>();
-    for (const target of TARGETS) byTarget.set(target, []);
-
-    for (const cp of checkpoints) {
-        let matched: number | null = null;
-        for (const t of TARGETS) {
-            if (cp.mass >= t - 0.001) matched = t;
-        }
-        if (matched !== null) {
-            const existing = byTarget.get(matched)!;
-            if (!existing.some(e => e.level === cp.modLevel)) {
-                existing.push({ threshold: cp.threshold, iterations: cp.iterations, level: cp.modLevel });
-            }
-        }
-    }
-
-    const summary: CheckpointSummary[] = [];
-    for (const target of TARGETS) {
-        const entries = byTarget.get(target)!;
-        if (entries.length === 0) continue;
-        const bottleneck = entries.reduce((worst, e) => e.threshold < worst.threshold ? e : worst, entries[0]);
-        summary.push({
-            target,
-            worstCaseThreshold: bottleneck.threshold,
-            worstCaseIterations: Math.max(...entries.map(e => e.iterations)),
-            bottleneckLevel: bottleneck.level
-        });
-    }
-    return summary;
-}
-
-/** Snapshot instrumentation with computed summary. */
-function snapshotInstrumentation(instr: EngineInstrumentation): EngineInstrumentation {
-    const checkpoints = [...instr.checkpoints];
-    const checkpointSummary = buildCheckpointSummary(checkpoints);
-    instr.checkpointSummary = checkpointSummary;
-    return { ...instr, checkpoints, checkpointSummary };
-}
+import { CacheManager } from '../services/CacheManager.js';
 
 /**
  * Service for aggregating enchantment statistics across multiple modified levels.
  */
 export class StatAggregator {
+    constructor(
+        private readonly cache: CacheManager,
+        private readonly distributionService: DistributionService,
+        private readonly searchService: SearchService
+    ) {}
 
     /**
      * Aggregates statistics across tiers of increasing search depth.
      */
-    public static async getFullStatsTiered(
+    public async getFullStatsTiered(
         registry: RegistryState,
         cat: string,
         xp: number,
@@ -78,7 +41,7 @@ export class StatAggregator {
         } = config;
 
         const enchantability = getEnchantability(registry, mat, cat);
-        const modDist = DistributionService.getModifiedLevelDist(registry.version, xp, enchantability, registry, cacheManager);
+        const modDist = this.distributionService.getModifiedLevelDist(registry, xp, enchantability, this.cache, instrumentation);
         const levels = Object.keys(modDist).map(Number).sort((a, b) => b - a);
 
         const frontierMap = new Map<number, SearchFrontier>();
@@ -112,32 +75,22 @@ export class StatAggregator {
                 const mProb = modDist[ml];
                 const existingFrontier = frontierMap.get(ml);
 
-                const result = await SearchService.calculateCombinations(
-                    registry, cat, ml, mat, guaranteedFirst,
-                    activeThreshold, tier.limit,
-                    existingFrontier, resultsLimit, signal, instrumentation,
-                    activeThreshold, config.timing
+                const result = await this.searchService.calculateCombinations(
+                    registry, cat, ml, guaranteedFirst,
+                    existingFrontier, {
+                        threshold: activeThreshold,
+                        limit: tier.limit,
+                        resultsLimit,
+                        signal,
+                        instrumentation,
+                        timing: config.timing
+                    }
                 );
 
                 frontierMap.set(ml, result);
 
                 if (instrumentation) {
-                    instrumentation.checkpoints = instrumentation.checkpoints || [];
-                    instrumentation.frontierCache = instrumentation.frontierCache || { hits: 0, misses: 0 };
-                    
-                    if (result.checkpoints) {
-                        for (const cp of result.checkpoints) {
-                            instrumentation.checkpoints.push({ 
-                                ...cp, 
-                                totalIterations: (instrumentation.totalIterations || 0) + cp.iterations 
-                            });
-                        }
-                    }
-                    instrumentation.totalIterations = (instrumentation.totalIterations || 0) + result.iterations;
-                    instrumentation.exitReason = result.exitReason;
-                    instrumentation.levelsProcessed = (instrumentation.levelsProcessed || 0) + 1;
-                    if (result.exitReason === 'empty') instrumentation.levelsFullyResolved = (instrumentation.levelsFullyResolved || 0) + 1;
-                    instrumentation.fullyResolved = instrumentation.levelsFullyResolved === instrumentation.levelsProcessed;
+                    this.updateInstrumentation(instrumentation, result);
                 }
 
                 ProbUtils.addMapMass(finalCombos, result.results, mProb);
@@ -157,13 +110,11 @@ export class StatAggregator {
             tierTracker.record('rounding', distRoundingError);
 
             if (guaranteedFirst) {
-                StatAggregator.reconcileGuaranteedMass(
-                    registry, guaranteedFirst, totalAnyMass, totalRankMass, totalCountMass
-                );
+                this.reconcileGuaranteedMass(registry, guaranteedFirst, totalAnyMass, totalRankMass, totalCountMass);
             }
 
             const tierStats = SummaryService.summarize(finalCombos, tierTracker, totalAnyMass, totalRankMass, totalCountMass, summaryLimit, tier.threshold);
-            tierStats.instrumentation = instrumentation ? snapshotInstrumentation(instrumentation) : undefined;
+            tierStats.instrumentation = instrumentation ? this.snapshotInstrumentation(instrumentation) : undefined;
             tierStats.timing = config.timing ? { ...config.timing } : undefined;
 
             if (abortedMidTier) return tierStats;
@@ -178,7 +129,7 @@ export class StatAggregator {
     /**
      * Aggregates all statistics for a given enchantment attempt.
      */
-    public static async getFullStats(
+    public async getFullStats(
         registry: RegistryState,
         cat: string,
         xp: number,
@@ -202,7 +153,7 @@ export class StatAggregator {
 
         const bThreshold = ProbUtils.toBigInt(threshold);
         const enchantability = getEnchantability(registry, mat, cat);
-        const modDist = DistributionService.getModifiedLevelDist(registry.version, xp, enchantability, registry, cacheManager);
+        const modDist = this.distributionService.getModifiedLevelDist(registry, xp, enchantability, this.cache, instrumentation);
         const levels = Object.keys(modDist).map(Number).sort((a, b) => b - a);
 
         const finalCombos = new Map<PackedCombo, bigint>();
@@ -228,35 +179,30 @@ export class StatAggregator {
 
             const mProb = modDist[ml];
             const cached = getExtendedCache?.(ml);
-            if (instrumentation && getExtendedCache && instrumentation.frontierCache) {
-                if (cached) instrumentation.frontierCache.hits++;
-                else instrumentation.frontierCache.misses++;
+            if (instrumentation && getExtendedCache) {
+                const metrics = this.cache.getEngineMetrics().frontierCache;
+                instrumentation.frontierCache = metrics;
             }
 
-            const result = await SearchService.calculateCombinations(
-                registry, cat, ml, mat, guaranteedFirst, bThreshold, limit, cached, resultsLimit, signal, instrumentation,
-                bThreshold, config.timing
+            const result = await this.searchService.calculateCombinations(
+                registry, cat, ml, guaranteedFirst,
+                cached, {
+                    threshold: bThreshold,
+                    limit,
+                    resultsLimit,
+                    signal,
+                    instrumentation,
+                    timing: config.timing
+                }
             );
 
             if (instrumentation) {
-                if (result.checkpoints && instrumentation.checkpoints) {
-                    for (const cp of result.checkpoints) {
-                        instrumentation.checkpoints.push({ ...cp, totalIterations: instrumentation.totalIterations + cp.iterations });
-                    }
-                }
-                instrumentation.totalIterations += result.iterations;
-                instrumentation.exitReason = result.exitReason;
-                instrumentation.levelsProcessed++;
-                if (result.exitReason === 'empty') instrumentation.levelsFullyResolved++;
-                instrumentation.fullyResolved = instrumentation.levelsFullyResolved === instrumentation.levelsProcessed;
-                
-                if (instrumentation.trackGlobalMetrics) {
+                this.updateInstrumentation(instrumentation, result);
+                if (instrumentation.trackGlobalMetrics && getCacheMetrics) {
                     instrumentation.globalResultsSize = finalCombos.size;
-                    if (getCacheMetrics) {
-                        const metrics = getCacheMetrics() as any;
-                        instrumentation.globalCacheNodes = metrics.cacheNodes ?? metrics.frontierCache?.hits; // Fallback or updated metrics
-                        instrumentation.globalCacheResults = metrics.cacheResults ?? metrics.frontierCache?.misses;
-                    }
+                    const metrics = getCacheMetrics() as any;
+                    instrumentation.globalCacheNodes = metrics.cacheNodes;
+                    instrumentation.globalCacheResults = metrics.cacheResults;
                 }
             }
 
@@ -273,7 +219,7 @@ export class StatAggregator {
             if (++iterCount % 3 === 0) {
                 if (onProgress) {
                     const partialStats = SummaryService.summarize(finalCombos, globalTracker, totalAnyMass, totalRankMass, totalCountMass, 0, threshold);
-                    partialStats.instrumentation = instrumentation ? snapshotInstrumentation(instrumentation) : undefined;
+                    partialStats.instrumentation = instrumentation ? this.snapshotInstrumentation(instrumentation) : undefined;
                     partialStats.timing = config.timing ? { ...config.timing } : undefined;
                     onProgress(partialStats);
                 }
@@ -285,23 +231,81 @@ export class StatAggregator {
         globalTracker.record('rounding', distRoundingError);
 
         if (guaranteedFirst) {
-            StatAggregator.reconcileGuaranteedMass(
-                registry, guaranteedFirst, totalAnyMass, totalRankMass, totalCountMass
-            );
+            this.reconcileGuaranteedMass(registry, guaranteedFirst, totalAnyMass, totalRankMass, totalCountMass);
         }
 
         const finalStats = SummaryService.summarize(finalCombos, globalTracker, totalAnyMass, totalRankMass, totalCountMass, summaryLimit, threshold);
-        finalStats.instrumentation = instrumentation ? snapshotInstrumentation(instrumentation) : undefined;
+        finalStats.instrumentation = instrumentation ? this.snapshotInstrumentation(instrumentation) : undefined;
         finalStats.timing = config.timing ? { ...config.timing } : undefined;
 
         return finalStats;
     }
 
-    /**
-     * Reconciles all non-pending mass (resolved, sieved, rounding, capped, overflow) 
-     * into the guaranteed enchantment's buckets.
-     */
-    private static reconcileGuaranteedMass(
+    private updateInstrumentation(instr: EngineInstrumentation, result: SearchFrontier): void {
+        instr.checkpoints = instr.checkpoints || [];
+        if (result.checkpoints) {
+            for (const cp of result.checkpoints) {
+                instr.checkpoints.push({ 
+                    ...cp, 
+                    totalIterations: (instr.totalIterations || 0) + cp.iterations 
+                });
+            }
+        }
+        instr.totalIterations = (instr.totalIterations || 0) + result.iterations;
+        instr.exitReason = result.exitReason;
+        instr.levelsProcessed = (instr.levelsProcessed || 0) + 1;
+        if (result.exitReason === 'empty') instr.levelsFullyResolved = (instr.levelsFullyResolved || 0) + 1;
+        instr.fullyResolved = instr.levelsFullyResolved === instr.levelsProcessed;
+        
+        // Update cache performance metrics
+        const metrics = this.cache.getEngineMetrics();
+        instr.poolCache = metrics.poolCache;
+        instr.distCache = metrics.distCache;
+        instr.frontierCache = metrics.frontierCache;
+    }
+
+    /** Build a checkpointSummary from the raw flat checkpoints array. */
+    private buildCheckpointSummary(checkpoints: MassCheckpoint[]): CheckpointSummary[] {
+        const TARGETS = [0.1, 0.25, 0.5, 0.75, 0.8, 0.85, 0.9, 0.95, 0.99, 0.999];
+        const byTarget = new Map<number, { threshold: number; iterations: number; level: number }[]>();
+        for (const target of TARGETS) byTarget.set(target, []);
+
+        for (const cp of checkpoints) {
+            let matched: number | null = null;
+            for (const t of TARGETS) {
+                if (cp.mass >= t - 0.001) matched = t;
+            }
+            if (matched !== null) {
+                const existing = byTarget.get(matched)!;
+                if (!existing.some(e => e.level === cp.modLevel)) {
+                    existing.push({ threshold: cp.threshold, iterations: cp.iterations, level: cp.modLevel });
+                }
+            }
+        }
+
+        const summary: CheckpointSummary[] = [];
+        for (const target of TARGETS) {
+            const entries = byTarget.get(target)!;
+            if (entries.length === 0) continue;
+            const bottleneck = entries.reduce((worst, e) => e.threshold < worst.threshold ? e : worst, entries[0]);
+            summary.push({
+                target,
+                worstCaseThreshold: bottleneck.threshold,
+                worstCaseIterations: Math.max(...entries.map(e => e.iterations)),
+                bottleneckLevel: bottleneck.level
+            });
+        }
+        return summary;
+    }
+
+    private snapshotInstrumentation(instr: EngineInstrumentation): EngineInstrumentation {
+        const checkpoints = [...instr.checkpoints];
+        const checkpointSummary = this.buildCheckpointSummary(checkpoints);
+        instr.checkpointSummary = checkpointSummary;
+        return { ...instr, checkpoints, checkpointSummary };
+    }
+
+    private reconcileGuaranteedMass(
         registry: RegistryState,
         guaranteedFirst: string,
         totalAnyMass: BigUint64Array,

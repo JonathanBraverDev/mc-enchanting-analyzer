@@ -1,4 +1,4 @@
-import { EnchantEngine } from '../engine/index.js';
+import { EnchantEngine, EngineFactory } from '../engine/index.js';
 import { DATA } from '../data/index.js';
 import { SerializationService } from '../services/index.js';
 import type { WorkerRequest } from './protocol.js';
@@ -19,7 +19,7 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
     try {
         if (type === 'init') {
             if (engine) engine.destroy();
-            engine = new EnchantEngine(DATA, payload.version);
+            engine = EngineFactory.create(DATA, payload.version);
             self.postMessage({ type: 'ready', id });
             return;
         }

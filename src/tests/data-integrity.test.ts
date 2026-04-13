@@ -17,7 +17,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { global_enchantments, enchantment_groups } from '../data/enchantments.js';
-import { EnchantEngine } from '../engine/index.js';
+import { EnchantEngine, EngineFactory } from '../engine/index.js';
 import { DATA } from '../data/index.js';
 import { hasConflict, getEnchantId } from '../core/registry.js';
 import { versions } from '../data/versions.js';
@@ -121,7 +121,7 @@ describe('Data integrity: enchantment groups reference valid enchantments', () =
 
 describe('Data integrity: conflict symmetry after RegistryFactory.build()', () => {
     // Build with the latest version so all enchantments are active
-    const engine = new EnchantEngine(DATA, '1.21.11');
+    const engine = EngineFactory.create(DATA, '1.21.11');
     const reg    = engine.registry;
 
     it('all conflict pairs are symmetric (exhaustive check)', () => {
@@ -223,7 +223,7 @@ describe('Data integrity: material enchantability coverage', () => {
 
     it('every category+material in the latest version resolves enchantability without throwing', () => {
         const latestVersion = '1.21.11';
-        const engine = new EnchantEngine(DATA, latestVersion);
+        const engine = EngineFactory.create(DATA, latestVersion);
         const reg = engine.registry;
         const cats = [...reg.versionPool.keys()];
         const armorCats = DATA.constants.ARMOR_CATS as readonly string[];

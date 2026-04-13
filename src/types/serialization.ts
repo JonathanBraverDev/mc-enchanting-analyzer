@@ -14,4 +14,5 @@ export interface CompactStats {
     
     accuracy: number;
     accounting: MassAccounting;
+    threshold: number;
 }

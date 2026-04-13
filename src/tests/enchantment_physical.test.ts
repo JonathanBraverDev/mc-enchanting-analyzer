@@ -1,13 +1,13 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { EnchantEngine } from '../engine/index.js';
+import { EnchantEngine, EngineFactory } from '../engine/index.js';
 import { DATA } from '../data/index.js';
 import { EngineTestUtils } from './test-utils.js';
 
 describe('Enchantment Physical Rules Test Suite', () => {
 
     describe('1. Enchantment Conflicts', () => {
-        const engine = new EnchantEngine(DATA, '1.20');
+        const engine = EngineFactory.create(DATA, '1.20');
 
         it('Silk Touch and Fortune should NEVER coexist', async () => {
             await engine.getFullStats('pickaxe', 30, 'diamond', { threshold: 0.0001 });
@@ -44,21 +44,21 @@ describe('Enchantment Physical Rules Test Suite', () => {
 
     describe('2. Material & Rank Limits', () => {
         it('Sharpness V should be impossible on Diamond at Level 30', async () => {
-            const engine = new EnchantEngine(DATA, '1.20');
+            const engine = EngineFactory.create(DATA, '1.20');
             const human = await EngineTestUtils.getHumanStats(engine, 'sword', 30, 'diamond');
             const hasSharpV = Object.keys(human.combos).some(c => c.includes('Sharpness V'));
             assert.ok(!hasSharpV, 'Sharpness V should not be possible on Diamond at Lvl 30');
         });
 
         it('Sharpness V SHOULD be possible on Gold at Level 30', async () => {
-            const engine = new EnchantEngine(DATA, '1.20');
+            const engine = EngineFactory.create(DATA, '1.20');
             const human = await EngineTestUtils.getHumanStats(engine, 'sword', 30, 'gold');
             const hasSharpV = !!human.ranks['Sharpness V'];
             assert.ok(hasSharpV, 'Sharpness V SHOULD be possible on Gold at Lvl 30 due to high enchantability');
         });
 
         it('Gold should have higher average enchantment count than Wood', async () => {
-            const engine = new EnchantEngine(DATA, '1.20');
+            const engine = EngineFactory.create(DATA, '1.20');
             const statsGold = await engine.getFullStats('sword', 30, 'gold');
             const statsWood = await engine.getFullStats('sword', 30, 'wood');
 
