@@ -1,9 +1,10 @@
-import fs from 'fs';
-import path from 'path';
+import { fileURLToPath } from 'url';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const root = path.resolve(__dirname, '..');
 
-const root = process.cwd();
-const htmlPath = path.join(root, 'analyzer.html');
-const cssPath = path.join(root, 'style.css');
+const htmlPath = path.join(root, 'src', 'ui', 'analyzer.html');
+const cssPath = path.join(root, 'src', 'ui', 'styles', 'style.css');
 const jsPath = path.join(root, 'dist', 'bundle.js');
 const outputPath = path.join(root, 'dist', 'analyzer-standalone.html');
 
@@ -15,8 +16,8 @@ try {
     let js = fs.readFileSync(jsPath, 'utf8');
 
     // Remove existing link and script tags
-    html = html.replace(/<link rel="stylesheet" href="style\.css">/, `<style>\n${css}\n</style>`);
-    html = html.replace(/<script src="dist\/bundle\.js"><\/script>/, `<script>\n${js}\n</script>`);
+    html = html.replace(/<link rel="stylesheet" href="styles\/style\.css">/, `<style>\n${css}\n</style>`);
+    html = html.replace(/<script src="\.\.\/\.\.\/dist\/bundle\.js"><\/script>/, `<script>\n${js}\n</script>`);
 
     // Ensure output directory exists
     if (!fs.existsSync(path.dirname(outputPath))) {

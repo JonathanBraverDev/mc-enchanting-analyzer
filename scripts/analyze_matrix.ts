@@ -8,11 +8,20 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-const OUT_DIR = path.join(path.dirname(new URL(import.meta.url).pathname), 'matrix-output');
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const OUT_DIR = path.join(__dirname, 'matrix-output');
 
 const args = process.argv.slice(2);
-const filterCat = args[args.indexOf('--cat') + 1] ?? null;
-const filterXp  = args[args.indexOf('--xp')  + 1] ? parseInt(args[args.indexOf('--xp') + 1]) : null;
+const findArg = (key: string) => {
+    const idx = args.indexOf(key);
+    return (idx !== -1 && args[idx + 1] && !args[idx + 1].startsWith('--')) ? args[idx + 1] : null;
+};
+
+const filterCat = findArg('--cat');
+const filterXp  = findArg('--xp') ? parseInt(findArg('--xp')!) : null;
 
 interface FileData {
     cat: string; mat: string; xp: number;
@@ -58,7 +67,8 @@ function summarize(data: FileData[]) {
         console.log(`CAT: ${cat}`);
         console.log(`${'='.repeat(60)}`);
 
-        for (const xp of [10, 20, 30]) {
+        const xpLevels = [...new Set(items.map(d => d.xp))].sort((a, b) => a - b);
+        for (const xp of xpLevels) {
             const group = byXp.get(xp);
             if (!group) continue;
 

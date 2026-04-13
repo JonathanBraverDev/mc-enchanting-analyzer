@@ -1,14 +1,25 @@
-import { EnchantEngine } from '../src/lib/engine/index.js';
+import { EnchantEngine, EngineFactory } from '../src/lib/engine/index.js';
 import { DATA as data } from '../src/lib/data/index.js';
 import { EngineInstrumentation } from '../src/lib/types/index.js';
 
-async function run() {
-    const version = '1.21.11';
-    const cat = 'book';
-    const mat = 'book';
-    const xp = 30;
+import { fileURLToPath } from 'url';
 
-    const engine = new EnchantEngine(data, version);
+async function run() {
+    const args = process.argv.slice(2);
+    const findArg = (key: string) => {
+        const idx = args.indexOf(key);
+        return (idx !== -1 && args[idx + 1]) ? args[idx + 1] : null;
+    };
+
+    const cat = findArg('--cat') ?? 'book';
+    const mat = findArg('--mat') ?? 'book';
+    const xp = parseInt(findArg('--xp') ?? '30');
+    const version = findArg('--version') ?? '1.21.11';
+
+    console.log(`--- Running Enchantment Simulation ---`);
+    console.log(`Version: ${version}, Category: ${cat}, Material: ${mat}, XP: ${xp}\n`);
+
+    const engine = EngineFactory.create(data, version);
     const instrumentation: EngineInstrumentation = {
         poolCache: { hits: 0, misses: 0 },
         distCache: { hits: 0, misses: 0 },
@@ -50,8 +61,8 @@ async function run() {
     console.log(`  Exit Reason:    ${instrumentation.exitReason}`);
     console.log(`  Pruned Nodes:   ${instrumentation.totalPrunedNodes}`);
     console.log(`  Rounding Errors: ${instrumentation.roundingErrorEvents}`);
-    console.log(`  Uncertainty:    ${(stats.uncertainty * 100).toFixed(6)}%`);
-    console.log(`  Rounding Error: ${stats.roundingError}`);
+    console.log(`  Uncertainty:    ${(stats.accounting.pending * 100).toFixed(6)}%`);
+    console.log(`  Rounding Mass:  ${stats.accounting.rounding.toExponential(4)}`);
 }
 
 run().catch(console.error);

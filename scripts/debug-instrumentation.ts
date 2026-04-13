@@ -1,11 +1,11 @@
-import { EnchantEngine } from '../src/lib/engine/index.js';
+import { EnchantEngine, EngineFactory } from '../src/lib/engine/index.js';
 import { DATA } from '../src/lib/data/index.js';
 import * as fs from 'node:fs';
 import * as assert from 'node:assert';
 import { CalculationStats } from '../src/lib/types/index.js';
 
 async function debug() {
-    const engine = new EnchantEngine(DATA, '1.7.2');
+    const engine = EngineFactory.create(DATA, '1.7.2');
     const cat = 'book'; 
     const level = 30;
     const mat = 'book';
@@ -27,14 +27,17 @@ async function debug() {
         onProgress: (s) => {
             if (s.instrumentation) {
                 const { totalIterations, resultsSize, memoryMB, globalResultsSize, globalCacheNodes } = s.instrumentation;
-                process.stdout.write(`\r Iter: ${totalIterations.toLocaleString()} | Res: ${resultsSize} | globalRes: ${globalResultsSize} | Cache: ${globalCacheNodes} | Mem: ${memoryMB}MB`);
+                const mem = memoryMB ? `${memoryMB}MB` : 'N/A';
+                const gRes = globalResultsSize ?? 'N/A';
+                const gCache = globalCacheNodes ?? 'N/A';
+                process.stdout.write(`\r Iter: ${totalIterations.toLocaleString()} | Res: ${resultsSize} | globalRes: ${gRes} | Cache: ${gCache} | Mem: ${mem}`);
             }
         }
     });
 
     console.log('\nSearch Complete.');
 
-    const snapshotPath = '../src/tests/snapshots/1.7.2_book_30_book.json';
+    const snapshotPath = '../tests/snapshots/1.7.2_book_30_book.json';
     if (fs.existsSync(snapshotPath)) {
         console.log('\nSimulating Snapshot Comparison (Deep Equality Check)...');
         const existing: CalculationStats = JSON.parse(fs.readFileSync(snapshotPath, 'utf8'));
