@@ -5,9 +5,9 @@
  *
  * Usage: npx tsx scripts/run_matrix.ts
  */
-import { EnchantEngine } from '../src/engine/index.js';
-import { DATA } from '../src/data/index.js';
-import { EngineInstrumentation } from '../src/types/index.js';
+import { EnchantEngine } from '../src/lib/engine/index.js';
+import { DATA } from '../src/lib/data/index.js';
+import { EngineInstrumentation } from '../src/lib/types/index.js';
 import * as fs from 'fs';
 import * as path from 'path';
 

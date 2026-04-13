@@ -1,8 +1,8 @@
 
-import { EnchantEngine } from '../src/engine/index.js';
-import { DATA } from '../src/data/index.js';
-import { SnapshotUtils } from '../src/tests/test-utils.js';
-import { ENGINE_DEFAULTS } from '../src/core/config.js';
+import { EnchantEngine } from '../src/lib/engine/index.js';
+import { DATA } from '../src/lib/data/index.js';
+import { SnapshotUtils } from '../tests/test-utils.js';
+import { ENGINE_DEFAULTS } from '../src/lib/core/config.js';
 
 async function updateSnapshots() {
     console.log('Updating Regression Snapshots...');

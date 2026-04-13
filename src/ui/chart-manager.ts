@@ -1,8 +1,8 @@
 import { ThemeManager } from './theme.js';
-import { getEnchantName, getFullEnchantName } from '../core/registry.js';
-import { CalculationStats, ChartDataset, RegistryState } from '../types/index.js';
-import { RomanUtils } from '../utils/index.js';
-import { ENGINE_DEFAULTS } from '../core/config.js';
+import { getEnchantName, getFullEnchantName } from '../lib/core/registry.js';
+import { CalculationStats, ChartDataset, RegistryState } from '../lib/types/index.js';
+import { RomanUtils } from '../lib/utils/index.js';
+import { ENGINE_DEFAULTS } from '../lib/core/config.js';
 
 interface ChartInstance {
     data: { labels: unknown[]; datasets: unknown[] };
