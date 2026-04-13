@@ -11,7 +11,7 @@ import { SummaryService } from '../../../src/lib/services/SummaryService.js';
 import { SerializationService } from '../../../src/lib/services/SerializationService.js';
 import { HumanizationService } from '../../../src/lib/services/HumanizationService.js';
 import { DistributionService } from '../../../src/lib/engine/distribution.js';
-import { EnchantEngine, EngineFactory } from '../../../src/lib/engine/index.js';
+import { EnchantEngine, EnchantEngine } from '../../../src/lib/engine/index.js'; import { EngineFactory } from '../../../src/lib/engine/factory.js';
 import { ProbabilityMassTracker } from '../../../src/lib/engine/ProbabilityMassTracker.js';
 import { DATA } from '../../../src/lib/data/index.js';
 import type { CalculationStats, MassAccounting } from '../../../src/lib/types/index.js';
@@ -126,6 +126,20 @@ describe('SerializationService', () => {
         assert.ok(Math.abs((recovered.combos['ff']   as number) - 0.5) < 1e-10);
         assert.ok(Math.abs((recovered.combos['1a2b'] as number) - 0.3) < 1e-10);
     });
+
+    it('serialize provides Transferable buffers for large arrays', () => {
+        const any = { 0: 0.1, 1: 0.2 };
+        const stats = makeStats({ any });
+        const { compact, transferables } = SerializationService.serialize(stats);
+        
+        // CompactStats uses BigUint64Array for any/ranks/count mass in the internal message
+        assert.ok(transferables.length > 0, 'Should have transferable buffers');
+        assert.ok(transferables[0] instanceof ArrayBuffer, 'Transferables should be ArrayBuffers');
+        
+        const recovered = SerializationService.deserialize(compact);
+        assert.strictEqual(recovered.any[0], 0.1);
+        assert.strictEqual(recovered.any[1], 0.2);
+    });
 });
 
 // ── HumanizationService ────────────────────────────────────────────────────
@@ -167,4 +181,33 @@ describe('DistributionService', () => {
         assert.strictEqual(dist[30], PRECISION);
     });
 });
+
+// ── ProbabilityMassTracker detailed accounting ───────────────────────────
+
+describe('ProbabilityMassTracker Accounting', () => {
+    it('toPublic converts BigInt buckets to floating-point accurately', () => {
+        const tracker = new ProbabilityMassTracker();
+        tracker.record('resolved', PRECISION / 2n);
+        tracker.record('pending', PRECISION / 10n);
+        
+        const accounting = tracker.toPublic();
+        assert.strictEqual(accounting.resolved, 0.5);
+        assert.strictEqual(accounting.pending, 0.1);
+    });
+
+    it('addScaled combines mass from another tracker', () => {
+        const t1 = new ProbabilityMassTracker();
+        const t2 = new ProbabilityMassTracker();
+        
+        t1.record('resolved', 100n);
+        t2.record('resolved', 200n);
+        
+        // factor = 0.5 (PRECISION / 2)
+        t1.addScaled(t2, PRECISION / 2n); 
+        
+        // 100 + (200 * 0.5) = 200
+        assert.strictEqual(t1.getBookkeeping().resolved, 200n);
+    });
+});
+
 

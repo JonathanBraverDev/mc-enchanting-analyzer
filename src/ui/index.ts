@@ -1,5 +1,6 @@
 import { DATA } from '../lib/data/index.js';
-import { EnchantEngine, EngineFactory } from '../lib/engine/index.js';
+import { EnchantEngine } from '../lib/engine/index.js';
+import { EngineFactory } from '../lib/engine/factory.js';
 import { UI_TEXTS } from '../lib/core/config.js';
 import { WorkerClient } from '../worker/client.js';
 import { ParamsView } from './views/ParamsView.js';

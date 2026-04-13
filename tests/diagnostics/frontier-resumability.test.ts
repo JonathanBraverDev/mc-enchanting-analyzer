@@ -21,7 +21,7 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { EngineFactory } from '../../src/lib/engine/index.js';
+import { EnchantEngine } from '../../src/lib/engine/index.js'; import { EngineFactory } from '../../src/lib/engine/factory.js';
 import { SearchService } from '../../src/lib/engine/search.js';
 import { CacheManager } from '../../src/lib/services/CacheManager.js';
 import { DATA } from '../../src/lib/data/index.js';
@@ -87,6 +87,7 @@ describe('Frontier Resumability & Cache Behavior', () => {
 
     it('progressive refinement improves accuracy (decreases pending mass)', async () => {
         // Coarse engine: threshold=0.01 — search stops when queue-top prob < 0.001
+        EngineFactory.clearCaches();
         const coarseEngine = EngineFactory.create(DATA, '1.21');
         const coarseResult = await coarseEngine.getFullStats('sword', 30, 'diamond', {
             threshold: 0.01,
@@ -96,6 +97,7 @@ describe('Frontier Resumability & Cache Behavior', () => {
         // Deep engine: threshold=0.0001 — search stops when queue-top prob < 0.00001,
         // exploring far more of the probability mass before stopping.
         // A fresh engine ensures the stats cache from the coarse run doesn't interfere.
+        EngineFactory.clearCaches();
         const deepEngine = EngineFactory.create(DATA, '1.21');
         const deepResult = await deepEngine.getFullStats('sword', 30, 'diamond', {
             threshold: 0.0001,
@@ -131,6 +133,7 @@ describe('Frontier Resumability & Cache Behavior', () => {
     // producing strictly higher accuracy than the coarse run.
 
     it('cross-tier combo cache: deep run resumes from coarse frontier', async () => {
+        EngineFactory.clearCaches();
         const engine = EngineFactory.create(DATA, '1.21');
 
         // Coarse pass: populates both statsCache and comboCache.
@@ -184,4 +187,5 @@ describe('Frontier Resumability & Cache Behavior', () => {
         // Cache is instance-local
     });
 });
+
 

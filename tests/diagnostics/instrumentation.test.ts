@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { EnchantEngine, EngineFactory } from '../../src/lib/engine/index.js';
+import { EnchantEngine, EnchantEngine } from '../../src/lib/engine/index.js'; import { EngineFactory } from '../../src/lib/engine/factory.js';
 import { DATA } from '../../src/lib/data/index.js';
 import { EngineInstrumentation } from '../../src/lib/types/index.js';
 
@@ -76,4 +76,5 @@ test('Frontier Cache Instrumentation (Resumption)', async () => {
     
     assert.ok(instrumentation2.frontierCache.hits > 0, 'Should have frontier cache hits when refining');
 });
+
 

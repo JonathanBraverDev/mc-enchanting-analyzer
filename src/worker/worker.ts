@@ -1,4 +1,5 @@
-import { EnchantEngine, EngineFactory } from '../lib/engine/index.js';
+import { EnchantEngine } from '../lib/engine/index.js';
+import { EngineFactory } from '../lib/engine/factory.js';
 import { DATA } from '../lib/data/index.js';
 import { SerializationService } from '../lib/services/index.js';
 import type { WorkerRequest } from './protocol.js';

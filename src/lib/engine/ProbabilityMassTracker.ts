@@ -207,7 +207,7 @@ export class ProbabilityMassTracker {
             }
         });
 
-        const guaranteedInCombo = guaranteedFirstId !== null && (currentBitset & (1n << BigInt(guaranteedFirstId))) !== 0n;
+        const guaranteedInCombo = guaranteedFirstId != null && (currentBitset & (1n << BigInt(guaranteedFirstId))) !== 0n;
 
         for (let i = 0; i < eligibleCount; i++) {
             const pNext = splits[i];
