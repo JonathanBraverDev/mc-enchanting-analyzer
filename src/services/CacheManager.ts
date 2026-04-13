@@ -1,19 +1,16 @@
 import { LRUCache } from '../utils/collections/LRUCache.js';
-import { CACHE_CONFIG } from '../constants/engine.js';
-import { CalculationStats, SearchFrontier, PackedEnchant, CacheStats } from '../types/index.js';
+import { CalculationStats, SearchFrontier, PackedEnchant, CacheStats, CacheConfig } from '../types/index.js';
 
 /**
  * Centralized service for managing all engine-level caches.
  * Provides unified access, metrics tracking, and lifecycle control.
  */
 export class CacheManager {
-    private static instance: CacheManager;
-
     private readonly dist = new Map<string, { [level: number]: bigint }>();
-    private readonly pool = new LRUCache<string, PackedEnchant[]>(CACHE_CONFIG.POOL_SIZE);
-    private readonly combo = new LRUCache<string, SearchFrontier>(CACHE_CONFIG.COMBO_OTHER_SIZE);
-    private readonly book = new LRUCache<string, SearchFrontier>(CACHE_CONFIG.COMBO_BOOK_SIZE);
-    private readonly stats = new LRUCache<string, CalculationStats>(CACHE_CONFIG.STATS_SIZE);
+    private readonly pool: LRUCache<string, PackedEnchant[]>;
+    private readonly combo: LRUCache<string, SearchFrontier>;
+    private readonly book: LRUCache<string, SearchFrontier>;
+    private readonly stats: LRUCache<string, CalculationStats>;
 
     private metrics = {
         dist: { hits: 0, misses: 0 },
@@ -23,13 +20,14 @@ export class CacheManager {
         stats: { hits: 0, misses: 0 }
     };
 
-    private constructor() {}
-
-    public static getInstance(): CacheManager {
-        if (!CacheManager.instance) {
-            CacheManager.instance = new CacheManager();
-        }
-        return CacheManager.instance;
+    /**
+     * Initializes a new CacheManager with custom or default limits.
+     */
+    constructor(config: CacheConfig) {
+        this.pool = new LRUCache<string, PackedEnchant[]>(config.poolSize);
+        this.combo = new LRUCache<string, SearchFrontier>(config.comboOtherSize);
+        this.book = new LRUCache<string, SearchFrontier>(config.comboBookSize);
+        this.stats = new LRUCache<string, CalculationStats>(config.statsSize);
     }
 
     // --- Distribution Cache ---
@@ -128,6 +126,20 @@ export class CacheManager {
             }
         };
     }
-}
 
-export const cacheManager = CacheManager.getInstance();
+    /** Returns total number of nodes cached in both combo and book frontiers. */
+    public getTotalCachedNodes(): number {
+        let count = 0;
+        for (const f of this.combo.values()) count += f.queue.size();
+        for (const f of this.book.values()) count += f.queue.size();
+        return count;
+    }
+
+    /** Returns total number of results cached in both combo and book frontiers. */
+    public getTotalCachedResults(): number {
+        let count = 0;
+        for (const f of this.combo.values()) count += f.results.size;
+        for (const f of this.book.values()) count += f.results.size;
+        return count;
+    }
+}

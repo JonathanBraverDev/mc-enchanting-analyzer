@@ -14,7 +14,7 @@ describe('ProbabilityMassTracker (Cache Functionality)', () => {
             probContinue: PRECISION / 2n,
             totalWeight: 10,
             eligibleCount: 1,
-            eligibleEnchants: new Int32Array([1]),
+            eligibleEnchants: [1] as any,
             eligibleWeights: new Int32Array([10]),
             nextLevel: 30,
             currentCount: 1,

@@ -1,11 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { EnchantEngine } from '../engine/index.js';
-import { DATA as data } from '../data/index.js';
+import { EnchantEngine, EngineFactory } from '../engine/index.js';
+import { DATA } from '../data/index.js';
 import { EngineInstrumentation } from '../types/index.js';
 
 test('Engine Instrumentation Collection', async () => {
-    const engine = new EnchantEngine(data, '1.21');
+    const engine = EngineFactory.create(DATA, '1.21');
     const instrumentation: EngineInstrumentation = {
         poolCache: { hits: 0, misses: 0 },
         distCache: { hits: 0, misses: 0 },
@@ -50,7 +50,7 @@ test('Engine Instrumentation Collection', async () => {
 });
 
 test('Frontier Cache Instrumentation (Resumption)', async () => {
-    const engine = new EnchantEngine(data, '1.21');
+    const engine = EngineFactory.create(DATA, '1.21');
     const instrumentation: EngineInstrumentation = {
         poolCache: { hits: 0, misses: 0 },
         distCache: { hits: 0, misses: 0 },

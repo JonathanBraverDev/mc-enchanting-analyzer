@@ -1,6 +1,6 @@
 import { ComboUtils } from '../utils/domain/ComboUtils.js';
 import { RomanUtils } from '../utils/format/RomanUtils.js';
-import type { EnchantInsights, ResultSortMode, CalculationStats, RegistryState } from '../types/index.js';
+import type { EnchantInsights, ResultSortMode, CalculationStats, RegistryState, PackedCombo } from '../types/index.js';
 import { getEnchantName, getFullEnchantName } from '../core/registry.js';
 
 /**
@@ -37,7 +37,7 @@ export class HumanizationService {
 
         const rawCombos: Record<string, number> = {};
         for (const [packed, prob] of Object.entries(stats.combos)) {
-            const ids = ComboUtils.unpack(parseInt(packed, 16), resolver.indexToEnchant);
+            const ids = ComboUtils.unpack(parseInt(packed, 16) as PackedCombo, resolver.indexToEnchant);
             const comboKey = ids.map(n => getFullEnchantName(resolver, n)).join("+");
             rawCombos[comboKey] = prob as number;
         }

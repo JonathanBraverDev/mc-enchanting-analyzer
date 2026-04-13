@@ -1,13 +1,13 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { EnchantEngine } from '../engine/index.js';
+import { EnchantEngine, EngineFactory } from '../engine/index.js';
 import { DATA } from '../data/index.js';
 import { getCategoryPool } from '../core/registry.js';
 
 describe('Book Mechanics Test Suite', () => {
 
     it('1.4.6: Books should remain single-enchantment', async () => {
-        const engine146 = new EnchantEngine(DATA, '1.4.6');
+        const engine146 = EngineFactory.create(DATA, '1.4.6');
         const stats = await engine146.getFullStats('book', 30, 'book', { threshold: 0.001 });
         
         // Count 1 should be ~100% (or very close if uncertainty exists)
@@ -15,7 +15,7 @@ describe('Book Mechanics Test Suite', () => {
     });
 
     it('1.7.2+: Books SHOULD allow multi-enchantment (though reduced by 1)', async () => {
-        const engine172 = new EnchantEngine(DATA, '1.7.2');
+        const engine172 = EngineFactory.create(DATA, '1.7.2');
         const stats = await engine172.getFullStats('book', 30, 'book', { threshold: 0.0001 });
         
         // At level 30, it is very common for books to have multiple enchantments (if they rolled 3+)
@@ -26,7 +26,7 @@ describe('Book Mechanics Test Suite', () => {
     });
 
     it('Enchantment weighting on books should be uniform ( Registry check )', () => {
-        const engine = new EnchantEngine(DATA, '1.20');
+        const engine = EngineFactory.create(DATA, '1.20');
         const pool = getCategoryPool(engine.registry, 'book');
         
         // Check if common and rare enchants are both present

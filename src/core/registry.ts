@@ -1,5 +1,5 @@
 import { RegistryState, PackedEnchant } from '../types/index.js';
-import { RomanUtils, LRUCache } from '../utils/index.js';
+import { RomanUtils } from '../utils/index.js';
 import { ENGINE_DEFAULTS } from './config.js';
 import { MaterialService } from './RegistryMaterials.js';
 import { PoolService } from './RegistryPools.js';
@@ -53,7 +53,7 @@ export function getEligiblePool(
     state: RegistryState, 
     cat: string, 
     level: number, 
-    cache?: { getPool(v: string, k: string): PackedEnchant[] | undefined; setPool(v: string, k: string, v: PackedEnchant[]): void },
+    cache?: { getPool(v: string, k: string): PackedEnchant[] | undefined; setPool(v: string, k: string, val: PackedEnchant[]): void },
     version?: string
 ): PackedEnchant[] {
     return PoolService.getEligiblePool(state, cat, level, cache, version);
@@ -64,7 +64,7 @@ export function isEnchantmentAchievable(
     fullName: string, 
     cat: string, 
     levels: number[], 
-    cache?: { getPool(v: string, k: string): PackedEnchant[] | undefined; setPool(v: string, k: string, v: PackedEnchant[]): void },
+    cache?: { getPool(v: string, k: string): PackedEnchant[] | undefined; setPool(v: string, k: string, val: PackedEnchant[]): void },
     version?: string
 ): boolean {
     return PoolService.isEnchantmentAchievable(state, fullName, cat, levels, state.data.constants.ROMAN_MAP, cache, version);

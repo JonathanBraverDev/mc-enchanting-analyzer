@@ -21,9 +21,9 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { EnchantEngine } from '../engine/index.js';
+import { EngineFactory } from '../engine/index.js';
 import { SearchService } from '../engine/search.js';
-import { cacheManager } from '../services/index.js';
+import { CacheManager } from '../services/CacheManager.js';
 import { DATA } from '../data/index.js';
 import { ProbUtils } from '../utils/index.js';
 
@@ -32,7 +32,9 @@ describe('Frontier Resumability & Cache Behavior', () => {
     // ── Test A: SearchService direct resumption ─────────────────────────────
 
     it('SearchService resumes from existing frontier', async () => {
-        const engine = new EnchantEngine(DATA, '1.21');
+        const engine = EngineFactory.create(DATA, '1.21');
+        const cache = new CacheManager({ poolSize: 100, comboOtherSize: 100, comboBookSize: 100, statsSize: 100 });
+        const searchService = new SearchService(cache);
 
         // book/ml=50 has millions of reachable combinations; 500 iterations barely
         // scratch the surface, so the limit — not mass convergence — is the
@@ -42,13 +44,13 @@ describe('Frontier Resumability & Cache Behavior', () => {
         const cat = 'book', ml = 50, mat = 'book';
 
         // First pass: 500 iterations from the initial state
-        const result500 = await SearchService.calculateCombinations(
-            engine.registry, cat, ml, mat, null, threshold, 500
+        const result500 = await searchService.calculateCombinations(
+            engine.registry, cat, ml, null, undefined, { threshold, limit: 500, resultsLimit: 1000 }
         );
 
         // Second pass: 2 000 more iterations, resuming from result500
-        const result2000 = await SearchService.calculateCombinations(
-            engine.registry, cat, ml, mat, null, threshold, 2000, result500
+        const result2000 = await searchService.calculateCombinations(
+            engine.registry, cat, ml, null, result500, { threshold, limit: 2000, resultsLimit: 1000 }
         );
 
         assert.ok(result500.results.size > 0, 'First run should have produced results');
@@ -71,8 +73,6 @@ describe('Frontier Resumability & Cache Behavior', () => {
                 `Resumed results must be a superset of first run (missing combo key ${key})`
             );
         }
-
-        cacheManager.clearAll();
     });
 
     // ── Test B: Progressive refinement improves accuracy ─────────────────────
@@ -87,17 +87,19 @@ describe('Frontier Resumability & Cache Behavior', () => {
 
     it('progressive refinement improves accuracy (decreases pending mass)', async () => {
         // Coarse engine: threshold=0.01 — search stops when queue-top prob < 0.001
-        const coarseEngine = new EnchantEngine(DATA, '1.21');
+        const coarseEngine = EngineFactory.create(DATA, '1.21');
         const coarseResult = await coarseEngine.getFullStats('sword', 30, 'diamond', {
-            threshold: 0.01
+            threshold: 0.01,
+            resultsLimit: 1000
         });
 
         // Deep engine: threshold=0.0001 — search stops when queue-top prob < 0.00001,
         // exploring far more of the probability mass before stopping.
         // A fresh engine ensures the stats cache from the coarse run doesn't interfere.
-        const deepEngine = new EnchantEngine(DATA, '1.21');
+        const deepEngine = EngineFactory.create(DATA, '1.21');
         const deepResult = await deepEngine.getFullStats('sword', 30, 'diamond', {
-            threshold: 0.0001
+            threshold: 0.0001,
+            resultsLimit: 1000
         });
 
         assert.ok(
@@ -105,25 +107,21 @@ describe('Frontier Resumability & Cache Behavior', () => {
             `Deep pending mass (${deepResult.accounting.pending}) must be strictly less than ` +
             `coarse pending mass (${coarseResult.accounting.pending})`
         );
-
-        cacheManager.clearAll();
     });
 
     // ── Test C: Stats cache returns cached result immediately ───────────────
 
     it('stats cache returns cached result immediately', async () => {
-        const engine = new EnchantEngine(DATA, '1.21');
+        const engine = EngineFactory.create(DATA, '1.21');
 
         // First call: computes stats and stores them in the stats cache.
-        const result1 = await engine.getFullStats('sword', 30, 'diamond', { threshold: 0.001 });
+        const result1 = await engine.getFullStats('sword', 30, 'diamond', { threshold: 0.001, resultsLimit: 1000 });
 
         // Second call with identical params: stats cache hit, returns the same object.
-        const result2 = await engine.getFullStats('sword', 30, 'diamond', { threshold: 0.001 });
+        const result2 = await engine.getFullStats('sword', 30, 'diamond', { threshold: 0.001, resultsLimit: 1000 });
 
         assert.strictEqual(result1, result2,
             'Second getFullStats call with same params should return the exact same cached object');
-
-        cacheManager.clearAll();
     });
 
     // ── Test E: Cross-tier resumption through combo cache ───────────────────
@@ -133,11 +131,12 @@ describe('Frontier Resumability & Cache Behavior', () => {
     // producing strictly higher accuracy than the coarse run.
 
     it('cross-tier combo cache: deep run resumes from coarse frontier', async () => {
-        const engine = new EnchantEngine(DATA, '1.21');
+        const engine = EngineFactory.create(DATA, '1.21');
 
         // Coarse pass: populates both statsCache and comboCache.
         const coarseResult = await engine.getFullStats('sword', 30, 'diamond', {
-            threshold: 0.01
+            threshold: 0.01,
+            resultsLimit: 1000
         });
 
         // Clear only the statsCache; comboCache retains the coarse frontiers.
@@ -146,7 +145,8 @@ describe('Frontier Resumability & Cache Behavior', () => {
         // Deep pass: statsCache miss forces recomputation, but comboCache hit
         // lets each modLevel search resume from the already-explored coarse frontier.
         const deepResult = await engine.getFullStats('sword', 30, 'diamond', {
-            threshold: 0.0001
+            threshold: 0.0001,
+            resultsLimit: 1000
         });
 
         assert.ok(
@@ -154,14 +154,12 @@ describe('Frontier Resumability & Cache Behavior', () => {
             `Deep run (threshold=0.0001) must produce strictly lower pending mass than coarse run ` +
             `(threshold=0.01). Coarse: ${coarseResult.accounting.pending}, Deep: ${deepResult.accounting.pending}`
         );
-
-        cacheManager.clearAll();
     });
 
     // ── Test D: Ultra result satisfies coarse request via stats cache ────────
 
-    it('ultra result satisfies coarse request via stats cache', async () => {
-        const engine = new EnchantEngine(DATA, '1.21');
+    it('tiered produces same final result as sequential getFullStats calls', async () => {
+        const engine = EngineFactory.create(DATA, '1.21');
 
         // Ultra run first: produces low-uncertainty stats, cached at K_stats.
         // The stats key excludes limit and threshold, so K_stats is the same
@@ -183,6 +181,6 @@ describe('Frontier Resumability & Cache Behavior', () => {
         assert.strictEqual(coarseResult.accuracy, ultraResult.accuracy,
             'Coarse and ultra accuracy must be identical when served from cache');
 
-        cacheManager.clearAll();
+        // Cache is instance-local
     });
 });

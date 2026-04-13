@@ -9,8 +9,7 @@ import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { RefinementService } from '../ui/refinement.js';
 import { WorkerClient } from '../worker/client.js';
-import { EnchantEngine } from '../engine/index.js';
-import { cacheManager } from '../services/index.js';
+import { EnchantEngine, EngineFactory } from '../engine/index.js';
 import { DATA } from '../data/index.js';
 import { isCategoryAvailable } from '../core/registry.js';
 import { MassAccounting } from '../types/mass.js';
@@ -35,7 +34,8 @@ function makeStats(accuracy: number, pending: number = 1 - accuracy): any {
         accuracy, 
         accounting: acc, 
         uncertainty: pending,
-        ranks: {}, any: {}, count: {}, combos: {} 
+        ranks: {}, any: {}, count: {}, combos: {},
+        threshold: accuracy
     };
 }
 
@@ -352,14 +352,11 @@ describe('Integration: RefinementService with mocked WorkerClient', () => {
 // ---------------------------------------------------------------------------
 
 describe('Integration: Version switch and book state reset', () => {
-    afterEach(() => {
-        cacheManager.clearAll();
-    });
 
     it('engine re-initialization reflects new version registry (1.4.6 → 1.3.1)', () => {
         // Simulate what the worker does on WorkerClient.init(newVersion):
         // destroy old engine, create new engine with new version.
-        const engineA = new EnchantEngine(DATA, TEST_DATA.VERSIONS.LEGACY);
+        const engineA = EngineFactory.create(DATA, TEST_DATA.VERSIONS.LEGACY);
         assert.ok(
             engineA.registry.mergedMaterials.has('book'),
             '1.4.6: book material should be available'
@@ -368,7 +365,7 @@ describe('Integration: Version switch and book state reset', () => {
 
         // Simulate re-init: destroy old, create new
         engineA.destroy();
-        const engineB = new EnchantEngine(DATA, TEST_DATA.VERSIONS.CLASSIC);
+        const engineB = EngineFactory.create(DATA, TEST_DATA.VERSIONS.CLASSIC);
         assert.ok(
             !engineB.registry.mergedMaterials.has(TEST_DATA.MATERIALS.BOOK),
             '1.3.1 (classic): book material should NOT be available after version switch'
@@ -405,7 +402,7 @@ describe('Integration: Version switch and book state reset', () => {
 
     it('version switch with book category: getFullStats reflects new version (no books in classic)', async () => {
         // Engine for classic should report book category as unavailable
-        const engine = new EnchantEngine(DATA, TEST_DATA.VERSIONS.CLASSIC);
+        const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.CLASSIC);
         assert.strictEqual(
             isCategoryAvailable(engine.registry, TEST_DATA.ITEMS.BOOK), false,
             'Classic: book category should not be available'
@@ -419,12 +416,9 @@ describe('Integration: Version switch and book state reset', () => {
 // ---------------------------------------------------------------------------
 
 describe('Integration: Guaranteed enchantment accuracy (engine direct)', () => {
-    afterEach(() => {
-        cacheManager.clearAll();
-    });
 
     it('guaranteed enchantment (Sword): Sharpness probability >= 99.99% at level 30', async () => {
-        const engine = new EnchantEngine(DATA, TEST_DATA.VERSIONS.MODERN);
+        const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
         const stats = await engine.getFullStats(TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND, {
             guaranteedFirst: 'Sharpness IV',
             threshold: TEST_DATA.THRESHOLDS.PROB_MIN,
@@ -437,7 +431,7 @@ describe('Integration: Guaranteed enchantment accuracy (engine direct)', () => {
     });
 
     it('guaranteed enchantment (Pickaxe): Efficiency probability >= 99.99% at levels 25, 28, 30', async () => {
-        const engine = new EnchantEngine(DATA, TEST_DATA.VERSIONS.MODERN);
+        const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
         const effId = engine.registry.idMap.get('Efficiency')!;
         // Efficiency IV is impossible at Level 10/20 for Diamond (Enchantability 10). 
         // Using 25, 28, 30 instead.
@@ -456,7 +450,7 @@ describe('Integration: Guaranteed enchantment accuracy (engine direct)', () => {
     });
 
     it('guaranteed book enchantment: Silk Touch exactly 100%', async () => {
-        const engine = new EnchantEngine(DATA, '1.20.1');
+        const engine = EngineFactory.create(DATA, '1.20.1');
         const stats = await engine.getFullStats('book', 30, 'book', {
             guaranteedFirst: 'Silk Touch I',
             threshold: 0.0001,

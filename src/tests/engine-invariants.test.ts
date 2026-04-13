@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { EnchantEngine } from '../engine/index.js';
+import { EnchantEngine, EngineFactory } from '../engine/index.js';
 import { DATA } from '../data/index.js';
 import { ProbUtils, PRECISION } from '../utils/index.js';
 import { ENGINE_DEFAULTS } from '../core/config.js';
@@ -8,7 +8,7 @@ import { ENGINE_DEFAULTS } from '../core/config.js';
 describe('Engine Architectural Invariants', () => {
 
     it('Invariant: Mass Conservation (1.0 Total)', async () => {
-        const engine = new EnchantEngine(DATA, '1.21');
+        const engine = EngineFactory.create(DATA, '1.21');
         const stats = await engine.getFullStats('sword', 30, 'diamond', { threshold: 0.001 });
         
         const acc = stats.accounting;
@@ -21,7 +21,7 @@ describe('Engine Architectural Invariants', () => {
     });
 
     it('Invariant: Static Pruning Floor (No leakage between tiers)', async () => {
-        const engine = new EnchantEngine(DATA, '1.21');
+        const engine = EngineFactory.create(DATA, '1.21');
         
         // Run with a very high threshold (0.1). 
         // Most nodes won't even be expanded, so they should be 'pending', NOT 'sieved'.
@@ -35,7 +35,7 @@ describe('Engine Architectural Invariants', () => {
     });
 
     it('Invariant: Legacy Book Restriction (Pre-1.7.2)', async () => {
-        const engine = new EnchantEngine(DATA, '1.6.4');
+        const engine = EngineFactory.create(DATA, '1.6.4');
         const stats = await engine.getFullStats('book', 30, 'book', { threshold: 0.0001 });
         
         // Verify that no expansion happened beyond count 1

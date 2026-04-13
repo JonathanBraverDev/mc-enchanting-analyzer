@@ -1,56 +1,71 @@
-import { EnchantmentData, CalculationStats, SearchFrontier, RegistryState, SearchConfig, InternalSearchConfig, PackedEnchant, EngineInstrumentation } from '../types/index.js';
-import { LRUCache, ProbUtils, KeyUtils, EnchantUtils, RomanUtils } from '../utils/index.js';
-import { getCategoryId, getMaterialId, getEnchantId, getEligiblePool, isCategoryAvailable, getEnchantability } from '../core/registry.js';
+import { EnchantmentData, CalculationStats, SearchFrontier, RegistryState, SearchConfig, InternalSearchConfig, PackedEnchant, EngineInstrumentation, CacheStats } from '../types/index.js';
+import { ProbUtils, KeyUtils, EnchantUtils, RomanUtils } from '../utils/index.js';
+import { getMaterialId, getEnchantId, getEligiblePool, isCategoryAvailable, getEnchantability } from '../core/registry.js';
 import { RegistryFactory } from '../core/factory.js';
 import { ENGINE_LIMITS } from '../constants/engine.js';
 import { getSearchLimit } from '../core/config.js';
-import { cacheManager } from '../services/index.js';
+import { CacheManager } from '../services/CacheManager.js';
+import { KeyService } from '../services/KeyService.js';
+import { PoolService } from '../services/PoolService.js';
 import { DistributionService } from './distribution.js';
 import { SearchService } from './search.js';
 import { StatAggregator } from './aggregator.js';
 
+export { EngineFactory } from './factory.js';
+
 /**
  * Core math and logic engine for Minecraft Enchanting.
  * Orchestrates distribution calculation, best-first search, and statistics aggregation.
+ * Optimized for high-speed calculation via Dependency Injection.
  */
 export class EnchantEngine {
-    private _registry: RegistryState;
+    private readonly _registry: RegistryState;
     get registry(): RegistryState { return this._registry; }
 
-    constructor(data: EnchantmentData, version: string) {
+    constructor(
+        data: EnchantmentData,
+        version: string,
+        private readonly cache: CacheManager,
+        private readonly keyService: KeyService,
+        private readonly poolService: PoolService,
+        private readonly distributionService: DistributionService,
+        private readonly searchService: SearchService,
+        private readonly statAggregator: StatAggregator
+    ) {
         this._registry = RegistryFactory.build(data, version);
     }
 
     /** Clears all engine-level caches. */
     public resetCaches(): void {
-        cacheManager.clearAll();
+        this.cache.clearAll();
     }
 
     /** Clears only the stats cache. */
     public resetStatsCache(): void {
-        cacheManager.clearStats();
+        this.cache.clearStats();
     }
 
-    private getPackedKey(cat: string, modLevel: number, mat: string, guaranteedFirst: string | null): number {
-        const catId = getCategoryId(this.registry, cat);
-        const matId = getMaterialId(this.registry, mat);
-        const parsed = EnchantUtils.parse(guaranteedFirst, this.registry.data.constants.ROMAN_MAP);
-        const guaranteedId = parsed ? getEnchantId(this.registry, parsed.name) : ENGINE_LIMITS.UNKNOWN_ENCHANT_ID;
-
-        return KeyUtils.getPackedKey(catId, matId, modLevel, guaranteedId);
+    /** Returns current cache performance metrics. */
+    public getCacheMetrics(): { distCache: CacheStats; poolCache: CacheStats; frontierCache: CacheStats } {
+        return this.cache.getEngineMetrics();
     }
 
     public destroy(): void {
-        // Shared caches are not cleared on destroy unless explicitly requested via resetCaches()
+        // Shared caches are not cleared on destroy unless explicitly requested
     }
 
-    public getModifiedLevelDist(xp: number, enchantability: number, _instrumentation?: EngineInstrumentation): { [level: number]: bigint } {
-        return DistributionService.getModifiedLevelDist(this.registry.version, xp, enchantability, this._registry, cacheManager);
+    /**
+     * Retrieves the probability distribution of Modified Levels.
+     */
+    public getModifiedLevelDist(xp: number, enchantability: number, instrumentation?: EngineInstrumentation): { [level: number]: bigint } {
+        return this.distributionService.getModifiedLevelDist(this.registry, xp, enchantability, this.cache, instrumentation);
     }
 
+    /**
+     * Returns a list of eligible enchantments filtered by conflict bitset.
+     */
     public getEligibleListNumeric(cat: string, level: number, bitset: bigint = 0n): number[] {
-        const pool = getEligiblePool(this.registry, cat, level, cacheManager, this.registry.version);
-        return pool.filter(p => (bitset & (1n << BigInt(p >> 8))) === 0n);
+        return this.poolService.getEligibleListNumeric(this.registry, cat, level, bitset);
     }
 
     /**
@@ -67,17 +82,23 @@ export class EnchantEngine {
         instrumentation?: EngineInstrumentation
     ): Promise<SearchFrontier> {
         const limit = getSearchLimit(cat, ProbUtils.toNumber(threshold), maxIterations);
-        const cacheKey = this.getPackedKey(cat, modLevel, mat, guaranteedFirst);
+        const cacheKey = this.keyService.getPackedKey(this.registry, cat, modLevel, mat, guaranteedFirst);
         
-        const cached = cat === "book" ? cacheManager.getBook(this.registry.version, cacheKey) : cacheManager.getCombo(this.registry.version, cacheKey);
+        const cached = cat === "book" ? this.cache.getBook(this.registry.version, cacheKey) : this.cache.getCombo(this.registry.version, cacheKey);
         if (cached && cached.threshold <= threshold) return cached;
 
-        const result = await SearchService.calculateCombinations(
-            this.registry, cat, modLevel, mat, guaranteedFirst, threshold, limit, cached, resultsLimit, undefined, undefined, instrumentation
+        const result = await this.searchService.calculateCombinations(
+            this.registry, cat, modLevel, guaranteedFirst, cached, {
+                threshold,
+                limit,
+                resultsLimit,
+                instrumentation,
+                // Timing is optionally passed via a dedicated tier/config if needed, but not here for brevity
+            }
         );
 
-        if (cat === "book") cacheManager.setBook(this.registry.version, cacheKey, result);
-        else cacheManager.setCombo(this.registry.version, cacheKey, result);
+        if (cat === "book") this.cache.setBook(this.registry.version, cacheKey, result);
+        else this.cache.setCombo(this.registry.version, cacheKey, result);
         
         return result;
     }
@@ -94,18 +115,8 @@ export class EnchantEngine {
         onTierComplete: (stats: CalculationStats, tierIndex: number) => void,
         config?: Partial<SearchConfig>
     ): Promise<CalculationStats> {
-        if (!Number.isFinite(xp) || xp <= 0) {
-            throw new Error(`Invalid XP level: ${xp}. XP must be a positive integer.`);
-        }
-        if (xp > ENGINE_LIMITS.MAX_XP_LEVEL) {
-            throw new Error(`XP level ${xp} exceeds the maximum of ${ENGINE_LIMITS.MAX_XP_LEVEL}.`);
-        }
-        if (!isCategoryAvailable(this.registry, cat)) {
-            throw new Error(`Unknown or unavailable category: "${cat}" in version ${this.registry.version}.`);
-        }
-        if (getMaterialId(this.registry, mat) === ENGINE_LIMITS.UNKNOWN_MATERIAL_ID) {
-            throw new Error(`Unknown material: "${mat}".`);
-        }
+        this.validateRequest(cat, xp, mat, guaranteedFirst);
+
         const {
             threshold = 0.0001,
             signal,
@@ -118,20 +129,11 @@ export class EnchantEngine {
             timing
         } = config ?? {};
 
-        const catId = getCategoryId(this.registry, cat);
-        const matId = getMaterialId(this.registry, mat);
-        const parsedG = EnchantUtils.parse(guaranteedFirst, this.registry.data.constants.ROMAN_MAP);
-        const guaranteedId = parsedG ? getEnchantId(this.registry, parsedG.name) : ENGINE_LIMITS.UNKNOWN_ENCHANT_ID;
+        const cacheKey = this.keyService.getStatsKey(this.registry, cat, xp, mat, guaranteedFirst);
 
-        const cacheKey = KeyUtils.getStatsKey(catId, matId, xp, guaranteedId);
-
-        const cachedStats = cacheManager.getStats(this.registry.version, cacheKey);
+        const cachedStats = this.cache.getStats(this.registry.version, cacheKey);
         const finestThreshold = tiers[tiers.length - 1].threshold;
         if (cachedStats && cachedStats.threshold <= finestThreshold) return cachedStats;
-
-        if (guaranteedFirst) {
-            this.validateGuaranteedFirst(cat, xp, mat, guaranteedFirst);
-        }
 
         const internalConfig: InternalSearchConfig = {
             threshold,
@@ -142,31 +144,31 @@ export class EnchantEngine {
             resultsLimit,
             useCache,
             instrumentation,
-            timing
+            timing,
+            getCacheMetrics: () => ({ 
+                cacheNodes: this.cache.getTotalCachedNodes(), 
+                cacheResults: this.cache.getTotalCachedResults() 
+            })
         };
 
         const wrappedOnTierComplete = (stats: CalculationStats, tierIndex: number) => {
             onTierComplete(stats, tierIndex);
-            const currentCached = cacheManager.getStats(this.registry.version, cacheKey);
+            const currentCached = this.cache.getStats(this.registry.version, cacheKey);
             if (!currentCached || stats.accuracy > currentCached.accuracy) {
-                cacheManager.setStats(this.registry.version, cacheKey, stats);
+                this.cache.setStats(this.registry.version, cacheKey, stats);
             }
         };
 
-        const finalStats = await StatAggregator.getFullStatsTiered(
+        const finalStats = await this.statAggregator.getFullStatsTiered(
             this.registry, cat, xp, mat, guaranteedFirst, tiers, wrappedOnTierComplete, internalConfig
         );
 
-        const currentCached = cacheManager.getStats(this.registry.version, cacheKey);
+        const currentCached = this.cache.getStats(this.registry.version, cacheKey);
         if (!currentCached || finalStats.accuracy > currentCached.accuracy) {
-            cacheManager.setStats(this.registry.version, cacheKey, finalStats);
+            this.cache.setStats(this.registry.version, cacheKey, finalStats);
         }
 
         return finalStats;
-    }
-
-    public getCacheMetrics(): { distCache: CacheStats; poolCache: CacheStats; frontierCache: CacheStats } {
-        return cacheManager.getEngineMetrics();
     }
 
     /**
@@ -178,18 +180,7 @@ export class EnchantEngine {
         mat: string,
         config: SearchConfig = {}
     ): Promise<CalculationStats> {
-        if (!Number.isFinite(xp) || xp <= 0) {
-            throw new Error(`Invalid XP level: ${xp}. XP must be a positive integer.`);
-        }
-        if (xp > ENGINE_LIMITS.MAX_XP_LEVEL) {
-            throw new Error(`XP level ${xp} exceeds the maximum of ${ENGINE_LIMITS.MAX_XP_LEVEL}.`);
-        }
-        if (!isCategoryAvailable(this.registry, cat)) {
-            throw new Error(`Unknown or unavailable category: "${cat}" in version ${this.registry.version}.`);
-        }
-        if (getMaterialId(this.registry, mat) === ENGINE_LIMITS.UNKNOWN_MATERIAL_ID) {
-            throw new Error(`Unknown material: "${mat}".`);
-        }
+        this.validateRequest(cat, xp, mat, config.guaranteedFirst ?? null);
 
         const {
             guaranteedFirst = null,
@@ -204,19 +195,10 @@ export class EnchantEngine {
             timing
         } = config;
 
-        const catId = getCategoryId(this.registry, cat);
-        const matId = getMaterialId(this.registry, mat);
-        const parsedG = EnchantUtils.parse(guaranteedFirst, this.registry.data.constants.ROMAN_MAP);
-        const guaranteedId = parsedG ? getEnchantId(this.registry, parsedG.name) : ENGINE_LIMITS.UNKNOWN_ENCHANT_ID;
+        const cacheKey = this.keyService.getStatsKey(this.registry, cat, xp, mat, guaranteedFirst);
 
-        const cacheKey = KeyUtils.getStatsKey(catId, matId, xp, guaranteedId);
-
-        const cachedStats = cacheManager.getStats(this.registry.version, cacheKey);
+        const cachedStats = this.cache.getStats(this.registry.version, cacheKey);
         if (cachedStats && cachedStats.threshold <= threshold) return cachedStats;
-
-        if (guaranteedFirst) {
-            this.validateGuaranteedFirst(cat, xp, mat, guaranteedFirst);
-        }
 
         const internalConfig: InternalSearchConfig = {
             threshold,
@@ -225,25 +207,52 @@ export class EnchantEngine {
             maxIterations,
             summaryLimit,
             resultsLimit,
-            getExtendedCache: (ml) => cat === "book" ? cacheManager.getBook(this.registry.version, KeyUtils.getPackedKey(catId, matId, ml, guaranteedId)) : cacheManager.getCombo(this.registry.version, KeyUtils.getPackedKey(catId, matId, ml, guaranteedId)),
+            getExtendedCache: (ml) => {
+                const pk = this.keyService.getPackedKey(this.registry, cat, ml, mat, guaranteedFirst);
+                return cat === "book" ? this.cache.getBook(this.registry.version, pk) : this.cache.getCombo(this.registry.version, pk);
+            },
             setExtendedCache: (ml, frontier) => {
-                if (cat === "book") cacheManager.setBook(this.registry.version, KeyUtils.getPackedKey(catId, matId, ml, guaranteedId), frontier);
-                else cacheManager.setCombo(this.registry.version, KeyUtils.getPackedKey(catId, matId, ml, guaranteedId), frontier);
+                const pk = this.keyService.getPackedKey(this.registry, cat, ml, mat, guaranteedFirst);
+                if (cat === "book") this.cache.setBook(this.registry.version, pk, frontier);
+                else this.cache.setCombo(this.registry.version, pk, frontier);
             },
             instrumentation,
             timing,
-            getCacheMetrics: () => this.getCacheMetrics() as any
+            getCacheMetrics: () => ({ 
+                cacheNodes: this.cache.getTotalCachedNodes(), 
+                cacheResults: this.cache.getTotalCachedResults() 
+            })
         };
-        const finalStats = await StatAggregator.getFullStats(
+
+        const finalStats = await this.statAggregator.getFullStats(
             this.registry, cat, xp, mat, guaranteedFirst, internalConfig
         );
 
-        const currentCached = cacheManager.getStats(this.registry.version, cacheKey);
+        const currentCached = this.cache.getStats(this.registry.version, cacheKey);
         if (!currentCached || finalStats.accuracy > currentCached.accuracy) {
-            cacheManager.setStats(this.registry.version, cacheKey, finalStats);
+            this.cache.setStats(this.registry.version, cacheKey, finalStats);
         }
 
         return finalStats;
+    }
+
+
+    private validateRequest(cat: string, xp: number, mat: string, guaranteedFirst: string | null): void {
+        if (!Number.isFinite(xp) || xp <= 0) {
+            throw new Error(`Invalid XP level: ${xp}. XP must be a positive integer.`);
+        }
+        if (xp > ENGINE_LIMITS.MAX_XP_LEVEL) {
+            throw new Error(`XP level ${xp} exceeds the maximum of ${ENGINE_LIMITS.MAX_XP_LEVEL}.`);
+        }
+        if (!isCategoryAvailable(this.registry, cat)) {
+            throw new Error(`Unknown or unavailable category: "${cat}" in version ${this.registry.version}.`);
+        }
+        if (getMaterialId(this.registry, mat) === ENGINE_LIMITS.UNKNOWN_MATERIAL_ID) {
+            throw new Error(`Unknown material: "${mat}".`);
+        }
+        if (guaranteedFirst) {
+            this.validateGuaranteedFirst(cat, xp, mat, guaranteedFirst);
+        }
     }
 
     /**
@@ -282,7 +291,7 @@ export class EnchantEngine {
         const levels = Object.keys(dist).map(Number);
         
         const isPossible = levels.some(ml => {
-            const elPool = getEligiblePool(this.registry, cat, ml, this.poolCache);
+            const elPool = getEligiblePool(this.registry, cat, ml, this.cache, this.registry.version);
             return elPool.some(p => (p >> 8) === id && (p & 0xFF) === parsed.rank);
         });
 
@@ -290,5 +299,4 @@ export class EnchantEngine {
             throw new Error(`Enchantment "${guaranteedFirst}" is impossible to obtain for category "${cat}" at XP level ${xp} with "${mat}".`);
         }
     }
-
 }

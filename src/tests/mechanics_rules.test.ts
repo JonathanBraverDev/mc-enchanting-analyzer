@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { EnchantEngine } from '../engine/index.js';
+import { EnchantEngine, EngineFactory } from '../engine/index.js';
 import { DATA } from '../data/index.js';
 import { ProbUtils } from '../utils/index.js';
 import { getEnchantId } from '../core/registry.js';
@@ -9,7 +9,7 @@ describe('Mechanics Rules Test Suite', () => {
 
     describe('1. Version-Specific Level Caps (Legacy 50 vs Modern 30)', () => {
         it('1.0: Level 50 should be possible and yield higher-tier results', async () => {
-            const engine10 = new EnchantEngine(DATA, '1.0');
+            const engine10 = EngineFactory.create(DATA, '1.0');
             const stats50 = await engine10.getFullStats('sword', 50, 'diamond', { threshold: 0.001 });
             const sharpnessId = getEnchantId(engine10.registry,'Sharpness');
             
@@ -23,13 +23,13 @@ describe('Mechanics Rules Test Suite', () => {
         });
 
         it('1.3.1: Level 30 cap should be the limit (UI level, but engine should handle it)', async () => {
-            const engine131 = new EnchantEngine(DATA, '1.3.1');
+            const engine131 = EngineFactory.create(DATA, '1.3.1');
             const stats30 = await engine131.getFullStats('sword', 30, 'diamond', { threshold: 0.001 });
             const sharpnessId = getEnchantId(engine131.registry,'Sharpness');
             const sharpIVId = (sharpnessId << 8) | 4;
             
             // In 1.3.1, the divisor is 4, making high levels harder to reach than 1.0 (divisor 2)
-            const engine10 = new EnchantEngine(DATA, '1.0');
+            const engine10 = EngineFactory.create(DATA, '1.0');
             const stats30_10 = await engine10.getFullStats('sword', 30, 'diamond', { threshold: 0.001 });
             
             // Stats 30 in 1.3.1 should be "worse" than Stats 30 in 1.0 due to divisor and bonus range
@@ -39,10 +39,10 @@ describe('Mechanics Rules Test Suite', () => {
 
     describe('2. Modified Level Distribution Accuracy', () => {
         it('should correctly apply enchantability_bonus_divisor', () => {
-            const engine10 = new EnchantEngine(DATA, '1.0'); // Divisor 2
+            const engine10 = EngineFactory.create(DATA, '1.0'); // Divisor 2
             const dist10 = engine10.getModifiedLevelDist(30, 10);
             
-            const engine131 = new EnchantEngine(DATA, '1.3.1'); // Divisor 4
+            const engine131 = EngineFactory.create(DATA, '1.3.1'); // Divisor 4
             const dist131 = engine131.getModifiedLevelDist(30, 10);
 
             const avg10 = Object.entries(dist10).reduce((acc, [lvl, prob]) => acc + Number(lvl) * ProbUtils.toNumber(prob), 0);

@@ -7,21 +7,22 @@
  */
 import { describe, it, before } from 'node:test';
 import assert from 'node:assert';
-import { EnchantEngine } from '../engine/index.js';
+import { EnchantEngine, EngineFactory } from '../engine/index.js';
 import { DATA } from '../data/index.js';
+import { PackedEnchant, PackedCombo } from '../types/index.js';
 import { ComboUtils } from '../utils/domain/ComboUtils.js';
 
 // Build once at module level.
-const engine = new EnchantEngine(DATA, '1.21');
+const engine = EngineFactory.create(DATA, '1.21');
 const reg = engine.registry;
 
 /** Returns a PackedEnchant value: (enchant_id << 8) | rank */
-const pe = (name: string, rank: number): number => (reg.idMap.get(name)! << 8) | rank;
+const pe = (name: string, rank: number): PackedEnchant => ((reg.idMap.get(name)! << 8) | rank) as PackedEnchant;
 
 describe('ComboUtils', () => {
     // ── Helpers ──────────────────────────────────────────────────────────────
 
-    let SHARP4: number, UNBR3: number, FIRE2: number, FORT3: number;
+    let SHARP4: PackedEnchant, UNBR3: PackedEnchant, FIRE2: PackedEnchant, FORT3: PackedEnchant;
     let SHARP_ID: number, UNBR_ID: number;
 
     before(() => {
@@ -50,11 +51,11 @@ describe('ComboUtils', () => {
     // ── pack / unpack ─────────────────────────────────────────────────────
 
     it('pack([], null) === 0', () => {
-        assert.strictEqual(ComboUtils.pack([], null, reg.enchantToIndex), 0);
+        assert.strictEqual(ComboUtils.pack([], null, reg.enchantToIndex), (0 as PackedCombo));
     });
 
     it('unpack(0) returns empty array', () => {
-        assert.deepStrictEqual(ComboUtils.unpack(0, reg.indexToEnchant), []);
+        assert.deepStrictEqual(ComboUtils.unpack((0 as PackedCombo), reg.indexToEnchant), []);
     });
 
     it('pack/unpack roundtrip — single enchant', () => {
@@ -92,7 +93,7 @@ describe('ComboUtils', () => {
     // ── getCount ──────────────────────────────────────────────────────────
 
     it('getCount returns 0 for empty combo', () => {
-        assert.strictEqual(ComboUtils.getCount(0), 0);
+        assert.strictEqual(ComboUtils.getCount((0 as PackedCombo)), 0);
     });
 
     it('getCount returns correct count for 1–3 enchants', () => {
@@ -138,9 +139,9 @@ describe('ComboUtils', () => {
     });
 
     it('removeAdditional on empty combo returns [0]', () => {
-        const results = ComboUtils.removeAdditional(0, null, reg.indexToEnchant);
+        const results = ComboUtils.removeAdditional((0 as PackedCombo), null, reg.indexToEnchant);
         assert.strictEqual(results.length, 1);
-        assert.strictEqual(results[0], 0);
+        assert.strictEqual(results[0], (0 as PackedCombo));
     });
 
     it('removeAdditional without guarantee returns N results for N-enchant input', () => {

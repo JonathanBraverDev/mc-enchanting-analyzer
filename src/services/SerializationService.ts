@@ -42,7 +42,8 @@ export class SerializationService {
             anyKeys, anyProbs,
             counts, 
             accuracy: stats.accuracy,
-            accounting: stats.accounting
+            accounting: stats.accounting,
+            threshold: stats.threshold
         };
 
         return {
@@ -63,7 +64,8 @@ export class SerializationService {
         const stats: CalculationStats = { 
             ranks: {}, any: {}, count: {}, combos: {}, 
             accuracy: compact.accuracy,
-            accounting: compact.accounting
+            accounting: compact.accounting,
+            threshold: compact.threshold
         };
         
         for (let i = 0; i < compact.comboKeys.length; i++) {

@@ -1,11 +1,12 @@
-import { EnchantEngine } from '../engine/index.js';
+import { EngineFactory } from '../engine/index.js';
 import { DATA } from '../data/index.js';
-import { cacheManager } from '../services/index.js';
 
 async function runProfile() {
     console.log('--- Enchantment Engine Performance Profile ---');
 
-    const engine = new EnchantEngine(DATA, '1.20.1');
+    const version = '1.21';
+    const engine = EngineFactory.create(DATA, version);
+    
     const categories = ['helmet', 'sword', 'book'];
     const materials = ['netherite', 'diamond'];
     const levels = [30];
@@ -18,7 +19,7 @@ async function runProfile() {
         }
     }
 
-    cacheManager.clearAll();
+    engine.resetCaches();
     console.log('\nRunning Benchmarks (Cold Cache)...');
 
     const start = performance.now();
@@ -47,7 +48,7 @@ async function runProfile() {
     console.log(`Total Warm: ${warmDuration.toFixed(2)}ms`);
     console.log(`Speedup: ${(coldDuration / warmDuration).toFixed(2)}x`);
 
-    const metrics = cacheManager.getMetrics();
+    const metrics = engine.getCacheMetrics();
     console.log('\n--- Cache Metrics ---');
     console.log(JSON.stringify(metrics, null, 2));
 }

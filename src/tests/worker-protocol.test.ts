@@ -8,8 +8,7 @@
  */
 import { describe, it, before, after, afterEach } from 'node:test';
 import assert from 'node:assert';
-import { EnchantEngine } from '../engine/index.js';
-import { cacheManager } from '../services/index.js';
+import { EnchantEngine, EngineFactory } from '../engine/index.js';
 import { DATA } from '../data/index.js';
 import { SerializationService } from '../services/index.js';
 import type { WorkerResponse } from '../worker/protocol.js';
@@ -151,7 +150,7 @@ describe('Worker: getFullStatsProgressive handler', () => {
         const workerStats = SerializationService.deserialize(resultMsg.payload.stats);
 
         // Compare against a fresh direct engine call
-        const engine = new EnchantEngine(DATA, TEST_DATA.VERSIONS.MODERN);
+        const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
         const directStats = await engine.getFullStatsProgressive(
             TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND, null,
             [
@@ -160,7 +159,7 @@ describe('Worker: getFullStatsProgressive handler', () => {
             ],
             () => {}
         );
-        cacheManager.clearAll();
+        engine.resetCaches();
 
         const accuracyDiff = Math.abs(workerStats.accuracy - directStats.accuracy);
         assert.ok(
