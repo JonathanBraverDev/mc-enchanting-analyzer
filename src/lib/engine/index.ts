@@ -11,8 +11,6 @@ import { DistributionService } from './distribution.js';
 import { SearchService } from './search.js';
 import { StatAggregator } from './aggregator.js';
 
-export { EngineFactory } from './factory.js';
-
 /**
  * Core math and logic engine for Minecraft Enchanting.
  * Orchestrates distribution calculation, best-first search, and statistics aggregation.

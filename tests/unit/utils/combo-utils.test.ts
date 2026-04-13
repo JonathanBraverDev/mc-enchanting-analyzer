@@ -7,7 +7,7 @@
  */
 import { describe, it, before } from 'node:test';
 import assert from 'node:assert';
-import { EnchantEngine, EngineFactory } from '../../../src/lib/engine/index.js';
+import { EnchantEngine, EnchantEngine } from '../../../src/lib/engine/index.js'; import { EngineFactory } from '../../../src/lib/engine/factory.js';
 import { DATA } from '../../../src/lib/data/index.js';
 import { PackedEnchant, PackedCombo } from '../../../src/lib/types/index.js';
 import { ComboUtils } from '../../../src/lib/utils/domain/ComboUtils.js';
@@ -199,4 +199,5 @@ describe('ComboUtils', () => {
         assert.ok(ids.includes(SHARP_ID));
     });
 });
+
 

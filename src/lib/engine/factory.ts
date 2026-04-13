@@ -12,10 +12,18 @@ import { CACHE_CONFIG } from '../constants/engine.js';
  * Factory for creating Enchantment Engine instances with default dependencies.
  */
 export class EngineFactory {
+    private static readonly instances = new Map<string, EnchantEngine>();
+
     /**
-     * Creates a fully-wired EnchantEngine with standard production dependencies.
+     * Creates or retrieves a fully-wired EnchantEngine for the given version.
+     * Reuses instances to optimize registry building and cache warming.
      */
     public static create(data: EnchantmentData, version: string, customConfig?: any): EnchantEngine {
+        const cacheKey = version;
+        if (this.instances.has(cacheKey)) {
+            return this.instances.get(cacheKey)!;
+        }
+
         const cacheConfig = {
             comboOtherSize: CACHE_CONFIG.COMBO_OTHER_SIZE,
             comboBookSize: CACHE_CONFIG.COMBO_BOOK_SIZE,
@@ -31,7 +39,7 @@ export class EngineFactory {
         const searchService = new SearchService(cache);
         const statAggregator = new StatAggregator(cache, distributionService, searchService);
 
-        return new EnchantEngine(
+        const engine = new EnchantEngine(
             data,
             version,
             cache,
@@ -41,5 +49,15 @@ export class EngineFactory {
             searchService,
             statAggregator
         );
+
+        this.instances.set(cacheKey, engine);
+        return engine;
+    }
+
+    /**
+     * Clears the internal instance cache.
+     */
+    public static clearCaches(): void {
+        this.instances.clear();
     }
 }

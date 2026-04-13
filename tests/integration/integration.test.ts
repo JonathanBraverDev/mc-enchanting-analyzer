@@ -9,7 +9,7 @@ import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { RefinementService } from '../../src/ui/refinement.js';
 import { WorkerClient } from '../../src/worker/client.js';
-import { EnchantEngine, EngineFactory } from '../../src/lib/engine/index.js';
+import { EnchantEngine, EnchantEngine } from '../../src/lib/engine/index.js'; import { EngineFactory } from '../../src/lib/engine/factory.js';
 import { DATA } from '../../src/lib/data/index.js';
 import { isCategoryAvailable } from '../../src/lib/core/registry.js';
 import { MassAccounting } from '../../src/lib/types/mass.js';
@@ -459,4 +459,5 @@ describe('Integration: Guaranteed enchantment accuracy (engine direct)', () => {
         assert.strictEqual(stats.any[silkTouchId], 1.0, 'Silk Touch probability should be exactly 1.0');
     });
 });
+
 

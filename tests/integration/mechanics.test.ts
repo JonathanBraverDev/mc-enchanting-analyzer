@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { EngineFactory } from '../../src/lib/engine/index.js';
+import { EnchantEngine } from '../../src/lib/engine/index.js'; import { EngineFactory } from '../../src/lib/engine/factory.js';
 import { DATA } from '../../src/lib/data/index.js';
 import { ProbUtils } from '../../src/lib/utils/index.js';
 import { getEnchantId, getCategoryPool } from '../../src/lib/core/registry.js';
@@ -94,4 +94,5 @@ describe('Minecraft Mechanics Integration Tests', () => {
         });
     });
 });
+
 

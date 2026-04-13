@@ -17,7 +17,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { global_enchantments, enchantment_groups } from '../../../src/lib/data/enchantments.js';
-import { EnchantEngine, EngineFactory } from '../../../src/lib/engine/index.js';
+import { EnchantEngine, EnchantEngine } from '../../../src/lib/engine/index.js'; import { EngineFactory } from '../../../src/lib/engine/factory.js';
 import { DATA } from '../../../src/lib/data/index.js';
 import { hasConflict, getEnchantId } from '../../../src/lib/core/registry.js';
 import { versions } from '../../../src/lib/data/versions.js';
@@ -258,4 +258,5 @@ describe('Data integrity: material enchantability coverage', () => {
         assert.deepStrictEqual(bad, [], `Enchantability lookup failures:\n${bad.join('\n')}`);
     });
 });
+
 

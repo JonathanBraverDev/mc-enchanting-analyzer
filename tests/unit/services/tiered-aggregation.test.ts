@@ -7,7 +7,7 @@
  */
 import { describe, it, afterEach } from 'node:test';
 import assert from 'node:assert';
-import { EnchantEngine, EngineFactory } from '../../../src/lib/engine/index.js';
+import { EnchantEngine, EnchantEngine } from '../../../src/lib/engine/index.js'; import { EngineFactory } from '../../../src/lib/engine/factory.js';
 import { StatAggregator } from '../../../src/lib/engine/aggregator.js';
 import { DistributionService } from '../../../src/lib/engine/distribution.js';
 import { SearchService } from '../../../src/lib/engine/search.js';
@@ -290,4 +290,5 @@ describe('EnchantEngine.getFullStatsProgressive', () => {
         );
     });
 });
+
 

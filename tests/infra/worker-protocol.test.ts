@@ -8,7 +8,7 @@
  */
 import { describe, it, before, after, afterEach } from 'node:test';
 import assert from 'node:assert';
-import { EnchantEngine, EngineFactory } from '../../src/lib/engine/index.js';
+import { EnchantEngine, EnchantEngine } from '../../src/lib/engine/index.js'; import { EngineFactory } from '../../src/lib/engine/factory.js';
 import { DATA } from '../../src/lib/data/index.js';
 import { SerializationService } from '../../src/lib/services/index.js';
 import type { WorkerResponse } from '../../src/worker/protocol.js';
@@ -173,4 +173,5 @@ describe('Worker: getFullStatsProgressive handler', () => {
         );
     });
 });
+
 

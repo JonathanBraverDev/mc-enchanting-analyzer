@@ -1,4 +1,5 @@
-export { EnchantEngine, EngineFactory } from './engine/index.js';
+export { EnchantEngine } from './engine/index.js';
+export { EngineFactory } from './engine/factory.js';
 export * from './core/registry.js';
 export { DATA } from './data/index.js';
 export * from './types/index.js';

@@ -16,7 +16,7 @@
  */
 import { describe, it, afterEach } from 'node:test';
 import assert from 'node:assert';
-import { EnchantEngine, EngineFactory } from '../../../src/lib/engine/index.js';
+import { EnchantEngine, EnchantEngine } from '../../../src/lib/engine/index.js'; import { EngineFactory } from '../../../src/lib/engine/factory.js';
 import { DATA } from '../../../src/lib/data/index.js';
 import { TEST_DATA } from '../../infra/test-data.js';
 
@@ -113,4 +113,5 @@ describe('Probability Conservation', () => {
         );
     });
 });
+
 
