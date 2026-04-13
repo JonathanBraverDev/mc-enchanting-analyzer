@@ -7,3 +7,6 @@
 
 # chore: repository restructuring (automated migration)
 80a158987ce0598579dd0514650a0d3447af8e29
+
+# refactor: reorganize test suite into tiered hierarchy
+54b858706de42eed12a283a8f35548ee9d476764
