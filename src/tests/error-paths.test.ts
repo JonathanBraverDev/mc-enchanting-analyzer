@@ -1,12 +1,13 @@
 import { test, describe, it } from 'node:test';
 import assert from 'node:assert';
 import { EnchantEngine } from '../engine/index.js';
+import { cacheManager } from '../services/index.js';
 import { DATA } from '../data/index.js';
 import { ENGINE_DEFAULTS } from '../core/config.js';
 
 describe('Error Path Tests', () => {
     test.afterEach(() => {
-        EnchantEngine.clearAllEngines();
+        cacheManager.clearAll();
     });
 
     describe('1. Invalid version strings', () => {

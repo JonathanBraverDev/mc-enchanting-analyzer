@@ -6,6 +6,7 @@ import { PackedCombo, SearchFrontier, RegistryState, EngineInstrumentation, Mass
 import { FrontierFactory } from './frontier.js';
 import { ProbabilityMassTracker } from './ProbabilityMassTracker.js';
 import { SearchProcessor } from './SearchProcessor.js';
+import { cacheManager } from '../services/index.js';
 
 /**
  * Service for the Best-First search of enchantment combinations.
@@ -25,7 +26,6 @@ export class SearchService {
         limit: number,
         existingFrontier?: SearchFrontier,
         resultsLimit: number = ENGINE_LIMITS.MAX_RESULTS_SIZE,
-        poolCache?: any,
         signal?: AbortSignal,
         instrumentation?: EngineInstrumentation,
         _floor: bigint = threshold,
@@ -47,7 +47,7 @@ export class SearchService {
         const { results, queue, tracker } = frontier;
         
         const guaranteedFirstId = FrontierFactory.getGuaranteedFirstId(registry, guaranteedFirst);
-        const initialPool = getEligiblePool(registry, cat, modLevel, poolCache);
+        const initialPool = getEligiblePool(registry, cat, modLevel, cacheManager);
         const poolWeights = initialPool.map(e => registry.weightMap[e >> 8]);
         const initialTotalWeight = poolWeights.reduce((a, b) => a + b, 0);
 

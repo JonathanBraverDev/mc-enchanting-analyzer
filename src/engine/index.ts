@@ -4,6 +4,7 @@ import { getCategoryId, getMaterialId, getEnchantId, getEligiblePool, isCategory
 import { RegistryFactory } from '../core/factory.js';
 import { ENGINE_LIMITS } from '../constants/engine.js';
 import { getSearchLimit } from '../core/config.js';
+import { cacheManager } from '../services/index.js';
 import { DistributionService } from './distribution.js';
 import { SearchService } from './search.js';
 import { StatAggregator } from './aggregator.js';
@@ -13,31 +14,21 @@ import { StatAggregator } from './aggregator.js';
  * Orchestrates distribution calculation, best-first search, and statistics aggregation.
  */
 export class EnchantEngine {
-    private static allEngines: Set<WeakRef<EnchantEngine>> = new Set();
-
-
     private _registry: RegistryState;
     get registry(): RegistryState { return this._registry; }
-    private distCache = new Map<string, { [level: number]: bigint }>();
-    private poolCache = new LRUCache<string, PackedEnchant[]>(200);
-    private comboCache = new LRUCache<number, SearchFrontier>(128); // Will be centralized in CacheManager
-    private bookComboCache = new LRUCache<number, SearchFrontier>(64);
-    private statsCache = new LRUCache<number, CalculationStats>(8);
 
     constructor(data: EnchantmentData, version: string) {
         this._registry = RegistryFactory.build(data, version);
-        EnchantEngine.allEngines.add(new WeakRef(this));
     }
 
-    /** Clears the combo and stats caches. Useful in tests to force fresh computation. */
+    /** Clears all engine-level caches. */
     public resetCaches(): void {
-        this.comboCache.clear();
-        this.statsCache.clear();
+        cacheManager.clearAll();
     }
 
-    /** Clears only the stats cache, leaving combo caches intact for cross-tier resumption tests. */
+    /** Clears only the stats cache. */
     public resetStatsCache(): void {
-        this.statsCache.clear();
+        cacheManager.clearStats();
     }
 
     private getPackedKey(cat: string, modLevel: number, mat: string, guaranteedFirst: string | null): number {
@@ -49,50 +40,16 @@ export class EnchantEngine {
         return KeyUtils.getPackedKey(catId, matId, modLevel, guaranteedId);
     }
 
-    public static clearAllEngines(): void {
-        this.clearAllCaches();
-        this.allEngines.clear();
-    }
-
-    public static clearAllCaches(): void {
-        const dead: WeakRef<EnchantEngine>[] = [];
-        for (const ref of this.allEngines) {
-            const engine = ref.deref();
-            if (engine) {
-                engine.distCache.clear();
-                engine.poolCache.clear();
-                engine.comboCache.clear();
-                engine.bookComboCache.clear();
-                engine.statsCache.clear();
-            } else {
-                dead.push(ref);
-            }
-        }
-        for (const ref of dead) {
-            this.allEngines.delete(ref);
-        }
-    }
-
     public destroy(): void {
-        this.distCache.clear();
-        this.poolCache.clear();
-        this.comboCache.clear();
-        this.bookComboCache.clear();
-        this.statsCache.clear();
-        for (const ref of EnchantEngine.allEngines) {
-            if (ref.deref() === this) {
-                EnchantEngine.allEngines.delete(ref);
-                break;
-            }
-        }
+        // Shared caches are not cleared on destroy unless explicitly requested via resetCaches()
     }
 
     public getModifiedLevelDist(xp: number, enchantability: number, _instrumentation?: EngineInstrumentation): { [level: number]: bigint } {
-        return DistributionService.getModifiedLevelDist(xp, enchantability, this._registry, this.distCache);
+        return DistributionService.getModifiedLevelDist(this.registry.version, xp, enchantability, this._registry, cacheManager);
     }
 
     public getEligibleListNumeric(cat: string, level: number, bitset: bigint = 0n): number[] {
-        const pool = getEligiblePool(this.registry, cat, level, this.poolCache);
+        const pool = getEligiblePool(this.registry, cat, level, cacheManager, this.registry.version);
         return pool.filter(p => (bitset & (1n << BigInt(p >> 8))) === 0n);
     }
 
@@ -111,16 +68,17 @@ export class EnchantEngine {
     ): Promise<SearchFrontier> {
         const limit = getSearchLimit(cat, ProbUtils.toNumber(threshold), maxIterations);
         const cacheKey = this.getPackedKey(cat, modLevel, mat, guaranteedFirst);
-        const activeCache = cat === "book" ? this.bookComboCache : this.comboCache;
-
-        const cached = activeCache.get(cacheKey);
+        
+        const cached = cat === "book" ? cacheManager.getBook(this.registry.version, cacheKey) : cacheManager.getCombo(this.registry.version, cacheKey);
         if (cached && cached.threshold <= threshold) return cached;
 
         const result = await SearchService.calculateCombinations(
-            this.registry, cat, modLevel, mat, guaranteedFirst, threshold, limit, cached, resultsLimit, this.poolCache, undefined, instrumentation
+            this.registry, cat, modLevel, mat, guaranteedFirst, threshold, limit, cached, resultsLimit, undefined, undefined, instrumentation
         );
 
-        activeCache.set(cacheKey, result);
+        if (cat === "book") cacheManager.setBook(this.registry.version, cacheKey, result);
+        else cacheManager.setCombo(this.registry.version, cacheKey, result);
+        
         return result;
     }
 
@@ -167,8 +125,9 @@ export class EnchantEngine {
 
         const cacheKey = KeyUtils.getStatsKey(catId, matId, xp, guaranteedId);
 
-        const cachedStats = this.statsCache.get(cacheKey);
-        if (cachedStats) return cachedStats;
+        const cachedStats = cacheManager.getStats(this.registry.version, cacheKey);
+        const finestThreshold = tiers[tiers.length - 1].threshold;
+        if (cachedStats && cachedStats.threshold <= finestThreshold) return cachedStats;
 
         if (guaranteedFirst) {
             this.validateGuaranteedFirst(cat, xp, mat, guaranteedFirst);
@@ -182,17 +141,15 @@ export class EnchantEngine {
             summaryLimit,
             resultsLimit,
             useCache,
-            distCache: this.distCache,
-            poolCache: this.poolCache,
             instrumentation,
             timing
         };
 
         const wrappedOnTierComplete = (stats: CalculationStats, tierIndex: number) => {
             onTierComplete(stats, tierIndex);
-            const currentCached = this.statsCache.get(cacheKey);
+            const currentCached = cacheManager.getStats(this.registry.version, cacheKey);
             if (!currentCached || stats.accuracy > currentCached.accuracy) {
-                this.statsCache.set(cacheKey, stats);
+                cacheManager.setStats(this.registry.version, cacheKey, stats);
             }
         };
 
@@ -200,28 +157,16 @@ export class EnchantEngine {
             this.registry, cat, xp, mat, guaranteedFirst, tiers, wrappedOnTierComplete, internalConfig
         );
 
-        const currentCached = this.statsCache.get(cacheKey);
+        const currentCached = cacheManager.getStats(this.registry.version, cacheKey);
         if (!currentCached || finalStats.accuracy > currentCached.accuracy) {
-            this.statsCache.set(cacheKey, finalStats);
+            cacheManager.setStats(this.registry.version, cacheKey, finalStats);
         }
 
         return finalStats;
     }
 
-    public getCacheMetrics(): { cacheNodes: number; cacheResults: number } {
-        let cacheNodes = 0;
-        let cacheResults = 0;
-
-        for (const frontier of this.comboCache.values()) {
-            cacheNodes += frontier.queue.size();
-            cacheResults += frontier.results.size;
-        }
-        for (const frontier of this.bookComboCache.values()) {
-            cacheNodes += frontier.queue.size();
-            cacheResults += frontier.results.size;
-        }
-
-        return { cacheNodes, cacheResults };
+    public getCacheMetrics(): { distCache: CacheStats; poolCache: CacheStats; frontierCache: CacheStats } {
+        return cacheManager.getEngineMetrics();
     }
 
     /**
@@ -266,10 +211,8 @@ export class EnchantEngine {
 
         const cacheKey = KeyUtils.getStatsKey(catId, matId, xp, guaranteedId);
 
-        const cachedStats = this.statsCache.get(cacheKey);
-        if (cachedStats) return cachedStats;
-
-        const activeCache = cat === "book" ? this.bookComboCache : this.comboCache;
+        const cachedStats = cacheManager.getStats(this.registry.version, cacheKey);
+        if (cachedStats && cachedStats.threshold <= threshold) return cachedStats;
 
         if (guaranteedFirst) {
             this.validateGuaranteedFirst(cat, xp, mat, guaranteedFirst);
@@ -282,21 +225,22 @@ export class EnchantEngine {
             maxIterations,
             summaryLimit,
             resultsLimit,
-            getExtendedCache: (ml) => activeCache.get(KeyUtils.getPackedKey(catId, matId, ml, guaranteedId)),
-            setExtendedCache: (ml, frontier) => activeCache.set(KeyUtils.getPackedKey(catId, matId, ml, guaranteedId), frontier),
-            distCache: this.distCache,
-            poolCache: this.poolCache,
+            getExtendedCache: (ml) => cat === "book" ? cacheManager.getBook(this.registry.version, KeyUtils.getPackedKey(catId, matId, ml, guaranteedId)) : cacheManager.getCombo(this.registry.version, KeyUtils.getPackedKey(catId, matId, ml, guaranteedId)),
+            setExtendedCache: (ml, frontier) => {
+                if (cat === "book") cacheManager.setBook(this.registry.version, KeyUtils.getPackedKey(catId, matId, ml, guaranteedId), frontier);
+                else cacheManager.setCombo(this.registry.version, KeyUtils.getPackedKey(catId, matId, ml, guaranteedId), frontier);
+            },
             instrumentation,
             timing,
-            getCacheMetrics: () => this.getCacheMetrics()
+            getCacheMetrics: () => this.getCacheMetrics() as any
         };
         const finalStats = await StatAggregator.getFullStats(
             this.registry, cat, xp, mat, guaranteedFirst, internalConfig
         );
 
-        const currentCached = this.statsCache.get(cacheKey);
+        const currentCached = cacheManager.getStats(this.registry.version, cacheKey);
         if (!currentCached || finalStats.accuracy > currentCached.accuracy) {
-            this.statsCache.set(cacheKey, finalStats);
+            cacheManager.setStats(this.registry.version, cacheKey, finalStats);
         }
 
         return finalStats;

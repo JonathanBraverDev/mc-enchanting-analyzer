@@ -9,6 +9,7 @@
 import { describe, it, before, after, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { EnchantEngine } from '../engine/index.js';
+import { cacheManager } from '../services/index.js';
 import { DATA } from '../data/index.js';
 import { SerializationService } from '../services/index.js';
 import type { WorkerResponse } from '../worker/protocol.js';
@@ -159,7 +160,7 @@ describe('Worker: getFullStatsProgressive handler', () => {
             ],
             () => {}
         );
-        EnchantEngine.clearAllEngines();
+        cacheManager.clearAll();
 
         const accuracyDiff = Math.abs(workerStats.accuracy - directStats.accuracy);
         assert.ok(

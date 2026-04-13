@@ -3,7 +3,7 @@ import assert from 'node:assert';
 import { EnchantEngine } from '../engine/index.js';
 import { DATA } from '../data/index.js';
 import { ProbUtils } from '../utils/index.js';
-import { HumanizationService } from '../services/index.js';
+import { HumanizationService, cacheManager } from '../services/index.js';
 import { SnapshotUtils, EngineTestUtils } from './test-utils.js';
 import { ENGINE_DEFAULTS } from '../core/config.js';
 import { getEnchantId } from '../core/registry.js';
@@ -16,7 +16,7 @@ if (typeof (globalThis as any).requestAnimationFrame !== 'function') {
 
 describe('Enchantment Engine Test Suite', () => {
     test.afterEach(() => {
-        EnchantEngine.clearAllEngines();
+        cacheManager.clearAll();
     });
 
     describe('1. Core Engine Logic', () => {
