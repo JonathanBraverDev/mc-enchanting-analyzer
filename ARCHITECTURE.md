@@ -51,12 +51,14 @@ src/core/            ← registry construction & shared config
 src/engine/          ← calculation pipeline
   distribution.ts    (imports: utils, config, types)
   frontier.ts        (imports: utils, config, registry, types)
-  search.ts          (imports: utils, registry, config, frontier, types)
-  MassAccountant.ts  (imports: types, utils)
-  aggregator.ts      (imports: utils, services, registry, config, types, distribution, search, frontier, MassAccountant)
-  index.ts           (imports: types, utils, registry, factory, config, distribution, search, aggregator)
+  search.ts          (imports: utils, registry, config, frontier, types, SearchProcessor)
+  ProbabilityMassTracker.ts (imports: types, utils, constants)
+  SearchProcessor.ts (imports: types, utils, constants)
+  aggregator.ts      (imports: utils, services, registry, config, types, distribution, search, frontier, ProbabilityMassTracker)
+  index.ts           (imports: types, utils, registry, factory, config, distribution, search, aggregator, CacheManager)
 
-src/services/        ← post-processing, serialization
+src/services/        ← post-processing, serialization, caching
+  CacheManager.ts    (imports: utils, types, constants)
   SummaryService.ts  (imports: utils, config, types)
   HumanizationService.ts (imports: utils, registry, types)
   SerializationService.ts (imports: types)
@@ -96,26 +98,31 @@ Worker (src/worker/worker.ts)
   engine.getFullStats(cat, xp, mat, config)
     │
     ▼
-EnchantEngine.getFullStats  (src/engine/index.ts)
+EnchantEngine.getFullStats (src/engine/index.ts)
   ├─ validates inputs (xp range, known category/material, guaranteed-first validity)
-  ├─ checks statsCache
+  ├─ checks CacheManager (stats cache, threshold-aware hit detection)
   └─ StatAggregator.getFullStats(registry, cat, xp, mat, guaranteedFirst, config)
         │
-        ├─ DistributionService.getModifiedLevelDist(xp, enchantability)
+        ├─ DistributionService.getModifiedLevelDist(version, xp, enchantability)
         │    → bigint probability map  { modifiedLevel → P(level) }
         │
         └─ for each modifiedLevel (highest→lowest):
              SearchService.calculateCombinations(registry, cat, ml, mat, ...)
+               ├─ CacheManager (combo/book cache hit/resumption detection)
                ├─ FrontierFactory.create()   → initialises BinaryHeap + mass maps
+               ├─ SearchProcessor: high-speed search primitives
                ├─ best-first search loop:
                │    getEligiblePool()        → PackedEnchant[] for (cat, level, mat)
                │    processInitialNode()     → expand root into first enchants
-                  ├─ processSearchNode()      → branch, conflict-prune, merge duplicates
-                ├─ redistributeBookProb()   → split prob for multi-enchant books
-                └─ returns SearchFrontier { results, anyMass, rankMass, countMass, mass (MassBookkeeping) }
+               │    processSearchNode()      → branch, conflict-prune, merge duplicates
+               ├─ SearchProcessor.redistributeBookProb() → split prob for multi-enchant books
+               └─ returns SearchFrontier { results, anyMass, rankMass, countMass, accounting (ProbabilityMassTracker) }
 
         ↓ accumulate frontier results weighted by modLevel probabilities
-        SummaryService.summarize()   → CalculationStats { ..., accuracy, accounting (MassAccounting) }
+        SummaryService.summarize()   → CalculationStats { ..., accuracy, accounting (MassAccounting), threshold }
+    │
+    ▼
+CacheManager.setStats(version, key, CalculationStats)
     │
     ▼
 SerializationService.serialize()   → CompactStats (TypedArrays for transferable transfer)
@@ -224,21 +231,58 @@ UI (HumanizationService.humanize + ResultsView.render + ChartController.update)
 
 ---
 
-## Caching Layers (inside `EnchantEngine`)
+## Caching Strategy (CacheManager)
 
-All caches and `_registry` are **private** fields on `EnchantEngine`.
+The engine uses a centralized, singleton `CacheManager` to manage memory and lifecycle. All cache keys are **version-prefixed** to prevent cross-version pollution.
 
+```mermaid
+graph TD
+    EE[EnchantEngine] --> CM[CacheManager]
+    SA[StatAggregator] --> CM
+    DS[DistributionService] --> CM
+    PS[PoolService] --> CM
+    
+    subgraph "CacheManager (Global Singleton)"
+        D[(Dist Cache)]
+        P[(Pool Cache)]
+        C[(Combo Cache)]
+        B[(Book Cache)]
+        S[(Stats Cache)]
+    end
+    
+    CM -.-> D
+    CM -.-> P
+    CM -.-> C
+    CM -.-> B
+    CM -.-> S
 ```
-distCache      Map<string, {[level]: bigint}>      "xp@enchantability@div@rngRange" → modified level distribution
-poolCache      LRUCache<string, PackedEnchant[]>   "cat|level" → eligible enchant list  (mat is NOT in the key)
-comboCache     LRUCache<number, SearchFrontier>    getPackedKey (no limit) → search frontier (non-book)
-bookComboCache LRUCache<number, SearchFrontier>    getPackedKey (no limit) → search frontier (book)
-statsCache     LRUCache<number, CalculationStats>  getStatsKey  (no limit, no threshold) → final stats
+
+### Probability Accounting (ProbabilityMassTracker)
+
+The `ProbabilityMassTracker` unifies mass tracking and residue harvesting into a single class, ensuring 100% mass conservation across the complex branching search.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Initial: 100% Pending
+    Initial --> Search: calculateCombinations
+    Search --> Resolved: Terminal Leaf (Success)
+    Search --> Pending: Still in Heap
+    Search --> Sieved: Below Resolution Threshold
+    Search --> Capped: Hit Resource Limits
+    Search --> Overflow: >6 Enchants (Game Limit)
+    
+    Resolved --> Aggregation: Weighted by ModLevel P(ml)
+    Pending --> Aggregation
+    Sieved --> Aggregation
+    Capped --> Aggregation
+    Overflow --> Aggregation
+    
+    Aggregation --> FinalStats: SummaryService.summarize()
 ```
 
-**statsCache semantics**
-- Key: `getStatsKey(catId, matId, xp, guaranteedId)` — no threshold, no limit, no resultsLimit in key
-- Read: Accuracy is defined strictly as `Resolved / (Resolved + Pending + Capped + Sieved + Overflow)`. In practice, the denominator is always 1.0 (PRECISION), so `Accuracy = Resolved`.
+### statsCache semantics
+- Key: `version:getStatsKey(catId, matId, xp, guaranteedId)`
+- **Threshold Awareness**: When retrieving from cache, the engine checks if `cached.threshold <= requested.threshold`. If the cached result was generated with *more* precision (lower threshold), it is returned. If not, it is ignored or used as a baseline for further refinement.
 
 ## Search Termination & Invariants
 
