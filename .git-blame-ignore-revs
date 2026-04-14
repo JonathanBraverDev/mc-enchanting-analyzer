@@ -10,3 +10,6 @@
 
 # refactor: reorganize test suite into tiered hierarchy
 54b858706de42eed12a283a8f35548ee9d476764
+
+# refactor: restructure engine directory (pure movement)
+578fe6d01dddbbc21532572d06ce4667a96d14f3
