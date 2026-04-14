@@ -1,8 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { ProbabilityMassTracker } from '../../../src/lib/engine/ProbabilityMassTracker.js';
-import { ExpansionBlueprint } from '../../../src/lib/types/index.js';
-import { PRECISION } from '../../../src/lib/utils/index.js';
+import { ProbabilityMassTracker } from '#engine/ProbabilityMassTracker.js';
+import { ExpansionBlueprint } from '#types/index.js';
+import { PRECISION } from '#utils/index.js';
 
 describe('ProbabilityMassTracker', () => {
 

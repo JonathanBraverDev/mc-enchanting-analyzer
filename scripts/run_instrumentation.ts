@@ -1,6 +1,6 @@
-import { EnchantEngine, EngineFactory } from '../src/lib/engine/index.js';
+import { EnchantEngine, EngineFactory } from '#engine/index.js';
 import { DATA as data } from '../src/lib/data/index.js';
-import { EngineInstrumentation } from '../src/lib/types/index.js';
+import { EngineInstrumentation } from '#types/index.js';
 
 import { fileURLToPath } from 'url';
 

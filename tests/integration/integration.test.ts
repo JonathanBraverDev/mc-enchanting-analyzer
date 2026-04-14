@@ -9,10 +9,10 @@ import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { RefinementService } from '../../src/ui/refinement.js';
 import { WorkerClient } from '../../src/worker/client.js';
-import { EnchantEngine, EngineFactory } from '../../src/lib/engine/index.js';
-import { DATA } from '../../src/lib/data/index.js';
-import { isCategoryAvailable } from '../../src/lib/core/registry.js';
-import { MassAccounting } from '../../src/lib/types/mass.js';
+import { EnchantEngine, EngineFactory } from '#engine/index.js';
+import { DATA } from '#data/index.js';
+import { isCategoryAvailable } from '#core/registry.js';
+import { MassAccounting } from '#types/mass.js';
 import { TEST_DATA } from '../infra/test-data.js';
 
 // ---------------------------------------------------------------------------

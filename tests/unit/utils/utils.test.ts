@@ -4,12 +4,12 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { ProbUtils, PRECISION } from '../../../src/lib/utils/math/ProbUtils.js';
-import { VersionUtils } from '../../../src/lib/utils/domain/VersionUtils.js';
-import { StringUtils, UIUtils } from '../../../src/lib/utils/format/FormatUtils.js';
-import { RomanUtils } from '../../../src/lib/utils/format/RomanUtils.js';
-import { KeyUtils, KEY_SHIFT_GUARANTEED, KEY_SHIFT_LEVEL } from '../../../src/lib/utils/domain/KeyUtils.js';
-import { EnchantUtils } from '../../../src/lib/utils/domain/EnchantUtils.js';
+import { ProbUtils, PRECISION } from '#utils/math/ProbUtils.js';
+import { VersionUtils } from '#utils/domain/VersionUtils.js';
+import { StringUtils, UIUtils } from '#utils/format/FormatUtils.js';
+import { RomanUtils } from '#utils/format/RomanUtils.js';
+import { KeyUtils, KEY_SHIFT_GUARANTEED, KEY_SHIFT_LEVEL } from '#utils/domain/KeyUtils.js';
+import { EnchantUtils } from '#utils/domain/EnchantUtils.js';
 
 const ROMAN_MAP = { "I": 1, "II": 2, "III": 3, "IV": 4, "V": 5 };
 

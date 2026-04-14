@@ -1,6 +1,6 @@
-import { UIUtils, RomanUtils } from '../../lib/utils/index.js';
-import { UI_DEFAULTS, UI_TEXTS, SEARCH_LEVEL_COLORS, SearchLevel } from '../../lib/core/config.js';
-import { RegistryState, EnchantInsights } from '../../lib/types/index.js';
+import { UIUtils, RomanUtils } from '#utils/index.js';
+import { UI_DEFAULTS, UI_TEXTS, SEARCH_LEVEL_COLORS, SearchLevel } from '#core/config.js';
+import { RegistryState, EnchantInsights } from '#types/index.js';
 
 /**
  * View component for rendering enchantment combinations and ranks.

@@ -7,10 +7,10 @@
  */
 import { describe, it, before } from 'node:test';
 import assert from 'node:assert';
-import { EnchantEngine, EngineFactory } from '../../../src/lib/engine/index.js';
-import { DATA } from '../../../src/lib/data/index.js';
-import { PackedEnchant, PackedCombo } from '../../../src/lib/types/index.js';
-import { ComboUtils } from '../../../src/lib/utils/domain/ComboUtils.js';
+import { EnchantEngine, EngineFactory } from '#engine/index.js';
+import { DATA } from '#data/index.js';
+import { PackedEnchant, PackedCombo } from '#types/index.js';
+import { ComboUtils } from '#utils/domain/ComboUtils.js';
 
 // Build once at module level.
 const engine = EngineFactory.create(DATA, '1.21');

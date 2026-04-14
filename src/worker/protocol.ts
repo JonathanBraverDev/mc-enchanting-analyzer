@@ -1,4 +1,4 @@
-import { CompactStats, ProgressUpdate } from '../lib/types/index.js';
+import { CompactStats, ProgressUpdate } from '#types/index.js';
 
 export type WorkerRequest =
     | { type: "init"; id: number; payload: { version: string } }

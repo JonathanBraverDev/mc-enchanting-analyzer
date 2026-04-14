@@ -1,13 +1,13 @@
-import { PRECISION, ProbUtils, AsyncUtils, ComboUtils, EnchantUtils } from '../../utils/index.js';
-import { getEnchantability } from '../../core/registry.js';
-import { ENGINE_LIMITS } from '../../constants/engine.js';
-import { getSearchLimit } from '../../core/config.js';
-import { CalculationStats, PackedCombo, SearchFrontier, RegistryState, InternalSearchConfig, EngineInstrumentation, MassCheckpoint, CheckpointSummary, ProgressReporter, AggregationResult } from '../../types/index.js';
-import { DistributionService } from '../distribution.js';
-import { SearchService } from '../search.js';
-import { FrontierFactory } from '../frontier.js';
-import { ProbabilityMassTracker } from '../ProbabilityMassTracker.js';
-import { CacheManager } from '../../services/CacheManager.js';
+import { PRECISION, ProbUtils, AsyncUtils, ComboUtils, EnchantUtils } from '#utils/index.js';
+import { getEnchantability } from '#core/registry.js';
+import { ENGINE_LIMITS } from '#constants/engine.js';
+import { getSearchLimit } from '#core/config.js';
+import { CalculationStats, PackedCombo, SearchFrontier, RegistryState, InternalSearchConfig, EngineInstrumentation, MassCheckpoint, CheckpointSummary, ProgressReporter, AggregationResult } from '#types/index.js';
+import { DistributionService } from '#engine/distribution.js';
+import { SearchService } from '#engine/search.js';
+import { FrontierFactory } from '#engine/frontier.js';
+import { ProbabilityMassTracker } from '#engine/ProbabilityMassTracker.js';
+import { CacheManager } from '#services/CacheManager.js';
 
 /**
  * Service for aggregating enchantment statistics across multiple modified levels.

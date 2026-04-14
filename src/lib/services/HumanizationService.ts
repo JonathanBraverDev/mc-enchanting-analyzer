@@ -1,7 +1,7 @@
-import { ComboUtils } from '../utils/domain/ComboUtils.js';
-import { RomanUtils } from '../utils/format/RomanUtils.js';
-import type { EnchantInsights, ResultSortMode, CalculationStats, RegistryState, PackedCombo } from '../types/index.js';
-import { getEnchantName, getFullEnchantName } from '../core/registry.js';
+import { ComboUtils } from '#utils/domain/ComboUtils.js';
+import { RomanUtils } from '#utils/format/RomanUtils.js';
+import type { EnchantInsights, ResultSortMode, CalculationStats, RegistryState, PackedCombo } from '#types/index.js';
+import { getEnchantName, getFullEnchantName } from '#core/registry.js';
 
 /**
  * Service for converting raw statistics into human-readable insights.

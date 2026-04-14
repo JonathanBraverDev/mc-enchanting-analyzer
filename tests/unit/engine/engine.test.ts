@@ -1,12 +1,12 @@
 import { test, describe, it } from 'node:test';
 import assert from 'node:assert';
-import { EnchantEngine, EngineFactory } from '../../../src/lib/engine/index.js';
-import { DATA } from '../../../src/lib/data/index.js';
-import { ProbUtils } from '../../../src/lib/utils/index.js';
-import { HumanizationService } from '../../../src/lib/services/index.js';
+import { EnchantEngine, EngineFactory } from '#engine/index.js';
+import { DATA } from '#data/index.js';
+import { ProbUtils } from '#utils/index.js';
+import { HumanizationService } from '#services/index.js';
 import { SnapshotUtils, EngineTestUtils } from '../../infra/test-utils.js';
-import { ENGINE_DEFAULTS } from '../../../src/lib/core/config.js';
-import { getEnchantId } from '../../../src/lib/core/registry.js';
+import { ENGINE_DEFAULTS } from '#core/config.js';
+import { getEnchantId } from '#core/registry.js';
 import { TEST_DATA } from '../../infra/test-data.js';
 
 // Polyfill for requestAnimationFrame in Node (Sync version for tests)

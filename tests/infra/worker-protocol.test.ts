@@ -8,9 +8,9 @@
  */
 import { describe, it, before, after, afterEach } from 'node:test';
 import assert from 'node:assert';
-import { EnchantEngine, EngineFactory } from '../../src/lib/engine/index.js';
-import { DATA } from '../../src/lib/data/index.js';
-import { SerializationService } from '../../src/lib/services/index.js';
+import { EnchantEngine, EngineFactory } from '#engine/index.js';
+import { DATA } from '#data/index.js';
+import { SerializationService } from '#services/index.js';
 import type { WorkerResponse } from '../../src/worker/protocol.js';
 import { TEST_DATA } from '../infra/test-data.js';
 

@@ -6,7 +6,7 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { LRUCache } from '../../../src/lib/utils/collections/LRUCache.js';
+import { LRUCache } from '#utils/collections/LRUCache.js';
 
 describe('LRUCache', () => {
     // ── Basic operations ──────────────────────────────────────────────────

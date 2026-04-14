@@ -21,11 +21,11 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { EnchantEngine, EngineFactory } from '../../src/lib/engine/index.js';
-import { SearchService } from '../../src/lib/engine/search.js';
-import { CacheManager } from '../../src/lib/services/CacheManager.js';
-import { DATA } from '../../src/lib/data/index.js';
-import { ProbUtils } from '../../src/lib/utils/index.js';
+import { EnchantEngine, EngineFactory } from '#engine/index.js';
+import { SearchService } from '#engine/search.js';
+import { CacheManager } from '#services/CacheManager.js';
+import { DATA } from '#data/index.js';
+import { ProbUtils } from '#utils/index.js';
 
 describe('Frontier Resumability & Cache Behavior', () => {
 

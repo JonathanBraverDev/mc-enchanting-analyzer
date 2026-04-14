@@ -1,8 +1,8 @@
-import { EnchantEngine, EngineFactory } from '../src/lib/engine/index.js';
+import { EnchantEngine, EngineFactory } from '#engine/index.js';
 import { DATA } from '../src/lib/data/index.js';
 import * as fs from 'node:fs';
 import * as assert from 'node:assert';
-import { CalculationStats } from '../src/lib/types/index.js';
+import { CalculationStats } from '#types/index.js';
 
 async function debug() {
     const engine = EngineFactory.create(DATA, '1.7.2');

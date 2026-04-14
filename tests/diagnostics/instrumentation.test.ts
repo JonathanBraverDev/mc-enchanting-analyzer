@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { EnchantEngine, EngineFactory } from '../../src/lib/engine/index.js';
-import { DATA } from '../../src/lib/data/index.js';
-import { EngineInstrumentation } from '../../src/lib/types/index.js';
+import { EnchantEngine, EngineFactory } from '#engine/index.js';
+import { DATA } from '#data/index.js';
+import { EngineInstrumentation } from '#types/index.js';
 
 test('Engine Instrumentation Collection', async () => {
     const engine = EngineFactory.create(DATA, '1.21');
