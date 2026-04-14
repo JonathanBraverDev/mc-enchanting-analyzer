@@ -220,7 +220,7 @@ export interface SearchConfig {
     guaranteedFirst?: string | null;
     threshold?: number;
     signal?: AbortSignal;
-    onProgress?: (stats: CalculationStats) => void;
+    onProgress?: (update: ProgressUpdate) => void;
     maxIterations?: number;
     summaryLimit?: number;
     resultsLimit?: number;
@@ -239,4 +239,37 @@ export interface InternalSearchConfig extends SearchConfig {
     instrumentation?: EngineInstrumentation;
     timing?: SearchTiming;
     getCacheMetrics?: () => { cacheNodes: number; cacheResults: number };
+}
+
+/**
+ * Lightweight progress update from the engine.
+ */
+export interface ProgressUpdate {
+  /** Number of modified levels or units processed. */
+  processed: number;
+  /** Total number of modified levels or units to process. */
+  total: number;
+  /** Optional current accuracy (resolved mass). */
+  accuracy?: number;
+}
+
+/**
+ * Interface for reporting search progress to external consumers.
+ */
+export interface ProgressReporter {
+  onProgress(update: ProgressUpdate): void;
+}
+
+/**
+ * Raw results from an aggregation run before summarization.
+ */
+export interface AggregationResult {
+    combos: Map<PackedCombo, bigint>;
+    tracker: import('../engine/ProbabilityMassTracker.js').ProbabilityMassTracker;
+    anyMass: BigUint64Array;
+    rankMass: BigUint64Array;
+    countMass: BigUint64Array;
+    instrumentation?: EngineInstrumentation;
+    timing?: SearchTiming;
+    threshold: number;
 }

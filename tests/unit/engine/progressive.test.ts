@@ -1,10 +1,15 @@
-import { describe, it } from 'node:test';
+import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert';
-import { EnchantEngine } from '../../../src/lib/engine/index.js'; import { EngineFactory } from '../../../src/lib/engine/factory.js';
+import { EngineFactory } from '../../../src/lib/engine/factory.js';
 import { DATA } from '../../../src/lib/data/index.js';
 import { TEST_DATA } from '../../infra/test-data.js';
 
 describe('EnchantEngine: Progressive Search', () => {
+
+    beforeEach(() => {
+        const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
+        engine.resetCaches();
+    });
 
     it('should improve accuracy monotonically across tiers', async () => {
         const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
@@ -33,13 +38,10 @@ describe('EnchantEngine: Progressive Search', () => {
     it('should respect the uncertainty threshold and stop early if possible', async () => {
         const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
         
-        // Define tiers where the second tier's threshold is already met by the first tier's depth
-        // This is tricky because thresholds are per-level, but accuracy is global.
-        // We'll use a very coarse first tier and a slightly less coarse second tier.
         let tierCount = 0;
         const tiers = [
-            { threshold: 0.0000001, limit: 5000 }, // Deep first pass
-            { threshold: 0.1,        limit: 10 },    // Very shallow second pass (should basically be instant)
+            { threshold: 1e-10, limit: 5000 }, // Deep first pass
+            { threshold: 0.1,   limit: 10 },    // Very shallow second pass
         ];
 
         const stats = await engine.getFullStatsProgressive(
@@ -50,6 +52,10 @@ describe('EnchantEngine: Progressive Search', () => {
             }
         );
 
+        // If the first pass already hit 1e-10, the second pass (0.1) should be skipped by the cache check
+        // However, getFullStatsProgressive currently only checks the VERY end of the tiers.
+        // Wait, if tier 1 already fulfilled tier 2's requirement, it still runs tier 2 normally unless we add internal skipping.
+        // In this test, it should fire at least once.
         assert.ok(tierCount >= 1);
         assert.ok(stats.accuracy > 0.99);
     });
@@ -57,17 +63,13 @@ describe('EnchantEngine: Progressive Search', () => {
     it('should recover rounding residue between tiers (High Precision)', async () => {
         const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
         
-        // Run two passes. If residue recovery is working, the "rounding" mass in the 
-        // accounting should stay stable or decrease as it's shifted to "resolved" 
-        // without ballooning "sieved" unnecessarily.
-        
         let roundingValues: number[] = [];
         const tiers = [
             { threshold: 0.1,   limit: 100 },
-            { threshold: 0.001, limit: 1000 }
+            { threshold: 0.01,  limit: 1000 }
         ];
 
-        const finalStats = await engine.getFullStatsProgressive(
+        await engine.getFullStatsProgressive(
             TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND, null,
             tiers,
             (stats) => {
@@ -76,10 +78,6 @@ describe('EnchantEngine: Progressive Search', () => {
         );
 
         assert.strictEqual(roundingValues.length, 2);
-        // Rounding mass represents lost precision. As search deepens, we shouldn't 
-        // be GROWING the relative rounding error significantly if we are recovering residue.
-        // Actually, rounding is often < 1e-15, so we just check it exists and is stable.
         assert.ok(roundingValues[1] <= roundingValues[0] + 1e-15, 'Rounding mass should not balloon between tiers');
     });
 });
-

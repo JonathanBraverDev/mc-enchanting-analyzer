@@ -52,9 +52,8 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
                             guaranteedFirst: payload.guaranteedFirst,
                             threshold: payload.threshold,
                             signal,
-                            onProgress: (partialStats) => {
-                                const { compact, transferables } = SerializationService.serialize(partialStats);
-                                workerScope.postMessage({ type: 'progress', id, payload: { stats: compact } }, transferables);
+                            onProgress: (update) => {
+                                workerScope.postMessage({ type: 'progress', id, payload: { update } }, []);
                             },
                             maxIterations: payload.maxIterations
                         }

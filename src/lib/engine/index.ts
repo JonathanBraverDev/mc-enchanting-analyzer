@@ -1,4 +1,4 @@
-import { EnchantmentData, CalculationStats, SearchFrontier, RegistryState, SearchConfig, InternalSearchConfig, PackedEnchant, EngineInstrumentation, CacheStats } from '../types/index.js';
+import { EnchantmentData, CalculationStats, SearchFrontier, RegistryState, SearchConfig, InternalSearchConfig, PackedEnchant, EngineInstrumentation, CacheStats, ProgressUpdate } from '../types/index.js';
 import { ProbUtils, KeyUtils, EnchantUtils, RomanUtils } from '../utils/index.js';
 import { getMaterialId, getEnchantId, getEligiblePool, isCategoryAvailable, getEnchantability } from '../core/registry.js';
 import { RegistryFactory } from '../core/factory.js';
@@ -7,6 +7,7 @@ import { getSearchLimit } from '../core/config.js';
 import { CacheManager } from '../services/CacheManager.js';
 import { KeyService } from '../services/KeyService.js';
 import { PoolService } from '../services/PoolService.js';
+import { SummaryService } from '../services/SummaryService.js';
 import { DistributionService } from './distribution.js';
 import { SearchService } from './search.js';
 import { StatAggregator } from './aggregator.js';
@@ -149,7 +150,11 @@ export class EnchantEngine {
             })
         };
 
-        const wrappedOnTierComplete = (stats: CalculationStats, tierIndex: number) => {
+        const wrappedOnTierComplete = (raw: any, tierIndex: number) => {
+            const stats = SummaryService.summarize(raw.combos, raw.tracker, raw.anyMass, raw.rankMass, raw.countMass, summaryLimit, raw.threshold);
+            stats.instrumentation = raw.instrumentation;
+            stats.timing = raw.timing;
+            
             onTierComplete(stats, tierIndex);
             const currentCached = this.cache.getStats(this.registry.version, cacheKey);
             if (!currentCached || stats.accuracy > currentCached.accuracy) {
@@ -157,9 +162,13 @@ export class EnchantEngine {
             }
         };
 
-        const finalStats = await this.statAggregator.getFullStatsTiered(
+        const finalRaw = await this.statAggregator.getFullStatsTiered(
             this.registry, cat, xp, mat, guaranteedFirst, tiers, wrappedOnTierComplete, internalConfig
         );
+
+        const finalStats = SummaryService.summarize(finalRaw.combos, finalRaw.tracker, finalRaw.anyMass, finalRaw.rankMass, finalRaw.countMass, summaryLimit, finalRaw.threshold);
+        finalStats.instrumentation = finalRaw.instrumentation;
+        finalStats.timing = finalRaw.timing;
 
         const currentCached = this.cache.getStats(this.registry.version, cacheKey);
         if (!currentCached || finalStats.accuracy > currentCached.accuracy) {
@@ -222,9 +231,13 @@ export class EnchantEngine {
             })
         };
 
-        const finalStats = await this.statAggregator.getFullStats(
+        const finalRaw = await this.statAggregator.getFullStats(
             this.registry, cat, xp, mat, guaranteedFirst, internalConfig
         );
+
+        const finalStats = SummaryService.summarize(finalRaw.combos, finalRaw.tracker, finalRaw.anyMass, finalRaw.rankMass, finalRaw.countMass, summaryLimit, finalRaw.threshold);
+        finalStats.instrumentation = finalRaw.instrumentation;
+        finalStats.timing = finalRaw.timing;
 
         const currentCached = this.cache.getStats(this.registry.version, cacheKey);
         if (!currentCached || finalStats.accuracy > currentCached.accuracy) {
