@@ -1,19 +1,23 @@
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert';
 import { EngineFactory } from '../../../src/lib/engine/factory.js';
+import { CacheManager } from '../../../src/lib/services/CacheManager.js';
+import { EnchantEngine } from '../../../src/lib/engine/index.js';
 import { DATA } from '../../../src/lib/data/index.js';
 import { TEST_DATA } from '../../infra/test-data.js';
 
 describe('EnchantEngine: Progressive Search', () => {
 
+    let cache: CacheManager;
+    let engine: EnchantEngine;
+
     beforeEach(() => {
-        const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
-        engine.resetCaches();
+        EngineFactory.clearCaches();
+        cache = new CacheManager({ statsSize: 100, comboOtherSize: 100, comboBookSize: 100, poolSize: 100 });
+        engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN, { cache });
     });
 
     it('should improve accuracy monotonically across tiers', async () => {
-        const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
-        
         const accuracies: number[] = [];
         const tiers = [
             { threshold: 0.1,   limit: 100 },
@@ -36,8 +40,6 @@ describe('EnchantEngine: Progressive Search', () => {
     });
 
     it('should respect the uncertainty threshold and stop early if possible', async () => {
-        const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
-        
         let tierCount = 0;
         const tiers = [
             { threshold: 1e-10, limit: 5000 }, // Deep first pass
@@ -52,17 +54,11 @@ describe('EnchantEngine: Progressive Search', () => {
             }
         );
 
-        // If the first pass already hit 1e-10, the second pass (0.1) should be skipped by the cache check
-        // However, getFullStatsProgressive currently only checks the VERY end of the tiers.
-        // Wait, if tier 1 already fulfilled tier 2's requirement, it still runs tier 2 normally unless we add internal skipping.
-        // In this test, it should fire at least once.
         assert.ok(tierCount >= 1);
         assert.ok(stats.accuracy > 0.99);
     });
 
     it('should recover rounding residue between tiers (High Precision)', async () => {
-        const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
-        
         let roundingValues: number[] = [];
         const tiers = [
             { threshold: 0.1,   limit: 100 },
