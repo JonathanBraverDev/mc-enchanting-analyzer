@@ -1,6 +1,6 @@
-import { ChartManager } from './chart-manager.js';
-import { RegistryState, SweepData } from '../lib/types/index.js';
-import { UI_DEFAULTS } from '../lib/core/config.js';
+import { ChartManager } from '#ui/chart-manager.js';
+import { RegistryState, SweepData } from '#types/index.js';
+import { UI_DEFAULTS } from '#core/config.js';
 
 export class ChartController {
     public manager: ChartManager | null;

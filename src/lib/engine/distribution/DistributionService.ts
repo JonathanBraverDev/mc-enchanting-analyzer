@@ -1,7 +1,7 @@
-import { PRECISION, ProbUtils } from '../../utils/index.js';
-import { ENGINE_DEFAULTS } from '../../core/config.js';
-import { RegistryState, LevelDistribution, EngineInstrumentation } from '../../types/index.js';
-import { CacheManager } from '../../services/CacheManager.js';
+import { PRECISION, ProbUtils } from '#utils/index.js';
+import { ENGINE_DEFAULTS } from '#core/config.js';
+import { RegistryState, LevelDistribution, EngineInstrumentation } from '#types/index.js';
+import { CacheManager } from '#services/CacheManager.js';
 
 /**
  * Service for calculating the probability distribution of Modified Levels.

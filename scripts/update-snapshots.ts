@@ -1,5 +1,5 @@
 
-import { EnchantEngine, EngineFactory } from '../src/lib/engine/index.js';
+import { EnchantEngine, EngineFactory } from '#engine/index.js';
 import { DATA } from '../src/lib/data/index.js';
 import { SnapshotUtils } from '../tests/infra/test-utils.js';
 import { ENGINE_DEFAULTS } from '../src/lib/core/config.js';

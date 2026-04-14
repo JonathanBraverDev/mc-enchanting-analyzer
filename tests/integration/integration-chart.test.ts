@@ -7,7 +7,7 @@
  */
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
-import { MassAccounting } from '../../src/lib/types/mass.js';
+import { MassAccounting } from '#types/mass.js';
 import { RefinementService } from '../../src/ui/refinement.js';
 import { WorkerClient } from '../../src/worker/client.js';
 import { TEST_DATA } from '../infra/test-data.js';

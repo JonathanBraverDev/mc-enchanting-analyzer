@@ -1,15 +1,15 @@
-import { DATA } from '../lib/data/index.js';
-import { EnchantEngine } from '../lib/engine/index.js';
-import { EngineFactory } from '../lib/engine/factory.js';
-import { UI_TEXTS } from '../lib/core/config.js';
-import { WorkerClient } from '../worker/client.js';
-import { ParamsView } from './views/ParamsView.js';
-import { ResultsView } from './views/ResultsView.js';
-import { ChartController } from './chart.js';
-import { RefinementService } from './refinement.js';
-import { HumanizationService } from '../lib/services/index.js';
-import { getEnchantability } from '../lib/core/registry.js';
-import { EnchantInsights, CalculationStats, ResultSortMode } from '../lib/types/index.js';
+import { DATA } from '#data/index.js';
+import { EnchantEngine } from '#engine/index.js';
+import { EngineFactory } from '#engine/factory.js';
+import { UI_TEXTS } from '#core/config.js';
+import { WorkerClient } from '#worker/client.js';
+import { ParamsView } from '#ui/views/ParamsView.js';
+import { ResultsView } from '#ui/views/ResultsView.js';
+import { ChartController } from '#ui/chart.js';
+import { RefinementService } from '#ui/refinement.js';
+import { HumanizationService } from '#services/index.js';
+import { getEnchantability } from '#core/registry.js';
+import { EnchantInsights, CalculationStats, ResultSortMode } from '#types/index.js';
 
 /**
  * Main Web Application Controller.

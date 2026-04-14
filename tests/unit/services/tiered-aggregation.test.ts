@@ -3,16 +3,16 @@
  */
 import { describe, it, afterEach } from 'node:test';
 import assert from 'node:assert';
-import { EngineFactory } from '../../../src/lib/engine/factory.js';
-import { StatAggregator } from '../../../src/lib/engine/aggregator.js';
-import { DistributionService } from '../../../src/lib/engine/distribution.js';
-import { SearchService } from '../../../src/lib/engine/search.js';
-import { CacheManager } from '../../../src/lib/services/CacheManager.js';
-import { SummaryService } from '../../../src/lib/services/SummaryService.js';
-import { DATA } from '../../../src/lib/data/index.js';
+import { EngineFactory } from '#engine/factory.js';
+import { StatAggregator } from '#engine/aggregator.js';
+import { DistributionService } from '#engine/distribution.js';
+import { SearchService } from '#engine/search.js';
+import { CacheManager } from '#services/CacheManager.js';
+import { SummaryService } from '#services/SummaryService.js';
+import { DATA } from '#data/index.js';
 import { TEST_DATA } from '../../infra/test-data.js';
-import { CacheConfig, AggregationResult } from '../../../src/lib/types/index.js';
-import { ProbUtils } from '../../../src/lib/utils/math/ProbUtils.js';
+import { CacheConfig, AggregationResult } from '#types/index.js';
+import { ProbUtils } from '#utils/math/ProbUtils.js';
 
 const CAT = TEST_DATA.ITEMS.SWORD;
 const XP = 30;

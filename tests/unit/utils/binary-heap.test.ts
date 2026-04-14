@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { BinaryHeap } from '../../../src/lib/utils/collections/BinaryHeap.js';
+import { BinaryHeap } from '#utils/collections/BinaryHeap.js';
 
 describe('BinaryHeap', () => {
     it('pop returns items in descending prob order (max-heap)', () => {

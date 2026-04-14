@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { MassAccountant } from '../../../src/lib/engine/MassAccountant.js';
-import { PRECISION } from '../../../src/lib/utils/math/ProbUtils.js';
+import { MassAccountant } from '#engine/MassAccountant.js';
+import { PRECISION } from '#utils/math/ProbUtils.js';
 
 describe('MassAccountant', () => {
     it('should initialize with zero mass in all buckets', () => {

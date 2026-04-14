@@ -1,9 +1,9 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { EnchantEngine, EngineFactory } from '../../../src/lib/engine/index.js';
-import { DATA } from '../../../src/lib/data/index.js';
-import { ProbUtils, PRECISION } from '../../../src/lib/utils/index.js';
-import { ENGINE_DEFAULTS } from '../../../src/lib/core/config.js';
+import { EnchantEngine, EngineFactory } from '#engine/index.js';
+import { DATA } from '#data/index.js';
+import { ProbUtils, PRECISION } from '#utils/index.js';
+import { ENGINE_DEFAULTS } from '#core/config.js';
 
 describe('Engine Architectural Invariants', () => {
 

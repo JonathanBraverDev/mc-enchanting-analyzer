@@ -6,15 +6,15 @@
  */
 import { describe, it, before } from 'node:test';
 import assert from 'node:assert';
-import { PRECISION } from '../../../src/lib/utils/math/ProbUtils.js';
-import { SummaryService } from '../../../src/lib/services/SummaryService.js';
-import { SerializationService } from '../../../src/lib/services/SerializationService.js';
-import { HumanizationService } from '../../../src/lib/services/HumanizationService.js';
-import { DistributionService } from '../../../src/lib/engine/distribution.js';
-import { EnchantEngine, EngineFactory } from '../../../src/lib/engine/index.js';
-import { ProbabilityMassTracker } from '../../../src/lib/engine/ProbabilityMassTracker.js';
-import { DATA } from '../../../src/lib/data/index.js';
-import type { CalculationStats, MassAccounting } from '../../../src/lib/types/index.js';
+import { PRECISION } from '#utils/math/ProbUtils.js';
+import { SummaryService } from '#services/SummaryService.js';
+import { SerializationService } from '#services/SerializationService.js';
+import { HumanizationService } from '#services/HumanizationService.js';
+import { DistributionService } from '#engine/distribution.js';
+import { EnchantEngine, EngineFactory } from '#engine/index.js';
+import { ProbabilityMassTracker } from '#engine/ProbabilityMassTracker.js';
+import { DATA } from '#data/index.js';
+import type { CalculationStats, MassAccounting } from '#types/index.js';
 
 // ── SummaryService ────────────────────────────────────────────────────────────
 

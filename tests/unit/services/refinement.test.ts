@@ -3,8 +3,8 @@ import assert from 'node:assert';
 import { RefinementService } from '../../../src/ui/refinement.js';
 import { WorkerClient } from '../../../src/worker/client.js';
 import { TEST_DATA } from '../../infra/test-data.js';
-import { CalculationStats } from '../../../src/lib/types/index.js';
-import { AsyncUtils } from '../../../src/lib/utils/index.js';
+import { CalculationStats } from '#types/index.js';
+import { AsyncUtils } from '#utils/index.js';
 
 describe('RefinementService', () => {
     let service: RefinementService;

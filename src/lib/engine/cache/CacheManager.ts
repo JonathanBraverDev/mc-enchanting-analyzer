@@ -1,5 +1,5 @@
-import { LRUCache } from '../../utils/collections/LRUCache.js';
-import { CalculationStats, SearchFrontier, PackedEnchant, CacheStats, CacheConfig } from '../../types/index.js';
+import { LRUCache } from '#utils/collections/LRUCache.js';
+import { CalculationStats, SearchFrontier, PackedEnchant, CacheStats, CacheConfig } from '#types/index.js';
 
 /**
  * Centralized service for managing all engine-level caches.

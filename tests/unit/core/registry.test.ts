@@ -1,8 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { EnchantEngine, EngineFactory } from '../../../src/lib/engine/index.js';
-import { DATA } from '../../../src/lib/data/index.js';
-import { isCategoryAvailable, getEligibleMaterials, getCategoryPool, getEnchantId, hasConflict, getCategoryId, getMaterialId } from '../../../src/lib/core/registry.js';
+import { EnchantEngine, EngineFactory } from '#engine/index.js';
+import { DATA } from '#data/index.js';
+import { isCategoryAvailable, getEligibleMaterials, getCategoryPool, getEnchantId, hasConflict, getCategoryId, getMaterialId } from '#core/registry.js';
 
 describe('Registry & Data Rules Test Suite', () => {
 

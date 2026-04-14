@@ -1,7 +1,7 @@
-import { RegistryState, CalculationStats, SweepData } from '../lib/types/index.js';
-import { UI_TEXTS, UI_DEFAULTS, SearchLevel, getParamsForMode } from '../lib/core/config.js';
-import { WorkerClient } from '../worker/client.js';
-import { AsyncUtils } from '../lib/utils/index.js';
+import { RegistryState, CalculationStats, SweepData } from '#types/index.js';
+import { UI_TEXTS, UI_DEFAULTS, SearchLevel, getParamsForMode } from '#core/config.js';
+import { WorkerClient } from '#worker/client.js';
+import { AsyncUtils } from '#utils/index.js';
 
 interface BaseSearchPayload {
     cat: string;

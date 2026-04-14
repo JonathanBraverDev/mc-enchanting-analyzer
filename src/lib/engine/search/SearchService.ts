@@ -1,12 +1,12 @@
-import { SearchHeap } from '../../utils/collections/SearchHeap.js';
-import { PRECISION, ProbUtils, ComboUtils, AsyncUtils } from '../../utils/index.js';
-import { getEligiblePool } from '../../core/registry.js';
-import { ENGINE_LIMITS, SEARCH_CONSTANTS } from '../../constants/engine.js';
-import { PackedCombo, SearchFrontier, RegistryState, EngineInstrumentation, MassCheckpoint, EngineExitReason, SearchTiming, ForwardingContext } from '../../types/index.js';
-import { FrontierFactory } from '../frontier.js';
-import { ProbabilityMassTracker } from '../ProbabilityMassTracker.js';
+import { SearchHeap } from '#utils/collections/SearchHeap.js';
+import { PRECISION, ProbUtils, ComboUtils, AsyncUtils } from '#utils/index.js';
+import { getEligiblePool } from '#core/registry.js';
+import { ENGINE_LIMITS, SEARCH_CONSTANTS } from '#constants/engine.js';
+import { PackedCombo, SearchFrontier, RegistryState, EngineInstrumentation, MassCheckpoint, EngineExitReason, SearchTiming, ForwardingContext } from '#types/index.js';
+import { FrontierFactory } from '#engine/frontier.js';
+import { ProbabilityMassTracker } from '#engine/ProbabilityMassTracker.js';
 import { SearchProcessor } from './SearchProcessor.js';
-import { CacheManager } from '../../services/CacheManager.js';
+import { CacheManager } from '#services/CacheManager.js';
 
 /**
  * Shared context for a specific search execution.

@@ -1,5 +1,5 @@
-import { MassBookkeeping, MassAccounting, MassEventType } from '../../types/mass.js';
-import { ProbUtils, PRECISION } from '../../utils/index.js';
+import { MassBookkeeping, MassAccounting, MassEventType } from '#types/mass.js';
+import { ProbUtils, PRECISION } from '#utils/index.js';
 
 /**
  * Encapsulated state tracker for probability mass units.

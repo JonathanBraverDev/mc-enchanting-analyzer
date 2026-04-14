@@ -1,7 +1,7 @@
-import { RegistryState } from '../types/index.js';
-import { getCategoryId, getMaterialId, getEnchantId } from '../core/registry.js';
-import { EnchantUtils, KeyUtils } from '../utils/index.js';
-import { ENGINE_LIMITS } from '../constants/engine.js';
+import { RegistryState } from '#types/index.js';
+import { getCategoryId, getMaterialId, getEnchantId } from '#core/registry.js';
+import { EnchantUtils, KeyUtils } from '#utils/index.js';
+import { ENGINE_LIMITS } from '#constants/engine.js';
 
 /**
  * Service for generating complex cache keys using registry-aware lookups.

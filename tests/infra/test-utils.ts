@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { HumanizationService } from '../../src/lib/services/index.js';
-import { EnchantEngine } from '../../src/lib/engine/index.js';
+import { HumanizationService } from '#services/index.js';
+import { EnchantEngine } from '#engine/index.js';
 
 /**
  * Utility for snapshot-based regression testing of engine results.

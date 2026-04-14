@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { UI_TEXTS, UI_DEFAULTS } from '../../../src/lib/core/config.js';
+import { UI_TEXTS, UI_DEFAULTS } from '#core/config.js';
 import { AnalyzerPage } from './pom/analyzer-page.js';
 import { TEST_DATA } from '../../infra/test-data.js';
 

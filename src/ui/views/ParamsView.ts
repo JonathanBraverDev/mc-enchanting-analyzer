@@ -1,7 +1,7 @@
-import { DATA } from '../../lib/data/index.js';
-import { DOMUtils, StringUtils } from '../../lib/utils/index.js';
-import { EnchantEngine } from '../../lib/engine/index.js';
-import { getEligibleMaterials, getEnchantability, getFullEnchantName } from '../../lib/core/registry.js';
+import { DATA } from '#data/index.js';
+import { DOMUtils, StringUtils } from '#utils/index.js';
+import { EnchantEngine } from '#engine/index.js';
+import { getEligibleMaterials, getEnchantability, getFullEnchantName } from '#core/registry.js';
 
 /**
  * View component for managing input parameters and their synchronization.
