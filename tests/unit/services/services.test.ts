@@ -11,7 +11,7 @@ import { SummaryService } from '../../../src/lib/services/SummaryService.js';
 import { SerializationService } from '../../../src/lib/services/SerializationService.js';
 import { HumanizationService } from '../../../src/lib/services/HumanizationService.js';
 import { DistributionService } from '../../../src/lib/engine/distribution.js';
-import { EnchantEngine, EnchantEngine } from '../../../src/lib/engine/index.js'; import { EngineFactory } from '../../../src/lib/engine/factory.js';
+import { EnchantEngine, EngineFactory } from '../../../src/lib/engine/index.js';
 import { ProbabilityMassTracker } from '../../../src/lib/engine/ProbabilityMassTracker.js';
 import { DATA } from '../../../src/lib/data/index.js';
 import type { CalculationStats, MassAccounting } from '../../../src/lib/types/index.js';

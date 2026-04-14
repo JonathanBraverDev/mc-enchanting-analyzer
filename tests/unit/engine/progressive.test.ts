@@ -1,8 +1,7 @@
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert';
-import { EngineFactory } from '../../../src/lib/engine/factory.js';
 import { CacheManager } from '../../../src/lib/services/CacheManager.js';
-import { EnchantEngine } from '../../../src/lib/engine/index.js';
+import { EnchantEngine, EngineFactory } from '../../../src/lib/engine/index.js';
 import { DATA } from '../../../src/lib/data/index.js';
 import { TEST_DATA } from '../../infra/test-data.js';
 
