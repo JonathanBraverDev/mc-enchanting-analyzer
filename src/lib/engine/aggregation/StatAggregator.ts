@@ -21,6 +21,18 @@ export class StatAggregator {
 
     /**
      * Aggregates statistics across tiers of increasing search depth.
+     * This is the orchestrator for progressive refinement, reusing previous tiers'
+     * results and search states to efficiently deepen the calculation.
+     * 
+     * @param registry Resolved registry state.
+     * @param cat Item category.
+     * @param xp Base XP level.
+     * @param mat Item material.
+     * @param guaranteedFirst Optional guaranteed enchantment.
+     * @param tiers Array of (threshold, limit) configs for each pass.
+     * @param onTierComplete Callback fired with results after each tier.
+     * @param config Internal search configuration.
+     * @returns The final aggregated result from the last tier.
      */
     public async calculateTiered(
         registry: RegistryState,
@@ -139,7 +151,16 @@ export class StatAggregator {
     }
 
     /**
-     * Aggregates all statistics for a given enchantment attempt.
+     * Performs a single-pass aggregation for the given XP level.
+     * Aggregates mass from the probability distribution of modified levels
+     * into global any/rank/count counters.
+     * 
+     * @param registry Resolved registry state.
+     * @param cat Item category.
+     * @param xp Base XP level.
+     * @param mat Item material.
+     * @param guaranteedFirst Optional guaranteed enchantment.
+     * @param config Internal search configuration.
      */
     public async calculate(
         registry: RegistryState,
@@ -254,7 +275,7 @@ export class StatAggregator {
             countMass: totalCountMass,
             instrumentation: instrumentation ? this.snapshotInstrumentation(instrumentation) : undefined,
             timing: config.timing ? { ...config.timing } : undefined,
-            threshold
+            threshold: ProbUtils.toNumber(threshold)
         };
     }
 
@@ -322,6 +343,11 @@ export class StatAggregator {
         return { ...instr, checkpoints, checkpointSummary };
     }
 
+    /**
+     * Final mass reconciliation for guaranteed enchantments.
+     * Ensures that if the search was aborted or thresholded early, the guaranteed
+     * enchantment still reflects 100% mass in the summary counters.
+     */
     private reconcileGuaranteedMass(
         registry: RegistryState,
         guaranteedFirst: string,
