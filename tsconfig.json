@@ -2,7 +2,11 @@
   "compilerOptions": {
     "target": "ESNext",
     "module": "ESNext",
-    "lib": ["DOM", "DOM.Iterable", "ESNext"],
+    "lib": [
+      "DOM",
+      "DOM.Iterable",
+      "ESNext"
+    ],
     "moduleResolution": "node",
     "strict": true,
     "sourceMap": true,
@@ -12,7 +16,47 @@
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
     "noEmit": false,
-    "declaration": true
+    "declaration": true,
+    "baseUrl": ".",
+    "paths": {
+      "#lib/*": [
+        "src/lib/*"
+      ],
+      "#core/*": [
+        "src/lib/core/*"
+      ],
+      "#data/*": [
+        "src/lib/data/*"
+      ],
+      "#engine/*": [
+        "src/lib/engine/*"
+      ],
+      "#services/*": [
+        "src/lib/services/*"
+      ],
+      "#types/*": [
+        "src/lib/types/*"
+      ],
+      "#utils/*": [
+        "src/lib/utils/*"
+      ],
+      "#constants/*": [
+        "src/lib/constants/*"
+      ],
+      "#ui/*": [
+        "src/ui/*"
+      ],
+      "#worker/*": [
+        "src/worker/*"
+      ],
+      "#tests/*": [
+        "tests/*"
+      ]
+    }
   },
-  "include": ["src/**/*", "tests/**/*", "scripts/**/*"]
+  "include": [
+    "src/**/*",
+    "tests/**/*",
+    "scripts/**/*"
+  ]
 }

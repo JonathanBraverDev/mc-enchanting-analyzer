@@ -32,5 +32,18 @@
     "test:ui": "playwright test",
     "update-snapshots": "tsx scripts/update-snapshots.ts",
     "release": "npm run test:all && npm run build:standalone"
+  },
+  "imports": {
+    "#lib/*": "./src/lib/*",
+    "#core/*": "./src/lib/core/*",
+    "#data/*": "./src/lib/data/*",
+    "#engine/*": "./src/lib/engine/*",
+    "#services/*": "./src/lib/services/*",
+    "#types/*": "./src/lib/types/*",
+    "#utils/*": "./src/lib/utils/*",
+    "#constants/*": "./src/lib/constants/*",
+    "#ui/*": "./src/ui/*",
+    "#worker/*": "./src/worker/*",
+    "#tests/*": "./tests/*"
   }
 }
