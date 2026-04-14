@@ -31,7 +31,12 @@ describe('Tiered Aggregation: StatAggregator.getFullStatsTiered', () => {
     });
 
     it('tiered produces same final result as sequential getFullStats calls', async () => {
-        const engine = EngineFactory.create(DATA, VERSION);
+        const engine = EngineFactory.create(DATA, VERSION, { 
+            statAggregator: aggregator,
+            cache: cache,
+            distributionService: distService,
+            searchService: searchService
+        });
 
         // Sequential
         const seqRaw = await aggregator.getFullStats(
@@ -57,7 +62,10 @@ describe('Tiered Aggregation: StatAggregator.getFullStatsTiered', () => {
     });
 
     it('onTierComplete fires for each tier', async () => {
-        const engine = EngineFactory.create(DATA, VERSION);
+        const engine = EngineFactory.create(DATA, VERSION, { 
+            statAggregator: aggregator,
+            cache: cache
+        });
         const tiers = [
             { threshold: 0.01,   limit: 200 },
             { threshold: 0.001,  limit: 500 },
@@ -76,7 +84,10 @@ describe('Tiered Aggregation: StatAggregator.getFullStatsTiered', () => {
     });
 
     it('each tier improves on the previous (accuracy increases monotonically)', async () => {
-        const engine = EngineFactory.create(DATA, VERSION);
+        const engine = EngineFactory.create(DATA, VERSION, { 
+            statAggregator: aggregator,
+            cache: cache
+        });
         const accuracies: number[] = [];
 
         await aggregator.getFullStatsTiered(

@@ -22,8 +22,7 @@ export class EnchantEngine {
     get registry(): RegistryState { return this._registry; }
 
     constructor(
-        data: EnchantmentData,
-        version: string,
+        registry: RegistryState,
         private readonly cache: CacheManager,
         private readonly keyService: KeyService,
         private readonly poolService: PoolService,
@@ -31,7 +30,7 @@ export class EnchantEngine {
         private readonly searchService: SearchService,
         private readonly statAggregator: StatAggregator
     ) {
-        this._registry = RegistryFactory.build(data, version);
+        this._registry = registry;
     }
 
     /** Clears all engine-level caches. */
