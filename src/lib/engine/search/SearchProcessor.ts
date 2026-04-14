@@ -1,8 +1,8 @@
-import { RegistryState, ForwardingContext, PackedCombo, PackedEnchant, SearchTiming, ExpansionBlueprint } from '../types/index.js';
-import { ComboUtils, ProbUtils, PRECISION } from '../utils/index.js';
-import { ENGINE_LIMITS, SEARCH_CONSTANTS } from '../constants/engine.js';
-import { DistributionPool } from './DistributionPool.js';
-import { ProbabilityMassTracker } from './ProbabilityMassTracker.js';
+import { RegistryState, ForwardingContext, PackedCombo, PackedEnchant, SearchTiming, ExpansionBlueprint } from '../../types/index.js';
+import { ComboUtils, ProbUtils, PRECISION } from '../../utils/index.js';
+import { ENGINE_LIMITS, SEARCH_CONSTANTS } from '../../constants/engine.js';
+import { DistributionPool } from '../distribution.js';
+import { ProbabilityMassTracker } from '../ProbabilityMassTracker.js';
 
 /**
  * Low-level primitives for the enchantment search engine.

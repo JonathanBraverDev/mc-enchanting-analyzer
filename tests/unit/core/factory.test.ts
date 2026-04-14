@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { EnchantEngine } from '../../../src/lib/engine/index.js'; import { EngineFactory } from '../../../src/lib/engine/factory.js';
+import { EnchantEngine, EngineFactory } from '../../../src/lib/engine/index.js';
 import { DATA } from '../../../src/lib/data/index.js';
 
 describe('EngineFactory', () => {

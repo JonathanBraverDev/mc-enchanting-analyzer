@@ -1,6 +1,6 @@
 import { RegistryState, PackedEnchant } from '../types/index.js';
 import { getEligiblePool } from '../core/registry.js';
-import { CacheManager } from './CacheManager.js';
+import { CacheManager } from '../engine/cache/CacheManager.js';
 
 /**
  * Service for registry-aware pool operations and filtering.

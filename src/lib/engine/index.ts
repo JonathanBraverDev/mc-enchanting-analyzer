@@ -310,3 +310,5 @@ export class EnchantEngine {
         }
     }
 }
+
+export { EngineFactory } from './factory.js';

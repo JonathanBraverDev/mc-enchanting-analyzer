@@ -177,7 +177,7 @@ export interface SearchFrontier {
     anyMass: BigUint64Array;
     rankMass: BigUint64Array;
     countMass: BigUint64Array;
-    tracker: import('../engine/ProbabilityMassTracker.js').ProbabilityMassTracker;
+    tracker: import('../engine/search/MassAccountant.js').ProbabilityMassTracker;
     threshold: bigint;
     iterations: number;
     nodesProcessed: number;
@@ -265,7 +265,7 @@ export interface ProgressReporter {
  */
 export interface AggregationResult {
     combos: Map<PackedCombo, bigint>;
-    tracker: import('../engine/ProbabilityMassTracker.js').ProbabilityMassTracker;
+    tracker: import('../engine/search/MassAccountant.js').ProbabilityMassTracker;
     anyMass: BigUint64Array;
     rankMass: BigUint64Array;
     countMass: BigUint64Array;

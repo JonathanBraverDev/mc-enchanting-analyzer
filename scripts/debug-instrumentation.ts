@@ -24,7 +24,7 @@ async function debug() {
         threshold: 0.000000001,
         maxIterations: 1000000,
         instrumentation,
-        onProgress: (s) => {
+        onProgress: (s: any) => {
             if (s.instrumentation) {
                 const { totalIterations, resultsSize, memoryMB, globalResultsSize, globalCacheNodes } = s.instrumentation;
                 const mem = memoryMB ? `${memoryMB}MB` : 'N/A';
