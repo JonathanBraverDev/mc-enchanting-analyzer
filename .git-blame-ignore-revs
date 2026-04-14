@@ -13,3 +13,5 @@
 
 # refactor: restructure engine directory (pure movement)
 578fe6d01dddbbc21532572d06ce4667a96d14f3
+# refactor(imports): migrate cross-module imports to aliases
+f909e4817fc73db0cc13a8e5c6fba0bd09045ee4
