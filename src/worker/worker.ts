@@ -30,7 +30,7 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
         }
 
         switch (type) {
-            case 'getFullStats': {
+            case 'calculate': {
                 const source = payload.source || 'main';
 
                 // Cancel previous search of the SAME source if it exists
@@ -44,7 +44,7 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
                 const signal = ctrl.signal;
 
                 try {
-                    const stats = await engine.getFullStats(
+                    const stats = await engine.calculate(
                         payload.cat,
                         payload.xp,
                         payload.mat,
@@ -80,7 +80,7 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
                 break;
             }
 
-            case 'getFullStatsProgressive': {
+            case 'calculateProgressive': {
                 const source = payload.source;
 
                 const existing = abortControllers.get(source);
@@ -93,7 +93,7 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
                 const signal = ctrl.signal;
 
                 try {
-                    const stats = await engine.getFullStatsProgressive(
+                    const stats = await engine.calculateProgressive(
                         payload.cat,
                         payload.xp,
                         payload.mat,

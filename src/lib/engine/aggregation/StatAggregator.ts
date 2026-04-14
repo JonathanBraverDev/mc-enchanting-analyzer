@@ -2,12 +2,12 @@ import { PRECISION, ProbUtils, AsyncUtils, ComboUtils, EnchantUtils } from '#uti
 import { getEnchantability } from '#core/registry.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import { getSearchLimit } from '#core/config.js';
-import { CalculationStats, PackedCombo, SearchFrontier, RegistryState, InternalSearchConfig, EngineInstrumentation, MassCheckpoint, CheckpointSummary, ProgressReporter, AggregationResult } from '#types/index.js';
-import { DistributionService } from '#engine/distribution.js';
-import { SearchService } from '#engine/search.js';
-import { FrontierFactory } from '#engine/frontier.js';
-import { ProbabilityMassTracker } from '#engine/ProbabilityMassTracker.js';
-import { CacheManager } from '#services/CacheManager.js';
+import { CalculationStats, PackedCombo, SearchState, RegistryState, InternalSearchConfig, EngineInstrumentation, MassCheckpoint, CheckpointSummary, AggregationResult } from '#types/index.js';
+import { DistributionService } from '#engine/distribution/DistributionService.js';
+import { SearchService } from '#engine/search/SearchService.js';
+import { StateFactory } from '#engine/search/StateFactory.js';
+import { SearchManager } from '#engine/search/SearchManager.js';
+import { CacheManager } from '#engine/cache/CacheManager.js';
 
 /**
  * Service for aggregating enchantment statistics across multiple modified levels.
@@ -22,7 +22,7 @@ export class StatAggregator {
     /**
      * Aggregates statistics across tiers of increasing search depth.
      */
-    public async getFullStatsTiered(
+    public async calculateTiered(
         registry: RegistryState,
         cat: string,
         xp: number,
@@ -41,8 +41,8 @@ export class StatAggregator {
         const modDist = this.distributionService.getModifiedLevelDist(registry, xp, enchantability, this.cache, instrumentation);
         const levels = Object.keys(modDist).map(Number).sort((a, b) => b - a);
 
-        const frontierMap = new Map<number, SearchFrontier>();
-        const initialTracker = new ProbabilityMassTracker();
+        const stateMap = new Map<number, SearchState>();
+        const initialTracker = new SearchManager();
         initialTracker.record('pending', PRECISION);
         
         let lastResult: AggregationResult = {
@@ -65,7 +65,7 @@ export class StatAggregator {
             const totalRankMass = new BigUint64Array(16384);
             const totalCountMass = new BigUint64Array(16);
 
-            let tierTracker = new ProbabilityMassTracker();
+            let tierTracker = new SearchManager();
 
             let processedMProb = 0n;
             let abortedMidTier = false;
@@ -78,11 +78,11 @@ export class StatAggregator {
                 }
 
                 const mProb = modDist[ml];
-                const existingFrontier = frontierMap.get(ml);
+                const existingState = stateMap.get(ml);
 
-                const result = await this.searchService.calculateCombinations(
+                const result = await this.searchService.search(
                     registry, cat, ml, guaranteedFirst,
-                    existingFrontier, {
+                    existingState, {
                         threshold: activeThreshold,
                         limit: tier.limit,
                         resultsLimit: config.resultsLimit ?? ENGINE_LIMITS.MAX_RESULTS_SIZE,
@@ -92,7 +92,7 @@ export class StatAggregator {
                     }
                 );
 
-                frontierMap.set(ml, result);
+                stateMap.set(ml, result);
 
                 if (instrumentation) {
                     this.updateInstrumentation(instrumentation, result);
@@ -141,7 +141,7 @@ export class StatAggregator {
     /**
      * Aggregates all statistics for a given enchantment attempt.
      */
-    public async getFullStats(
+    public async calculate(
         registry: RegistryState,
         cat: string,
         xp: number,
@@ -171,7 +171,7 @@ export class StatAggregator {
         const totalRankMass = new BigUint64Array(16384);
         const totalCountMass = new BigUint64Array(16);
 
-        let globalTracker = new ProbabilityMassTracker();
+        let globalTracker = new SearchManager();
 
         let processedMProb = 0n;
         let iterCount = 0;
@@ -194,7 +194,7 @@ export class StatAggregator {
                 instrumentation.frontierCache = metrics;
             }
 
-            const result = await this.searchService.calculateCombinations(
+            const result = await this.searchService.search(
                 registry, cat, ml, guaranteedFirst,
                 cached, {
                     threshold: bThreshold,
@@ -258,20 +258,20 @@ export class StatAggregator {
         };
     }
 
-    private updateInstrumentation(instr: EngineInstrumentation, result: SearchFrontier): void {
+    private updateInstrumentation(instr: EngineInstrumentation, state: SearchState): void {
         instr.checkpoints = instr.checkpoints || [];
-        if (result.checkpoints) {
-            for (const cp of result.checkpoints) {
+        if (state.checkpoints) {
+            for (const cp of state.checkpoints) {
                 instr.checkpoints.push({ 
                     ...cp, 
                     totalIterations: (instr.totalIterations || 0) + cp.iterations 
                 });
             }
         }
-        instr.totalIterations = (instr.totalIterations || 0) + result.iterations;
-        instr.exitReason = result.exitReason;
+        instr.totalIterations = (instr.totalIterations || 0) + state.iterations;
+        instr.exitReason = state.exitReason;
         instr.levelsProcessed = (instr.levelsProcessed || 0) + 1;
-        if (result.exitReason === 'empty') instr.levelsFullyResolved = (instr.levelsFullyResolved || 0) + 1;
+        if (state.exitReason === 'empty') instr.levelsFullyResolved = (instr.levelsFullyResolved || 0) + 1;
         instr.fullyResolved = instr.levelsFullyResolved === instr.levelsProcessed;
         
         // Update cache performance metrics

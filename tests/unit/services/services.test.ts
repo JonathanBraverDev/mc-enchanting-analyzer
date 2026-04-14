@@ -10,9 +10,10 @@ import { PRECISION } from '#utils/math/ProbUtils.js';
 import { SummaryService } from '#services/SummaryService.js';
 import { SerializationService } from '#services/SerializationService.js';
 import { HumanizationService } from '#services/HumanizationService.js';
-import { DistributionService } from '#engine/distribution.js';
-import { EnchantEngine, EngineFactory } from '#engine/index.js';
-import { ProbabilityMassTracker } from '#engine/ProbabilityMassTracker.js';
+import { DistributionService } from '#engine/distribution/DistributionService.js';
+import { EnchantEngine } from '#engine/index.js';
+import { EngineFactory } from '#engine/factory.js';
+import { SearchManager } from '#engine/search/SearchManager.js';
 import { DATA } from '#data/index.js';
 import type { CalculationStats, MassAccounting } from '#types/index.js';
 
@@ -20,14 +21,14 @@ import type { CalculationStats, MassAccounting } from '#types/index.js';
 
 describe('SummaryService', () => {
     it('empty combos map yields empty combos output', () => {
-        const tracker = new ProbabilityMassTracker();
+        const tracker = new SearchManager();
         const result = SummaryService.summarize(new Map(), tracker);
         assert.deepStrictEqual(result.combos, {});
     });
 
     it('converts pending mass bigint to float correctly', () => {
         const pending = PRECISION / 4n; // represents 0.25
-        const tracker = new ProbabilityMassTracker();
+        const tracker = new SearchManager();
         tracker.record('pending', pending);
         const result = SummaryService.summarize(new Map(), tracker);
         assert.ok(Math.abs(result.accounting.pending - 0.25) < 1e-12, `got ${result.accounting.pending}`);
@@ -43,7 +44,7 @@ describe('SummaryService', () => {
         const countMass = new BigUint64Array(16);
         countMass[3] = PRECISION / 5n;
 
-        const tracker = new ProbabilityMassTracker();
+        const tracker = new SearchManager();
         const result = SummaryService.summarize(new Map(), tracker, anyMass, rankMass, countMass);
         assert.ok(Math.abs(result.any[5]         - 0.5)  < 1e-12);
         assert.ok(Math.abs(result.ranks[0x0501]  - 0.25) < 1e-12);
@@ -53,7 +54,7 @@ describe('SummaryService', () => {
     it('comboLimit=0 yields empty combos even when data is present', () => {
         const combos = new Map<number, bigint>();
         for (let i = 1; i <= 10; i++) combos.set(i, BigInt(i) * (PRECISION / 100n));
-        const tracker = new ProbabilityMassTracker();
+        const tracker = new SearchManager();
         const result = SummaryService.summarize(combos, tracker, undefined, undefined, undefined, 0);
         assert.deepStrictEqual(result.combos, {});
     });
@@ -62,7 +63,7 @@ describe('SummaryService', () => {
         const combos = new Map<number, bigint>();
         for (let i = 1; i <= 10; i++) combos.set(i, BigInt(i) * (PRECISION / 1000n));
 
-        const tracker = new ProbabilityMassTracker();
+        const tracker = new SearchManager();
         const result = SummaryService.summarize(combos, tracker, undefined, undefined, undefined, 3);
         const numericKeys = Object.keys(result.combos).map(k => parseInt(k, 16));
 
@@ -76,7 +77,7 @@ describe('SummaryService', () => {
         const combos = new Map<number, bigint>();
         for (let i = 1; i <= 400; i++) combos.set(i, BigInt(i) * (PRECISION / 100000n));
 
-        const tracker = new ProbabilityMassTracker();
+        const tracker = new SearchManager();
         const result = SummaryService.summarize(combos, tracker, undefined, undefined, undefined, 300);
         const numericKeys = Object.keys(result.combos).map(k => parseInt(k, 16));
 
@@ -87,7 +88,7 @@ describe('SummaryService', () => {
 
     it('stores combo keys as lowercase hex strings', () => {
         const combos = new Map<number, bigint>([[255, PRECISION / 2n]]);
-        const tracker = new ProbabilityMassTracker();
+        const tracker = new SearchManager();
         const result = SummaryService.summarize(combos, tracker);
         assert.ok(Object.keys(result.combos).includes('ff'));
     });
@@ -150,7 +151,7 @@ describe('HumanizationService', () => {
 
     let stats: CalculationStats;
     before(async () => {
-        stats = await engine.getFullStats('pickaxe', 30, 'diamond', { threshold: 0.005 });
+        stats = await engine.calculate('pickaxe', 30, 'diamond', { threshold: 0.005 });
     });
 
     it('resolves enchantment names in the any map', () => {
@@ -182,11 +183,11 @@ describe('DistributionService', () => {
     });
 });
 
-// ── ProbabilityMassTracker detailed accounting ───────────────────────────
+// ── SearchManager detailed accounting ───────────────────────────
 
-describe('ProbabilityMassTracker Accounting', () => {
+describe('SearchManager Accounting', () => {
     it('toPublic converts BigInt buckets to floating-point accurately', () => {
-        const tracker = new ProbabilityMassTracker();
+        const tracker = new SearchManager();
         tracker.record('resolved', PRECISION / 2n);
         tracker.record('pending', PRECISION / 10n);
         
@@ -196,8 +197,8 @@ describe('ProbabilityMassTracker Accounting', () => {
     });
 
     it('addScaled combines mass from another tracker', () => {
-        const t1 = new ProbabilityMassTracker();
-        const t2 = new ProbabilityMassTracker();
+        const t1 = new SearchManager();
+        const t2 = new SearchManager();
         
         t1.record('resolved', 100n);
         t2.record('resolved', 200n);

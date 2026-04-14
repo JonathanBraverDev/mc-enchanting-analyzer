@@ -1,6 +1,7 @@
 import { test, describe, it } from 'node:test';
 import assert from 'node:assert';
-import { EnchantEngine, EngineFactory } from '#engine/index.js';
+import { EnchantEngine } from '#engine/index.js';
+import { EngineFactory } from '#engine/factory.js';
 import { DATA } from '#data/index.js';
 import { ProbUtils } from '#utils/index.js';
 import { HumanizationService } from '#services/index.js';
@@ -26,7 +27,7 @@ describe('Enchantment Engine Test Suite', () => {
         });
 
         it('should NOT return "X undefined" when no enchants are possible', async () => {
-            const stats = await engine.getFullStats(TEST_DATA.ITEMS.SWORD, 1, TEST_DATA.MATERIALS.DIAMOND);
+            const stats = await engine.calculate(TEST_DATA.ITEMS.SWORD, 1, TEST_DATA.MATERIALS.DIAMOND);
             const h = HumanizationService.humanize(stats, engine.registry);
             const hasUndefined = Object.keys(h.combos).some(c => c.includes('undefined')) ||
                                 Object.keys(h.ranks).some(r => r.includes('undefined'));
@@ -38,11 +39,11 @@ describe('Enchantment Engine Test Suite', () => {
         it('1.11.1+: Sweeping Edge should only appear in valid versions', async () => {
             const v18 = EngineFactory.create(DATA, TEST_DATA.VERSIONS.LEGACY);
             const id = v18.registry.idMap.get('Sweeping Edge')!;
-            const s18 = await v18.getFullStats(TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND);
+            const s18 = await v18.calculate(TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND);
             assert.ok(!s18.any[id]);
 
             const v111 = EngineFactory.create(DATA, '1.11.1');
-            const s111 = await v111.getFullStats(TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND);
+            const s111 = await v111.calculate(TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND);
             assert.ok(s111.any[id] > 0);
         });
 
@@ -70,10 +71,10 @@ describe('Enchantment Engine Test Suite', () => {
         const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.POST_NETHERITE);
 
         it('Progressive Refinement Parity: Resumed search should match fresh search', async () => {
-            const standard = await engine.getFullStats(TEST_DATA.ITEMS.BOOK, 30, TEST_DATA.MATERIALS.BOOK, { threshold: 0.001 });
+            const standard = await engine.calculate(TEST_DATA.ITEMS.BOOK, 30, TEST_DATA.MATERIALS.BOOK, { threshold: 0.001 });
             engine.resetCaches();
-            await engine.getFullStats(TEST_DATA.ITEMS.BOOK, 30, TEST_DATA.MATERIALS.BOOK, { threshold: 0.05 }); // Coarse
-            const resumed = await engine.getFullStats(TEST_DATA.ITEMS.BOOK, 30, TEST_DATA.MATERIALS.BOOK, { threshold: 0.001 }); // Resume
+            await engine.calculate(TEST_DATA.ITEMS.BOOK, 30, TEST_DATA.MATERIALS.BOOK, { threshold: 0.05 }); // Coarse
+            const resumed = await engine.calculate(TEST_DATA.ITEMS.BOOK, 30, TEST_DATA.MATERIALS.BOOK, { threshold: 0.001 }); // Resume
             
             const keysS = Object.keys(standard.any).sort().slice(0, 5);
             const keysR = Object.keys(resumed.any).sort().slice(0, 5);
@@ -81,7 +82,7 @@ describe('Enchantment Engine Test Suite', () => {
         });
 
         it('Delayed Level Decay & Pool Persistence', async () => {
-            const stats = await engine.getFullStats(TEST_DATA.ITEMS.PICKAXE, 30, TEST_DATA.MATERIALS.DIAMOND);
+            const stats = await engine.calculate(TEST_DATA.ITEMS.PICKAXE, 30, TEST_DATA.MATERIALS.DIAMOND);
             const human = HumanizationService.humanize(stats, engine.registry);
             
             const hasEffIVDeep = Object.keys(human.combos)
@@ -105,7 +106,7 @@ describe('Enchantment Engine Test Suite', () => {
 
         it('Guaranteed First should yield 100% total probability', async () => {
             const guaranteedFirst = "Efficiency IV";
-            const stats = await engine.getFullStats(TEST_DATA.ITEMS.PICKAXE, 30, TEST_DATA.MATERIALS.DIAMOND, { guaranteedFirst, threshold: TEST_DATA.THRESHOLDS.PROB_MIN });
+            const stats = await engine.calculate(TEST_DATA.ITEMS.PICKAXE, 30, TEST_DATA.MATERIALS.DIAMOND, { guaranteedFirst, threshold: TEST_DATA.THRESHOLDS.PROB_MIN });
             const effId = engine.registry.idMap.get('Efficiency')!;
             const probAnyEff = stats.any[effId];
             
@@ -118,7 +119,7 @@ describe('Enchantment Engine Test Suite', () => {
         });
 
         it('should maintain high precision for complex enchantment results', async () => {
-            const stats = await engine.getFullStats(TEST_DATA.ITEMS.PICKAXE, 30, TEST_DATA.MATERIALS.DIAMOND, { threshold: 0.00001 });
+            const stats = await engine.calculate(TEST_DATA.ITEMS.PICKAXE, 30, TEST_DATA.MATERIALS.DIAMOND, { threshold: 0.00001 });
             let totalProb = 0; // Uncertainty is now properly tracked within the combos themselves as partial states
             for (const p of Object.values(stats.combos)) {
                 totalProb += Number(p);
@@ -130,7 +131,7 @@ describe('Enchantment Engine Test Suite', () => {
              const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
              
              // Force a high-uncertainty search by setting extremely low maxIterations (e.g., 5)
-             const stats = await engine.getFullStats(
+             const stats = await engine.calculate(
                  TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND,
                  { guaranteedFirst: 'Sharpness IV', threshold: 0.000001, maxIterations: 5 }
              );
@@ -147,7 +148,7 @@ describe('Enchantment Engine Test Suite', () => {
 
          it('Regression: Guaranteed first must still allow single-enchant outcomes (Match Wiki)', async () => {
              const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.LAPIS_PIVOT);
-             const stats = await engine.getFullStats(TEST_DATA.ITEMS.BOW, 30, TEST_DATA.MATERIALS.BOW, { 
+             const stats = await engine.calculate(TEST_DATA.ITEMS.BOW, 30, TEST_DATA.MATERIALS.BOW, { 
                  guaranteedFirst: 'Power IV', 
                  threshold: 0.0001 
              });
@@ -158,7 +159,7 @@ describe('Enchantment Engine Test Suite', () => {
 
          it('Guaranteed book enchant should be exactly 100%', async () => {
              const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.POST_NETHERITE);
-             const stats = await engine.getFullStats(TEST_DATA.ITEMS.BOOK, 30, TEST_DATA.MATERIALS.BOOK, { guaranteedFirst: 'Silk Touch I', threshold: TEST_DATA.THRESHOLDS.PROB_MIN, summaryLimit: 1000 });
+             const stats = await engine.calculate(TEST_DATA.ITEMS.BOOK, 30, TEST_DATA.MATERIALS.BOOK, { guaranteedFirst: 'Silk Touch I', threshold: TEST_DATA.THRESHOLDS.PROB_MIN, summaryLimit: 1000 });
              const silkTouchId = getEnchantId(engine.registry,'Silk Touch');
              assert.strictEqual(stats.any[silkTouchId], 1.0, 'Guaranteed book enchant should be 100%');
          });
@@ -171,43 +172,43 @@ describe('Enchantment Engine Test Suite', () => {
 
         it('Snapshot: 1.8 Diamond Sword @ Level 30', async () => {
             const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.LAPIS_PIVOT);
-            const stats = await engine.getFullStats(TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND, { threshold: SNAPSHOT_THRESHOLD, maxIterations: SNAPSHOT_ITERATIONS, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false });
+            const stats = await engine.calculate(TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND, { threshold: SNAPSHOT_THRESHOLD, maxIterations: SNAPSHOT_ITERATIONS, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false });
             await SnapshotUtils.assertSnapshot('1.8_sword_30_diamond', stats);
         });
 
         it('Snapshot: 1.21 Mace @ Level 30', async () => {
             const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
-            const stats = await engine.getFullStats(TEST_DATA.ITEMS.MACE, 30, TEST_DATA.MATERIALS.MACE, { threshold: SNAPSHOT_THRESHOLD, maxIterations: SNAPSHOT_ITERATIONS, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false });
+            const stats = await engine.calculate(TEST_DATA.ITEMS.MACE, 30, TEST_DATA.MATERIALS.MACE, { threshold: SNAPSHOT_THRESHOLD, maxIterations: SNAPSHOT_ITERATIONS, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false });
             await SnapshotUtils.assertSnapshot('1.21_mace_30_mace', stats);
         });
 
         it('Snapshot: 1.7.2 Multi-Enchant Book @ Level 30', async () => {
             const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.BOOK_MULTI_LIMIT);
-            const stats = await engine.getFullStats(TEST_DATA.ITEMS.BOOK, 30, TEST_DATA.MATERIALS.BOOK, { threshold: SNAPSHOT_THRESHOLD, maxIterations: SNAPSHOT_ITERATIONS, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false });
+            const stats = await engine.calculate(TEST_DATA.ITEMS.BOOK, 30, TEST_DATA.MATERIALS.BOOK, { threshold: SNAPSHOT_THRESHOLD, maxIterations: SNAPSHOT_ITERATIONS, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false });
             await SnapshotUtils.assertSnapshot('1.7.2_book_30_book', stats);
         });
 
         it('Snapshot: 1.21.11 Spear @ Level 30', async () => {
             const engine = EngineFactory.create(DATA, '1.21.11');
-            const stats = await engine.getFullStats(TEST_DATA.ITEMS.SPEAR, 30, TEST_DATA.MATERIALS.DIAMOND, { threshold: SNAPSHOT_THRESHOLD, maxIterations: SNAPSHOT_ITERATIONS, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false });
+            const stats = await engine.calculate(TEST_DATA.ITEMS.SPEAR, 30, TEST_DATA.MATERIALS.DIAMOND, { threshold: SNAPSHOT_THRESHOLD, maxIterations: SNAPSHOT_ITERATIONS, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false });
             await SnapshotUtils.assertSnapshot('1.21.11_spear_30_diamond', stats);
         });
 
         it('Snapshot: 1.21.11 Book @ Level 30', async () => {
             const engine = EngineFactory.create(DATA, '1.21.11');
-            const stats = await engine.getFullStats(TEST_DATA.ITEMS.BOOK, 30, TEST_DATA.MATERIALS.BOOK, { threshold: SNAPSHOT_THRESHOLD, maxIterations: SNAPSHOT_ITERATIONS, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false });
+            const stats = await engine.calculate(TEST_DATA.ITEMS.BOOK, 30, TEST_DATA.MATERIALS.BOOK, { threshold: SNAPSHOT_THRESHOLD, maxIterations: SNAPSHOT_ITERATIONS, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false });
             await SnapshotUtils.assertSnapshot('1.21.11_book_30_book', stats);
         });
 
         it('Snapshot: 1.21 Diamond Sword @ Level 30 (Guaranteed Sharpness IV)', async () => {
             const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
-            const stats = await engine.getFullStats(TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND, { threshold: SNAPSHOT_THRESHOLD, maxIterations: SNAPSHOT_LIMIT, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false, guaranteedFirst: 'Sharpness IV' });
+            const stats = await engine.calculate(TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND, { threshold: SNAPSHOT_THRESHOLD, maxIterations: SNAPSHOT_LIMIT, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false, guaranteedFirst: 'Sharpness IV' });
             await SnapshotUtils.assertSnapshot('1.21_sword_30_diamond_guaranteed_sharpness', stats);
         });
 
         it('Snapshot: 1.8 Bow @ Level 30 (Guaranteed Power IV)', async () => {
             const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.LAPIS_PIVOT);
-            const stats = await engine.getFullStats(TEST_DATA.ITEMS.BOW, 30, TEST_DATA.MATERIALS.BOW, { threshold: SNAPSHOT_THRESHOLD, maxIterations: SNAPSHOT_ITERATIONS, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false, guaranteedFirst: 'Power IV' });
+            const stats = await engine.calculate(TEST_DATA.ITEMS.BOW, 30, TEST_DATA.MATERIALS.BOW, { threshold: SNAPSHOT_THRESHOLD, maxIterations: SNAPSHOT_ITERATIONS, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false, guaranteedFirst: 'Power IV' });
             await SnapshotUtils.assertSnapshot('1.8_bow_30_bow_guaranteed_power', stats);
         });
     });
@@ -217,13 +218,13 @@ describe('Enchantment Engine Test Suite', () => {
              const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.LAPIS_PIVOT);
              
              // 1. Get stats for Sword
-             const swordStats = await engine.getFullStats(TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND, { threshold: 0.001 });
+             const swordStats = await engine.calculate(TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND, { threshold: 0.001 });
              const sharpnessId = getEnchantId(engine.registry,'Sharpness') as number;
              assert.ok(swordStats.any[sharpnessId] > 0, 'Sword should have Sharpness');
              
              // 2. Get stats for Pickaxe (same version, level, material)
              // This should bypass the sword cache because category ID is different
-             const pickaxeStats = await engine.getFullStats(TEST_DATA.ITEMS.PICKAXE, 30, TEST_DATA.MATERIALS.DIAMOND, { threshold: 0.001 });
+             const pickaxeStats = await engine.calculate(TEST_DATA.ITEMS.PICKAXE, 30, TEST_DATA.MATERIALS.DIAMOND, { threshold: 0.001 });
              const efficiencyId = getEnchantId(engine.registry,'Efficiency') as number;
              
              assert.strictEqual(pickaxeStats.any[sharpnessId] || 0, 0, 'Pickaxe should NOT have Sharpness');

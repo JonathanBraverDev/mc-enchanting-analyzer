@@ -1,7 +1,8 @@
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert';
-import { CacheManager } from '#services/CacheManager.js';
-import { EnchantEngine, EngineFactory } from '#engine/index.js';
+import { CacheManager } from '#engine/cache/CacheManager.js';
+import { EnchantEngine } from '#engine/index.js';
+import { EngineFactory } from '#engine/factory.js';
 import { DATA } from '#data/index.js';
 import { TEST_DATA } from '../../infra/test-data.js';
 
@@ -24,7 +25,7 @@ describe('EnchantEngine: Progressive Search', () => {
             { threshold: 0.001, limit: 1000 }
         ];
 
-        await engine.getFullStatsProgressive(
+        await engine.calculateProgressive(
             TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND, null,
             tiers,
             (stats) => {
@@ -45,7 +46,7 @@ describe('EnchantEngine: Progressive Search', () => {
             { threshold: 0.1,   limit: 10 },    // Very shallow second pass
         ];
 
-        const stats = await engine.getFullStatsProgressive(
+        const stats = await engine.calculateProgressive(
             TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND, null,
             tiers,
             () => {
@@ -64,7 +65,7 @@ describe('EnchantEngine: Progressive Search', () => {
             { threshold: 0.01,  limit: 1000 }
         ];
 
-        await engine.getFullStatsProgressive(
+        await engine.calculateProgressive(
             TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND, null,
             tiers,
             (stats) => {

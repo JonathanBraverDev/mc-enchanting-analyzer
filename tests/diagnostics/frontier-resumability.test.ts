@@ -21,9 +21,10 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { EnchantEngine, EngineFactory } from '#engine/index.js';
-import { SearchService } from '#engine/search.js';
-import { CacheManager } from '#services/CacheManager.js';
+import { EnchantEngine } from '#engine/index.js';
+import { EngineFactory } from '#engine/factory.js';
+import { SearchService } from '#engine/search/SearchService.js';
+import { CacheManager } from '#engine/cache/CacheManager.js';
 import { DATA } from '#data/index.js';
 import { ProbUtils } from '#utils/index.js';
 
@@ -44,12 +45,12 @@ describe('Frontier Resumability & Cache Behavior', () => {
         const cat = 'book', ml = 50, mat = 'book';
 
         // First pass: 500 iterations from the initial state
-        const result500 = await searchService.calculateCombinations(
+        const result500 = await searchService.search(
             engine.registry, cat, ml, null, undefined, { threshold, limit: 500, resultsLimit: 1000 }
         );
 
         // Second pass: 2 000 more iterations, resuming from result500
-        const result2000 = await searchService.calculateCombinations(
+        const result2000 = await searchService.search(
             engine.registry, cat, ml, null, result500, { threshold, limit: 2000, resultsLimit: 1000 }
         );
 
@@ -89,7 +90,7 @@ describe('Frontier Resumability & Cache Behavior', () => {
         // Coarse engine: threshold=0.01 — search stops when queue-top prob < 0.001
         EngineFactory.clearCaches();
         const coarseEngine = EngineFactory.create(DATA, '1.21');
-        const coarseResult = await coarseEngine.getFullStats('sword', 30, 'diamond', {
+        const coarseResult = await coarseEngine.calculate('sword', 30, 'diamond', {
             threshold: 0.01,
             resultsLimit: 1000
         });
@@ -99,7 +100,7 @@ describe('Frontier Resumability & Cache Behavior', () => {
         // A fresh engine ensures the stats cache from the coarse run doesn't interfere.
         EngineFactory.clearCaches();
         const deepEngine = EngineFactory.create(DATA, '1.21');
-        const deepResult = await deepEngine.getFullStats('sword', 30, 'diamond', {
+        const deepResult = await deepEngine.calculate('sword', 30, 'diamond', {
             threshold: 0.0001,
             resultsLimit: 1000
         });
@@ -117,10 +118,10 @@ describe('Frontier Resumability & Cache Behavior', () => {
         const engine = EngineFactory.create(DATA, '1.21');
 
         // First call: computes stats and stores them in the stats cache.
-        const result1 = await engine.getFullStats('sword', 30, 'diamond', { threshold: 0.001, resultsLimit: 1000 });
+        const result1 = await engine.calculate('sword', 30, 'diamond', { threshold: 0.001, resultsLimit: 1000 });
 
         // Second call with identical params: stats cache hit, returns the same object.
-        const result2 = await engine.getFullStats('sword', 30, 'diamond', { threshold: 0.001, resultsLimit: 1000 });
+        const result2 = await engine.calculate('sword', 30, 'diamond', { threshold: 0.001, resultsLimit: 1000 });
 
         assert.strictEqual(result1, result2,
             'Second getFullStats call with same params should return the exact same cached object');
@@ -137,7 +138,7 @@ describe('Frontier Resumability & Cache Behavior', () => {
         const engine = EngineFactory.create(DATA, '1.21');
 
         // Coarse pass: populates both statsCache and comboCache.
-        const coarseResult = await engine.getFullStats('sword', 30, 'diamond', {
+        const coarseResult = await engine.calculate('sword', 30, 'diamond', {
             threshold: 0.01,
             resultsLimit: 1000
         });
@@ -147,7 +148,7 @@ describe('Frontier Resumability & Cache Behavior', () => {
 
         // Deep pass: statsCache miss forces recomputation, but comboCache hit
         // lets each modLevel search resume from the already-explored coarse frontier.
-        const deepResult = await engine.getFullStats('sword', 30, 'diamond', {
+        const deepResult = await engine.calculate('sword', 30, 'diamond', {
             threshold: 0.0001,
             resultsLimit: 1000
         });
@@ -167,14 +168,14 @@ describe('Frontier Resumability & Cache Behavior', () => {
         // Ultra run first: produces low-uncertainty stats, cached at K_stats.
         // The stats key excludes limit and threshold, so K_stats is the same
         // for any config on the same (cat, mat, xp, guaranteed) tuple.
-        const ultraResult = await engine.getFullStats('sword', 30, 'diamond', {
+        const ultraResult = await engine.calculate('sword', 30, 'diamond', {
             threshold: 0.00001,
             maxIterations: 200
         });
 
         // Coarse run: looks up the same K_stats → immediate stats cache hit.
         // Returns the already-cached ultra result without recomputing.
-        const coarseResult = await engine.getFullStats('sword', 30, 'diamond', {
+        const coarseResult = await engine.calculate('sword', 30, 'diamond', {
             threshold: 0.1, // use a very coarse threshold to be safe
             maxIterations: 20
         });

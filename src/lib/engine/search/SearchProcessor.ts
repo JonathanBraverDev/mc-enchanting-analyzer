@@ -1,8 +1,8 @@
 import { RegistryState, ForwardingContext, PackedCombo, PackedEnchant, SearchTiming, ExpansionBlueprint } from '#types/index.js';
 import { ComboUtils, ProbUtils, PRECISION } from '#utils/index.js';
 import { ENGINE_LIMITS, SEARCH_CONSTANTS } from '#constants/engine.js';
-import { DistributionPool } from '#engine/distribution.js';
-import { ProbabilityMassTracker } from '#engine/ProbabilityMassTracker.js';
+import { DistributionPool } from '#engine/distribution/DistributionPool.js';
+import { SearchManager } from '#engine/search/SearchManager.js';
 
 /**
  * Low-level primitives for the enchantment search engine.
@@ -131,7 +131,7 @@ export class SearchProcessor {
         currentMeta: bigint,
         currentLevel: number,
         ctx: ForwardingContext,
-        tracker: ProbabilityMassTracker
+        tracker: SearchManager
     ): void {
         const { registry, timing, queue, guaranteedFirstId, pool, poolWeights, initialTotalWeight } = ctx;
         
@@ -166,7 +166,7 @@ export class SearchProcessor {
         currentCombo: PackedCombo,
         currentCount: number,
         ctx: ForwardingContext,
-        tracker: ProbabilityMassTracker
+        tracker: SearchManager
     ): void {
         const { registry, timing, cat, pool } = ctx;
         const { indexToEnchant } = registry;

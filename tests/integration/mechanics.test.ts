@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { EnchantEngine, EngineFactory } from '#engine/index.js';
+import { EnchantEngine } from '#engine/index.js';
+import { EngineFactory } from '#engine/factory.js';
 import { DATA } from '#data/index.js';
 import { ProbUtils } from '#utils/index.js';
 import { getEnchantId, getCategoryPool } from '#core/registry.js';
@@ -11,13 +12,13 @@ describe('Minecraft Mechanics Integration Tests', () => {
     describe('Book Mechanics', () => {
         it('1.4.6: Books should remain single-enchantment', async () => {
             const engine146 = EngineFactory.create(DATA, '1.4.6');
-            const stats = await engine146.getFullStats('book', 30, 'book', { threshold: 0.001 });
+            const stats = await engine146.calculate('book', 30, 'book', { threshold: 0.001 });
             assert.ok(stats.count[1] > 0.99, '1.4.6 books should only have 1 enchantment');
         });
 
         it('1.7.2+: Books SHOULD allow multi-enchantment', async () => {
             const engine172 = EngineFactory.create(DATA, '1.7.2');
-            const stats = await engine172.getFullStats('book', 30, 'book', { threshold: 0.0001 });
+            const stats = await engine172.calculate('book', 30, 'book', { threshold: 0.0001 });
             assert.ok(stats.count[1] > 0.75, '1.7.2 books should still result in many single-enchant results');
             assert.ok(stats.count[2] > 0.10, '1.7.2 books should allow multiple enchants');
         });
@@ -34,23 +35,23 @@ describe('Minecraft Mechanics Integration Tests', () => {
     describe('Version-Specific Rules', () => {
         it('1.0: Level 50 should be possible and yield higher-tier results', async () => {
             const engine10 = EngineFactory.create(DATA, '1.0');
-            const stats50 = await engine10.getFullStats('sword', 50, 'diamond', { threshold: 0.001 });
+            const stats50 = await engine10.calculate('sword', 50, 'diamond', { threshold: 0.001 });
             const sharpnessId = getEnchantId(engine10.registry,'Sharpness');
             const sharpVId = (sharpnessId << 8) | 5;
             assert.ok((stats50.ranks[sharpVId] || 0) > 0.05);
 
-            const stats30 = await engine10.getFullStats('sword', 30, 'diamond', { threshold: 0.001 });
+            const stats30 = await engine10.calculate('sword', 30, 'diamond', { threshold: 0.001 });
             assert.ok((stats30.ranks[sharpVId] || 0) < (stats50.ranks[sharpVId] || 0));
         });
 
         it('1.3.1: Level 30 cap bonus range impact', async () => {
             const engine131 = EngineFactory.create(DATA, '1.3.1');
-            const stats30 = await engine131.getFullStats('sword', 30, 'diamond', { threshold: 0.001 });
+            const stats30 = await engine131.calculate('sword', 30, 'diamond', { threshold: 0.001 });
             const sharpnessId = getEnchantId(engine131.registry,'Sharpness');
             const sharpIVId = (sharpnessId << 8) | 4;
             
             const engine10 = EngineFactory.create(DATA, '1.0');
-            const stats30_10 = await engine10.getFullStats('sword', 30, 'diamond', { threshold: 0.001 });
+            const stats30_10 = await engine10.calculate('sword', 30, 'diamond', { threshold: 0.001 });
             assert.ok((stats30.ranks[sharpIVId] || 0) < (stats30_10.ranks[sharpIVId] || 0));
         });
 

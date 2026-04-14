@@ -1,22 +1,22 @@
 import { SearchHeap } from '#utils/collections/SearchHeap.js';
-import { BinaryHeap, PRECISION, ComboUtils, EnchantUtils } from '#utils/index.js';
+import { PRECISION, ComboUtils, EnchantUtils } from '#utils/index.js';
 import { ENGINE_DEFAULTS } from '#core/config.js';
 import { getEnchantId } from '#core/registry.js';
-import { PackedNode, PackedCombo, PackedEnchant, SearchFrontier, RegistryState } from '#types/index.js';
-import { ProbabilityMassTracker } from '#engine/ProbabilityMassTracker.js';
+import { PackedCombo, PackedEnchant, SearchState, RegistryState } from '#types/index.js';
+import { SearchManager } from './SearchManager.js';
 
-export class FrontierFactory {
+export class StateFactory {
     /**
-     * Initializes a new SearchFrontier or clones an existing one.
+     * Initializes a new SearchState or clones an existing one.
      */
     public static create(
         registry: RegistryState,
         cat: string,
         modLevel: number,
         guaranteedFirst: string | null,
-        existing?: SearchFrontier,
+        existing?: SearchState,
         threshold: bigint = 0n
-    ): SearchFrontier {
+    ): SearchState {
         if (existing) {
             return {
                 queue: existing.queue.clone(),
@@ -58,7 +58,7 @@ export class FrontierFactory {
 
         return {
             queue, results, anyMass, rankMass, countMass,
-            tracker: new ProbabilityMassTracker({ 
+            tracker: new SearchManager({ 
                 resolved: 0n, 
                 pending: PRECISION, 
                 sieved: 0n, 

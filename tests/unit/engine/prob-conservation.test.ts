@@ -16,7 +16,8 @@
  */
 import { describe, it, afterEach } from 'node:test';
 import assert from 'node:assert';
-import { EnchantEngine, EngineFactory } from '#engine/index.js';
+import { EnchantEngine } from '#engine/index.js';
+import { EngineFactory } from '#engine/factory.js';
 import { DATA } from '#data/index.js';
 import { TEST_DATA } from '../../infra/test-data.js';
 
@@ -37,7 +38,7 @@ describe('Probability Conservation', () => {
 
     it('pending mass is non-negative for a partially-converged search', async () => {
         const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
-        const stats  = await engine.getFullStats('chestplate', 15, 'iron', { threshold: 0.01 });
+        const stats  = await engine.calculate('chestplate', 15, 'iron', { threshold: 0.01 });
 
         assert.ok(
             stats.accounting.pending >= 0,
@@ -47,7 +48,7 @@ describe('Probability Conservation', () => {
 
     it('sum(buckets) ≈ 1.0 for a partially-converged search', async () => {
         const engine = EngineFactory.create(DATA, '1.21');
-        const stats  = await engine.getFullStats('chestplate', 15, 'iron', { threshold: 0.01 });
+        const stats  = await engine.calculate('chestplate', 15, 'iron', { threshold: 0.01 });
 
         const total = massTotal(stats);
         assert.ok(
@@ -58,7 +59,7 @@ describe('Probability Conservation', () => {
 
     it('sum(buckets) ≈ 1.0 for a fully-converged book search (modern)', async () => {
         const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
-        const stats  = await engine.getFullStats(TEST_DATA.ITEMS.BOOK, 30, TEST_DATA.MATERIALS.BOOK, { threshold: TEST_DATA.THRESHOLDS.PROB_MIN });
+        const stats  = await engine.calculate(TEST_DATA.ITEMS.BOOK, 30, TEST_DATA.MATERIALS.BOOK, { threshold: TEST_DATA.THRESHOLDS.PROB_MIN });
 
         const total = massTotal(stats);
         assert.ok(
@@ -77,7 +78,7 @@ describe('Probability Conservation', () => {
 
         for (const { version, cat, level, mat } of cases) {
             const engine = EngineFactory.create(DATA, version);
-            const stats  = await engine.getFullStats(cat, level, mat, { threshold: 0.001 });
+            const stats  = await engine.calculate(cat, level, mat, { threshold: 0.001 });
             const label  = `${version} ${cat}@${level} ${mat}`;
 
             assert.ok(
@@ -95,7 +96,7 @@ describe('Probability Conservation', () => {
 
     it('guaranteed enchant accuracy is 1.0 for bow (Power IV)', async () => {
         const engine  = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
-        const stats   = await engine.getFullStats('bow', 30, 'bow', {
+        const stats   = await engine.calculate('bow', 30, 'bow', {
             guaranteedFirst: 'Power IV',
             threshold: TEST_DATA.THRESHOLDS.PROB_MIN,
         });

@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { EnchantEngine, EngineFactory } from '#engine/index.js';
+import { EnchantEngine } from '#engine/index.js';
+import { EngineFactory } from '#engine/factory.js';
 import { DATA } from '#data/index.js';
 import { EngineInstrumentation } from '#types/index.js';
 
@@ -15,7 +16,7 @@ test('Engine Instrumentation Collection', async () => {
     };
 
     // First run - should have many misses, 0 hits
-    await engine.getFullStats('leggings', 30, 'diamond', { instrumentation, threshold: 0.0001 });
+    await engine.calculate('leggings', 30, 'diamond', { instrumentation, threshold: 0.0001 });
     
     assert.ok(instrumentation.totalIterations > 0, 'Should have recorded iterations');
     assert.ok(instrumentation.checkpoints.length > 0, 'Should have recorded mass checkpoints');
@@ -41,7 +42,7 @@ test('Engine Instrumentation Collection', async () => {
         checkpoints: []
     };
     
-    await engine.getFullStats('leggings', 30, 'diamond', { instrumentation: instrumentation2, threshold: 0.0001 });
+    await engine.calculate('leggings', 30, 'diamond', { instrumentation: instrumentation2, threshold: 0.0001 });
     
     // distCache is global to the engine, so it should hit
     assert.ok(instrumentation2.distCache.hits > 0, 'Should have dist cache hits on second run');
@@ -60,7 +61,7 @@ test('Frontier Cache Instrumentation (Resumption)', async () => {
     };
 
     // Run a coarse search
-    await engine.getFullStats('sword', 30, 'netherite', { threshold: 0.01, instrumentation });
+    await engine.calculate('sword', 30, 'netherite', { threshold: 0.01, instrumentation });
     
     // Run a deep search - should hit frontierCache to resume
     engine.resetStatsCache();
@@ -72,7 +73,7 @@ test('Frontier Cache Instrumentation (Resumption)', async () => {
         checkpoints: []
     };
     
-    await engine.getFullStats('sword', 30, 'netherite', { threshold: 0.0001, instrumentation: instrumentation2 });
+    await engine.calculate('sword', 30, 'netherite', { threshold: 0.0001, instrumentation: instrumentation2 });
     
     assert.ok(instrumentation2.frontierCache.hits > 0, 'Should have frontier cache hits when refining');
 });

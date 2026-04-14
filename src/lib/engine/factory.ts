@@ -1,15 +1,13 @@
-import { EnchantmentData } from '#types/index.js';
+import { EnchantmentData, RegistryState } from '#types/index.js';
 import { EnchantEngine } from './index.js';
-import { CacheManager } from '#services/CacheManager.js';
+import { CacheManager } from './cache/CacheManager.js';
 import { KeyService } from '#services/KeyService.js';
 import { PoolService } from '#services/PoolService.js';
-import { DistributionService } from './distribution.js';
-import { SearchService } from './search.js';
-import { StatAggregator } from './aggregator.js';
+import { DistributionService } from './distribution/DistributionService.js';
+import { SearchService } from './search/SearchService.js';
+import { StatAggregator } from './aggregation/StatAggregator.js';
 import { CACHE_CONFIG } from '#constants/engine.js';
-
 import { RegistryFactory } from '#core/factory.js';
-import { RegistryState } from '#types/index.js';
 
 export interface EngineDependencies {
     registry: RegistryState;
