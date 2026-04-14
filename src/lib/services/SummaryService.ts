@@ -1,7 +1,7 @@
 import { ProbUtils } from '#utils/math/ProbUtils.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import { CalculationStats } from '#types/index.js';
-import { ProbabilityMassTracker } from '#engine/search/MassAccountant.js';
+import { SearchManager } from '#engine/search/SearchManager.js';
 
 /**
  * Service for summarizing raw engine results into a standard JSON format.
@@ -12,7 +12,7 @@ export class SummaryService {
      */
     public static summarize(
         combos: Map<number, bigint>,
-        tracker: ProbabilityMassTracker,
+        tracker: SearchManager,
         anyMass?: Map<number, bigint> | BigUint64Array,
         rankMass?: Map<number, bigint> | BigUint64Array,
         countMass?: Map<number, bigint> | BigUint64Array,

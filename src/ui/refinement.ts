@@ -94,7 +94,7 @@ export class RefinementService {
             let converged = false;
 
             await WorkerClient.request(
-                'getFullStatsProgressive',
+                'calculateProgressive',
                 { ...basePayload, source: 'main', tiers },
                 (partial) => {
                     if (currentId !== this.activeId || converged) return;
@@ -179,7 +179,7 @@ export class RefinementService {
                     try {
                         const response = await Promise.race([
                             WorkerClient.request(
-                                'getFullStats',
+                                'calculate',
                                 { ...payload, xp: l, threshold: currentPassThreshold, source: 'chart' },
                                 undefined,
                                 'chart'

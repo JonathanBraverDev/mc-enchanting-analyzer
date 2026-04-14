@@ -171,13 +171,13 @@ export interface ForwardingContext {
 /**
  * State of a search for enchantment combinations.
  */
-export interface SearchFrontier {
+export interface SearchState {
     queue: SearchHeap;
     results: Map<PackedCombo, bigint>;
     anyMass: BigUint64Array;
     rankMass: BigUint64Array;
     countMass: BigUint64Array;
-    tracker: import('#engine/search/MassAccountant.js').ProbabilityMassTracker;
+    tracker: import('../engine/search/SearchManager.js').SearchManager;
     threshold: bigint;
     iterations: number;
     nodesProcessed: number;
@@ -218,7 +218,7 @@ export type ProbabilityValue = bigint & { __brand: "ProbabilityValue" };
  */
 export interface SearchConfig {
     guaranteedFirst?: string | null;
-    threshold?: number;
+    threshold?: number | bigint;
     signal?: AbortSignal;
     onProgress?: (update: ProgressUpdate) => void;
     maxIterations?: number;
@@ -234,10 +234,8 @@ export interface SearchConfig {
  * Extends SearchConfig with cache accessors that are internal implementation details.
  */
 export interface InternalSearchConfig extends SearchConfig {
-    getExtendedCache?: (ml: number) => SearchFrontier | undefined;
-    setExtendedCache?: (ml: number, frontier: SearchFrontier) => void;
-    instrumentation?: EngineInstrumentation;
-    timing?: SearchTiming;
+    getExtendedCache?: (ml: number) => SearchState | undefined;
+    setExtendedCache?: (ml: number, frontier: SearchState) => void;
     getCacheMetrics?: () => { cacheNodes: number; cacheResults: number };
 }
 
@@ -265,11 +263,24 @@ export interface ProgressReporter {
  */
 export interface AggregationResult {
     combos: Map<PackedCombo, bigint>;
-    tracker: import('#engine/search/MassAccountant.js').ProbabilityMassTracker;
+    tracker: import('../engine/search/SearchManager.js').SearchManager;
     anyMass: BigUint64Array;
     rankMass: BigUint64Array;
     countMass: BigUint64Array;
     instrumentation?: EngineInstrumentation;
     timing?: SearchTiming;
     threshold: number;
+}
+
+/**
+ * Context for the Best-First search algorithm tracking.
+ * Used internally by the SearchController and SearchService.
+ */
+export interface SearchContext {
+    threshold: bigint;
+    limit: number;
+    resultsLimit: number;
+    signal?: AbortSignal;
+    instrumentation?: EngineInstrumentation;
+    timing?: SearchTiming;
 }

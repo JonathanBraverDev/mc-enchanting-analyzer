@@ -2,16 +2,16 @@ import { CompactStats, ProgressUpdate } from '#types/index.js';
 
 export type WorkerRequest =
     | { type: "init"; id: number; payload: { version: string } }
-    | { type: "getFullStats"; id: number; payload: {
+    | { type: "calculate"; id: number; payload: {
         cat: string;
         xp: number;
         mat: string;
-        guaranteedFirst: string | null;
-        threshold: number;
-        source?: string;
+        guaranteedFirst?: string | null;
+        threshold?: bigint;
         maxIterations?: number;
+        source?: string;
       }}
-    | { type: "getFullStatsProgressive"; id: number; payload: {
+    | { type: "calculateProgressive"; id: number; payload: {
         cat: string; xp: number; mat: string; guaranteedFirst: string | null;
         source: string;
         tiers: Array<{ threshold: number; limit: number }>;

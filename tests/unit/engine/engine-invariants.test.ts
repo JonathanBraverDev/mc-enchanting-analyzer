@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { EnchantEngine, EngineFactory } from '#engine/index.js';
+import { EnchantEngine } from '#engine/index.js';
+import { EngineFactory } from '#engine/factory.js';
 import { DATA } from '#data/index.js';
 import { ProbUtils, PRECISION } from '#utils/index.js';
 import { ENGINE_DEFAULTS } from '#core/config.js';
@@ -9,7 +10,7 @@ describe('Engine Architectural Invariants', () => {
 
     it('Invariant: Mass Conservation (1.0 Total)', async () => {
         const engine = EngineFactory.create(DATA, '1.21');
-        const stats = await engine.getFullStats('sword', 30, 'diamond', { threshold: 0.001 });
+        const stats = await engine.calculate('sword', 30, 'diamond', { threshold: 0.001 });
         
         const acc = stats.accounting;
         const total = acc.resolved + acc.pending + acc.sieved + acc.overflow + acc.capped + acc.rounding;
@@ -25,7 +26,7 @@ describe('Engine Architectural Invariants', () => {
         
         // Run with a very high threshold (0.1). 
         // Most nodes won't even be expanded, so they should be 'pending', NOT 'sieved'.
-        const coarseStats = await engine.getFullStats('sword', 30, 'diamond', { threshold: 0.1 });
+        const coarseStats = await engine.calculate('sword', 30, 'diamond', { threshold: 0.1 });
         
         // Sieved mass should be extremely low because it only counts branches that were
         // actually evaluated and fell below the 1e-10 floor.
@@ -36,7 +37,7 @@ describe('Engine Architectural Invariants', () => {
 
     it('Invariant: Legacy Book Restriction (Pre-1.7.2)', async () => {
         const engine = EngineFactory.create(DATA, '1.6.4');
-        const stats = await engine.getFullStats('book', 30, 'book', { threshold: 0.0001 });
+        const stats = await engine.calculate('book', 30, 'book', { threshold: 0.0001 });
         
         // Verify that no expansion happened beyond count 1
         assert.strictEqual(stats.count[2] || 0, 0, 'Legacy books must have 0% for 2 enchants');

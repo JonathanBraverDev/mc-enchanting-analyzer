@@ -4,10 +4,10 @@
 import { describe, it, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { EngineFactory } from '#engine/factory.js';
-import { StatAggregator } from '#engine/aggregator.js';
-import { DistributionService } from '#engine/distribution.js';
-import { SearchService } from '#engine/search.js';
-import { CacheManager } from '#services/CacheManager.js';
+import { StatAggregator } from '#engine/aggregation/StatAggregator.js';
+import { DistributionService } from '#engine/distribution/DistributionService.js';
+import { SearchService } from '#engine/search/SearchService.js';
+import { CacheManager } from '#engine/cache/CacheManager.js';
 import { SummaryService } from '#services/SummaryService.js';
 import { DATA } from '#data/index.js';
 import { TEST_DATA } from '../../infra/test-data.js';
@@ -30,7 +30,7 @@ describe('Tiered Aggregation: StatAggregator.getFullStatsTiered', () => {
         cache.clearAll();
     });
 
-    it('tiered produces same final result as sequential getFullStats calls', async () => {
+    it('tiered produces same final result as sequential calculate calls', async () => {
         const engine = EngineFactory.create(DATA, VERSION, { 
             statAggregator: aggregator,
             cache: cache,
@@ -39,14 +39,14 @@ describe('Tiered Aggregation: StatAggregator.getFullStatsTiered', () => {
         });
 
         // Sequential
-        const seqRaw = await aggregator.getFullStats(
+        const seqRaw = await aggregator.calculate(
             engine.registry, CAT, XP, MAT, null,
             { threshold: TEST_DATA.THRESHOLDS.PROB_MIN, resultsLimit: 10000 }
         );
         const seqStats = SummaryService.summarize(seqRaw.combos, seqRaw.tracker, seqRaw.anyMass, seqRaw.rankMass, seqRaw.countMass, 10000, seqRaw.threshold);
 
         // Tiered
-        const tieredRaw = await aggregator.getFullStatsTiered(
+        const tieredRaw = await aggregator.calculateTiered(
             engine.registry, CAT, XP, MAT, null,
             [
                 { threshold: 0.01,   limit: 500 },
@@ -73,7 +73,7 @@ describe('Tiered Aggregation: StatAggregator.getFullStatsTiered', () => {
         ];
         const callbackIndices: number[] = [];
 
-        await aggregator.getFullStatsTiered(
+        await aggregator.calculateTiered(
             engine.registry, CAT, XP, MAT, null,
             tiers,
             (_raw: AggregationResult, tierIndex: number) => { callbackIndices.push(tierIndex); },
@@ -90,7 +90,7 @@ describe('Tiered Aggregation: StatAggregator.getFullStatsTiered', () => {
         });
         const accuracies: number[] = [];
 
-        await aggregator.getFullStatsTiered(
+        await aggregator.calculateTiered(
             engine.registry, TEST_DATA.ITEMS.BOOK, 30, TEST_DATA.MATERIALS.BOOK, null,
             [
                 { threshold: 0.1,    limit: 100 },
@@ -111,17 +111,17 @@ describe('Tiered Aggregation: StatAggregator.getFullStatsTiered', () => {
     });
 });
 
-describe('EnchantEngine.getFullStatsProgressive', () => {
+describe('EnchantEngine.calculateProgressive', () => {
     afterEach(() => {
         const engine = EngineFactory.create(DATA, VERSION);
         engine.resetCaches();
     });
 
-    it('getFullStatsProgressive produces same result as getFullStats', async () => {
+    it('calculateProgressive produces same result as calculate', async () => {
         const engine = EngineFactory.create(DATA, VERSION);
         engine.resetCaches();
 
-        const progressiveStats = await engine.getFullStatsProgressive(
+        const progressiveStats = await engine.calculateProgressive(
             CAT, XP, MAT, null,
             [
                 { threshold: 0.01,   limit: 500 },
@@ -132,7 +132,7 @@ describe('EnchantEngine.getFullStatsProgressive', () => {
 
         engine.resetCaches();
 
-        const fullStats = await engine.getFullStats(CAT, XP, MAT, {
+        const fullStats = await engine.calculate(CAT, XP, MAT, {
             threshold: TEST_DATA.THRESHOLDS.PROB_MIN,
             resultsLimit: 10000
         });
@@ -147,7 +147,7 @@ describe('EnchantEngine.getFullStatsProgressive', () => {
         engine.resetCaches();
         const tierAccuracies: number[] = [];
 
-        await engine.getFullStatsProgressive(
+        await engine.calculateProgressive(
             CAT, XP, MAT, null,
             [
                 { threshold: 0.1,    limit: 100 },
@@ -159,7 +159,7 @@ describe('EnchantEngine.getFullStatsProgressive', () => {
 
         assert.strictEqual(tierAccuracies.length, 3);
         const ultraAccuracy = tierAccuracies[2];
-        const futureStats = await engine.getFullStats(CAT, XP, MAT, { threshold: TEST_DATA.THRESHOLDS.PROB_MIN });
+        const futureStats = await engine.calculate(CAT, XP, MAT, { threshold: TEST_DATA.THRESHOLDS.PROB_MIN });
         assert.strictEqual(futureStats.accuracy, ultraAccuracy);
     });
 });

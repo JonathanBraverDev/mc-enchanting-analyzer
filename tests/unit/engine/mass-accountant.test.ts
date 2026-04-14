@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { MassAccountant } from '#engine/MassAccountant.js';
+import { MassAccountant } from '#engine/search/MassAccountant.js';
 import { PRECISION } from '#utils/math/ProbUtils.js';
 
 describe('MassAccountant', () => {

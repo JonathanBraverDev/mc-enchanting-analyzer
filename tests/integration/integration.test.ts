@@ -9,7 +9,8 @@ import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { RefinementService } from '../../src/ui/refinement.js';
 import { WorkerClient } from '../../src/worker/client.js';
-import { EnchantEngine, EngineFactory } from '#engine/index.js';
+import { EnchantEngine } from '#engine/index.js';
+import { EngineFactory } from '#engine/factory.js';
 import { DATA } from '#data/index.js';
 import { isCategoryAvailable } from '#core/registry.js';
 import { MassAccounting } from '#types/mass.js';
@@ -81,7 +82,7 @@ describe('Integration: RefinementService with mocked WorkerClient', () => {
                 // Chart sweep requests: never resolve so they don't interfere
                 return new Promise(() => {});
             }
-            if (_type === 'getFullStatsProgressive') {
+            if (_type === 'calculateProgressive') {
                 progressCb = onProgress;
                 return new Promise(resolve => { mainResolve = resolve; });
             }
@@ -205,11 +206,11 @@ describe('Integration: RefinementService with mocked WorkerClient', () => {
         let chartReqCount = 0;
 
         WorkerClient.request = (_type: string, payload: any, onProgress?: any): Promise<any> => {
-            if (_type === 'getFullStatsProgressive') {
+            if (_type === 'calculateProgressive') {
                 capturedProgress = onProgress;
                 return new Promise(() => {}); // kept pending; test drives it via capturedProgress
             }
-            if (_type === 'getFullStats' && payload.source === 'chart') {
+            if (_type === 'calculate' && payload.source === 'chart') {
                 chartReqCount++;
                 console.log(`Mock intercepted chart request: level=${payload.xp}, count=${chartReqCount}`);
                 // Return a controllable promise; the test resolves them manually
@@ -419,7 +420,7 @@ describe('Integration: Guaranteed enchantment accuracy (engine direct)', () => {
 
     it('guaranteed enchantment (Sword): Sharpness probability >= 99.99% at level 30', async () => {
         const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
-        const stats = await engine.getFullStats(TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND, {
+        const stats = await engine.calculate(TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND, {
             guaranteedFirst: 'Sharpness IV',
             threshold: TEST_DATA.THRESHOLDS.PROB_MIN,
         });
@@ -436,7 +437,7 @@ describe('Integration: Guaranteed enchantment accuracy (engine direct)', () => {
         // Efficiency IV is impossible at Level 10/20 for Diamond (Enchantability 10). 
         // Using 25, 28, 30 instead.
         for (const level of [25, 28, 30]) {
-            const stats = await engine.getFullStats(TEST_DATA.ITEMS.PICKAXE, level, TEST_DATA.MATERIALS.DIAMOND, {
+            const stats = await engine.calculate(TEST_DATA.ITEMS.PICKAXE, level, TEST_DATA.MATERIALS.DIAMOND, {
                 guaranteedFirst: 'Efficiency IV',
                 threshold: TEST_DATA.THRESHOLDS.PROB_MIN,
             });
@@ -451,7 +452,7 @@ describe('Integration: Guaranteed enchantment accuracy (engine direct)', () => {
 
     it('guaranteed book enchantment: Silk Touch exactly 100%', async () => {
         const engine = EngineFactory.create(DATA, '1.20.1');
-        const stats = await engine.getFullStats('book', 30, 'book', {
+        const stats = await engine.calculate('book', 30, 'book', {
             guaranteedFirst: 'Silk Touch I',
             threshold: 0.0001,
         });

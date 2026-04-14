@@ -7,7 +7,8 @@
  */
 import { describe, it, before } from 'node:test';
 import assert from 'node:assert';
-import { EnchantEngine, EngineFactory } from '#engine/index.js';
+import { EnchantEngine } from '#engine/index.js';
+import { EngineFactory } from '#engine/factory.js';
 import { DATA } from '#data/index.js';
 import { PackedEnchant, PackedCombo } from '#types/index.js';
 import { ComboUtils } from '#utils/domain/ComboUtils.js';

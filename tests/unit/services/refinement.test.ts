@@ -14,7 +14,7 @@ describe('RefinementService', () => {
         
         // Mock static-style WorkerClient
         WorkerClient.request = async (type, payload, onProgress) => {
-            if (type === 'getFullStatsProgressive') {
+            if (type === 'calculateProgressive') {
                 const tiers = (payload as any).tiers;
                 for (let i = 0; i < tiers.length; i++) {
                     // Small delay to ensure it's truly async

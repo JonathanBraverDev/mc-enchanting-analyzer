@@ -1,24 +1,12 @@
-import { SearchHeap } from '#utils/collections/SearchHeap.js';
-import { PRECISION, ProbUtils, ComboUtils, AsyncUtils } from '#utils/index.js';
+import { PRECISION, ProbUtils } from '#utils/index.js';
 import { getEligiblePool } from '#core/registry.js';
-import { ENGINE_LIMITS, SEARCH_CONSTANTS } from '#constants/engine.js';
-import { PackedCombo, SearchFrontier, RegistryState, EngineInstrumentation, MassCheckpoint, EngineExitReason, SearchTiming, ForwardingContext } from '#types/index.js';
-import { FrontierFactory } from '#engine/frontier.js';
-import { ProbabilityMassTracker } from '#engine/ProbabilityMassTracker.js';
-import { SearchProcessor } from './SearchProcessor.js';
-import { CacheManager } from '#services/CacheManager.js';
-
-/**
- * Shared context for a specific search execution.
- */
-export interface SearchContext {
-    threshold: bigint;
-    limit: number;
-    resultsLimit: number;
-    signal?: AbortSignal;
-    instrumentation?: EngineInstrumentation;
-    timing?: SearchTiming;
-}
+import { ENGINE_LIMITS } from '#constants/engine.js';
+import { SearchState, RegistryState, SearchContext, ForwardingContext } from '#types/index.js';
+import { StateFactory } from './StateFactory.js';
+import { SearchManager } from './SearchManager.js';
+import { SearchController } from './SearchController.js';
+import { SearchHeap } from '#utils/collections/SearchHeap.js';
+import { CacheManager } from '#engine/cache/CacheManager.js';
 
 /**
  * Service for the Best-First search of enchantment combinations.
@@ -28,58 +16,49 @@ export class SearchService {
     constructor(private readonly cache: CacheManager) {}
 
     /**
-     * Iteratively calculates enchantment combinations using a Best-First approach.
+     * Search for enchantment combinations.
      */
-    public async calculateCombinations(
+    public async search(
         registry: RegistryState,
         cat: string,
         modLevel: number,
         guaranteedFirst: string | null = null,
-        existingFrontier?: SearchFrontier,
+        existingState?: SearchState,
         config?: SearchContext
-    ): Promise<SearchFrontier> {
+    ): Promise<SearchState> {
         const {
             threshold = 0n,
             limit = ENGINE_LIMITS.MAX_ITERATIONS_UNBOUNDED,
             resultsLimit = ENGINE_LIMITS.MAX_RESULTS_SIZE,
-            signal,
-            instrumentation,
             timing: timingResult
         } = config ?? {};
 
         let startTime = 0;
         if (timingResult) startTime = performance.now();
         
-        const timing = timingResult ? {
-            totalMs: 0,
-            searchMs: 0,
-            filteringMs: 0,
-            distributionMs: 0,
-            settlingMs: 0,
-            heapMs: 0
-        } : undefined;
-
-        const frontier = FrontierFactory.create(registry, cat, modLevel, guaranteedFirst, existingFrontier, threshold);
-        const { results, queue, tracker } = frontier;
+        const state = StateFactory.create(registry, cat, modLevel, guaranteedFirst, existingState, threshold);
+        const { results, queue, tracker } = state;
         
-        const guaranteedFirstId = FrontierFactory.getGuaranteedFirstId(registry, guaranteedFirst);
+        const guaranteedFirstId = StateFactory.getGuaranteedFirstId(registry, guaranteedFirst);
         const initialPool = getEligiblePool(registry, cat, modLevel, this.cache, registry.version);
-        if (instrumentation) {
-            instrumentation.poolCache = this.cache.getEngineMetrics().poolCache;
-        }
+        
         const poolWeights = initialPool.map(e => registry.weightMap[e >> 8]);
         const initialTotalWeight = poolWeights.reduce((a, b) => a + b, 0);
+
+        if (initialPool.length === 0) {
+            return this.handleEmptyPool(threshold);
+        }
 
         const ctx: ForwardingContext = {
             registry,
             results,
             queue,
-            anyMass: frontier.anyMass,
-            rankMass: frontier.rankMass,
-            countMass: frontier.countMass,
+            anyMass: state.anyMass,
+            rankMass: state.rankMass,
+            countMass: state.countMass,
             resultsLimit,
-            instrumentation,
-            timing: timing ? { ...timing } : undefined,
+            instrumentation: config?.instrumentation,
+            timing: timingResult ? { totalMs: 0, searchMs: 0, filteringMs: 0, distributionMs: 0, settlingMs: 0, heapMs: 0 } : undefined,
             cat,
             guaranteedFirstId,
             pool: initialPool,
@@ -87,97 +66,28 @@ export class SearchService {
             initialTotalWeight
         };
 
-        if (initialPool.length === 0) {
-            return this.handleEmptyPool(threshold);
-        }
+        await SearchController.run(state, ctx, modLevel, {
+            ...config,
+            threshold,
+            limit,
+            resultsLimit
+        } as SearchContext);
 
-        let iterations = 0;
-        let checkpointIdx = 0;
-        const localCheckpoints: MassCheckpoint[] = [];
-        let exitReason: EngineExitReason | undefined;
-        const current = { meta: 0n, prob: 0n, level: 0, combo: 0 as any as PackedCombo };
-
-        while (queue.size() > 0 && iterations < limit) {
-            const nextProb = queue.peekProb();
-
-            if (iterations > 0 && iterations % 1000 === 0) {
-                if (instrumentation) {
-                    instrumentation.queueSize = queue.size();
-                    instrumentation.indexMapSize = queue.indexMapSize;
-                    instrumentation.resultsSize = results.size;
-                }
-                await AsyncUtils.yield();
-                if (signal?.aborted) {
-                    exitReason = 'aborted';
-                    break;
-                }
-            }
-
-            if (nextProb < threshold) {
-                exitReason = 'threshold';
-                break;
-            }
-
-            if (queue.size() > ENGINE_LIMITS.MAX_QUEUE_SIZE) {
-                exitReason = 'exhausted';
-                break;
-            }
-
-            iterations++;
-            frontier.nodesProcessed++;
-            
-            if (!SearchProcessor.withTiming(timing, 'heapMs', () => queue.popFast(current as any))) break;
-
-            tracker.subtract('pending', current.prob);
-            const currentCount = ComboUtils.getCount(current.combo);
-
-            SearchProcessor.withTiming(timing, 'searchMs', () => {
-                if (currentCount === 0) {
-                    SearchProcessor.processInitialNode(current.prob, current.meta, modLevel, ctx, tracker);
-                } else {
-                    SearchProcessor.processSearchNode(current.prob, current.meta, current.combo, currentCount, ctx, tracker);
-                }
-            });
-
-            // Checkpoints
-            const bk = tracker.getBookkeeping();
-            while (checkpointIdx < SEARCH_CONSTANTS.CHECKPOINT_TARGETS.length) {
-                const targetMass = SEARCH_CONSTANTS.CHECKPOINT_TARGETS[checkpointIdx];
-                const currentSettledMass = bk.resolved + bk.sieved + bk.overflow;
-                if (currentSettledMass < targetMass) break;
-                localCheckpoints.push({
-                    modLevel,
-                    threshold: ProbUtils.toNumber(current.prob),
-                    mass: ProbUtils.toNumber(currentSettledMass),
-                    iterations,
-                    totalIterations: iterations
-                });
-                checkpointIdx++;
-            }
-        }
-
-        if (!exitReason) {
-            if (queue.size() === 0) exitReason = 'empty';
-            else if (iterations >= limit) exitReason = 'iterations';
-            else exitReason = 'threshold';
-        }
-
-        if (timingResult && timing) {
-            timing.totalMs = performance.now() - startTime;
-            timingResult.totalMs += timing.totalMs; // Update passed timing object
-            // Also update the sub-buckets if we want cumulative
-            timingResult.searchMs += timing.searchMs;
-            timingResult.filteringMs += timing.filteringMs;
-            timingResult.distributionMs += timing.distributionMs;
-            timingResult.settlingMs += timing.settlingMs;
-            timingResult.heapMs += timing.heapMs;
+        if (timingResult && ctx.timing) {
+            const totalMs = performance.now() - startTime;
+            timingResult.totalMs += totalMs;
+            timingResult.searchMs += ctx.timing.searchMs;
+            timingResult.filteringMs += ctx.timing.filteringMs;
+            timingResult.distributionMs += ctx.timing.distributionMs;
+            timingResult.settlingMs += ctx.timing.settlingMs;
+            timingResult.heapMs += ctx.timing.heapMs;
         }
         
-        return { ...frontier, tracker, iterations, checkpoints: localCheckpoints, exitReason };
+        return state;
     }
 
-    private handleEmptyPool(threshold: bigint): SearchFrontier {
-        const rootTracker = new ProbabilityMassTracker();
+    private handleEmptyPool(threshold: bigint): SearchState {
+        const rootTracker = new SearchManager();
         rootTracker.record('resolved', PRECISION);
         const anyMass = new BigUint64Array(256);
         const rankMass = new BigUint64Array(16384);

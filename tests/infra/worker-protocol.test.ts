@@ -1,5 +1,5 @@
 /**
- * Tests for the worker protocol — getFullStatsProgressive handler.
+ * Tests for the worker protocol — calculateProgressive handler.
  *
  * worker.ts registers self.onmessage at module load time and uses
  * workerScope (= self = globalThis in Node.js) to postMessage.
@@ -8,7 +8,8 @@
  */
 import { describe, it, before, after, afterEach } from 'node:test';
 import assert from 'node:assert';
-import { EnchantEngine, EngineFactory } from '#engine/index.js';
+import { EnchantEngine } from '#engine/index.js';
+import { EngineFactory } from '#engine/factory.js';
 import { DATA } from '#data/index.js';
 import { SerializationService } from '#services/index.js';
 import type { WorkerResponse } from '../../src/worker/protocol.js';
@@ -41,7 +42,7 @@ async function waitForMessage(
 // Suite
 // ---------------------------------------------------------------------------
 
-describe('Worker: getFullStatsProgressive handler', () => {
+describe('Worker: calculateProgressive handler', () => {
     const captured: WorkerResponse[] = [];
     let originalPostMessage: typeof globalThis.postMessage | undefined;
 
@@ -89,7 +90,7 @@ describe('Worker: getFullStatsProgressive handler', () => {
     it('progressive worker request fires tier callbacks as progress', async () => {
         const id = 10;
         sendMessage({
-            type: 'getFullStatsProgressive',
+            type: 'calculateProgressive',
             id,
             payload: {
                 cat: TEST_DATA.ITEMS.SWORD,
@@ -128,7 +129,7 @@ describe('Worker: getFullStatsProgressive handler', () => {
     it('progressive worker request returns final result', async () => {
         const id = 11;
         sendMessage({
-            type: 'getFullStatsProgressive',
+            type: 'calculateProgressive',
             id,
             payload: {
                 cat: TEST_DATA.ITEMS.SWORD,
@@ -151,7 +152,7 @@ describe('Worker: getFullStatsProgressive handler', () => {
 
         // Compare against a fresh direct engine call
         const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
-        const directStats = await engine.getFullStatsProgressive(
+        const directStats = await engine.calculateProgressive(
             TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND, null,
             [
                 { threshold: 0.01,   limit: 500 },

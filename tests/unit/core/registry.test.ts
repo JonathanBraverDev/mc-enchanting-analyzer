@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { EnchantEngine, EngineFactory } from '#engine/index.js';
+import { EnchantEngine } from '#engine/index.js';
+import { EngineFactory } from '#engine/factory.js';
 import { DATA } from '#data/index.js';
 import { isCategoryAvailable, getEligibleMaterials, getCategoryPool, getEnchantId, hasConflict, getCategoryId, getMaterialId } from '#core/registry.js';
 

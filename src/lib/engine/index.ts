@@ -1,16 +1,15 @@
-import { EnchantmentData, CalculationStats, SearchFrontier, RegistryState, SearchConfig, InternalSearchConfig, PackedEnchant, EngineInstrumentation, CacheStats, ProgressUpdate } from '#types/index.js';
-import { ProbUtils, KeyUtils, EnchantUtils, RomanUtils } from '#utils/index.js';
+import { CalculationStats, SearchState, RegistryState, SearchConfig, InternalSearchConfig, EngineInstrumentation, ProgressUpdate } from '#types/index.js';
+import { ProbUtils, RomanUtils, EnchantUtils } from '#utils/index.js';
 import { getMaterialId, getEnchantId, getEligiblePool, isCategoryAvailable, getEnchantability } from '#core/registry.js';
-import { RegistryFactory } from '#core/factory.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import { getSearchLimit } from '#core/config.js';
-import { CacheManager } from '#services/CacheManager.js';
+import { CacheManager } from './cache/CacheManager.js';
 import { KeyService } from '#services/KeyService.js';
 import { PoolService } from '#services/PoolService.js';
 import { SummaryService } from '#services/SummaryService.js';
-import { DistributionService } from './distribution.js';
-import { SearchService } from './search.js';
-import { StatAggregator } from './aggregator.js';
+import { DistributionService } from './distribution/DistributionService.js';
+import { SearchService } from './search/SearchService.js';
+import { StatAggregator } from './aggregation/StatAggregator.js';
 
 /**
  * Core math and logic engine for Minecraft Enchanting.
@@ -44,7 +43,7 @@ export class EnchantEngine {
     }
 
     /** Returns current cache performance metrics. */
-    public getCacheMetrics(): { distCache: CacheStats; poolCache: CacheStats; frontierCache: CacheStats } {
+    public getCacheMetrics(): { distCache: { hits: number; misses: number }; poolCache: { hits: number; misses: number }; frontierCache: { hits: number; misses: number } } {
         return this.cache.getEngineMetrics();
     }
 
@@ -67,9 +66,10 @@ export class EnchantEngine {
     }
 
     /**
-     * Iteratively calculates enchantment combinations using a Best-First approach.
+     * Search for enchantment combinations.
+     * Replaces previous: calculateCombinations
      */
-    public async calculateCombinations(
+    public async search(
         cat: string,
         modLevel: number,
         mat: string,
@@ -78,20 +78,20 @@ export class EnchantEngine {
         maxIterations?: number,
         resultsLimit: number = ENGINE_LIMITS.MAX_RESULTS_SIZE,
         instrumentation?: EngineInstrumentation
-    ): Promise<SearchFrontier> {
+    ): Promise<SearchState> {
         const limit = getSearchLimit(cat, ProbUtils.toNumber(threshold), maxIterations);
         const cacheKey = this.keyService.getPackedKey(this.registry, cat, modLevel, mat, guaranteedFirst);
         
         const cached = cat === "book" ? this.cache.getBook(this.registry.version, cacheKey) : this.cache.getCombo(this.registry.version, cacheKey);
-        if (cached && cached.threshold <= threshold) return cached;
+        // Cast cached to SearchState if needed, but the cache should already store SearchState 3.0 types
+        if (cached && cached.threshold <= threshold) return cached as SearchState;
 
-        const result = await this.searchService.calculateCombinations(
-            this.registry, cat, modLevel, guaranteedFirst, cached, {
+        const result = await this.searchService.search(
+            this.registry, cat, modLevel, guaranteedFirst, cached as SearchState, {
                 threshold,
                 limit,
                 resultsLimit,
-                instrumentation,
-                // Timing is optionally passed via a dedicated tier/config if needed, but not here for brevity
+                instrumentation
             }
         );
 
@@ -102,9 +102,10 @@ export class EnchantEngine {
     }
 
     /**
-     * Aggregates statistics using tiered progressive search, calling onTierComplete after each tier.
+     * Aggregates statistics using tiered progressive search.
+     * Replaces previous: getFullStatsProgressive
      */
-    public async getFullStatsProgressive(
+    public async calculateProgressive(
         cat: string,
         xp: number,
         mat: string,
@@ -161,7 +162,7 @@ export class EnchantEngine {
             }
         };
 
-        const finalRaw = await this.statAggregator.getFullStatsTiered(
+        const finalRaw = await this.statAggregator.calculateTiered(
             this.registry, cat, xp, mat, guaranteedFirst, tiers, wrappedOnTierComplete, internalConfig
         );
 
@@ -179,8 +180,9 @@ export class EnchantEngine {
 
     /**
      * Aggregates all statistics for a given enchantment attempt.
+     * Replaces previous: getFullStats
      */
-    public async getFullStats(
+    public async calculate(
         cat: string,
         xp: number,
         mat: string,
@@ -215,12 +217,12 @@ export class EnchantEngine {
             resultsLimit,
             getExtendedCache: (ml) => {
                 const pk = this.keyService.getPackedKey(this.registry, cat, ml, mat, guaranteedFirst);
-                return cat === "book" ? this.cache.getBook(this.registry.version, pk) : this.cache.getCombo(this.registry.version, pk);
+                return (cat === "book" ? this.cache.getBook(this.registry.version, pk) : this.cache.getCombo(this.registry.version, pk)) as SearchState;
             },
-            setExtendedCache: (ml, frontier) => {
+            setExtendedCache: (ml, state) => {
                 const pk = this.keyService.getPackedKey(this.registry, cat, ml, mat, guaranteedFirst);
-                if (cat === "book") this.cache.setBook(this.registry.version, pk, frontier);
-                else this.cache.setCombo(this.registry.version, pk, frontier);
+                if (cat === "book") this.cache.setBook(this.registry.version, pk, state);
+                else this.cache.setCombo(this.registry.version, pk, state);
             },
             instrumentation,
             timing,
@@ -230,7 +232,7 @@ export class EnchantEngine {
             })
         };
 
-        const finalRaw = await this.statAggregator.getFullStats(
+        const finalRaw = await this.statAggregator.calculate(
             this.registry, cat, xp, mat, guaranteedFirst, internalConfig
         );
 
@@ -310,5 +312,3 @@ export class EnchantEngine {
         }
     }
 }
-
-export { EngineFactory } from './factory.js';

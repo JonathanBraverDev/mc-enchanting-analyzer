@@ -1,6 +1,7 @@
 import { test, describe, it } from 'node:test';
 import assert from 'node:assert';
-import { EnchantEngine, EngineFactory } from '#engine/index.js';
+import { EnchantEngine } from '#engine/index.js';
+import { EngineFactory } from '#engine/factory.js';
 import { DATA } from '#data/index.js';
 import { ENGINE_DEFAULTS } from '#core/config.js';
 
@@ -55,7 +56,7 @@ describe('Error Path Tests', () => {
         it('completely unknown enchant name throws clear error', async () => {
             const engine = EngineFactory.create(DATA, '1.21');
             await assert.rejects(
-                () => engine.getFullStats('sword', 30, 'diamond', { guaranteedFirst: 'FakeEnchant X' }),
+                () => engine.calculate('sword', 30, 'diamond', { guaranteedFirst: 'FakeEnchant X' }),
                 (err: Error) => {
                     assert.ok(err.message.includes('Unknown enchantment'), `Expected "Unknown enchantment" in: ${err.message}`);
                     return true;
@@ -67,7 +68,7 @@ describe('Error Path Tests', () => {
             const engine = EngineFactory.create(DATA, '1.21');
             // Aqua Affinity is helmet-only, not applicable to swords
             await assert.rejects(
-                () => engine.getFullStats('sword', 30, 'diamond', { guaranteedFirst: 'Aqua Affinity I' }),
+                () => engine.calculate('sword', 30, 'diamond', { guaranteedFirst: 'Aqua Affinity I' }),
                 (err: Error) => {
                     assert.ok(err.message.includes('not applicable to category'), `Got: ${err.message}`);
                     return true;
@@ -79,7 +80,7 @@ describe('Error Path Tests', () => {
             const engine = EngineFactory.create(DATA, '1.21');
             // Sharpness only goes to V, VI is invalid
             await assert.rejects(
-                () => engine.getFullStats('sword', 30, 'diamond', { guaranteedFirst: 'Sharpness VI' }),
+                () => engine.calculate('sword', 30, 'diamond', { guaranteedFirst: 'Sharpness VI' }),
                 (err: Error) => {
                     assert.ok(err.message.includes('Invalid rank'), `Got: ${err.message}`);
                     assert.ok(err.message.includes('exceeds max level of V'), `Got: ${err.message}`);
@@ -92,7 +93,7 @@ describe('Error Path Tests', () => {
             const engine = EngineFactory.create(DATA, '1.21');
             // Sharpness V is impossible at level 1
             await assert.rejects(
-                () => engine.getFullStats('sword', 1, 'diamond', { guaranteedFirst: 'Sharpness V' }),
+                () => engine.calculate('sword', 1, 'diamond', { guaranteedFirst: 'Sharpness V' }),
                 (err: Error) => {
                     assert.ok(err.message.includes('impossible to obtain'), `Got: ${err.message}`);
                     return true;
@@ -105,7 +106,7 @@ describe('Error Path Tests', () => {
         it('unknown category throws a clear error', async () => {
             const engine = EngineFactory.create(DATA, '1.21');
             await assert.rejects(
-                () => engine.getFullStats('not_a_real_category', 30, 'diamond'),
+                () => engine.calculate('not_a_real_category', 30, 'diamond'),
                 (err: Error) => {
                     assert.ok(err.message.toLowerCase().includes('category'), `Expected "category" in: ${err.message}`);
                     return true;
@@ -116,7 +117,7 @@ describe('Error Path Tests', () => {
         it('empty string category throws a clear error', async () => {
             const engine = EngineFactory.create(DATA, '1.21');
             await assert.rejects(
-                () => engine.getFullStats('', 30, 'diamond'),
+                () => engine.calculate('', 30, 'diamond'),
                 (err: Error) => {
                     assert.ok(err.message.toLowerCase().includes('category'), `Expected "category" in: ${err.message}`);
                     return true;
@@ -129,7 +130,7 @@ describe('Error Path Tests', () => {
         it('unknown material throws a clear error', async () => {
             const engine = EngineFactory.create(DATA, '1.21');
             await assert.rejects(
-                () => engine.getFullStats('sword', 30, 'unobtanium'),
+                () => engine.calculate('sword', 30, 'unobtanium'),
                 (err: Error) => {
                     assert.ok(err.message.toLowerCase().includes('material'), `Expected "material" in: ${err.message}`);
                     return true;
@@ -140,7 +141,7 @@ describe('Error Path Tests', () => {
         it('empty string material throws a clear error', async () => {
             const engine = EngineFactory.create(DATA, '1.21');
             await assert.rejects(
-                () => engine.getFullStats('sword', 30, ''),
+                () => engine.calculate('sword', 30, ''),
                 (err: Error) => {
                     assert.ok(err.message.toLowerCase().includes('material'), `Expected "material" in: ${err.message}`);
                     return true;
@@ -153,7 +154,7 @@ describe('Error Path Tests', () => {
         it('XP = 0 throws a clear error', async () => {
             const engine = EngineFactory.create(DATA, '1.21');
             await assert.rejects(
-                () => engine.getFullStats('sword', 0, 'diamond'),
+                () => engine.calculate('sword', 0, 'diamond'),
                 (err: Error) => {
                     assert.ok(err.message.toLowerCase().includes('xp'), `Expected "xp" in: ${err.message}`);
                     return true;
@@ -164,7 +165,7 @@ describe('Error Path Tests', () => {
         it('XP = -1 throws a clear error', async () => {
             const engine = EngineFactory.create(DATA, '1.21');
             await assert.rejects(
-                () => engine.getFullStats('sword', -1, 'diamond'),
+                () => engine.calculate('sword', -1, 'diamond'),
                 (err: Error) => {
                     assert.ok(err.message.toLowerCase().includes('xp'), `Expected "xp" in: ${err.message}`);
                     return true;
@@ -175,7 +176,7 @@ describe('Error Path Tests', () => {
         it('XP = -100 throws a clear error', async () => {
             const engine = EngineFactory.create(DATA, '1.21');
             await assert.rejects(
-                () => engine.getFullStats('sword', -100, 'diamond'),
+                () => engine.calculate('sword', -100, 'diamond'),
                 (err: Error) => {
                     assert.ok(err.message.toLowerCase().includes('xp'), `Expected "xp" in: ${err.message}`);
                     return true;
@@ -186,7 +187,7 @@ describe('Error Path Tests', () => {
         it('NaN XP throws a clear error', async () => {
             const engine = EngineFactory.create(DATA, '1.21');
             await assert.rejects(
-                () => engine.getFullStats('sword', NaN, 'diamond'),
+                () => engine.calculate('sword', NaN, 'diamond'),
                 (err: Error) => {
                     assert.ok(err.message.toLowerCase().includes('xp'), `Expected "xp" in: ${err.message}`);
                     return true;
@@ -199,7 +200,7 @@ describe('Error Path Tests', () => {
         it(`XP = ${ENGINE_DEFAULTS.MAX_XP_LEVEL + 1} throws a clear error`, async () => {
             const engine = EngineFactory.create(DATA, '1.21');
             await assert.rejects(
-                () => engine.getFullStats('sword', ENGINE_DEFAULTS.MAX_XP_LEVEL + 1, 'diamond'),
+                () => engine.calculate('sword', ENGINE_DEFAULTS.MAX_XP_LEVEL + 1, 'diamond'),
                 (err: Error) => {
                     assert.ok(err.message.toLowerCase().includes('xp'), `Expected "xp" in: ${err.message}`);
                     return true;
@@ -210,7 +211,7 @@ describe('Error Path Tests', () => {
         it('XP = 1000 throws a clear error', async () => {
             const engine = EngineFactory.create(DATA, '1.21');
             await assert.rejects(
-                () => engine.getFullStats('sword', 1000, 'diamond'),
+                () => engine.calculate('sword', 1000, 'diamond'),
                 (err: Error) => {
                     assert.ok(err.message.toLowerCase().includes('xp'), `Expected "xp" in: ${err.message}`);
                     return true;
@@ -220,13 +221,13 @@ describe('Error Path Tests', () => {
 
         it(`XP = ${ENGINE_DEFAULTS.MAX_XP_LEVEL} is valid (boundary check)`, async () => {
             const engine = EngineFactory.create(DATA, '1.21');
-            const stats = await engine.getFullStats('sword', ENGINE_DEFAULTS.MAX_XP_LEVEL, 'diamond', { threshold: 0.01 });
+            const stats = await engine.calculate('sword', ENGINE_DEFAULTS.MAX_XP_LEVEL, 'diamond', { threshold: 0.01 });
             assert.ok(Object.keys(stats.any).length > 0, 'Should have enchantment probabilities at max XP');
         });
 
         it('XP = 1 is valid (minimum boundary check)', async () => {
             const engine = EngineFactory.create(DATA, '1.21');
-            const stats = await engine.getFullStats('sword', 1, 'diamond', { threshold: 0.01 });
+            const stats = await engine.calculate('sword', 1, 'diamond', { threshold: 0.01 });
             // At XP=1, modified levels are very low; may produce empty or minimal results - just check no crash
             assert.ok(stats !== null);
         });
