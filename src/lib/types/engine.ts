@@ -8,16 +8,20 @@ import { MassAccounting, MassBookkeeping } from './mass.js';
  * Raw calculation statistics from the search engine.
  */
 export interface CalculationStats {
-  ranks: { [idAndRank: number]: number }; // (id << 8 | rank)
-  any: { [id: number]: number };          // base id
+  /** Map of enchantment rank IDs to their total cumulative probability. Key is (enchantId << 8 | rank). */
+  ranks: { [idAndRank: number]: number };
+  /** Map of base enchantment IDs to their total probability on the item (any rank). */
+  any: { [id: number]: number };
+  /** Map of enchantment counts (1, 2, 3...) to their total probability. */
   count: { [count: number]: number };
-  combos: { [packed: string]: number };    // Hex string of bit-packed BigInt
+  /** Map of bit-packed hexadecimal combo strings to their joint probability. */
+  combos: { [packed: string]: number };
   
-  /** The search threshold used to generate these stats. */
+  /** The minimum probability threshold used for this search. */
   threshold: number;
-  /** Simplified Accuracy: Resolved mass. */
+  /** Normalized resolved mass (0.0 to 1.0). */
   accuracy: number;
-  /** Complete diagnostic breakdown of all mass states. */
+  /** Detailed breakdown of where the total 1.0 probability mass settled. */
   accounting: MassAccounting;
   
   instrumentation?: EngineInstrumentation;

@@ -11,7 +11,8 @@ export const ProbUtils = {
     /**
      * Converts a floating-point probability to a BigInt fixed-point value.
      */
-    toBigInt: (p: number): bigint => {
+    toBigInt: (p: number | bigint): bigint => {
+        if (typeof p === 'bigint') return p;
         if (p <= 0) return 0n;
         if (p >= 1) return PRECISION;
         return BigInt(Math.floor(p * 9007199254740992)) << 7n; // 9007199254740992 is 2**53
@@ -20,7 +21,10 @@ export const ProbUtils = {
     /**
      * Converts a BigInt fixed-point value back to a floating-point probability.
      */
-    toNumber: (b: bigint): number => Number(b) / Number(PRECISION),
+    toNumber: (b: bigint | number): number => {
+        if (typeof b === 'number') return b;
+        return Number(b) / Number(PRECISION);
+    },
 
     /**
      * Scales a probability by a fixed-point factor using Banker's Rounding.

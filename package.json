@@ -30,6 +30,7 @@
     "test:engine": "tsx --test tests/unit/**/*.test.ts tests/integration/**/*.test.ts tests/diagnostics/**/*.test.ts tests/infra/*.test.ts",
     "test:snapshots": "tsx --test --test-name-pattern=\"Snapshot:\" tests/unit/engine/engine.test.ts",
     "test:ui": "playwright test",
+    "benchmark": "tsx tests/benchmarks/engine-perf.bench.ts",
     "update-snapshots": "tsx scripts/update-snapshots.ts",
     "release": "npm run test:all && npm run build:standalone"
   },

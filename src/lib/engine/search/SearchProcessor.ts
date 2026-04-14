@@ -10,6 +10,7 @@ import { SearchManager } from '#engine/search/SearchManager.js';
 export class SearchProcessor {
     /**
      * Executes a function and records its duration to the specified timing bucket.
+     * Used for detailed performance instrumentation of specific engine subsystems.
      */
     public static withTiming<T>(timing: SearchTiming | undefined, bucket: keyof Omit<SearchTiming, 'totalMs'>, fn: () => T): T {
         if (!timing) return fn();
@@ -126,6 +127,10 @@ export class SearchProcessor {
         return { rem: 0n };
     }
 
+    /**
+     * Entry point for a search: distributes mass from the "initial mass" (empty item)
+     * across the first layer of possible enchantments.
+     */
     public static processInitialNode(
         currentProb: bigint,
         currentMeta: bigint,
@@ -160,6 +165,10 @@ export class SearchProcessor {
         });
     }
 
+    /**
+     * Core expansion logic: determines eligibility for further enchantments,
+     * calculates continuous distribution probabilities, and forwards mass to children.
+     */
     public static processSearchNode(
         currentProb: bigint,
         currentMeta: bigint,

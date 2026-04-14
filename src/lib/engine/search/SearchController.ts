@@ -10,7 +10,13 @@ import { PackedCombo } from '#types/index.js';
  */
 export class SearchController {
     /**
-     * Executes the search loop on the given state.
+     * Executes the search loop on the given state until a limit or threshold is reached.
+     * This is the generic Best-First Search orchestrator, agnostic of Minecraft pooling details.
+     * 
+     * @param state The current search state (queue, results, mass maps).
+     * @param ctx Forwarding context for expansion.
+     * @param modLevel The modified level context.
+     * @param config Internal search configuration (threshold, limit, signal).
      */
     public static async run(
         state: SearchState,

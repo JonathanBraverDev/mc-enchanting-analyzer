@@ -66,8 +66,16 @@ export class EnchantEngine {
     }
 
     /**
-     * Search for enchantment combinations.
-     * Replaces previous: calculateCombinations
+     * Search for enchantment combinations at a specific modified level.
+     * 
+     * @param cat Item category.
+     * @param modLevel The pre-computed modified level for this search.
+     * @param mat Item material.
+     * @param guaranteedFirst Optional guaranteed enchantment.
+     * @param threshold High-precision bigint threshold (1.0 = 10^18).
+     * @param maxIterations Max nodes to process.
+     * @param resultsLimit Max unique combinations to return.
+     * @param instrumentation Optional performance tracking.
      */
     public async search(
         cat: string,
@@ -102,8 +110,17 @@ export class EnchantEngine {
     }
 
     /**
-     * Aggregates statistics using tiered progressive search.
-     * Replaces previous: getFullStatsProgressive
+     * Aggregates statistics using a tiered progressive search.
+     * Fires a callback after each tier completes, allowing for responsive UI updates
+     * without waiting for the finest precision.
+     * 
+     * @param cat The item category.
+     * @param xp The base XP level.
+     * @param mat The item material.
+     * @param guaranteedFirst Optional name of a guaranteed enchantment (e.g. "Sharpness IV").
+     * @param tiers Array of search depths (thresholds and iteration limits).
+     * @param onTierComplete Callback fired when a tier finishing aggregating.
+     * @param config Optional base configuration.
      */
     public async calculateProgressive(
         cat: string,
@@ -114,7 +131,7 @@ export class EnchantEngine {
         onTierComplete: (stats: CalculationStats, tierIndex: number) => void,
         config?: Partial<SearchConfig>
     ): Promise<CalculationStats> {
-        this.validateRequest(cat, xp, mat, guaranteedFirst);
+        this.validateRequest(cat, xp, mat, config ?? {});
 
         const {
             threshold = 0.0001,
@@ -180,7 +197,13 @@ export class EnchantEngine {
 
     /**
      * Aggregates all statistics for a given enchantment attempt.
-     * Replaces previous: getFullStats
+     * Use this for standard single-pass calculations (e.g. standard UI search).
+     * 
+     * @param cat The item category (e.g., 'sword', 'pickaxe').
+     * @param xp The base XP level from the enchantment table (1-50).
+     * @param mat The item material (e.g., 'diamond', 'netherite').
+     * @param config Optional search configuration (threshold, signals, etc).
+     * @returns A promise resolving to the final aggregated statistics.
      */
     public async calculate(
         cat: string,
@@ -188,7 +211,7 @@ export class EnchantEngine {
         mat: string,
         config: SearchConfig = {}
     ): Promise<CalculationStats> {
-        this.validateRequest(cat, xp, mat, config.guaranteedFirst ?? null);
+        this.validateRequest(cat, xp, mat, config);
 
         const {
             guaranteedFirst = null,
@@ -249,8 +272,11 @@ export class EnchantEngine {
     }
 
 
-    private validateRequest(cat: string, xp: number, mat: string, guaranteedFirst: string | null): void {
-        if (!Number.isFinite(xp) || xp <= 0) {
+    private validateRequest(cat: string, xp: number, mat: string, configOrGuaranteed: string | null | SearchConfig): void {
+        const guaranteedFirst = typeof configOrGuaranteed === 'string' ? configOrGuaranteed : (configOrGuaranteed as SearchConfig)?.guaranteedFirst ?? null;
+        const config = typeof configOrGuaranteed === 'string' ? {} : (configOrGuaranteed as SearchConfig ?? {});
+
+        if (!Number.isFinite(xp) || !Number.isInteger(xp) || xp <= 0) {
             throw new Error(`Invalid XP level: ${xp}. XP must be a positive integer.`);
         }
         if (xp > ENGINE_LIMITS.MAX_XP_LEVEL) {
@@ -262,6 +288,21 @@ export class EnchantEngine {
         if (getMaterialId(this.registry, mat) === ENGINE_LIMITS.UNKNOWN_MATERIAL_ID) {
             throw new Error(`Unknown material: "${mat}".`);
         }
+
+        // Config validation
+        if (config.threshold !== undefined) {
+            const t = ProbUtils.toNumber(config.threshold);
+            if (t < 0 || t > 1.0) {
+                throw new Error(`Invalid threshold: ${t}. Threshold must be between 0 and 1.0.`);
+            }
+        }
+        if (config.maxIterations !== undefined && (config.maxIterations <= 0 || !Number.isInteger(config.maxIterations))) {
+            throw new Error(`Invalid maxIterations: ${config.maxIterations}. Must be a positive integer.`);
+        }
+        if (config.resultsLimit !== undefined && (config.resultsLimit <= 0 || config.resultsLimit > 1_000_000)) {
+            throw new Error(`Invalid resultsLimit: ${config.resultsLimit}. Must be between 1 and 1,000,000.`);
+        }
+
         if (guaranteedFirst) {
             this.validateGuaranteedFirst(cat, xp, mat, guaranteedFirst);
         }

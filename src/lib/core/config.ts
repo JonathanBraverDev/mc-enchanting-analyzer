@@ -112,11 +112,14 @@ export const ENGINE_DEFAULTS = {
     MAX_XP_LEVEL: 50
 };
 
+import { ProbUtils } from '#utils/index.js';
+
 /**
  * Shared threshold-to-limit lookup used by both EnchantEngine and StatAggregator.
  */
-export function getSearchLimit(cat: string, threshold: number, maxIterations?: number): number {
+export function getSearchLimit(cat: string, threshold: number | bigint, maxIterations?: number): number {
+    const t = typeof threshold === 'number' ? threshold : ProbUtils.toNumber(threshold);
     if (maxIterations !== undefined) return maxIterations;
     if (cat === "book") return ENGINE_DEFAULTS.FALLBACK_LIMIT_BOOK;
-    return threshold < 0.0001 ? ENGINE_DEFAULTS.FALLBACK_LIMIT_HIGH_RES : ENGINE_DEFAULTS.FALLBACK_LIMIT_LOW_RES;
+    return t < 0.0001 ? ENGINE_DEFAULTS.FALLBACK_LIMIT_HIGH_RES : ENGINE_DEFAULTS.FALLBACK_LIMIT_LOW_RES;
 }
