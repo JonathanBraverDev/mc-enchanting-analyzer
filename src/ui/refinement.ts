@@ -98,9 +98,16 @@ export class RefinementService {
                 { ...basePayload, source: 'main', tiers },
                 (partial) => {
                     if (currentId !== this.activeId || converged) return;
-                    converged = (partial.stats?.accounting?.pending ?? 1) < 1e-9;
+                    
+                    if (partial.update) {
+                        // Intermediate progress could be handled here if needed
+                        return;
+                    }
+
+                    const stats = partial.stats!;
+                    converged = (stats.accounting?.pending ?? 1) < 1e-9;
                     const isFinal = tierIndex === tiers.length - 1 || converged;
-                    callbacks.onStats(partial.stats, isFinal);
+                    callbacks.onStats(stats, isFinal);
                     
                     const level = levels[tierIndex];
                     this.activeChartLevel = level;

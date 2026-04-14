@@ -1,9 +1,8 @@
 import { PRECISION, ProbUtils, AsyncUtils, ComboUtils, EnchantUtils } from '../utils/index.js';
-import { SummaryService } from '../services/index.js';
 import { getEnchantability } from '../core/registry.js';
 import { ENGINE_LIMITS } from '../constants/engine.js';
 import { getSearchLimit } from '../core/config.js';
-import { CalculationStats, PackedCombo, SearchFrontier, RegistryState, InternalSearchConfig, EngineInstrumentation, MassCheckpoint, CheckpointSummary } from '../types/index.js';
+import { CalculationStats, PackedCombo, SearchFrontier, RegistryState, InternalSearchConfig, EngineInstrumentation, MassCheckpoint, CheckpointSummary, ProgressReporter, AggregationResult } from '../types/index.js';
 import { DistributionService } from './distribution.js';
 import { SearchService } from './search.js';
 import { FrontierFactory } from './frontier.js';
@@ -30,13 +29,11 @@ export class StatAggregator {
         mat: string,
         guaranteedFirst: string | null,
         tiers: Array<{ threshold: number; limit: number }>,
-        onTierComplete: (stats: CalculationStats, tierIndex: number) => void,
+        onTierComplete: (result: AggregationResult, tierIndex: number) => void,
         config: InternalSearchConfig
-    ): Promise<CalculationStats> {
+    ): Promise<AggregationResult> {
         const {
             signal,
-            summaryLimit = ENGINE_LIMITS.MAX_RESULTS_SUMMARY,
-            resultsLimit = ENGINE_LIMITS.MAX_RESULTS_SIZE,
             instrumentation
         } = config;
 
@@ -47,10 +44,18 @@ export class StatAggregator {
         const frontierMap = new Map<number, SearchFrontier>();
         const initialTracker = new ProbabilityMassTracker();
         initialTracker.record('pending', PRECISION);
-        let lastStats: CalculationStats = { ranks: {}, any: {}, count: {}, combos: {}, threshold: 0, accuracy: 0, accounting: initialTracker.toPublic() };
+        
+        let lastResult: AggregationResult = {
+            combos: new Map(),
+            tracker: initialTracker,
+            anyMass: new BigUint64Array(256),
+            rankMass: new BigUint64Array(16384),
+            countMass: new BigUint64Array(16),
+            threshold: 0
+        };
 
         for (let tierIndex = 0; tierIndex < tiers.length; tierIndex++) {
-            if (signal?.aborted) return lastStats;
+            if (signal?.aborted) return lastResult;
 
             const tier = tiers[tierIndex];
             const activeThreshold = ProbUtils.toBigInt(tier.threshold);
@@ -80,7 +85,7 @@ export class StatAggregator {
                     existingFrontier, {
                         threshold: activeThreshold,
                         limit: tier.limit,
-                        resultsLimit,
+                        resultsLimit: config.resultsLimit ?? ENGINE_LIMITS.MAX_RESULTS_SIZE,
                         signal,
                         instrumentation,
                         timing: config.timing
@@ -104,7 +109,7 @@ export class StatAggregator {
                 await AsyncUtils.yield();
             }
 
-            if (abortedMidTier && processedMProb === 0n) return lastStats;
+            if (abortedMidTier && processedMProb === 0n) return lastResult;
 
             const distRoundingError = PRECISION - processedMProb;
             tierTracker.record('rounding', distRoundingError);
@@ -113,17 +118,24 @@ export class StatAggregator {
                 this.reconcileGuaranteedMass(registry, guaranteedFirst, totalAnyMass, totalRankMass, totalCountMass);
             }
 
-            const tierStats = SummaryService.summarize(finalCombos, tierTracker, totalAnyMass, totalRankMass, totalCountMass, summaryLimit, tier.threshold);
-            tierStats.instrumentation = instrumentation ? this.snapshotInstrumentation(instrumentation) : undefined;
-            tierStats.timing = config.timing ? { ...config.timing } : undefined;
+            const tierResult: AggregationResult = {
+                combos: finalCombos,
+                tracker: tierTracker,
+                anyMass: totalAnyMass,
+                rankMass: totalRankMass,
+                countMass: totalCountMass,
+                instrumentation: instrumentation ? this.snapshotInstrumentation(instrumentation) : undefined,
+                timing: config.timing ? { ...config.timing } : undefined,
+                threshold: tier.threshold
+            };
 
-            if (abortedMidTier) return tierStats;
+            if (abortedMidTier) return tierResult;
 
-            onTierComplete(tierStats, tierIndex);
-            lastStats = tierStats;
+            onTierComplete(tierResult, tierIndex);
+            lastResult = tierResult;
         }
 
-        return lastStats;
+        return lastResult;
     }
 
     /**
@@ -136,13 +148,11 @@ export class StatAggregator {
         mat: string,
         guaranteedFirst: string | null = null,
         config: InternalSearchConfig = {}
-    ): Promise<CalculationStats> {
+    ): Promise<AggregationResult> {
         const {
             threshold = 0.0001,
             signal,
-            onProgress,
             maxIterations,
-            summaryLimit = ENGINE_LIMITS.MAX_RESULTS_SUMMARY,
             resultsLimit = ENGINE_LIMITS.MAX_RESULTS_SIZE,
             getExtendedCache,
             setExtendedCache,
@@ -217,11 +227,13 @@ export class StatAggregator {
 
             processedMProb += mProb;
             if (++iterCount % 3 === 0) {
-                if (onProgress) {
-                    const partialStats = SummaryService.summarize(finalCombos, globalTracker, totalAnyMass, totalRankMass, totalCountMass, 0, threshold);
-                    partialStats.instrumentation = instrumentation ? this.snapshotInstrumentation(instrumentation) : undefined;
-                    partialStats.timing = config.timing ? { ...config.timing } : undefined;
-                    onProgress(partialStats);
+                if (config.onProgress) {
+                    const accuracy = globalTracker.toPublic().resolved;
+                    config.onProgress({
+                        processed: iterCount,
+                        total: levels.length,
+                        accuracy
+                    });
                 }
                 await AsyncUtils.yield();
             }
@@ -234,11 +246,16 @@ export class StatAggregator {
             this.reconcileGuaranteedMass(registry, guaranteedFirst, totalAnyMass, totalRankMass, totalCountMass);
         }
 
-        const finalStats = SummaryService.summarize(finalCombos, globalTracker, totalAnyMass, totalRankMass, totalCountMass, summaryLimit, threshold);
-        finalStats.instrumentation = instrumentation ? this.snapshotInstrumentation(instrumentation) : undefined;
-        finalStats.timing = config.timing ? { ...config.timing } : undefined;
-
-        return finalStats;
+        return {
+            combos: finalCombos,
+            tracker: globalTracker,
+            anyMass: totalAnyMass,
+            rankMass: totalRankMass,
+            countMass: totalCountMass,
+            instrumentation: instrumentation ? this.snapshotInstrumentation(instrumentation) : undefined,
+            timing: config.timing ? { ...config.timing } : undefined,
+            threshold
+        };
     }
 
     private updateInstrumentation(instr: EngineInstrumentation, result: SearchFrontier): void {

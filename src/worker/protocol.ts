@@ -1,4 +1,4 @@
-import { CompactStats } from '../lib/types/index.js';
+import { CompactStats, ProgressUpdate } from '../lib/types/index.js';
 
 export type WorkerRequest =
     | { type: "init"; id: number; payload: { version: string } }
@@ -21,5 +21,5 @@ export type WorkerRequest =
 export type WorkerResponse =
     | { type: "ready"; id: number; payload?: undefined }
     | { type: "result"; id: number; payload: { stats: CompactStats } }
-    | { type: "progress"; id: number; payload: { stats: CompactStats } }
+    | { type: "progress"; id: number; payload: { stats?: CompactStats; update?: ProgressUpdate } }
     | { type: "error"; id: number; payload: string };
