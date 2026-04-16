@@ -20,7 +20,7 @@ async function profile() {
 
     const timing = { totalMs: 0, searchMs: 0, filteringMs: 0, distributionMs: 0, settlingMs: 0, heapMs: 0 };
     console.time('TargetSnapshot');
-    const stats = await engine.getFullStats(
+    const stats = await engine.calculate(
         'book', 
         30, 
         'book', 
