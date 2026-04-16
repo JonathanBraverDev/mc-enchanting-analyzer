@@ -22,6 +22,8 @@
     "noImplicitOverride": true,
     "exactOptionalPropertyTypes": true,
     "noUncheckedIndexedAccess": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "allowUnreachableCode": false,
     "noEmit": false,
     "declaration": true,
     "baseUrl": ".",
