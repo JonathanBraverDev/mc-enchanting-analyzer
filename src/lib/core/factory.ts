@@ -63,7 +63,7 @@ export class RegistryFactory {
     private static resolveVersion(data: EnchantmentData, v: string): string {
         if (data.versions[v]) return v;
         const sorted = Object.keys(data.versions).sort(VersionUtils.compare);
-        let resolved = sorted[0];
+        let resolved = sorted[0] ?? v;
         for (const ver of sorted) {
             if (VersionUtils.compare(v, ver) >= 0) resolved = ver;
         }
@@ -136,8 +136,8 @@ export class RegistryFactory {
     }
 
     private static resolveEnchantmentProps(state: RegistryState, data: EnchantmentData, allEnchNames: string[]): void {
-        for (let i = 0; i < allEnchNames.length; i++) {
-            const name = allEnchNames[i];
+        for (const [i, name] of allEnchNames.entries()) {
+            if (name === undefined) continue;
             const props = Object.assign({}, data.global_enchantments[name], state.mergedOverrides[name] || {}) as Enchantment;
             state.resolvedRegistry[name] = props;
             state.weightMap[i] = props.weight;
@@ -147,7 +147,8 @@ export class RegistryFactory {
     private static buildConflictBitsets(state: RegistryState, allEnchNames: string[]): void {
         const effectiveConflicts = new Map<string, Set<string>>();
         for (const name of allEnchNames) {
-            effectiveConflicts.set(name, new Set(state.resolvedRegistry[name].conflicts ?? []));
+            const entry = state.resolvedRegistry[name];
+            effectiveConflicts.set(name, new Set(entry?.conflicts ?? []));
         }
         for (const [name, conflicts] of effectiveConflicts) {
             for (const conflictName of conflicts) {
@@ -155,10 +156,11 @@ export class RegistryFactory {
             }
         }
 
-        for (let i = 0; i < allEnchNames.length; i++) {
-            const name = allEnchNames[i];
+        for (const [i, name] of allEnchNames.entries()) {
+            if (name === undefined) continue;
             let bitset = 0n;
-            for (const cName of effectiveConflicts.get(name) ?? []) {
+            const confList = effectiveConflicts.get(name) ?? [];
+            for (const cName of confList) {
                 const cId = state.idMap.get(cName);
                 if (cId !== undefined) bitset |= (1n << BigInt(cId));
             }
@@ -168,17 +170,20 @@ export class RegistryFactory {
 
     private static initializeEnchantmentPairs(state: RegistryState, data: EnchantmentData, allEnchNames: string[]): void {
         const allPairs: number[] = [];
-        for (let id = 0; id < allEnchNames.length; id++) {
-            const ench = data.global_enchantments[allEnchNames[id]];
+        for (const [id, enName] of allEnchNames.entries()) {
+            if (enName === undefined) continue;
+            const ench = data.global_enchantments[enName];
+            if (!ench) continue;
             const rankCount = Object.keys(ench.levels).length;
             for (let rank = 1; rank <= rankCount; rank++) {
                 allPairs.push((id << 8) | rank);
             }
         }
         allPairs.sort((a, b) => a - b);
-        for (let i = 0; i < allPairs.length; i++) {
-            state.enchantToIndex.set(allPairs[i], i + 1);
-            state.indexToEnchant.push(allPairs[i]);
+        for (const [i, pair] of allPairs.entries()) {
+            if (pair === undefined) continue;
+            state.enchantToIndex.set(pair, i + 1);
+            state.indexToEnchant.push(pair);
         }
     }
 
@@ -209,8 +214,11 @@ export class RegistryFactory {
 
     private static filterMergedPools(state: RegistryState): void {
         for (const cat of Object.keys(state.mergedItems)) {
-            state.mergedItems[cat] = state.mergedItems[cat].filter(name => {
+            const pool = state.mergedItems[cat];
+            if (!pool) continue;
+            state.mergedItems[cat] = pool.filter(name => {
                 const props = state.resolvedRegistry[name];
+                if (!props) return false;
                 return VersionUtils.isInRange(state.version, props.valid_from, props.valid_to);
             });
         }

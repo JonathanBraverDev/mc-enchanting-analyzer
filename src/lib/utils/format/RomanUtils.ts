@@ -16,7 +16,9 @@ export class RomanUtils {
      */
     static getRomanValue(r: string, romanMap: { [key: string]: number }): number {
         if (!(r in romanMap)) throw new Error(`Invalid Roman numeral: "${r}"`);
-        return romanMap[r];
+        const val = romanMap[r];
+        if (val === undefined) throw new Error(`Invalid Roman numeral: "${r}"`);
+        return val;
     }
 
     /**
@@ -24,7 +26,7 @@ export class RomanUtils {
      */
     static getBaseName(fullName: string, romanMap: { [key: string]: number }): string {
         const parts = fullName.split(" ");
-        const last = parts[parts.length - 1];
+        const last = parts[parts.length - 1] ?? '';
         return Object.keys(romanMap).includes(last) ? parts.slice(0, -1).join(" ") : fullName;
     }
 }

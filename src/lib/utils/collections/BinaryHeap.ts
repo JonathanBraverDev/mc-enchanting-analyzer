@@ -10,12 +10,16 @@ export class BinaryHeap<T extends { prob: bigint }> {
         this.idSelector = idSelector;
     }
 
+    private at(idx: number): T {
+        return this.heap[idx]!;
+    }
+
     push(item: T) {
         if (this.idSelector) {
             const id = this.idSelector(item);
             const idx = this.indexMap.get(id);
             if (idx !== undefined) {
-                this.heap[idx].prob += item.prob;
+                this.at(idx).prob += item.prob;
                 this.bubbleUp(idx);
                 return;
             }
@@ -38,7 +42,7 @@ export class BinaryHeap<T extends { prob: bigint }> {
 
         const idx = this.indexMap.get(id);
         if (idx !== undefined) {
-            this.heap[idx].prob += prob;
+            this.at(idx).prob += prob;
             this.bubbleUp(idx);
             return;
         }
@@ -54,7 +58,7 @@ export class BinaryHeap<T extends { prob: bigint }> {
         const length = this.heap.length;
         if (length === 0) return undefined;
         
-        const top = this.heap[0];
+        const top = this.at(0);
         const idSelector = this.idSelector;
         if (idSelector) {
             this.indexMap.delete(idSelector(top));
@@ -89,14 +93,14 @@ export class BinaryHeap<T extends { prob: bigint }> {
     }
 
     private bubbleUp(idx: number) {
-        const element = this.heap[idx];
+        const element = this.at(idx);
         const prob = element.prob;
         const idSelector = this.idSelector;
         const id = idSelector ? idSelector(element) : null;
 
         while (idx > 0) {
             const parentIdx = (idx - 1) >>> 1;
-            const parent = this.heap[parentIdx];
+            const parent = this.at(parentIdx);
             
             if (prob <= parent.prob) break;
 
@@ -116,7 +120,7 @@ export class BinaryHeap<T extends { prob: bigint }> {
 
     private sinkDown(idx: number) {
         const length = this.heap.length;
-        const element = this.heap[idx];
+        const element = this.at(idx);
         const prob = element.prob;
         const idSelector = this.idSelector;
         const id = idSelector ? idSelector(element) : null;
@@ -128,7 +132,7 @@ export class BinaryHeap<T extends { prob: bigint }> {
             let maxProb = prob;
 
             if (leftChildIdx < length) {
-                const leftChild = this.heap[leftChildIdx];
+                const leftChild = this.at(leftChildIdx);
                 if (leftChild.prob > maxProb) {
                     maxProb = leftChild.prob;
                     swapIdx = leftChildIdx;
@@ -136,7 +140,7 @@ export class BinaryHeap<T extends { prob: bigint }> {
             }
 
             if (rightChildIdx < length) {
-                const rightChild = this.heap[rightChildIdx];
+                const rightChild = this.at(rightChildIdx);
                 if (rightChild.prob > maxProb) {
                     swapIdx = rightChildIdx;
                 }
@@ -144,7 +148,7 @@ export class BinaryHeap<T extends { prob: bigint }> {
 
             if (swapIdx === -1) break;
 
-            const swapElement = this.heap[swapIdx];
+            const swapElement = this.at(swapIdx);
             this.heap[idx] = swapElement;
             if (idSelector) {
                 this.indexMap.set(idSelector(swapElement), idx);

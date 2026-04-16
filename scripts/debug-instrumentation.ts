@@ -46,7 +46,9 @@ async function debug() {
             console.log('Simulating a MISMATCH in assert.deepStrictEqual (67k+ entries)...');
             const statsMismatch: CalculationStats = JSON.parse(JSON.stringify(existing));
             const firstKey = Object.keys(statsMismatch.combos)[0];
-            statsMismatch.combos[firstKey] = (statsMismatch.combos[firstKey] || 0) + 0.000000000001;
+            if (firstKey !== undefined) {
+                statsMismatch.combos[firstKey] = (statsMismatch.combos[firstKey] || 0) + 0.000000000001;
+            }
 
             console.log('Comparing... (This triggers AssertionError generation)');
             assert.deepStrictEqual(statsMismatch, existing);

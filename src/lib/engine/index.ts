@@ -148,7 +148,8 @@ export class EnchantEngine {
         const cacheKey = this.keyService.getStatsKey(this.registry, cat, xp, mat, guaranteedFirst);
 
         const cachedStats = this.cache.getStats(this.registry.version, cacheKey);
-        const finestThreshold = tiers[tiers.length - 1].threshold;
+        const lastTier = tiers[tiers.length - 1];
+        const finestThreshold = lastTier?.threshold ?? Infinity;
         if (cachedStats && cachedStats.threshold <= finestThreshold) return cachedStats;
 
         const internalConfig: InternalSearchConfig = {

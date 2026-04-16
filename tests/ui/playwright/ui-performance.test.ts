@@ -88,7 +88,7 @@ test.describe('UI Performance & Stability', () => {
         // RAPID switches: don't await results between these
         const categories = [TEST_DATA.ITEMS.SWORD, TEST_DATA.ITEMS.PICKAXE];
         for (let i = 0; i < 5; i++) {
-            await analyzer.selectCategory(categories[i % 2]);
+            await analyzer.selectCategory(categories[i % 2]!);
             // Small pause ensures the browser handles the event before the next one fires
             await analyzer.page.waitForTimeout(50);
         }
@@ -121,7 +121,7 @@ test.describe('UI Performance & Stability', () => {
         const percentages = log
             .map(s => {
                 const match = s.match(/\((\d+)%\)/);
-                return match ? parseInt(match[1]) : null;
+                return match ? parseInt(match[1]!) : null;
             })
             .filter(n => n !== null) as number[];
 
@@ -169,7 +169,7 @@ test.describe('UI Performance & Stability', () => {
         const percentages = log
             .map(s => {
                 const match = s.match(/\((\d+)%\)/);
-                return match ? parseInt(match[1]) : null;
+                return match ? parseInt(match[1]!) : null;
             })
             .filter(n => n !== null) as number[];
 

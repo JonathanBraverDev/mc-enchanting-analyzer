@@ -45,9 +45,9 @@ describe('SummaryService', () => {
 
         const tracker = new SearchManager();
         const result = SummaryService.summarize(new Map(), tracker, anyMass, rankMass, countMass);
-        assert.ok(Math.abs(result.any[5]         - 0.5)  < 1e-12);
-        assert.ok(Math.abs(result.ranks[0x0501]  - 0.25) < 1e-12);
-        assert.ok(Math.abs(result.count[3]       - 0.2)  < 1e-10);
+        assert.ok(Math.abs((result.any[5] ?? 0)         - 0.5)  < 1e-12);
+        assert.ok(Math.abs((result.ranks[0x0501] ?? 0)  - 0.25) < 1e-12);
+        assert.ok(Math.abs((result.count[3] ?? 0)       - 0.2)  < 1e-10);
     });
 
     it('comboLimit=0 yields empty combos even when data is present', () => {

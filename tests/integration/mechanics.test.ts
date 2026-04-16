@@ -12,14 +12,14 @@ describe('Minecraft Mechanics Integration Tests', () => {
         it('1.4.6: Books should remain single-enchantment', async () => {
             const engine146 = EngineFactory.create(DATA, '1.4.6');
             const stats = await engine146.calculate('book', 30, 'book', { threshold: 0.001 });
-            assert.ok(stats.count[1] > 0.99, '1.4.6 books should only have 1 enchantment');
+            assert.ok((stats.count[1] ?? 0) > 0.99, '1.4.6 books should only have 1 enchantment');
         });
 
         it('1.7.2+: Books SHOULD allow multi-enchantment', async () => {
             const engine172 = EngineFactory.create(DATA, '1.7.2');
             const stats = await engine172.calculate('book', 30, 'book', { threshold: 0.0001 });
-            assert.ok(stats.count[1] > 0.75, '1.7.2 books should still result in many single-enchant results');
-            assert.ok(stats.count[2] > 0.10, '1.7.2 books should allow multiple enchants');
+            assert.ok((stats.count[1] ?? 0) > 0.75, '1.7.2 books should still result in many single-enchant results');
+            assert.ok((stats.count[2] ?? 0) > 0.10, '1.7.2 books should allow multiple enchants');
         });
 
         it('Enchantment weighting on books should be uniform', () => {

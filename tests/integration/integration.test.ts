@@ -285,7 +285,7 @@ describe('Integration: RefinementService with mocked WorkerClient', () => {
         const categories = ['sword', 'pickaxe'];
         for (let i = 0; i < 10; i++) {
             service.run(
-                { ...BASE_PAYLOAD, category: categories[i % 2] },
+                { ...BASE_PAYLOAD, category: categories[i % 2]! },
                 null as any,
                 {
                     onStatus: () => {},
@@ -425,7 +425,7 @@ describe('Integration: Guaranteed enchantment accuracy (engine direct)', () => {
         });
         const sharpnessId = engine.registry.idMap.get('Sharpness')!;
         assert.ok(
-            stats.any[sharpnessId] >= 0.9999,
+            (stats.any[sharpnessId] ?? 0) >= 0.9999,
             `Expected Sharpness prob >= 0.9999, got ${stats.any[sharpnessId]}`
         );
     });

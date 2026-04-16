@@ -110,11 +110,15 @@ export class RefinementService {
                     callbacks.onStats(stats, isFinal);
                     
                     const level = levels[tierIndex];
+                    if (level === undefined) return;
                     this.activeChartLevel = level;
                     this.refreshChart(basePayload, getParamsForMode(level, isBook).threshold, registry, currentId, callbacks);
                     tierIndex++;
                     if (!converged && tierIndex < levels.length) {
-                        callbacks.onStatus(getParamsForMode(levels[tierIndex], isBook).status, levels[tierIndex]);
+                        const nextLevel = levels[tierIndex];
+                        if (nextLevel !== undefined) {
+                            callbacks.onStatus(getParamsForMode(nextLevel, isBook).status, nextLevel);
+                        }
                     }
                 },
                 'main'

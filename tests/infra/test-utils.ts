@@ -139,6 +139,7 @@ export const SnapshotUtils = {
             
             const aVal = actual[key];
             const eVal = expected[key];
+            if (aVal === undefined || eVal === undefined) continue;
             const delta = Math.abs(aVal - eVal);
 
             if (delta > 0) {
@@ -150,7 +151,8 @@ export const SnapshotUtils = {
                 }
                 
                 // Track top outliers
-                if (outliers.length < 5 || delta > outliers[outliers.length - 1].delta) {
+                const lastOutlier = outliers[outliers.length - 1];
+                if (outliers.length < 5 || (lastOutlier !== undefined && delta > lastOutlier.delta)) {
                     outliers.push({ key, delta, expected: eVal, actual: aVal });
                     outliers.sort((a, b) => b.delta - a.delta);
                     if (outliers.length > 5) outliers.pop();

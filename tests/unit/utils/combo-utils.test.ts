@@ -110,7 +110,7 @@ describe('ComboUtils', () => {
         const unpacked = ComboUtils.unpack(packed, reg.indexToEnchant);
 
         // The first element must be UNBREAKING
-        assert.strictEqual(ComboUtils.getEnchantId(unpacked[0]), UNBR_ID);
+        assert.strictEqual(ComboUtils.getEnchantId(unpacked[0]!), UNBR_ID);
         // All three enchants still present
         assert.deepStrictEqual(new Set(unpacked), new Set([SHARP4, UNBR3, FIRE2]));
     });
@@ -121,7 +121,7 @@ describe('ComboUtils', () => {
         const packedGuaranteed = ComboUtils.pack([SHARP4, FORT3], SHARP_ID, reg.enchantToIndex);
         const packedFree       = ComboUtils.pack([SHARP4, FORT3], null, reg.enchantToIndex);
 
-        const firstGuaranteed = ComboUtils.getEnchantId(ComboUtils.unpack(packedGuaranteed, reg.indexToEnchant)[0]);
+        const firstGuaranteed = ComboUtils.getEnchantId(ComboUtils.unpack(packedGuaranteed, reg.indexToEnchant)[0]!);
         assert.strictEqual(firstGuaranteed, SHARP_ID);
 
         // The free-order encoding is a valid combo with both enchants
@@ -135,13 +135,13 @@ describe('ComboUtils', () => {
         const packed  = ComboUtils.pack([SHARP4], null, reg.enchantToIndex);
         const results = ComboUtils.removeAdditional(packed, null, reg.indexToEnchant);
         assert.strictEqual(results.length, 1);
-        assert.strictEqual(results[0], packed);
+        assert.strictEqual(results[0]!, packed);
     });
 
     it('removeAdditional on empty combo returns [0]', () => {
         const results = ComboUtils.removeAdditional((0 as PackedCombo), null, reg.indexToEnchant);
         assert.strictEqual(results.length, 1);
-        assert.strictEqual(results[0], (0 as PackedCombo));
+        assert.strictEqual(results[0]!, (0 as PackedCombo));
     });
 
     it('removeAdditional without guarantee returns N results for N-enchant input', () => {
@@ -195,7 +195,7 @@ describe('ComboUtils', () => {
         const withGuarantee = ComboUtils.removeAdditional(packed, SHARP_ID, reg.indexToEnchant);
         assert.strictEqual(withGuarantee.length, 1);
 
-        const ids = ComboUtils.unpack(withGuarantee[0], reg.indexToEnchant).map(e => e >> 8);
+        const ids = ComboUtils.unpack(withGuarantee[0]!, reg.indexToEnchant).map(e => e >> 8);
         assert.ok(ids.includes(SHARP_ID));
     });
 });

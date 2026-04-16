@@ -150,7 +150,7 @@ export const ProbUtils = {
      */
     addItemMass: (target: Map<number, bigint> | BigUint64Array, key: number, prob: bigint): void => {
         if (target instanceof BigUint64Array) {
-            target[key] += prob;
+            target[key] = (target[key] ?? 0n) + prob;
         } else {
             target.set(key, (target.get(key) || 0n) + prob);
         }
@@ -168,13 +168,13 @@ export const ProbUtils = {
 
         if (source instanceof BigUint64Array) {
             const targetIsArray = target instanceof BigUint64Array;
-            for (let i = 0; i < source.length; i++) {
-                const mass = source[i];
+            for (const [i, mass] of source.entries()) {
                 if (mass === 0n) continue;
                 
                 const added = hasFactor ? ProbUtils.scale(mass, factor!) : mass;
                 if (targetIsArray) {
-                    (target as BigUint64Array)[i] += added;
+                    const arr = target as BigUint64Array;
+                    arr[i] = (arr[i] ?? 0n) + added;
                 } else {
                     const t = target as Map<number, bigint>;
                     t.set(i, (t.get(i) || 0n) + added);
@@ -185,7 +185,8 @@ export const ProbUtils = {
             for (const [key, mass] of source) {
                 const added = hasFactor ? ProbUtils.scale(mass, factor!) : mass;
                 if (targetIsArray) {
-                    (target as BigUint64Array)[key] += added;
+                    const arr = target as BigUint64Array;
+                    arr[key] = (arr[key] ?? 0n) + added;
                 } else {
                     const t = target as Map<number, bigint>;
                     t.set(key, (t.get(key) || 0n) + added);

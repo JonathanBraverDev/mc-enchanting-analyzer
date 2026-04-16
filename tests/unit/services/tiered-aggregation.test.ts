@@ -104,9 +104,9 @@ describe('Tiered Aggregation: StatAggregator.getFullStatsTiered', () => {
 
         assert.strictEqual(accuracies.length, 3);
         for (let i = 1; i < accuracies.length; i++) {
-            assert.ok(accuracies[i] >= accuracies[i - 1]);
+            assert.ok((accuracies[i] ?? 0) >= (accuracies[i - 1] ?? 0));
         }
-        assert.ok(accuracies[accuracies.length - 1] > accuracies[0]);
+        assert.ok((accuracies[accuracies.length - 1] ?? 0) > (accuracies[0] ?? 0));
     });
 });
 

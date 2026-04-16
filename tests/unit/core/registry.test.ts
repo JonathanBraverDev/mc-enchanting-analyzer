@@ -50,7 +50,7 @@ describe('Registry & Data Rules Test Suite', () => {
 
             for (let i = 0; i < ids.length; i++) {
                 for (let j = i + 1; j < ids.length; j++) {
-                    assert.strictEqual(hasConflict(reg1143, ids[i], ids[j]), true, `1.14.3: ${enchs[i]} vs ${enchs[j]} SHOULD conflict`);
+                    assert.strictEqual(hasConflict(reg1143, ids[i]!, ids[j]!), true, `1.14.3: ${enchs[i]} vs ${enchs[j]} SHOULD conflict`);
                 }
             }
         });

@@ -31,7 +31,7 @@ export function getEnchantId(state: RegistryState, name: string): number {
 }
 
 export function hasConflict(state: RegistryState, idA: number, idB: number): boolean {
-    return (state.conflictBitsets[idA] & (1n << BigInt(idB))) !== 0n;
+    return ((state.conflictBitsets[idA] ?? 0n) & (1n << BigInt(idB))) !== 0n;
 }
 
 export function isCategoryAvailable(state: RegistryState, cat: string): boolean {

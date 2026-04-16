@@ -75,8 +75,9 @@ export class DistributionService {
         const baseRemainder = ProbUtils.distributeDetailed(PRECISION, baseWeights, totalBaseWeight, this.buffer);
 
         const baseDistMap = new Map<number, bigint>();
-        for (let i = 0; i < baseValues.length; i++) {
-            baseDistMap.set(baseValues[i], this.buffer[i]);
+        for (const [i, base] of baseValues.entries()) {
+            const bufVal = this.buffer[i];
+            if (bufVal !== undefined) baseDistMap.set(base, bufVal);
         }
         
         // Attribute sub-atomic remainder to the peak level
@@ -101,7 +102,9 @@ export class DistributionService {
             for (let k = 0; k < triWeights.length; k++) {
                 const bonus = (k * unitStep) - halfRange;
                 const modVal = Math.max(1, ProbUtils.mcRound(base * (1 + bonus)));
-                finalDist[modVal] = (finalDist[modVal] || 0n) + this.buffer[k];
+                const bufVal = this.buffer[k];
+                if (bufVal === undefined) continue;
+                finalDist[modVal] = (finalDist[modVal] || 0n) + bufVal;
             }
             
             // Attribute remainder to the central peak

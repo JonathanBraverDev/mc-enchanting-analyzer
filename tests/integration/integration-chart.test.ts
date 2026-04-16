@@ -83,7 +83,9 @@ describe('Integration: Chart sweep with mocked WorkerClient', () => {
 
         // Fire coarse tier progress to trigger refreshChart (not converged)
         assert.strictEqual(mainQueue.length, 1, 'progressive request should be queued synchronously');
-        mainQueue[0].onProgress?.({ stats: makeStats(0.1) });
+        const q0 = mainQueue[0];
+        assert.ok(q0 !== undefined);
+        q0.onProgress?.({ stats: makeStats(0.1) });
 
         // Wait for the coarse chart sweep to populate all 30 levels
         for (let i = 0; i < 5; i++) await flush();
@@ -109,7 +111,9 @@ describe('Integration: Chart sweep with mocked WorkerClient', () => {
         );
 
         // Clean up
-        mainQueue[0].resolve({ stats: makeStats(0.1) });
+        const q1 = mainQueue[0];
+        assert.ok(q1 !== undefined);
+        q1.resolve({ stats: makeStats(0.1) });
         await flush();
     });
 
@@ -147,14 +151,18 @@ describe('Integration: Chart sweep with mocked WorkerClient', () => {
 
         // Fire coarse tier progress (not converged) → first chart sweep starts
         assert.strictEqual(mainQueue.length, 1, 'progressive request pending');
-        mainQueue[0].onProgress?.({ stats: makeStats(0.1) });
+        const q2 = mainQueue[0];
+        assert.ok(q2 !== undefined);
+        q2.onProgress?.({ stats: makeStats(0.1) });
 
         // Let coarse chart sweep start
         await flush();
 
         // Fire standard tier progress while chart sweep may still be running.
         // This updates targetThreshold so the sweep loops (or a second sweep starts).
-        mainQueue[0].onProgress?.({ stats: makeStats(0.01) });
+        const q2b = mainQueue[0];
+        assert.ok(q2b !== undefined);
+        q2b.onProgress?.({ stats: makeStats(0.01) });
 
         // Allow time for both sweeps (2 × 30 levels × setTimeout 0)
         for (let i = 0; i < 8; i++) await flush();
@@ -180,7 +188,9 @@ describe('Integration: Chart sweep with mocked WorkerClient', () => {
         );
 
         // Clean up
-        mainQueue[0].resolve({ stats: makeStats(0.01) });
+        const q3 = mainQueue[0];
+        assert.ok(q3 !== undefined);
+        q3.resolve({ stats: makeStats(0.01) });
         await flush();
     });
 
@@ -226,11 +236,15 @@ describe('Integration: Chart sweep with mocked WorkerClient', () => {
 
         // Fire coarse tier progress → first chart sweep with coarse threshold
         assert.strictEqual(mainQueue.length, 1, 'progressive request should be queued');
-        mainQueue[0].onProgress?.({ stats: makeStats(0.1) });
+        const q4 = mainQueue[0];
+        assert.ok(q4 !== undefined);
+        q4.onProgress?.({ stats: makeStats(0.1) });
         await flush();
 
         // Fire standard tier progress → second chart sweep with finer threshold
-        mainQueue[0].onProgress?.({ stats: makeStats(0.01) });
+        const q5 = mainQueue[0];
+        assert.ok(q5 !== undefined);
+        q5.onProgress?.({ stats: makeStats(0.01) });
 
         // Wait for both sweeps to complete
         for (let i = 0; i < 8; i++) await flush();
@@ -248,13 +262,18 @@ describe('Integration: Chart sweep with mocked WorkerClient', () => {
                 break;
             }
         }
+        const f0 = final[0];
+        const c0 = coarse[0];
+        assert.ok(f0 !== undefined && c0 !== undefined);
         assert.ok(improved, 
             `Expected the final sweep to increase accuracy for at least one level. ` +
-            `Coarse[0]: ${coarse[0].accuracy}, Final[0]: ${final[0].accuracy}`
+            `Coarse[0]: ${c0.accuracy}, Final[0]: ${f0.accuracy}`
         );
 
         // Clean up
-        mainQueue[0].resolve({ stats: makeStats(0.01) });
+        const q0 = mainQueue[0];
+        assert.ok(q0 !== undefined);
+        q0.resolve({ stats: makeStats(0.01) });
         await flush();
     });
 });

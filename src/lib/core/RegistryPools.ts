@@ -25,6 +25,7 @@ export class PoolService {
         
         for (const name of pool) {
             const props = state.resolvedRegistry[name];
+            if (!props) continue;
             const id = state.idMap.get(name)!;
             
             // sortedRanks is sorted descending (highest rank first), so the first matching

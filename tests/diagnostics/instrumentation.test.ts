@@ -24,6 +24,7 @@ test('Engine Instrumentation Collection', async () => {
     
     // Check checkpoint structure
     const firstCheckpoint = instrumentation.checkpoints[0];
+    assert.ok(firstCheckpoint !== undefined, 'Should have at least one checkpoint recorded');
     assert.ok(firstCheckpoint.mass >= 0.1, 'Checkpoints should start at 10% mass or higher');
     assert.ok(firstCheckpoint.iterations > 0, 'Checkpoints should record iterations');
     assert.ok(firstCheckpoint.totalIterations >= firstCheckpoint.iterations, 'Checkpoints should record global total iterations');

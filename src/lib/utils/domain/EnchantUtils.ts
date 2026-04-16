@@ -21,7 +21,7 @@ export class EnchantUtils {
         const parts = fullName.trim().split(/\s+/);
         if (parts.length < 2) return { name: fullName, rank: 1 };
 
-        const rankStr = parts[parts.length - 1];
+        const rankStr = parts[parts.length - 1] ?? '';
         let rank: number;
         try {
             rank = RomanUtils.getRomanValue(rankStr, romanMap);
