@@ -48,11 +48,13 @@ export class SummaryService {
                 const results: [number, bigint][] = [];
                 for (const entry of combos.entries()) {
                     const prob = entry[1];
-                    if (results.length < comboLimit || prob > results[results.length - 1][1]) {
+                const lastEntry = results[results.length - 1];
+                    if (results.length < comboLimit || (lastEntry !== undefined && prob > lastEntry[1])) {
                         let low = 0, high = results.length;
                         while (low < high) {
                             const mid = (low + high) >>> 1;
-                            if (results[mid][1] < prob) high = mid;
+                            const midEntry = results[mid];
+                            if (midEntry !== undefined && midEntry[1] < prob) high = mid;
                             else low = mid + 1;
                         }
                         results.splice(low, 0, entry);
@@ -74,8 +76,7 @@ export class SummaryService {
 
     private static populateStats(target: { [key: number]: number }, source: Map<number, bigint> | BigUint64Array): void {
         if (source instanceof BigUint64Array) {
-            for (let i = 0; i < source.length; i++) {
-                const mass = source[i];
+            for (const [i, mass] of source.entries()) {
                 if (mass > 0n) {
                     target[i] = ProbUtils.toNumber(mass);
                 }

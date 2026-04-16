@@ -44,7 +44,7 @@ test.describe('Chart Loading Regression', () => {
             const percentages = log
                 .map(s => {
                     const match = s.match(/\((\d+)%\)/);
-                    return match ? parseInt(match[1]) : null;
+                    return match ? parseInt(match[1]!) : null;
                 })
                 .filter(n => n !== null) as number[];
             

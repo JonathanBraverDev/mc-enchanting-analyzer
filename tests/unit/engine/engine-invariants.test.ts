@@ -54,11 +54,11 @@ describe('Engine Architectural Invariants', () => {
         
         const remainder = ProbUtils.distributeDetailed(prob, weights, totalWeight, outParts);
         
-        const sumParts = outParts[0] + outParts[1] + outParts[2];
+        const sumParts = (outParts[0] ?? 0n) + (outParts[1] ?? 0n) + (outParts[2] ?? 0n);
         const total = sumParts + remainder;
         
         assert.strictEqual(total, prob, 'Sum of parts + remainder must exactly equal input prob');
-        assert.strictEqual(outParts[0], outParts[1], 'Equal weights should yield equal parts');
+        assert.strictEqual(outParts[0] ?? 0n, outParts[1] ?? 0n, 'Equal weights should yield equal parts');
         assert.strictEqual(remainder, prob % 3n, 'Remainder should match modulo');
     });
 

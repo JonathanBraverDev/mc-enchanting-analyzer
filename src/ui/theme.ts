@@ -27,7 +27,8 @@ export const ThemeManager = {
         if (color.startsWith('hsl')) {
             const parts = color.match(/\d+/g);
             if (parts && parts.length >= 3) {
-                return `hsl(${parts[0]}, ${parts[1]}%, ${parseInt(parts[2]) + boost}%)`;
+                const [h = '', s = '', l = ''] = parts;
+                return `hsl(${h}, ${s}%, ${parseInt(l) + boost}%)`;
             }
         }
         return color;

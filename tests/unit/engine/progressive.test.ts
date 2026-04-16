@@ -35,7 +35,7 @@ describe('EnchantEngine: Progressive Search', () => {
 
         assert.strictEqual(accuracies.length, 3, 'Should have fired 3 tier callbacks');
         for (let i = 1; i < accuracies.length; i++) {
-            assert.ok(accuracies[i] >= accuracies[i-1], `Accuracy should be monotonic. Tier ${i} (${accuracies[i]}) < Tier ${i-1} (${accuracies[i-1]})`);
+            assert.ok((accuracies[i] ?? 0) >= (accuracies[i-1] ?? 0), `Accuracy should be monotonic. Tier ${i} (${accuracies[i]}) < Tier ${i-1} (${accuracies[i-1]})`);
         }
     });
 
@@ -74,6 +74,6 @@ describe('EnchantEngine: Progressive Search', () => {
         );
 
         assert.strictEqual(roundingValues.length, 2);
-        assert.ok(roundingValues[1] <= roundingValues[0] + 1e-15, 'Rounding mass should not balloon between tiers');
+        assert.ok((roundingValues[1] ?? 0) <= (roundingValues[0] ?? 0) + 1e-15, 'Rounding mass should not balloon between tiers');
     });
 });

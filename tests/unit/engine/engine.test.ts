@@ -39,11 +39,11 @@ describe('Enchantment Engine Test Suite', () => {
             const v18 = EngineFactory.create(DATA, TEST_DATA.VERSIONS.LEGACY);
             const id = v18.registry.idMap.get('Sweeping Edge')!;
             const s18 = await v18.calculate(TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND);
-            assert.ok(!s18.any[id]);
+            assert.ok(!(s18.any[id] ?? 0));
 
             const v111 = EngineFactory.create(DATA, '1.11.1');
             const s111 = await v111.calculate(TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND);
-            assert.ok(s111.any[id] > 0);
+            assert.ok((s111.any[id] ?? 0) > 0);
         });
 
         it('1.14 vs 1.14.3: Protection conflict window (Engine Check)', async () => {
@@ -89,7 +89,7 @@ describe('Enchantment Engine Test Suite', () => {
                 .some(c => c.includes("Efficiency IV"));
             assert.ok(hasEffIVDeep);
 
-            assert.ok(human.count[2] > 0.1, "Double enchants should be significant");
+            assert.ok((human.count[2] ?? 0) > 0.1, "Double enchants should be significant");
             assert.ok((human.count[1] || 0) + (human.count[2] || 0) + (human.count[3] || 0) + (human.count[4] || 0) > 0.9);
         });
 
@@ -113,7 +113,7 @@ describe('Enchantment Engine Test Suite', () => {
             for (const p of Object.values(stats.combos)) {
                 totalComboProb += Number(p);
             }
-            assert.ok(probAnyEff > 0.999);
+            assert.ok((probAnyEff ?? 0) > 0.999);
             assert.ok(totalComboProb > 0.999);
         });
 
@@ -139,7 +139,7 @@ describe('Enchantment Engine Test Suite', () => {
              const anySharpness = stats.any[sharpnessId];
              
              assert.ok(stats.accounting.pending > 0.1, `Expected high uncertainty, got ${stats.accounting.pending}`);
-             assert.ok(Math.abs(anySharpness - 1.0) < 0.0001, `Guaranteed enchantment should be ~100%, got ${anySharpness}`);
+             assert.ok(Math.abs((anySharpness ?? 0) - 1.0) < 0.0001, `Guaranteed enchantment should be ~100%, got ${anySharpness}`);
              
              const totalCounted = Object.values(stats.count).reduce((a: any, b: any) => a + b, 0) as number;
              assert.ok(Math.abs(totalCounted + stats.accounting.pending - 1.0) < 0.0001, 'Total probability including uncertainty must be 1.0');
@@ -219,7 +219,7 @@ describe('Enchantment Engine Test Suite', () => {
              // 1. Get stats for Sword
              const swordStats = await engine.calculate(TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND, { threshold: 0.001 });
              const sharpnessId = getEnchantId(engine.registry,'Sharpness') as number;
-             assert.ok(swordStats.any[sharpnessId] > 0, 'Sword should have Sharpness');
+             assert.ok((swordStats.any[sharpnessId] ?? 0) > 0, 'Sword should have Sharpness');
              
              // 2. Get stats for Pickaxe (same version, level, material)
              // This should bypass the sword cache because category ID is different
@@ -227,7 +227,7 @@ describe('Enchantment Engine Test Suite', () => {
              const efficiencyId = getEnchantId(engine.registry,'Efficiency') as number;
              
              assert.strictEqual(pickaxeStats.any[sharpnessId] || 0, 0, 'Pickaxe should NOT have Sharpness');
-             assert.ok(pickaxeStats.any[efficiencyId] > 0, 'Pickaxe should have Efficiency');
+             assert.ok((pickaxeStats.any[efficiencyId] ?? 0) > 0, 'Pickaxe should have Efficiency');
         });
     });
 });

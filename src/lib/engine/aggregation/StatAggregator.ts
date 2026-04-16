@@ -69,6 +69,7 @@ export class StatAggregator {
             if (signal?.aborted) return lastResult;
 
             const tier = tiers[tierIndex];
+            if (tier === undefined) continue;
             const activeThreshold = ProbUtils.toBigInt(tier.threshold);
 
             const finalCombos = new Map<PackedCombo, bigint>();
@@ -88,6 +89,7 @@ export class StatAggregator {
                 }
 
                 const mProb = modDist[ml];
+                if (mProb === undefined) continue;
                 const existingState = stateMap.get(ml);
 
                 const result = await this.searchService.search(
@@ -206,6 +208,7 @@ export class StatAggregator {
             if (signal?.aborted) throw new Error("Aborted");
 
             const mProb = modDist[ml];
+            if (mProb === undefined) continue;
             const cached = getExtendedCache?.(ml);
             if (instrumentation && getExtendedCache) {
                 const metrics = this.cache.getEngineMetrics().frontierCache;
@@ -322,7 +325,9 @@ export class StatAggregator {
         for (const target of TARGETS) {
             const entries = byTarget.get(target)!;
             if (entries.length === 0) continue;
-            const bottleneck = entries.reduce((worst, e) => e.threshold < worst.threshold ? e : worst, entries[0]);
+            const first = entries[0];
+            if (first === undefined) continue;
+            const bottleneck = entries.reduce((worst, e) => e.threshold < worst.threshold ? e : worst, first);
             summary.push({
                 target,
                 worstCaseThreshold: bottleneck.threshold,

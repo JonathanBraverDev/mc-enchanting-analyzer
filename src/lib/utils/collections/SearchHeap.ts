@@ -33,11 +33,27 @@ export class SearchHeap {
         this.freeIds = new Uint32Array(initialCapacity);
     }
 
+    /**
+     * Returns the dataId stored at the given heap array position.
+     * Invariant: idx is always within [0, _size) at all call sites.
+     */
+    private heapAt(idx: number): number {
+        return this.heap[idx]!;
+    }
+
+    /**
+     * Pops the next available dataId from the free list.
+     * Invariant: freeCount > 0 at all call sites.
+     */
+    private nextFreeId(): number {
+        return this.freeIds[--this.freeCount]!;
+    }
+
     public pushOrMerge(meta: bigint, prob: bigint, level: number, combo: number): void {
         const existingIdx = this.indexMap.get(meta);
         if (existingIdx !== undefined) {
-            const dataId = this.heap[existingIdx];
-            this.probBuffer[dataId] += prob;
+            const dataId = this.heapAt(existingIdx);
+            this.probBuffer[dataId] = (this.probBuffer[dataId] ?? 0n) + prob;
             this.bubbleUp(existingIdx);
             return;
         }
@@ -46,7 +62,7 @@ export class SearchHeap {
             this.grow();
         }
 
-        const dataId = this.freeCount > 0 ? this.freeIds[--this.freeCount] : this._nextId++;
+        const dataId = this.freeCount > 0 ? this.nextFreeId() : this._nextId++;
         this.probBuffer[dataId] = prob;
         this.bitsetBuffer[dataId] = meta >> 8n;
         this.levelBuffer[dataId] = level;
@@ -61,21 +77,21 @@ export class SearchHeap {
     public pop(): { meta: bigint, prob: bigint, level: number, combo: number } | undefined {
         if (this._size === 0) return undefined;
 
-        const dataId = this.heap[0];
-        const bitset = this.bitsetBuffer[dataId];
-        const level = this.levelBuffer[dataId];
+        const dataId = this.heapAt(0);
+        const bitset = this.bitsetBuffer[dataId] ?? 0n;
+        const level = this.levelBuffer[dataId] ?? 0;
         const meta = (bitset << 8n) | BigInt(level);
-        const prob = this.probBuffer[dataId];
-        const combo = this.comboBuffer[dataId];
+        const prob = this.probBuffer[dataId] ?? 0n;
+        const combo = this.comboBuffer[dataId] ?? 0;
 
         this.indexMap.delete(meta);
         this.freeIds[this.freeCount++] = dataId;
 
-        const lastDataId = this.heap[--this._size];
+        const lastDataId = this.heapAt(--this._size);
         if (this._size > 0) {
             this.heap[0] = lastDataId;
-            const lastBitset = this.bitsetBuffer[lastDataId];
-            const lastLevel = this.levelBuffer[lastDataId];
+            const lastBitset = this.bitsetBuffer[lastDataId] ?? 0n;
+            const lastLevel = this.levelBuffer[lastDataId] ?? 0;
             this.indexMap.set((lastBitset << 8n) | BigInt(lastLevel), 0);
             this.sinkDown(0);
         }
@@ -89,24 +105,24 @@ export class SearchHeap {
     public popFast(out: { meta: bigint, prob: bigint, level: number, combo: number }): boolean {
         if (this._size === 0) return false;
 
-        const dataId = this.heap[0];
-        const bitset = this.bitsetBuffer[dataId];
-        const level = this.levelBuffer[dataId];
+        const dataId = this.heapAt(0);
+        const bitset = this.bitsetBuffer[dataId] ?? 0n;
+        const level = this.levelBuffer[dataId] ?? 0;
         const meta = (bitset << 8n) | BigInt(level);
         
         out.meta = meta;
-        out.prob = this.probBuffer[dataId];
+        out.prob = this.probBuffer[dataId] ?? 0n;
         out.level = level;
-        out.combo = this.comboBuffer[dataId];
+        out.combo = this.comboBuffer[dataId] ?? 0;
 
         this.indexMap.delete(meta);
         this.freeIds[this.freeCount++] = dataId;
 
-        const lastDataId = this.heap[--this._size];
+        const lastDataId = this.heapAt(--this._size);
         if (this._size > 0) {
             this.heap[0] = lastDataId;
-            const lastBitset = this.bitsetBuffer[lastDataId];
-            const lastLevel = this.levelBuffer[lastDataId];
+            const lastBitset = this.bitsetBuffer[lastDataId] ?? 0n;
+            const lastLevel = this.levelBuffer[lastDataId] ?? 0;
             this.indexMap.set((lastBitset << 8n) | BigInt(lastLevel), 0);
             this.sinkDown(0);
         }
@@ -115,7 +131,7 @@ export class SearchHeap {
     }
 
     public peekProb(): bigint {
-        return this._size > 0 ? this.probBuffer[this.heap[0]] : 0n;
+        return this._size > 0 ? (this.probBuffer[this.heapAt(0)] ?? 0n) : 0n;
     }
 
     public size(): number {
@@ -127,31 +143,31 @@ export class SearchHeap {
     }
 
     private bubbleUp(idx: number): void {
-        const dataId = this.heap[idx];
-        const prob = this.probBuffer[dataId];
+        const dataId = this.heapAt(idx);
+        const prob = this.probBuffer[dataId] ?? 0n;
         
         while (idx > 0) {
             const parentIdx = (idx - 1) >>> 1;
-            const parentDataId = this.heap[parentIdx];
-            if (prob <= this.probBuffer[parentDataId]) break;
+            const parentDataId = this.heapAt(parentIdx);
+            if (prob <= (this.probBuffer[parentDataId] ?? 0n)) break;
 
             this.heap[idx] = parentDataId;
-            const pBitset = this.bitsetBuffer[parentDataId];
-            const pLevel = this.levelBuffer[parentDataId];
+            const pBitset = this.bitsetBuffer[parentDataId] ?? 0n;
+            const pLevel = this.levelBuffer[parentDataId] ?? 0;
             this.indexMap.set((pBitset << 8n) | BigInt(pLevel), idx);
             
             idx = parentIdx;
         }
 
         this.heap[idx] = dataId;
-        const bitset = this.bitsetBuffer[dataId];
-        const level = this.levelBuffer[dataId];
+        const bitset = this.bitsetBuffer[dataId] ?? 0n;
+        const level = this.levelBuffer[dataId] ?? 0;
         this.indexMap.set((bitset << 8n) | BigInt(level), idx);
     }
 
     private sinkDown(idx: number): void {
-        const dataId = this.heap[idx];
-        const prob = this.probBuffer[dataId];
+        const dataId = this.heapAt(idx);
+        const prob = this.probBuffer[dataId] ?? 0n;
 
         while (true) {
             let leftChildIdx = (idx << 1) + 1;
@@ -160,34 +176,36 @@ export class SearchHeap {
             let maxProb = prob;
 
             if (leftChildIdx < this._size) {
-                const childDataId = this.heap[leftChildIdx];
-                if (this.probBuffer[childDataId] > maxProb) {
-                    maxProb = this.probBuffer[childDataId];
+                const childDataId = this.heapAt(leftChildIdx);
+                const childProb = this.probBuffer[childDataId] ?? 0n;
+                if (childProb > maxProb) {
+                    maxProb = childProb;
                     swapIdx = leftChildIdx;
                 }
             }
 
             if (rightChildIdx < this._size) {
-                const childDataId = this.heap[rightChildIdx];
-                if (this.probBuffer[childDataId] > maxProb) {
+                const childDataId = this.heapAt(rightChildIdx);
+                const childProb = this.probBuffer[childDataId] ?? 0n;
+                if (childProb > maxProb) {
                     swapIdx = rightChildIdx;
                 }
             }
 
             if (swapIdx === -1) break;
 
-            const swapDataId = this.heap[swapIdx];
+            const swapDataId = this.heapAt(swapIdx);
             this.heap[idx] = swapDataId;
-            const sBitset = this.bitsetBuffer[swapDataId];
-            const sLevel = this.levelBuffer[swapDataId];
+            const sBitset = this.bitsetBuffer[swapDataId] ?? 0n;
+            const sLevel = this.levelBuffer[swapDataId] ?? 0;
             this.indexMap.set((sBitset << 8n) | BigInt(sLevel), idx);
 
             idx = swapIdx;
         }
 
         this.heap[idx] = dataId;
-        const bitset = this.bitsetBuffer[dataId];
-        const level = this.levelBuffer[dataId];
+        const bitset = this.bitsetBuffer[dataId] ?? 0n;
+        const level = this.levelBuffer[dataId] ?? 0;
         this.indexMap.set((bitset << 8n) | BigInt(level), idx);
     }
 
