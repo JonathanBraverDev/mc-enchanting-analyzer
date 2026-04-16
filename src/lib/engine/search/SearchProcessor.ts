@@ -99,11 +99,12 @@ export class SearchProcessor {
             splitRemainder = prob % bigN;
         }
 
-        for (let i = 0; i < nOutcomes; i++) {
-            ProbUtils.addItemMass(results, redistributed[i], quotient);
+        for (const combo of redistributed) {
+            ProbUtils.addItemMass(results, combo, quotient);
         }
-        if (nOutcomes > 0 && splitRemainder > 0n) {
-            ProbUtils.addItemMass(results, redistributed[0], splitRemainder);
+        const firstRedistributed = redistributed[0];
+        if (nOutcomes > 0 && splitRemainder > 0n && firstRedistributed !== undefined) {
+            ProbUtils.addItemMass(results, firstRedistributed, splitRemainder);
         }
 
         const finalCount = currentCount - 1;
@@ -145,16 +146,16 @@ export class SearchProcessor {
         });
 
         this.withTiming(timing, 'heapMs', () => {
-            for (let i = 0; i < pool.length; i++) {
+            for (const [i, e] of pool.entries()) {
                 const pNext = splits[i];
-                if (pNext === 0n) continue;
+                if (pNext === undefined || pNext === 0n) continue;
                 
-                const nextId = ComboUtils.getEnchantId(pool[i]);
+                const nextId = ComboUtils.getEnchantId(e);
                 const nextMeta = ((1n << BigInt(nextId)) << 8n) | BigInt(currentLevel);
-                const nextPacked = ComboUtils.pack([pool[i]], guaranteedFirstId, registry.enchantToIndex) as PackedCombo;
+                const nextPacked = ComboUtils.pack([e], guaranteedFirstId, registry.enchantToIndex) as PackedCombo;
 
                 ProbUtils.addItemMass(ctx.anyMass, nextId, pNext);
-                ProbUtils.addItemMass(ctx.rankMass, pool[i], pNext);
+                ProbUtils.addItemMass(ctx.rankMass, e, pNext);
 
                 tracker.record('pending', pNext);
                 queue.pushOrMerge(nextMeta, pNext, currentLevel, nextPacked);
@@ -195,15 +196,17 @@ export class SearchProcessor {
                 let eligibleCount = 0;
                 let totalWeight = 0;
 
-                for (let i = 0; i < pool.length; i++) {
-                    const e = pool[i];
+                for (const [i, e] of pool.entries()) {
                     const id = ComboUtils.getEnchantId(e);
                     if ((currentBitset & (1n << BigInt(id))) !== 0n) continue;
-                    if ((currentBitset & registry.conflictBitsets[id]) !== 0n) continue;
+                    const conflictBitset = registry.conflictBitsets[id];
+                    if (conflictBitset !== undefined && (currentBitset & conflictBitset) !== 0n) continue;
+                    const weight = ctx.poolWeights[i];
+                    if (weight === undefined) continue;
                     tempEligible.push(e);
-                    tempWeights.push(ctx.poolWeights[i]);
+                    tempWeights.push(weight);
                     eligibleCount++;
-                    totalWeight += ctx.poolWeights[i];
+                    totalWeight += weight;
                 }
                 
                 const nextLevel = currentCount >= 1 ? Math.floor(currentLevel / 2) : currentLevel;

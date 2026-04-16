@@ -11,11 +11,14 @@ async function runProfile() {
     const materials = ['netherite', 'diamond'];
     const levels = [30];
 
+    const level = levels[0];
+    if (level === undefined) throw new Error('No levels configured');
+
     // Warm up
     console.log('Warming up...');
     for (const cat of categories) {
         for (const mat of materials) {
-            await engine.calculate(cat, levels[0], mat);
+            await engine.calculate(cat, level, mat);
         }
     }
 
@@ -26,8 +29,8 @@ async function runProfile() {
     for (const cat of categories) {
         for (const mat of materials) {
             const qStart = performance.now();
-            await engine.calculate(cat, levels[0], mat);
-            console.log(`[Cold] ${cat} @ ${levels[0]} (${mat}): ${(performance.now() - qStart).toFixed(2)}ms`);
+            await engine.calculate(cat, level, mat);
+            console.log(`[Cold] ${cat} @ ${level} (${mat}): ${(performance.now() - qStart).toFixed(2)}ms`);
         }
     }
     const coldDuration = performance.now() - start;
@@ -37,8 +40,8 @@ async function runProfile() {
     for (const cat of categories) {
         for (const mat of materials) {
             const qStart = performance.now();
-            await engine.calculate(cat, levels[0], mat);
-            console.log(`[Warm] ${cat} @ ${levels[0]} (${mat}): ${(performance.now() - qStart).toFixed(2)}ms`);
+            await engine.calculate(cat, level, mat);
+            console.log(`[Warm] ${cat} @ ${level} (${mat}): ${(performance.now() - qStart).toFixed(2)}ms`);
         }
     }
     const warmDuration = performance.now() - startWarm;
