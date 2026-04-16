@@ -19,6 +19,8 @@
     "noFallthroughCasesInSwitch": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
+    "noImplicitOverride": true,
+    "exactOptionalPropertyTypes": true,
     "noEmit": false,
     "declaration": true,
     "baseUrl": ".",
