@@ -69,7 +69,6 @@ describe('SearchManager', () => {
             residue: 15n // High residue from previous arrival
         };
         
-        const outParts = new BigUint64Array(2);
         // We use string-index access for private method testing in node:test
         (tracker as any).processExpansionStep(
             0n, PRECISION, 0n, 0n, // probStop=0, probForward=PRECISION

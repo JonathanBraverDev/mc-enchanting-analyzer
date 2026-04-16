@@ -21,7 +21,6 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { EnchantEngine } from '#engine/index.js';
 import { EngineFactory } from '#engine/factory.js';
 import { SearchService } from '#engine/search/SearchService.js';
 import { CacheManager } from '#engine/cache/CacheManager.js';
@@ -42,7 +41,7 @@ describe('Frontier Resumability & Cache Behavior', () => {
         // binding exit condition.  sword/diamond has only ~65 valid combinations
         // and always converges before reaching the limit, making resumption a no-op.
         const threshold = ProbUtils.toBigInt(0.0001);
-        const cat = 'book', ml = 50, mat = 'book';
+        const cat = 'book', ml = 50;
 
         // First pass: 500 iterations from the initial state
         const result500 = await searchService.search(

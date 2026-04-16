@@ -1,4 +1,4 @@
-import { EnchantEngine, EngineFactory } from '#engine/index.js';
+import { EngineFactory } from '#engine/index.js';
 import { DATA } from '../src/lib/data/index.js';
 import * as fs from 'node:fs';
 import * as assert from 'node:assert';
@@ -20,7 +20,7 @@ async function debug() {
         distCache: { hits: 0, misses: 0 }
     };
 
-    const stats = await engine.calculate(cat, level, mat, {
+    await engine.calculate(cat, level, mat, {
         threshold: 0.000000001,
         maxIterations: 1000000,
         instrumentation,

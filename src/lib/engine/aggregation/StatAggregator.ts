@@ -1,11 +1,10 @@
-import { PRECISION, ProbUtils, AsyncUtils, ComboUtils, EnchantUtils } from '#utils/index.js';
+import { PRECISION, ProbUtils, AsyncUtils, EnchantUtils } from '#utils/index.js';
 import { getEnchantability } from '#core/registry.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import { getSearchLimit } from '#core/config.js';
-import { CalculationStats, PackedCombo, SearchState, RegistryState, InternalSearchConfig, EngineInstrumentation, MassCheckpoint, CheckpointSummary, AggregationResult } from '#types/index.js';
+import { PackedCombo, SearchState, RegistryState, InternalSearchConfig, EngineInstrumentation, MassCheckpoint, CheckpointSummary, AggregationResult } from '#types/index.js';
 import { DistributionService } from '#engine/distribution/DistributionService.js';
 import { SearchService } from '#engine/search/SearchService.js';
-import { StateFactory } from '#engine/search/StateFactory.js';
 import { SearchManager } from '#engine/search/SearchManager.js';
 import { CacheManager } from '#engine/cache/CacheManager.js';
 
@@ -76,7 +75,6 @@ export class StatAggregator {
             const totalAnyMass = new BigUint64Array(256);
             const totalRankMass = new BigUint64Array(16384);
             const totalCountMass = new BigUint64Array(16);
-
             let tierTracker = new SearchManager();
 
             let processedMProb = 0n;
@@ -127,7 +125,7 @@ export class StatAggregator {
             tierTracker.record('rounding', distRoundingError);
 
             if (guaranteedFirst) {
-                this.reconcileGuaranteedMass(registry, guaranteedFirst, totalAnyMass, totalRankMass, totalCountMass);
+                this.reconcileGuaranteedMass(registry, guaranteedFirst, totalAnyMass, totalRankMass);
             }
 
             const tierResult: AggregationResult = {
@@ -191,7 +189,6 @@ export class StatAggregator {
         const totalAnyMass = new BigUint64Array(256);
         const totalRankMass = new BigUint64Array(16384);
         const totalCountMass = new BigUint64Array(16);
-
         let globalTracker = new SearchManager();
 
         let processedMProb = 0n;
@@ -264,7 +261,7 @@ export class StatAggregator {
         globalTracker.record('rounding', distRoundingError);
 
         if (guaranteedFirst) {
-            this.reconcileGuaranteedMass(registry, guaranteedFirst, totalAnyMass, totalRankMass, totalCountMass);
+            this.reconcileGuaranteedMass(registry, guaranteedFirst, totalAnyMass, totalRankMass);
         }
 
         return {
@@ -352,8 +349,7 @@ export class StatAggregator {
         registry: RegistryState,
         guaranteedFirst: string,
         totalAnyMass: BigUint64Array,
-        totalRankMass: BigUint64Array,
-        totalCountMass: BigUint64Array
+        totalRankMass: BigUint64Array
     ): void {
         const romanMap = registry.data.constants.ROMAN_MAP;
         const parsed = EnchantUtils.parse(guaranteedFirst, romanMap);

@@ -11,7 +11,6 @@ import { SummaryService } from '#services/SummaryService.js';
 import { SerializationService } from '#services/SerializationService.js';
 import { HumanizationService } from '#services/HumanizationService.js';
 import { DistributionService } from '#engine/distribution/DistributionService.js';
-import { EnchantEngine } from '#engine/index.js';
 import { EngineFactory } from '#engine/factory.js';
 import { SearchManager } from '#engine/search/SearchManager.js';
 import { DATA } from '#data/index.js';
@@ -149,9 +148,8 @@ describe('HumanizationService', () => {
     const engine = EngineFactory.create(DATA, '1.20');
     const reg    = engine.registry;
 
-    let stats: CalculationStats;
     before(async () => {
-        stats = await engine.calculate('pickaxe', 30, 'diamond', { threshold: 0.005 });
+        await engine.calculate('pickaxe', 30, 'diamond', { threshold: 0.005 });
     });
 
     it('resolves enchantment names in the any map', () => {

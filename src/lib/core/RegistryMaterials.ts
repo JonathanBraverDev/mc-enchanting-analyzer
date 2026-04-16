@@ -16,11 +16,11 @@ export class MaterialService {
             return [cat];
         }
 
-        const eligible = Object.keys(mats).filter(m => this.isMaterialCompatible(data, m, cat, itemSpecific, mergedMaterials));
+        const eligible = Object.keys(mats).filter(m => this.isMaterialCompatible(m, cat, itemSpecific, mergedMaterials));
         return this.sortMaterials(data, eligible);
     }
 
-    private static isMaterialCompatible(data: EnchantmentData, mat: string, cat: string, itemCats: string[], mergedMaterials: Set<string>): boolean {
+    private static isMaterialCompatible(mat: string, cat: string, itemCats: string[], mergedMaterials: Set<string>): boolean {
         if (!mergedMaterials.has(mat)) return false;
         if (mat === "turtle_shell") return cat === "helmet";
         if (itemCats.includes(mat)) return mat === cat;

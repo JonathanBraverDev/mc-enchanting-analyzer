@@ -8,7 +8,6 @@
  */
 import { describe, it, before, after, afterEach } from 'node:test';
 import assert from 'node:assert';
-import { EnchantEngine } from '#engine/index.js';
 import { EngineFactory } from '#engine/factory.js';
 import { DATA } from '#data/index.js';
 import { SerializationService } from '#services/index.js';

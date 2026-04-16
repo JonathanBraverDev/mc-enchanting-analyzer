@@ -17,7 +17,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { global_enchantments, enchantment_groups } from '#data/enchantments.js';
-import { EnchantEngine } from '#engine/index.js';
 import { EngineFactory } from '#engine/factory.js';
 import { DATA } from '#data/index.js';
 import { hasConflict, getEnchantId } from '#core/registry.js';

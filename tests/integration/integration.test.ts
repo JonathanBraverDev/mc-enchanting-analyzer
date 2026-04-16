@@ -9,7 +9,6 @@ import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { RefinementService } from '../../src/ui/refinement.js';
 import { WorkerClient } from '../../src/worker/client.js';
-import { EnchantEngine } from '#engine/index.js';
 import { EngineFactory } from '#engine/factory.js';
 import { DATA } from '#data/index.js';
 import { isCategoryAvailable } from '#core/registry.js';

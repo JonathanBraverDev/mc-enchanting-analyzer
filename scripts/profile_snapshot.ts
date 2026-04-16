@@ -1,5 +1,3 @@
-import { fileURLToPath } from 'url';
-import path from 'path';
 import { EngineFactory } from '#engine/index.js';
 import { DATA } from '../src/lib/data/index.js';
 import { ENGINE_DEFAULTS } from '../src/lib/core/config.js';

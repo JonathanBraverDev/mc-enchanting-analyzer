@@ -1,6 +1,5 @@
-import { EnchantUtils, LRUCache } from '../utils/index.js';
+import { EnchantUtils } from '../utils/index.js';
 import { PackedEnchant, RegistryState } from '../types/index.js';
-import { ENGINE_DEFAULTS } from './config.js';
 
 /**
  * Service for managing enchantment pools and checking achievability.

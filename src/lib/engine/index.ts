@@ -1,4 +1,4 @@
-import { CalculationStats, SearchState, RegistryState, SearchConfig, InternalSearchConfig, EngineInstrumentation, ProgressUpdate } from '#types/index.js';
+import { CalculationStats, SearchState, RegistryState, SearchConfig, InternalSearchConfig, EngineInstrumentation, } from '#types/index.js';
 import { ProbUtils, RomanUtils, EnchantUtils } from '#utils/index.js';
 import { getMaterialId, getEnchantId, getEligiblePool, isCategoryAvailable, getEnchantability } from '#core/registry.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
@@ -141,7 +141,6 @@ export class EnchantEngine {
             maxIterations,
             summaryLimit = ENGINE_LIMITS.MAX_RESULTS_SUMMARY,
             resultsLimit = ENGINE_LIMITS.MAX_RESULTS_SIZE,
-            useCache = true,
             instrumentation,
             timing
         } = config ?? {};
@@ -159,7 +158,6 @@ export class EnchantEngine {
             maxIterations,
             summaryLimit,
             resultsLimit,
-            useCache,
             instrumentation,
             timing,
             getCacheMetrics: () => ({ 
@@ -222,7 +220,6 @@ export class EnchantEngine {
             maxIterations,
             summaryLimit = ENGINE_LIMITS.MAX_RESULTS_SUMMARY,
             resultsLimit = ENGINE_LIMITS.MAX_RESULTS_SIZE,
-            useCache = true,
             instrumentation,
             timing
         } = config;

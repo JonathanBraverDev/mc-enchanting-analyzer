@@ -1,6 +1,6 @@
 import { AsyncUtils, ProbUtils } from '#utils/index.js';
 import { ENGINE_LIMITS, SEARCH_CONSTANTS } from '#constants/engine.js';
-import { SearchState, SearchContext, MassCheckpoint, EngineExitReason, ForwardingContext } from '#types/index.js';
+import { SearchState, SearchContext, ForwardingContext } from '#types/index.js';
 import { SearchProcessor } from './SearchProcessor.js';
 import { ComboUtils } from '#utils/index.js';
 import { PackedCombo } from '#types/index.js';
@@ -67,7 +67,7 @@ export class SearchController {
 
             SearchProcessor.withTiming(timing, 'searchMs', () => {
                 if (currentCount === 0) {
-                    SearchProcessor.processInitialNode(current.prob, current.meta, modLevel, ctx, tracker);
+                    SearchProcessor.processInitialNode(current.prob, modLevel, ctx, tracker);
                 } else {
                     SearchProcessor.processSearchNode(current.prob, current.meta, current.combo, currentCount, ctx, tracker);
                 }
