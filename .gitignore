@@ -12,3 +12,6 @@ test-results/
 
 # Matrix Generation Artifacts
 scripts/matrix-output/
+
+# Scratch / temporary analysis files
+scratch/
