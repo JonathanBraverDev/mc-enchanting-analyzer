@@ -233,7 +233,7 @@ export const SnapshotUtils = {
 };
 
 /** Assertion timeout scaled for CI runners. */
-export const UI_TIMEOUT = process.env.CI ? 45000 : 15000;
+export const UI_TIMEOUT = process.env['CI'] ? 45000 : 15000;
 
 /**
  * Utilities for Node-based engine tests.
