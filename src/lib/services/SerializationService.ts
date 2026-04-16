@@ -12,25 +12,31 @@ export class SerializationService {
         const comboEntries = Object.entries(stats.combos);
         const comboKeys = new Float64Array(comboEntries.length);
         const comboProbs = new Float64Array(comboEntries.length);
-        for (let i = 0; i < comboEntries.length; i++) {
-            comboKeys[i] = parseInt(comboEntries[i][0] as string, 16);
-            comboProbs[i] = comboEntries[i][1] as number;
+        let ci = 0;
+        for (const [key, prob] of comboEntries) {
+            comboKeys[ci] = parseInt(key, 16);
+            comboProbs[ci] = prob as number;
+            ci++;
         }
 
         const rankEntries = Object.entries(stats.ranks);
         const rankKeys = new Uint32Array(rankEntries.length);
         const rankProbs = new Float64Array(rankEntries.length);
-        for (let i = 0; i < rankEntries.length; i++) {
-            rankKeys[i] = Number(rankEntries[i][0]);
-            rankProbs[i] = rankEntries[i][1] as number;
+        let ri = 0;
+        for (const [key, prob] of rankEntries) {
+            rankKeys[ri] = Number(key);
+            rankProbs[ri] = prob as number;
+            ri++;
         }
 
         const anyEntries = Object.entries(stats.any);
         const anyKeys = new Uint32Array(anyEntries.length);
         const anyProbs = new Float64Array(anyEntries.length);
-        for (let i = 0; i < anyEntries.length; i++) {
-            anyKeys[i] = Number(anyEntries[i][0]);
-            anyProbs[i] = anyEntries[i][1] as number;
+        let ai = 0;
+        for (const [key, prob] of anyEntries) {
+            anyKeys[ai] = Number(key);
+            anyProbs[ai] = prob as number;
+            ai++;
         }
 
         const counts = new Float64Array(ENGINE_DEFAULTS.MAX_COUNT_STATS);
@@ -68,17 +74,23 @@ export class SerializationService {
             threshold: compact.threshold
         };
         
-        for (let i = 0; i < compact.comboKeys.length; i++) {
-            stats.combos[compact.comboKeys[i].toString(16)] = compact.comboProbs[i];
+        for (const [i, key] of compact.comboKeys.entries()) {
+            const prob = compact.comboProbs[i];
+            if (prob === undefined) continue;
+            stats.combos[key.toString(16)] = prob;
         }
-        for (let i = 0; i < compact.rankKeys.length; i++) {
-            stats.ranks[compact.rankKeys[i]] = compact.rankProbs[i];
+        for (const [i, key] of compact.rankKeys.entries()) {
+            const prob = compact.rankProbs[i];
+            if (prob === undefined) continue;
+            stats.ranks[key] = prob;
         }
-        for (let i = 0; i < compact.anyKeys.length; i++) {
-            stats.any[compact.anyKeys[i]] = compact.anyProbs[i];
+        for (const [i, key] of compact.anyKeys.entries()) {
+            const prob = compact.anyProbs[i];
+            if (prob === undefined) continue;
+            stats.any[key] = prob;
         }
-        for (let i = 0; i < compact.counts.length; i++) {
-            if (compact.counts[i] > 0) stats.count[i] = compact.counts[i];
+        for (const [i, val] of compact.counts.entries()) {
+            if (val > 0) stats.count[i] = val;
         }
         
         return stats;

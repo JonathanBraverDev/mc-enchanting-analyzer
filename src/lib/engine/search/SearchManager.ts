@@ -209,16 +209,17 @@ export class SearchManager {
 
         const guaranteedInCombo = guaranteedFirstId != null && (currentBitset & (1n << BigInt(guaranteedFirstId))) !== 0n;
 
-        for (let i = 0; i < eligibleCount; i++) {
+        for (const [i, e] of blueprint.eligibleEnchants.entries()) {
+            if (i >= eligibleCount) break;
             const pNext = splits[i];
-            if (pNext === 0n) continue;
+            if (pNext === undefined || pNext === 0n) continue;
 
-            const nextPacked = ComboUtils.packAppend(blueprint.currentCombo, blueprint.eligibleEnchants[i], guaranteedFirstId, guaranteedInCombo, registry.enchantToIndex) as PackedCombo;
-            const nextId = ComboUtils.getEnchantId(blueprint.eligibleEnchants[i]);
+            const nextPacked = ComboUtils.packAppend(blueprint.currentCombo, e, guaranteedFirstId, guaranteedInCombo, registry.enchantToIndex) as PackedCombo;
+            const nextId = ComboUtils.getEnchantId(e);
             const nextMeta = ((currentBitset | (1n << BigInt(nextId))) << 8n) | BigInt(blueprint.nextLevel);
 
             ProbUtils.addItemMass(ctx.anyMass, nextId, pNext);
-            ProbUtils.addItemMass(ctx.rankMass, blueprint.eligibleEnchants[i], pNext);
+            ProbUtils.addItemMass(ctx.rankMass, e, pNext);
 
             if (this.expansionCache.has(nextMeta) && depth < SearchManager.MAX_RECURSION_DEPTH) {
                 stack.push({ mass: pNext, meta: nextMeta, combo: nextPacked, depth: depth + 1 });

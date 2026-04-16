@@ -42,7 +42,7 @@ export class SearchService {
         const guaranteedFirstId = StateFactory.getGuaranteedFirstId(registry, guaranteedFirst);
         const initialPool = getEligiblePool(registry, cat, modLevel, this.cache, registry.version);
         
-        const poolWeights = initialPool.map(e => registry.weightMap[e >> 8]);
+        const poolWeights: number[] = initialPool.map(e => registry.weightMap[e >> 8] ?? 0);
         const initialTotalWeight = poolWeights.reduce((a, b) => a + b, 0);
 
         if (initialPool.length === 0) {

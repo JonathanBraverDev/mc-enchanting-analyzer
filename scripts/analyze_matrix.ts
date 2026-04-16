@@ -17,7 +17,8 @@ const OUT_DIR = path.join(__dirname, 'matrix-output');
 const args = process.argv.slice(2);
 const findArg = (key: string) => {
     const idx = args.indexOf(key);
-    return (idx !== -1 && args[idx + 1] && !args[idx + 1].startsWith('--')) ? args[idx + 1] : null;
+    const next = idx !== -1 ? args[idx + 1] : undefined;
+    return (next && !next.startsWith('--')) ? next : null;
 };
 
 const filterCat = findArg('--cat');
@@ -90,11 +91,14 @@ function summarize(data: FileData[]) {
 
             console.log(`    Mass%     threshold(avg)   iters(avg)`);
             for (let i = 0; i < cpCount; i++) {
-                const cps = group.map(d => d.instrumentation.checkpoints[i]).filter(Boolean);
+                type CheckpointEntry = NonNullable<FileData['instrumentation']['checkpoints'][number]>;
+                const cps = group.map(d => d.instrumentation.checkpoints[i]).filter((c): c is CheckpointEntry => c !== undefined);
                 if (cps.length === 0) continue;
                 const avgThreshold = cps.reduce((s, c) => s + c.threshold, 0) / cps.length;
                 const avgIters     = cps.reduce((s, c) => s + c.iterations, 0) / cps.length;
-                const mass         = cps[0].mass; // same target across all
+                const firstCp = cps[0];
+                if (!firstCp) continue;
+                const mass = firstCp.mass; // same target across all
                 console.log(`    ${(mass * 100).toFixed(1).padStart(5)}%   ${formatThreshold(avgThreshold).padEnd(16)}  ${Math.round(avgIters)}`);
             }
         }

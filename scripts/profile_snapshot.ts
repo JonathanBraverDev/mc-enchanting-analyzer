@@ -6,7 +6,8 @@ async function profile() {
     const args = process.argv.slice(2);
     const findArg = (key: string) => {
         const idx = args.indexOf(key);
-        return (idx !== -1 && args[idx + 1] && !args[idx + 1].startsWith('--')) ? args[idx + 1] : null;
+        const next = idx !== -1 ? args[idx + 1] : undefined;
+        return (next && !next.startsWith('--')) ? next : null;
     };
     const version = findArg('--version') ?? '1.21.11';
     
