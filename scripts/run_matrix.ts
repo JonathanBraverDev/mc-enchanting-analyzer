@@ -89,7 +89,7 @@ async function runOne(engine: EnchantEngine, cat: string, mat: string, xp: numbe
     let error: string | null = null;
 
     try {
-        stats = await engine.getFullStats(cat, xp, mat, {
+        stats = await engine.calculate(cat, xp, mat, {
             instrumentation: instr,
             threshold: THRESHOLD,
             maxIterations: MAX_ITERATIONS,

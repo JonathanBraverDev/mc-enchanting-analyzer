@@ -10,6 +10,7 @@ import { SummaryService } from '#services/SummaryService.js';
 import { DistributionService } from './distribution/DistributionService.js';
 import { SearchService } from './search/SearchService.js';
 import { StatAggregator } from './aggregation/StatAggregator.js';
+export { EngineFactory } from './factory.js';
 
 /**
  * Core math and logic engine for Minecraft Enchanting.

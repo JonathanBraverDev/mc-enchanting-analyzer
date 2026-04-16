@@ -13,7 +13,7 @@ async function updateSnapshots() {
 
     // Helper to generate snapshots with new API signature
     const getStats = async (engine: EnchantEngine, cat: string, xp: number, mat: string, guaranteedFirst: string | null = null) => {
-        return await engine.getFullStats(cat, xp, mat, {
+        return await engine.calculate(cat, xp, mat, {
             guaranteedFirst,
             threshold: HI_RES_THRESHOLD,
             maxIterations: SNAPSHOT_ITERATIONS,

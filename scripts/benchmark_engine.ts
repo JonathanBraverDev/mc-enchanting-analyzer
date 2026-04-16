@@ -15,7 +15,7 @@ async function runProfile() {
     console.log('Warming up...');
     for (const cat of categories) {
         for (const mat of materials) {
-            await engine.getFullStats(cat, levels[0], mat);
+            await engine.calculate(cat, levels[0], mat);
         }
     }
 
@@ -26,7 +26,7 @@ async function runProfile() {
     for (const cat of categories) {
         for (const mat of materials) {
             const qStart = performance.now();
-            await engine.getFullStats(cat, levels[0], mat);
+            await engine.calculate(cat, levels[0], mat);
             console.log(`[Cold] ${cat} @ ${levels[0]} (${mat}): ${(performance.now() - qStart).toFixed(2)}ms`);
         }
     }
@@ -37,7 +37,7 @@ async function runProfile() {
     for (const cat of categories) {
         for (const mat of materials) {
             const qStart = performance.now();
-            await engine.getFullStats(cat, levels[0], mat);
+            await engine.calculate(cat, levels[0], mat);
             console.log(`[Warm] ${cat} @ ${levels[0]} (${mat}): ${(performance.now() - qStart).toFixed(2)}ms`);
         }
     }

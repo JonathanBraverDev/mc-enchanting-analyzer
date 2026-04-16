@@ -20,7 +20,7 @@ async function debug() {
         distCache: { hits: 0, misses: 0 }
     };
 
-    const stats = await engine.getFullStats(cat, level, mat, {
+    const stats = await engine.calculate(cat, level, mat, {
         threshold: 0.000000001,
         maxIterations: 1000000,
         instrumentation,
