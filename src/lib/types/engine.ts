@@ -23,8 +23,8 @@ export interface CalculationStats {
   /** Detailed breakdown of where the total 1.0 probability mass settled. */
   accounting: MassAccounting;
   
-  instrumentation?: EngineInstrumentation;
-  timing?: SearchTiming;
+  instrumentation?: EngineInstrumentation | undefined;
+  timing?: SearchTiming | undefined;
 }
 
 export type LevelDistribution = { [level: number]: bigint };
@@ -84,29 +84,29 @@ export interface EngineInstrumentation {
   fullyResolved: boolean;
 
   /** Total entries in the combinations results map */
-  resultsSize?: number;
+  resultsSize?: number | undefined;
   /** Current number of nodes in the priority queue */
-  queueSize?: number;
+  queueSize?: number | undefined;
   /** Size of the heap's internal deduplication map */
-  indexMapSize?: number;
+  indexMapSize?: number | undefined;
   /** Current heap usage in MB */
-  memoryMB?: number;
+  memoryMB?: number | undefined;
 
   /** Total unique results aggregated across all modified levels so far in this specific calculation */
-  globalResultsSize?: number;
+  globalResultsSize?: number | undefined;
   /** Total nodes currently stored in ALL frontiers across the entire engine's LRU caches */
-  globalCacheNodes?: number;
+  globalCacheNodes?: number | undefined;
   /** Total results currently stored in ALL frontiers across the entire engine's LRU caches */
-  globalCacheResults?: number;
+  globalCacheResults?: number | undefined;
 
   /** Raw per-level checkpoints — one entry per modified level x checkpoint target crossed */
   checkpoints: MassCheckpoint[];
   /** Aggregated summary: worst-case threshold and iteration count per mass target across all levels */
   checkpointSummary: CheckpointSummary[];
-  exitReason?: EngineExitReason;
+  exitReason?: EngineExitReason | undefined;
 
   /** Optional: If true, perform expensive global heap scans for cache nodes/results */
-  trackGlobalMetrics?: boolean;
+  trackGlobalMetrics?: boolean | undefined;
 }
 
 export interface ResolvedRegistry {
@@ -159,8 +159,8 @@ export interface ForwardingContext {
     rankMass: BigUint64Array;
     countMass: BigUint64Array;
     resultsLimit: number;
-    instrumentation?: EngineInstrumentation;
-    timing?: SearchTiming;
+    instrumentation?: EngineInstrumentation | undefined;
+    timing?: SearchTiming | undefined;
     
     // Search-global parameters
     cat: string;
@@ -185,7 +185,7 @@ export interface SearchState {
     iterations: number;
     nodesProcessed: number;
     checkpoints: MassCheckpoint[];  // per-call output; not carried over on resume
-    exitReason?: EngineExitReason;  // per-call output; not carried over on resume
+    exitReason?: EngineExitReason | undefined;  // per-call output; not carried over on resume
 }
 
 /**
@@ -220,16 +220,16 @@ export type ProbabilityValue = bigint & { __brand: "ProbabilityValue" };
  * Public configuration options for a full statistics calculation.
  */
 export interface SearchConfig {
-    guaranteedFirst?: string | null;
-    threshold?: number | bigint;
-    signal?: AbortSignal;
-    onProgress?: (update: ProgressUpdate) => void;
-    maxIterations?: number;
-    summaryLimit?: number;
-    resultsLimit?: number;
-    useCache?: boolean;
-    instrumentation?: EngineInstrumentation;
-    timing?: SearchTiming;
+    guaranteedFirst?: string | null | undefined;
+    threshold?: number | bigint | undefined;
+    signal?: AbortSignal | undefined;
+    onProgress?: ((update: ProgressUpdate) => void) | undefined;
+    maxIterations?: number | undefined;
+    summaryLimit?: number | undefined;
+    resultsLimit?: number | undefined;
+    useCache?: boolean | undefined;
+    instrumentation?: EngineInstrumentation | undefined;
+    timing?: SearchTiming | undefined;
 }
 
 /**
@@ -237,9 +237,9 @@ export interface SearchConfig {
  * Extends SearchConfig with cache accessors that are internal implementation details.
  */
 export interface InternalSearchConfig extends SearchConfig {
-    getExtendedCache?: (ml: number) => SearchState | undefined;
-    setExtendedCache?: (ml: number, frontier: SearchState) => void;
-    getCacheMetrics?: () => { cacheNodes: number; cacheResults: number };
+    getExtendedCache?: ((ml: number) => SearchState | undefined) | undefined;
+    setExtendedCache?: ((ml: number, frontier: SearchState) => void) | undefined;
+    getCacheMetrics?: (() => { cacheNodes: number; cacheResults: number }) | undefined;
 }
 
 /**
@@ -251,7 +251,7 @@ export interface ProgressUpdate {
   /** Total number of modified levels or units to process. */
   total: number;
   /** Optional current accuracy (resolved mass). */
-  accuracy?: number;
+  accuracy?: number | undefined;
 }
 
 /**
@@ -270,8 +270,8 @@ export interface AggregationResult {
     anyMass: BigUint64Array;
     rankMass: BigUint64Array;
     countMass: BigUint64Array;
-    instrumentation?: EngineInstrumentation;
-    timing?: SearchTiming;
+    instrumentation?: EngineInstrumentation | undefined;
+    timing?: SearchTiming | undefined;
     threshold: number;
 }
 
@@ -283,7 +283,7 @@ export interface SearchContext {
     threshold: bigint;
     limit: number;
     resultsLimit: number;
-    signal?: AbortSignal;
-    instrumentation?: EngineInstrumentation;
-    timing?: SearchTiming;
+    signal?: AbortSignal | undefined;
+    instrumentation?: EngineInstrumentation | undefined;
+    timing?: SearchTiming | undefined;
 }
