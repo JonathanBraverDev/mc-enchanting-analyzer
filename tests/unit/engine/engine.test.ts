@@ -1,6 +1,5 @@
-import { test, describe, it } from 'node:test';
+import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { EnchantEngine } from '#engine/index.js';
 import { EngineFactory } from '#engine/factory.js';
 import { DATA } from '#data/index.js';
 import { ProbUtils } from '#utils/index.js';

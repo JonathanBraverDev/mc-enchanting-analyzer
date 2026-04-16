@@ -1,4 +1,4 @@
-import { PRECISION, ProbUtils } from '#utils/index.js';
+import { PRECISION } from '#utils/index.js';
 import { getEligiblePool } from '#core/registry.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import { SearchState, RegistryState, SearchContext, ForwardingContext } from '#types/index.js';
@@ -36,8 +36,8 @@ export class SearchService {
         let startTime = 0;
         if (timingResult) startTime = performance.now();
         
-        const state = StateFactory.create(registry, cat, modLevel, guaranteedFirst, existingState, threshold);
-        const { results, queue, tracker } = state;
+        const state = StateFactory.create(registry, modLevel, guaranteedFirst, existingState, threshold);
+        const { results, queue } = state;
         
         const guaranteedFirstId = StateFactory.getGuaranteedFirstId(registry, guaranteedFirst);
         const initialPool = getEligiblePool(registry, cat, modLevel, this.cache, registry.version);

@@ -1,5 +1,5 @@
-import { RegistryState, ForwardingContext, PackedCombo, PackedEnchant, SearchTiming, ExpansionBlueprint } from '#types/index.js';
-import { ComboUtils, ProbUtils, PRECISION } from '#utils/index.js';
+import { ForwardingContext, PackedCombo, PackedEnchant, SearchTiming, ExpansionBlueprint } from '#types/index.js';
+import { ComboUtils, ProbUtils } from '#utils/index.js';
 import { ENGINE_LIMITS, SEARCH_CONSTANTS } from '#constants/engine.js';
 import { DistributionPool } from '#engine/distribution/DistributionPool.js';
 import { SearchManager } from '#engine/search/SearchManager.js';
@@ -30,10 +30,9 @@ export class SearchProcessor {
         probForward: bigint,
         resultsSize: number,
         resultsLimit: number,
-        currentCombo: PackedCombo,
         hasCombo: boolean,
         multiEnchantBooks: boolean,
-        floor: bigint
+        floor: bigint,
     ): { isLimitReached: boolean; isTooSmall: boolean; isMapFull: boolean; isTerminal: boolean } {
         const isLimitReached = currentCount >= (isBook && !multiEnchantBooks ? 1 : ENGINE_LIMITS.MAX_ENCHANTS_PER_ITEM);
         const isTooSmall = probForward < floor;
@@ -49,7 +48,6 @@ export class SearchProcessor {
 
     /** Settles `prob` into results/countMass, via book redistribution when applicable, and returns rem. */
     public static settleMass(
-        registry: RegistryState,
         isBook: boolean,
         currentCount: number,
         packedChosen: PackedCombo,
@@ -133,7 +131,6 @@ export class SearchProcessor {
      */
     public static processInitialNode(
         currentProb: bigint,
-        currentMeta: bigint,
         currentLevel: number,
         ctx: ForwardingContext,
         tracker: SearchManager

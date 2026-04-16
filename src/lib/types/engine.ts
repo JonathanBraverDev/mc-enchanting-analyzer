@@ -1,8 +1,7 @@
 import { Enchantment, EnchantmentData } from './domain.js';
 import { SearchHeap } from '#utils/collections/SearchHeap.js';
-import { LRUCache } from '#utils/collections/LRUCache.js';
 
-import { MassAccounting, MassBookkeeping } from './mass.js';
+import { MassAccounting } from './mass.js';
 
 /**
  * Raw calculation statistics from the search engine.

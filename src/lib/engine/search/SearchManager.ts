@@ -1,7 +1,7 @@
 import { MassBookkeeping, MassAccounting, MassEventType } from '#types/mass.js';
-import { ExpansionBlueprint, RegistryState, ForwardingContext, PackedCombo, PackedEnchant } from '#types/index.js';
+import { ExpansionBlueprint, ForwardingContext, PackedCombo } from '#types/index.js';
 import { ProbUtils, ComboUtils, PRECISION } from '#utils/index.js';
-import { ENGINE_LIMITS, SEARCH_CONSTANTS } from '#constants/engine.js';
+
 import { DistributionPool } from '#engine/distribution/DistributionPool.js';
 import { MassAccountant } from './MassAccountant.js';
 
@@ -86,7 +86,7 @@ export class SearchManager {
         let totalResolvedFromTrees = 0n;
 
         while (stack.length > 0) {
-            const { mass: incomingMass, meta, combo, depth } = stack.pop()! ;
+            const { mass: incomingMass, meta, depth } = stack.pop()! ;
             
             const blueprint = this.expansionCache.get(meta);
             if (!blueprint) continue;
@@ -105,7 +105,7 @@ export class SearchManager {
 
             const remStop = searchProcessor.withTiming(timing, 'settlingMs', () => 
                 searchProcessor.settleMass(
-                    registry, cat === "book", blueprint.currentCount, blueprint.currentCombo, blueprint.currentEnchants, 
+                    cat === "book", blueprint.currentCount, blueprint.currentCombo, blueprint.currentEnchants, 
                     probStop, guaranteedFirstId, registry.enchantToIndex, registry.indexToEnchant, 
                     ctx.results, ctx.countMass, ctx.anyMass, ctx.rankMass
                 )
@@ -114,7 +114,7 @@ export class SearchManager {
             // Terminal Check
             const term = searchProcessor.isTerminalCondition(
                 blueprint.currentCount, cat === "book", probForward, ctx.results.size, ctx.resultsLimit, 
-                blueprint.currentCombo, ctx.results.has(blueprint.currentCombo), registry.multiEnchantBooks, 
+                ctx.results.has(blueprint.currentCombo), registry.multiEnchantBooks, 
                 ProbUtils.toBigInt(0.0000000001) // SYSTEM_THRESHOLD_FLOOR
             );
 
@@ -149,7 +149,7 @@ export class SearchManager {
         
         const remForward = searchProcessor.withTiming(timing, 'settlingMs', () => 
             searchProcessor.settleMass(
-                registry, cat === "book", blueprint.currentCount, blueprint.currentCombo, blueprint.currentEnchants, 
+                cat === "book", blueprint.currentCount, blueprint.currentCombo, blueprint.currentEnchants, 
                 probForward, guaranteedFirstId, registry.enchantToIndex, registry.indexToEnchant, 
                 ctx.results, ctx.countMass, ctx.anyMass, ctx.rankMass
             )

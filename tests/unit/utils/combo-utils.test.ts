@@ -2,12 +2,11 @@
  * Direct unit tests for ComboUtils (pack/unpack/removeAdditional).
  *
  * ComboUtils methods now accept enchantToIndex / indexToEnchant explicitly.
- * We initialize these by constructing a real EnchantEngine, which guarantees
+ * We initialize these by constructing a real engine, which guarantees
  * the same mappings used in production.
  */
 import { describe, it, before } from 'node:test';
 import assert from 'node:assert';
-import { EnchantEngine } from '#engine/index.js';
 import { EngineFactory } from '#engine/factory.js';
 import { DATA } from '#data/index.js';
 import { PackedEnchant, PackedCombo } from '#types/index.js';

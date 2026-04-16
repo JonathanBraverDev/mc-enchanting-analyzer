@@ -1,8 +1,7 @@
-import { EnchantEngine, EngineFactory } from '#engine/index.js';
+import { EngineFactory } from '#engine/index.js';
 import { DATA as data } from '../src/lib/data/index.js';
 import { EngineInstrumentation } from '#types/index.js';
 
-import { fileURLToPath } from 'url';
 
 async function run() {
     const args = process.argv.slice(2);

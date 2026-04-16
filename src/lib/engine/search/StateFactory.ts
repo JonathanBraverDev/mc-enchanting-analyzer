@@ -11,7 +11,7 @@ export class StateFactory {
      */
     public static create(
         registry: RegistryState,
-        cat: string,
+        
         modLevel: number,
         guaranteedFirst: string | null,
         existing?: SearchState,
