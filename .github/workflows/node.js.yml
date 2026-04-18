@@ -27,32 +27,28 @@ jobs:
     - run: npm run build
     - run: npm test
 
-  release:
-    needs: build
-    # Only run on pushes (tags are handled internally), never on PRs
-    if: github.event_name == 'push'
+  check-tag:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    if: github.event_name == 'push'
+    outputs:
+      has_tag: ${{ steps.check.outputs.has_tag }}
+      tag_name: ${{ steps.check.outputs.tag_name }}
     steps:
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0
-    
-    - name: Detect Tag and Environment
-      id: meta
+    - id: check
       run: |
-        # Check if the current commit has a tag
         TAG_NAME=$(git tag --points-at HEAD | head -n 1)
-        if [ -z "$TAG_NAME" ]; then
-          echo "HAS_TAG=false" >> $GITHUB_OUTPUT
+        if [ -n "$TAG_NAME" ]; then
+          echo "has_tag=true" >> $GITHUB_OUTPUT
+          echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
         else
-          echo "HAS_TAG=true" >> $GITHUB_OUTPUT
-          echo "TAG_NAME=$TAG_NAME" >> $GITHUB_OUTPUT
+          echo "has_tag=false" >> $GITHUB_OUTPUT
         fi
 
   release:
-    needs: check-tag
+    needs: [build, check-tag]
     if: needs.check-tag.outputs.has_tag == 'true'
     runs-on: ubuntu-latest
     permissions:
