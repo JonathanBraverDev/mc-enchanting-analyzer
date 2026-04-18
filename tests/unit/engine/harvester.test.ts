@@ -40,7 +40,6 @@ describe('SearchManager', () => {
             nextLevel: 30,
             currentCount: 0,
             currentCombo: 0 as any,
-            currentEnchants: [],
             residue: 0n
         };
         tracker.registerExpansion(1n, mockBlueprint);
@@ -52,12 +51,9 @@ describe('SearchManager', () => {
     it('should recover rounding residue from blueprints during mass distribution', () => {
         const tracker = new SearchManager();
         const weights = new Int32Array([10, 10]);
-        // With totalWeight 20, a prob of 15 would have individualRemainder 15.
-        // If we have a residue of 5 already, then 15 + 5 = 20, which divides perfectly.
-        // Recovered mass should be 15 (the remainder that was 'saved').
         
         const blueprint: ExpansionBlueprint = {
-            probContinue: PRECISION, // 100% forward
+            probContinue: PRECISION,
             totalWeight: 20,
             eligibleCount: 2,
             eligibleEnchants: [1, 2] as any,
@@ -65,20 +61,17 @@ describe('SearchManager', () => {
             nextLevel: 30,
             currentCount: 1,
             currentCombo: 0 as any,
-            currentEnchants: [],
-            residue: 15n // High residue from previous arrival
+            residue: 15n
         };
         
-        // We use string-index access for private method testing in node:test
         (tracker as any).processExpansionStep(
-            0n, PRECISION, 0n, 0n, // probStop=0, probForward=PRECISION
+            0n, PRECISION, 0n, 0n,
             0n, blueprint, 
             { registry: { enchantToIndex: new Map() }, timing: {}, resultsLimit: 100, anyMass: new BigUint64Array(10), rankMass: new BigUint64Array(10), queue: { pushOrMerge: () => {} } } as any, 
             0, [], 
-            { withTiming: (_t: any, _b: any, fn: any) => fn() } // mock searchProcessor
+            { withTiming: (_t: any, _b: any, fn: any) => fn() }
         );
 
-        // This is a bit hard to test via private methods, so I'll check the accountant state instead.
         const bk = tracker.getBookkeeping();
         assert.ok(bk.recoveredRounding > 0n || bk.resolved > 0n, 'Should have accounted for recovered mass or resolved it');
     });

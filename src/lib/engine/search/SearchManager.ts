@@ -153,7 +153,7 @@ export class SearchManager {
 
             if (isBook && currentCount > 1) {
                 remStop = searchProcessor.settleMass(
-                    true, currentCount, currentCombo, blueprint.currentEnchants,
+                    true, currentCount, currentCombo,
                     probStop, guaranteedFirstId, registry.enchantToIndex, registry.indexToEnchant,
                     ctx.results, ctx.countMass, ctx.anyMass, ctx.rankMass
                 );
@@ -205,7 +205,7 @@ export class SearchManager {
         
         if (isBook && blueprint.currentCount > 1) {
             remForward = searchProcessor.settleMass(
-                true, blueprint.currentCount, blueprint.currentCombo, blueprint.currentEnchants, 
+                true, blueprint.currentCount, blueprint.currentCombo, 
                 probForward, guaranteedFirstId, registry.enchantToIndex, registry.indexToEnchant, 
                 ctx.results, ctx.countMass, ctx.anyMass, ctx.rankMass
             );

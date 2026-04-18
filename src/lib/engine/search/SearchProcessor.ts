@@ -39,7 +39,6 @@ export class SearchProcessor {
         isBook: boolean,
         currentCount: number,
         packedChosen: PackedCombo,
-        currentEnchants: PackedEnchant[],
         prob: bigint,
         guaranteedFirstId: number | null,
         enchantToIndex: Map<number, number>,
@@ -50,7 +49,7 @@ export class SearchProcessor {
         rankMass: BigUint64Array
     ): bigint {
         if (isBook && currentCount > 1) {
-            const { rem } = this.redistributeBookProb(packedChosen, currentEnchants, prob, currentCount, guaranteedFirstId, enchantToIndex, indexToEnchant, results, countMass, anyMass, rankMass);
+            const { rem } = this.redistributeBookProb(packedChosen, prob, currentCount, guaranteedFirstId, enchantToIndex, indexToEnchant, results, countMass, anyMass, rankMass);
             return rem;
         } else {
             ProbUtils.addItemMass(results, packedChosen, prob);
@@ -65,7 +64,6 @@ export class SearchProcessor {
      */
     public static redistributeBookProb(
         packedChosen: PackedCombo,
-        originalEnchants: PackedEnchant[],
         prob: bigint,
         currentCount: number,
         guaranteedFirstId: number | null,
@@ -98,7 +96,13 @@ export class SearchProcessor {
         const finalCount = currentCount - 1;
         ProbUtils.addItemMass(countMass, finalCount, prob);
 
-        for (const e of originalEnchants) {
+        // Bitwise iteration instead of array iteration to avoid allocations
+        let loopMult = 1;
+        for (let i = 0; i < currentCount; i++, loopMult *= PACKING_CONSTANTS.BYTE_BASIS) {
+            const idx = Math.floor(packedChosen / loopMult) % PACKING_CONSTANTS.BYTE_BASIS;
+            const e = indexToEnchant[idx] as PackedEnchant;
+            if (e === undefined) continue;
+
             const id = ComboUtils.getEnchantId(e);
             const isGuaranteed = guaranteedFirstId !== null && id === guaranteedFirstId;
             const nSurvivors = isGuaranteed ? nOutcomes : nOutcomes - 1;
@@ -165,14 +169,9 @@ export class SearchProcessor {
         tracker: SearchManager
     ): void {
         const { registry, cat, pool } = ctx;
-        const { indexToEnchant } = registry;
         const currentBitset = currentMeta >> BigInt(PACKING_CONSTANTS.ENCHANT_SHIFT);
         const currentLevel = Number(currentMeta & BigInt(PACKING_CONSTANTS.RANK_MASK));
         const isBook = cat === "book";
-
-        const currentEnchants = (isBook && currentCount > 1)
-            ? ComboUtils.unpack(currentCombo, indexToEnchant)
-            : [] as PackedEnchant[];
 
         const probContinue = (isBook && !registry.multiEnchantBooks && currentCount >= 1)
             ? 0n
@@ -212,8 +211,7 @@ export class SearchProcessor {
                 new Int32Array(SearchProcessor.SCRATCH_WEIGHTS.subarray(0, eligibleCount)),
                 nextLevel,
                 currentCount,
-                currentCombo,
-                currentEnchants
+                currentCombo
             );
             tracker.registerExpansion(currentMeta, blueprint);
         }

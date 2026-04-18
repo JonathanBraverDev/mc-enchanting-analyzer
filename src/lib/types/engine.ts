@@ -136,7 +136,6 @@ export class ExpansionBlueprint {
         public readonly nextLevel: number,
         public readonly currentCount: number,
         public readonly currentCombo: PackedCombo,
-        public readonly currentEnchants: PackedEnchant[],
         public residue: bigint = 0n
     ) {}
 }
