@@ -1,4 +1,4 @@
-import { PACKING_CONSTANTS, POOL_CONSTANTS } from '#constants/engine.js';
+import { POOL_CONSTANTS, BIGINT_CONSTANTS } from '#constants/engine.js';
 
 /**
  * A specialized, TypedArray-backed priority queue for PackedNode data.
@@ -68,7 +68,7 @@ export class SearchHeap {
 
         const dataId = this.heap[0]!;
         const meta = this.metaBuffer[dataId]!;
-        const level = Number(meta & BigInt(PACKING_CONSTANTS.RANK_MASK));
+        const level = Number(meta & BIGINT_CONSTANTS.RANK_MASK);
         const prob = this.probBuffer[dataId]!;
         const combo = this.comboBuffer[dataId]!;
 
@@ -96,7 +96,7 @@ export class SearchHeap {
         
         out.meta = meta;
         out.prob = this.probBuffer[dataId]!;
-        out.level = Number(meta & BigInt(PACKING_CONSTANTS.RANK_MASK));
+        out.level = Number(meta & BIGINT_CONSTANTS.RANK_MASK);
         out.combo = this.comboBuffer[dataId]!;
 
         this.indexMap.delete(meta);

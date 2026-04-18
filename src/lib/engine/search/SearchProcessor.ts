@@ -1,6 +1,6 @@
 import { ForwardingContext, PackedCombo, PackedEnchant, ExpansionBlueprint } from '#types/index.js';
 import { ComboUtils, ProbUtils } from '#utils/index.js';
-import { ENGINE_LIMITS, PACKING_CONSTANTS } from '#constants/engine.js';
+import { ENGINE_LIMITS, BIGINT_CONSTANTS } from '#constants/engine.js';
 import { DistributionPool } from '#engine/distribution/DistributionPool.js';
 import { SearchManager } from '#engine/search/SearchManager.js';
 
@@ -139,7 +139,9 @@ export class SearchProcessor {
             if (pNext === undefined || pNext === 0n) continue;
             
             const nextId = ComboUtils.getEnchantId(e);
-            const nextMeta = ((1n << BigInt(nextId)) << BigInt(PACKING_CONSTANTS.ENCHANT_SHIFT)) | BigInt(currentLevel);
+            
+            // Replaced BigInt allocations with precomputed lookups
+            const nextMeta = ((BIGINT_CONSTANTS.ID_BIT_LOOKUP[nextId]!) << BIGINT_CONSTANTS.ENCHANT_SHIFT) | BIGINT_CONSTANTS.LEVEL_LOOKUP[currentLevel]!;
             const nextPacked = ComboUtils.pack([e], guaranteedFirstId, registry.enchantToIndex) as PackedCombo;
 
             ctx.anyMass[nextId]! += pNext;
@@ -166,8 +168,8 @@ export class SearchProcessor {
         tracker: SearchManager
     ): void {
         const { registry, cat, pool } = ctx;
-        const currentBitset = currentMeta >> BigInt(PACKING_CONSTANTS.ENCHANT_SHIFT);
-        const currentLevel = Number(currentMeta & BigInt(PACKING_CONSTANTS.RANK_MASK));
+        const currentBitset = currentMeta >> BIGINT_CONSTANTS.ENCHANT_SHIFT;
+        const currentLevel = Number(currentMeta & BIGINT_CONSTANTS.RANK_MASK);
         const isBook = cat === "book";
 
         let catCache = registry.expansionCache.get(cat);
@@ -186,7 +188,7 @@ export class SearchProcessor {
             for (let i = 0; i < poolLen; i++) {
                 const e = pool[i]!;
                 const id = ComboUtils.getEnchantId(e);
-                const idBit = 1n << BigInt(id);
+                const idBit = BIGINT_CONSTANTS.ID_BIT_LOOKUP[id]!;
                 if ((currentBitset & idBit) !== 0n) continue;
                 
                 const conflictBitset = conflictBitsets[id];

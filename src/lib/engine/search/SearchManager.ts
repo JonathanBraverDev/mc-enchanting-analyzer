@@ -1,7 +1,7 @@
 import { ExpansionBlueprint, ForwardingContext, MassBookkeeping, PackedCombo } from '#types/index.js';
 import { DistributionPool } from '#engine/distribution/DistributionPool.js';
 import { PRECISION, ProbUtils, ComboUtils } from '#utils/index.js';
-import { PACKING_CONSTANTS, ENGINE_LIMITS } from '#constants/engine.js';
+import { PACKING_CONSTANTS, ENGINE_LIMITS, BIGINT_CONSTANTS } from '#constants/engine.js';
 
 /**
  * Manages probability mass tracking and iterative expansion.
@@ -124,7 +124,7 @@ export class SearchManager {
 
             // Standard expansion path
             const resolvedSub = this.processExpansionStep(probStop, probForward, remStop, scaleLoss, 
-                meta >> BigInt(PACKING_CONSTANTS.ENCHANT_SHIFT), 
+                meta >> BIGINT_CONSTANTS.ENCHANT_SHIFT, 
                 blueprint, ctx, depth);
             totalResolvedFromTrees += resolvedSub;
         }
@@ -214,10 +214,11 @@ export class SearchManager {
 
             const nextItem = eligibleEnchants[i]!;
             const nextId = nextItem >> PACKING_CONSTANTS.ENCHANT_SHIFT;
-            const nextMeta = ((currentBitset | (1n << BigInt(nextId))) << BigInt(PACKING_CONSTANTS.ENCHANT_SHIFT)) | BigInt(blueprint.nextLevel);
+            const nextMeta = ((currentBitset | BIGINT_CONSTANTS.ID_BIT_LOOKUP[nextId]!) << BIGINT_CONSTANTS.ENCHANT_SHIFT) | BIGINT_CONSTANTS.LEVEL_LOOKUP[blueprint.nextLevel]!;
             
+            const guaranteedIdLookup = guaranteedFirstId === null ? 0n : (BIGINT_CONSTANTS.ID_BIT_LOOKUP[guaranteedFirstId] ?? 0n);
             const nextPacked = ComboUtils.packAppend(
-                blueprint.currentCombo, nextItem, guaranteedFirstId, (currentBitset & (1n << BigInt(guaranteedFirstId ?? -1))) !== 0n, registry.enchantToIndex
+                blueprint.currentCombo, nextItem, guaranteedFirstId, (currentBitset & guaranteedIdLookup) !== 0n, registry.enchantToIndex
             ) as PackedCombo;
 
             ctx.anyMass[nextId]! += pNext;

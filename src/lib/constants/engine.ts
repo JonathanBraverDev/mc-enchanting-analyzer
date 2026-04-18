@@ -45,6 +45,16 @@ export const PACKING_CONSTANTS = {
 };
 
 /**
+ * Precomputed BigInt equivalents for packing, masks, and bit lookups to avoid runtime object allocation overhead.
+ */
+export const BIGINT_CONSTANTS = {
+    ENCHANT_SHIFT: BigInt(PACKING_CONSTANTS.ENCHANT_SHIFT),
+    RANK_MASK: BigInt(PACKING_CONSTANTS.RANK_MASK),
+    ID_BIT_LOOKUP: Array.from({ length: 64 }, (_, i) => 1n << BigInt(i)),
+    LEVEL_LOOKUP: Array.from({ length: 128 }, (_, i) => BigInt(i)),
+};
+
+/**
  * Shared memory pool and heap limits.
  */
 export const POOL_CONSTANTS = {
