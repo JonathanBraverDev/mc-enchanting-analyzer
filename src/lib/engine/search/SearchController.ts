@@ -69,7 +69,7 @@ export class SearchController {
             if (currentCount === 0) {
                 SearchProcessor.processInitialNode(current.prob, modLevel, ctx, tracker);
             } else {
-                SearchProcessor.processSearchNode(current.prob, current.meta, current.combo, currentCount, ctx, tracker);
+                SearchProcessor.processSearchNode(current.prob, current.meta, current.combo, current.level, ctx, tracker);
             }
             if (timing) {
                 timing.searchMs += performance.now() - start;

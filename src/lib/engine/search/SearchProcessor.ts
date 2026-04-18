@@ -163,22 +163,16 @@ export class SearchProcessor {
         currentProb: bigint,
         currentMeta: bigint,
         currentCombo: PackedCombo,
-        currentCount: number,
+        currentLevel: number,
         ctx: ForwardingContext,
         tracker: SearchManager
     ): void {
         const { registry, cat, pool } = ctx;
         const currentBitset = currentMeta >> BIGINT_CONSTANTS.ENCHANT_SHIFT;
-        const currentLevel = Number(currentMeta & BIGINT_CONSTANTS.RANK_MASK);
+        const actualCount = ComboUtils.getCount(currentCombo);
         const isBook = cat === "book";
 
-        let catCache = registry.expansionCache.get(cat);
-        if (!catCache) {
-            catCache = new Map();
-            registry.expansionCache.set(cat, catCache);
-        }
-
-        if (!catCache.has(currentMeta)) {
+        if (!tracker.hasBlueprint(currentMeta)) {
             const poolLen = pool.length;
             const poolWeights = ctx.poolWeights;
             const conflictBitsets = registry.conflictBitsets;
@@ -203,11 +197,11 @@ export class SearchProcessor {
                 totalWeight += weight;
             }
             
-            const probContinue = (isBook && !registry.multiEnchantBooks && currentCount >= 1)
+            const probContinue = (isBook && !registry.multiEnchantBooks && actualCount >= 1)
                 ? 0n
                 : (ProbUtils.PROB_CONTINUE_TABLE[currentLevel] || 0n);
 
-            const nextLevel = currentCount >= 1 ? Math.floor(currentLevel / 2) : currentLevel;
+            const nextLevel = actualCount >= 1 ? Math.floor(currentLevel / 2) : currentLevel;
             const blueprint = new ExpansionBlueprint(
                 probContinue,
                 totalWeight,
@@ -215,13 +209,12 @@ export class SearchProcessor {
                 Array.from(SearchProcessor.SCRATCH_ENCHANTS.subarray(0, eligibleCount)) as PackedEnchant[],
                 new Int32Array(SearchProcessor.SCRATCH_WEIGHTS.subarray(0, eligibleCount)),
                 nextLevel,
-                currentCount,
-                currentCombo
+                actualCount
             );
-            catCache.set(currentMeta, blueprint);
+            tracker.setBlueprint(currentMeta, blueprint);
         }
 
         tracker.markVisited(currentMeta);
-        tracker.forwardMass(currentProb, currentMeta, ctx, SearchProcessor);
+        tracker.forwardMass(currentProb, currentMeta, currentCombo, ctx, SearchProcessor);
     }
 }

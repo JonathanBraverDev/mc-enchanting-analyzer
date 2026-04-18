@@ -11,9 +11,12 @@ export class SearchManager {
     private static STACK_PTR = 0;
     private static readonly STACK_MASS = new BigUint64Array(1024);
     private static readonly STACK_META = new BigUint64Array(1024);
+    private static readonly STACK_COMBO = new Float64Array(1024); // Use Float64 for bit-safe storage of PackedCombo (number)
     private static readonly STACK_DEPTH = new Int32Array(1024);
 
     private visited = new Set<bigint>();
+    private residues = new Map<bigint, bigint>();
+    private expansionCache = new Map<bigint, ExpansionBlueprint>(); // Reverted to search-local cache for safety and isolation
     private buckets: MassBookkeeping;
 
     constructor(initialBuckets?: MassBookkeeping) {
@@ -41,6 +44,18 @@ export class SearchManager {
         return this.visited.has(key);
     }
 
+    public hasBlueprint(key: bigint): boolean {
+        return this.expansionCache.has(key);
+    }
+
+    public getBlueprint(key: bigint): ExpansionBlueprint | undefined {
+        return this.expansionCache.get(key);
+    }
+
+    public setBlueprint(key: bigint, blueprint: ExpansionBlueprint): void {
+        this.expansionCache.set(key, blueprint);
+    }
+
     public markVisited(key: bigint): void {
         this.visited.add(key);
     }
@@ -58,33 +73,29 @@ export class SearchManager {
     public forwardMass(
         initialMass: bigint,
         initialMeta: bigint,
+        initialCombo: PackedCombo,
         ctx: ForwardingContext,
         searchProcessor: {
             settleMass: (...args: any[]) => bigint;
         }
-    ): bigint {
+    ): void {
         const { registry, cat, guaranteedFirstId, resultsLimit } = ctx;
-        let catCache = registry.expansionCache.get(cat);
-        if (!catCache) {
-            catCache = new Map();
-            registry.expansionCache.set(cat, catCache);
-        }
 
         SearchManager.STACK_PTR = 0;
         const ptr = SearchManager.STACK_PTR++;
         SearchManager.STACK_MASS[ptr] = initialMass;
         SearchManager.STACK_META[ptr] = initialMeta;
+        SearchManager.STACK_COMBO[ptr] = initialCombo;
         SearchManager.STACK_DEPTH[ptr] = 0;
-
-        let totalResolvedFromTrees = 0n;
 
         while (SearchManager.STACK_PTR > 0) {
             const currentPtr = --SearchManager.STACK_PTR;
             const incomingMass = SearchManager.STACK_MASS[currentPtr]!;
             const meta = SearchManager.STACK_META[currentPtr]!;
+            const combo = SearchManager.STACK_COMBO[currentPtr]! as any as PackedCombo;
             const depth = SearchManager.STACK_DEPTH[currentPtr]!;
             
-            const blueprint = catCache.get(meta);
+            const blueprint = this.expansionCache.get(meta);
             if (!blueprint) continue;
 
             // Split mass into stop vs forward
@@ -95,7 +106,7 @@ export class SearchManager {
 
             const isBook = cat === "book";
             const currentCount = blueprint.currentCount;
-            const currentCombo = blueprint.currentCombo;
+            const currentCombo = combo;
             let remStop = 0n;
 
             if (isBook && currentCount > 1) {
@@ -115,21 +126,18 @@ export class SearchManager {
             const isMapFull = ctx.results.size >= resultsLimit && !ctx.results.has(currentCombo);
             
             if (isLimitReached || isTooSmall || isMapFull || blueprint.totalWeight === 0) {
-                totalResolvedFromTrees += this.handleTerminal(
-                    incomingMass, probStop, probForward, remStop, scaleLoss, blueprint, 
+                this.handleTerminal(
+                    incomingMass, probStop, probForward, remStop, scaleLoss, currentCombo, blueprint, 
                     { isLimitReached, isTooSmall, isMapFull }, ctx, searchProcessor
                 );
                 continue;
             }
 
             // Standard expansion path
-            const resolvedSub = this.processExpansionStep(probStop, probForward, remStop, scaleLoss, 
-                meta >> BIGINT_CONSTANTS.ENCHANT_SHIFT, 
+            this.processExpansionStep(probStop, probForward, remStop, scaleLoss, currentCombo,
+                meta, 
                 blueprint, ctx, depth);
-            totalResolvedFromTrees += resolvedSub;
         }
-
-        return totalResolvedFromTrees;
     }
 
     private handleTerminal(
@@ -138,13 +146,14 @@ export class SearchManager {
         probForward: bigint,
         remStop: bigint,
         scaleLoss: bigint,
+        currentCombo: PackedCombo,
         blueprint: ExpansionBlueprint,
         term: { isLimitReached: boolean; isTooSmall: boolean; isMapFull: boolean },
         ctx: ForwardingContext,
         searchProcessor: {
             settleMass: (...args: any[]) => bigint;
         }
-    ): bigint {
+    ): void {
         const { registry, cat, guaranteedFirstId, instrumentation } = ctx;
         
         let remForward = 0n;
@@ -152,12 +161,12 @@ export class SearchManager {
         
         if (isBook && blueprint.currentCount > 1) {
             remForward = searchProcessor.settleMass(
-                true, blueprint.currentCount, blueprint.currentCombo, 
+                true, blueprint.currentCount, currentCombo, 
                 probForward, guaranteedFirstId, registry.enchantToIndex, registry.indexToEnchant, 
                 ctx.results, ctx.countMass, ctx.anyMass, ctx.rankMass
             );
         } else {
-            ProbUtils.addItemMass(ctx.results, blueprint.currentCombo, probForward);
+            ProbUtils.addItemMass(ctx.results, currentCombo, probForward);
             ctx.countMass[blueprint.currentCount]! += probForward;
         }
 
@@ -178,7 +187,6 @@ export class SearchManager {
         }
 
         if (localRounding > 0n && instrumentation) instrumentation.roundingErrorEvents++;
-        return (probStop - remStop) + (blueprint.totalWeight === 0 ? (probForward - remForward) : 0n);
     }
 
     private processExpansionStep(
@@ -186,27 +194,29 @@ export class SearchManager {
         probForward: bigint,
         remStop: bigint,
         scaleLoss: bigint,
-        currentBitset: bigint,
+        currentCombo: PackedCombo,
+        meta: bigint,
         blueprint: ExpansionBlueprint,
         ctx: ForwardingContext,
         depth: number
-    ): bigint {
+    ): void {
         const { registry, queue, guaranteedFirstId } = ctx;
 
         const eligibleCount = blueprint.eligibleCount;
         const splits = DistributionPool.getBuffer(depth);
         
-        const oldResidue = blueprint.residue;
-        const { recovered } = ProbUtils.distributeWithResidue(
-            probForward, blueprint.eligibleWeights, blueprint.totalWeight, splits, blueprint, eligibleCount
+        const oldResidue = this.residues.get(meta) || 0n;
+        const { recovered, newResidue } = ProbUtils.distributeWithResidue(
+            probForward, blueprint.eligibleWeights, blueprint.totalWeight, splits, oldResidue, eligibleCount
         );
+        this.residues.set(meta, newResidue);
 
-        this.buckets.rounding += (remStop + (blueprint.residue - oldResidue) + scaleLoss);
+        this.buckets.rounding += (remStop + (newResidue - oldResidue) + scaleLoss);
         this.buckets.resolved += (probStop - remStop);
         this.buckets.recoveredRounding += recovered;
         
         const eligibleEnchants = blueprint.eligibleEnchants;
-        let localResolved = 0n;
+        const currentBitset = meta >> BIGINT_CONSTANTS.ENCHANT_SHIFT;
 
         for (let i = 0; i < eligibleCount; i++) {
             const pNext = splits[i]!;
@@ -218,7 +228,7 @@ export class SearchManager {
             
             const guaranteedIdLookup = guaranteedFirstId === null ? 0n : (BIGINT_CONSTANTS.ID_BIT_LOOKUP[guaranteedFirstId] ?? 0n);
             const nextPacked = ComboUtils.packAppend(
-                blueprint.currentCombo, nextItem, guaranteedFirstId, (currentBitset & guaranteedIdLookup) !== 0n, registry.enchantToIndex
+                currentCombo, nextItem, guaranteedFirstId, (currentBitset & guaranteedIdLookup) !== 0n, registry.enchantToIndex
             ) as PackedCombo;
 
             ctx.anyMass[nextId]! += pNext;
@@ -230,6 +240,7 @@ export class SearchManager {
                     const ptr = SearchManager.STACK_PTR++;
                     SearchManager.STACK_MASS[ptr] = pNext;
                     SearchManager.STACK_META[ptr] = nextMeta;
+                    SearchManager.STACK_COMBO[ptr] = nextPacked;
                     SearchManager.STACK_DEPTH[ptr] = depth + 1;
                 } else {
                     // Safety valve
@@ -241,8 +252,6 @@ export class SearchManager {
                 this.buckets.pending += pNext;
             }
         }
-
-        return (probStop - remStop) + localResolved;
     }
 
     public getTotalMass(): bigint {
@@ -270,7 +279,7 @@ export class SearchManager {
         return { ...this.buckets };
     }
 
-    public toPublic(): { resolved: number, pending: number, sieved: number, rounding: number, overflow: number, capped: number, recoveredRounding: number, recoveredSieved: number } {
+    public toPublic(): { resolved: number, pending: number, sieved: number, rounding: number, overflow: number, capped: number, recoveredRounding: number, recoveredSieved: number, units: Record<string, string> } {
         const factor = Number(PRECISION);
         return {
             resolved: Number(this.buckets.resolved) / factor,
@@ -280,13 +289,25 @@ export class SearchManager {
             overflow: Number(this.buckets.overflow) / factor,
             capped: Number(this.buckets.capped) / factor,
             recoveredRounding: Number(this.buckets.recoveredRounding) / factor,
-            recoveredSieved: Number(this.buckets.recoveredSieved) / factor
+            recoveredSieved: Number(this.buckets.recoveredSieved) / factor,
+            units: {
+                resolved: this.buckets.resolved.toString(),
+                pending: this.buckets.pending.toString(),
+                sieved: this.buckets.sieved.toString(),
+                overflow: this.buckets.overflow.toString(),
+                capped: this.buckets.capped.toString(),
+                rounding: this.buckets.rounding.toString(),
+                recoveredRounding: this.buckets.recoveredRounding.toString(),
+                recoveredSieved: this.buckets.recoveredSieved.toString()
+            }
         };
     }
 
     public clone(): SearchManager {
         const other = new SearchManager({ ...this.buckets });
         other.visited = new Set(this.visited);
+        other.residues = new Map(this.residues);
+        other.expansionCache = new Map(this.expansionCache);
         return other;
     }
 }

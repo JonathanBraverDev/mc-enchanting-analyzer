@@ -31,8 +31,7 @@ export class RegistryFactory {
             sortedRanks: [],
             versionPool: new Map(),
             enchantToIndex: new Map(),
-            indexToEnchant: [0],
-            expansionCache: new Map()
+            indexToEnchant: [0]
         };
 
         const resolvedVersion = this.resolveVersion(data, version);

@@ -134,9 +134,7 @@ export class ExpansionBlueprint {
         public readonly eligibleEnchants: PackedEnchant[],
         public readonly eligibleWeights: Int32Array,
         public readonly nextLevel: number,
-        public readonly currentCount: number,
-        public readonly currentCombo: PackedCombo,
-        public residue: bigint = 0n
+        public readonly currentCount: number
     ) {}
 }
 
@@ -204,7 +202,6 @@ export interface RegistryState {
     versionPool: Map<string, string[]>;
     enchantToIndex: Map<number, number>;
     indexToEnchant: number[];
-    expansionCache: Map<string, Map<bigint, ExpansionBlueprint>>;
 }
 
 export type PackedEnchant = number & { __brand: "PackedEnchant" };

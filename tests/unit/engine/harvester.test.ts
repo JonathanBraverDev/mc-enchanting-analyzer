@@ -38,7 +38,7 @@ describe('SearchManager', () => {
 
     it('should recover rounding residue from blueprints during mass distribution', () => {
         const tracker = new SearchManager();
-        const weights = new Int32Array([10, 10]);
+        const weights = new Int32Array([10, 9]);
         
         const blueprint: ExpansionBlueprint = {
             probContinue: PRECISION,
@@ -47,14 +47,20 @@ describe('SearchManager', () => {
             eligibleEnchants: [1, 2] as any,
             eligibleWeights: weights,
             nextLevel: 30,
-            currentCount: 1,
-            currentCombo: 0 as any,
-            residue: 15n
+            currentCount: 1
         };
         
+        const meta = 1n;
+        (tracker as any).residues.set(meta, 15n);
+        
+        // Use a mass that results in a remainder (e.g. 7)
+        // 7 % 20 = 7.
+        // With oldResidue 15, we get 7 + 15 = 22.
+        // 22 % 20 = 2.
+        // recovered = 7 - (2 - 15) = 7 - (-13) = 20.
         (tracker as any).processExpansionStep(
-            0n, PRECISION, 0n, 0n,
-            0n, blueprint, 
+            0n, 7n, 0n, 0n,
+            0 as any, meta, blueprint, 
             { 
                 registry: { enchantToIndex: new Map(), expansionCache: new Map() }, 
                 cat: 'test',
@@ -64,11 +70,11 @@ describe('SearchManager', () => {
                 rankMass: new BigUint64Array(10), 
                 queue: { pushOrMerge: () => {} } 
             } as any, 
-            0, [], 
-            { settleMass: () => 0n }
+            0
         );
 
         const bk = tracker.getBookkeeping();
-        assert.ok(bk.rounding > 0n || bk.resolved > 0n, 'Should have accounted for mass');
+        assert.strictEqual(bk.recoveredRounding, 20n, 'Should have recovered exactly 20 units of residue');
+        assert.strictEqual((tracker as any).residues.get(meta), 2n, 'New residue should be 2');
     });
 });

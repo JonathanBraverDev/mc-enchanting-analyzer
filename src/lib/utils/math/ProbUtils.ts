@@ -104,18 +104,17 @@ export const ProbUtils = {
         weights: ArrayLike<number | bigint>,
         totalWeight: number | bigint,
         outParts: bigint[] | BigUint64Array,
-        context: { residue: bigint },
+        oldResidue: bigint,
         count?: number
-    ): { recovered: bigint } => {
+    ): { recovered: bigint; newResidue: bigint } => {
         const total = BigInt(totalWeight);
         const len = count ?? weights.length;
 
         if (total === 0n) {
             for (let i = 0; i < len; i++) outParts[i] = 0n;
-            return { recovered: 0n };
+            return { recovered: 0n, newResidue: 0n };
         }
 
-        const oldResidue = context.residue;
         const totalToDistribute = prob + oldResidue;
         
         let rem = totalToDistribute;
@@ -127,14 +126,11 @@ export const ProbUtils = {
             rem -= quotient;
         }
         
-        context.residue = rem;
-
-        // The 'recovered' mass is the difference between what WOULD have been 
-        // the standalone remainder vs the new residue delta.
+        const newResidue = rem;
         const individualRemainder = prob % total;
-        const recovered = individualRemainder - (rem - oldResidue);
+        const recovered = individualRemainder - (newResidue - oldResidue);
 
-        return { recovered: recovered > 0n ? recovered : 0n };
+        return { recovered: recovered > 0n ? recovered : 0n, newResidue };
     },
     /**
      * Scales 'val' by 'multiplier' and divides by 'divisor' using Banker's Rounding.
