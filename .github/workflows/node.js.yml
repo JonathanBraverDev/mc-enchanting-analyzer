@@ -46,55 +46,58 @@ jobs:
         TAG_NAME=$(git tag --points-at HEAD | head -n 1)
         if [ -z "$TAG_NAME" ]; then
           echo "HAS_TAG=false" >> $GITHUB_OUTPUT
-          exit 0
+        else
+          echo "HAS_TAG=true" >> $GITHUB_OUTPUT
+          echo "TAG_NAME=$TAG_NAME" >> $GITHUB_OUTPUT
         fi
-        
-        echo "HAS_TAG=true" >> $GITHUB_OUTPUT
-        echo "TAG_NAME=$TAG_NAME" >> $GITHUB_OUTPUT
-        
+
+  release:
+    needs: check-tag
+    if: needs.check-tag.outputs.has_tag == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Determine Type
+      id: meta
+      run: |
         if [ "${{ github.ref_name }}" = "main" ]; then
           echo "PRERELEASE=false" >> $GITHUB_OUTPUT
-          echo "IS_OFFICIAL=true" >> $GITHUB_OUTPUT
+          echo "TITLE=Portable Analyzer: ${{ needs.check-tag.outputs.tag_name }}" >> $GITHUB_OUTPUT
         else
           echo "PRERELEASE=true" >> $GITHUB_OUTPUT
-          echo "IS_OFFICIAL=false" >> $GITHUB_OUTPUT
+          echo "TITLE=Portable Analyzer: ${{ needs.check-tag.outputs.tag_name }} (Pre-release)" >> $GITHUB_OUTPUT
         fi
 
     - name: Extract Changelog
-      if: steps.meta.outputs.HAS_TAG == 'true'
       id: changelog
       run: |
-        BODY=$(node scripts/extract-changelog.js ${{ steps.meta.outputs.TAG_NAME }})
+        BODY=$(node scripts/extract-changelog.js ${{ needs.check-tag.outputs.tag_name }})
         echo "body<<EOF" >> $GITHUB_OUTPUT
         echo "$BODY" >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
 
     - name: Use Node.js 22.x
-      if: steps.meta.outputs.HAS_TAG == 'true'
       uses: actions/setup-node@v4
       with:
         node-version: 22.x
         cache: 'npm'
 
     - run: npm ci
-      if: steps.meta.outputs.HAS_TAG == 'true'
-      
     - name: Install Playwright Chromium
-      if: steps.meta.outputs.HAS_TAG == 'true'
       run: npx playwright install chromium --with-deps
-
     - name: Standalone Build
-      if: steps.meta.outputs.HAS_TAG == 'true'
       run: npm run build:standalone
 
     - name: Create GitHub Release
-      if: steps.meta.outputs.HAS_TAG == 'true'
       uses: softprops/action-gh-release@v2
       with:
-        tag_name: ${{ steps.meta.outputs.TAG_NAME }}
+        tag_name: ${{ needs.check-tag.outputs.tag_name }}
         files: dist/analyzer-standalone.html
         prerelease: ${{ steps.meta.outputs.PRERELEASE == 'true' }}
         body: ${{ steps.changelog.outputs.body }}
-        name: "Portable Analyzer: ${{ steps.meta.outputs.TAG_NAME }}$([ \"${{ steps.meta.outputs.IS_OFFICIAL }}\" = \"true\" ] && echo \"\" || echo \" (Pre-release)\")"
+        name: ${{ steps.meta.outputs.TITLE }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
