@@ -149,6 +149,9 @@ export class SearchProcessor {
         }
     }
 
+    private static readonly SCRATCH_ENCHANTS = new Int32Array(256);
+    private static readonly SCRATCH_WEIGHTS = new Int32Array(256);
+
     /**
      * Core expansion logic: determines eligibility for further enchantments,
      * calculates continuous distribution probabilities, and forwards mass to children.
@@ -176,49 +179,43 @@ export class SearchProcessor {
             : (ProbUtils.PROB_CONTINUE_TABLE[currentLevel] || 0n);
 
         if (!tracker.has(currentMeta)) {
-            const filterFn = () => {
-                const tempEligible: PackedEnchant[] = [];
-                const tempWeights: number[] = [];
-                let eligibleCount = 0;
-                let totalWeight = 0;
+            const poolLen = pool.length;
+            const poolWeights = ctx.poolWeights;
+            const conflictBitsets = registry.conflictBitsets;
+            let eligibleCount = 0;
+            let totalWeight = 0;
 
-                const poolLen = pool.length;
-                const poolWeights = ctx.poolWeights;
-                const conflictBitsets = registry.conflictBitsets;
-
-                for (let i = 0; i < poolLen; i++) {
-                    const e = pool[i]!;
-                    const id = ComboUtils.getEnchantId(e);
-                    const idBit = 1n << BigInt(id);
-                    if ((currentBitset & idBit) !== 0n) continue;
-                    
-                    const conflictBitset = conflictBitsets[id];
-                    if (conflictBitset !== undefined && (currentBitset & conflictBitset) !== 0n) continue;
-                    
-                    const weight = poolWeights[i];
-                    if (weight === undefined) continue;
-                    tempEligible.push(e);
-                    tempWeights.push(weight);
-                    eligibleCount++;
-                    totalWeight += weight;
-                }
+            for (let i = 0; i < poolLen; i++) {
+                const e = pool[i]!;
+                const id = ComboUtils.getEnchantId(e);
+                const idBit = 1n << BigInt(id);
+                if ((currentBitset & idBit) !== 0n) continue;
                 
-                const nextLevel = currentCount >= 1 ? Math.floor(currentLevel / 2) : currentLevel;
-                const blueprint = new ExpansionBlueprint(
-                    probContinue,
-                    totalWeight,
-                    eligibleCount,
-                    tempEligible,
-                    new Int32Array(tempWeights),
-                    nextLevel,
-                    currentCount,
-                    currentCombo,
-                    currentEnchants
-                );
-                tracker.registerExpansion(currentMeta, blueprint);
-            };
-
-            filterFn();
+                const conflictBitset = conflictBitsets[id];
+                if (conflictBitset !== undefined && (currentBitset & conflictBitset) !== 0n) continue;
+                
+                const weight = poolWeights[i];
+                if (weight === undefined) continue;
+                
+                SearchProcessor.SCRATCH_ENCHANTS[eligibleCount] = e;
+                SearchProcessor.SCRATCH_WEIGHTS[eligibleCount] = weight;
+                eligibleCount++;
+                totalWeight += weight;
+            }
+            
+            const nextLevel = currentCount >= 1 ? Math.floor(currentLevel / 2) : currentLevel;
+            const blueprint = new ExpansionBlueprint(
+                probContinue,
+                totalWeight,
+                eligibleCount,
+                Array.from(SearchProcessor.SCRATCH_ENCHANTS.subarray(0, eligibleCount)) as PackedEnchant[],
+                new Int32Array(SearchProcessor.SCRATCH_WEIGHTS.subarray(0, eligibleCount)),
+                nextLevel,
+                currentCount,
+                currentCombo,
+                currentEnchants
+            );
+            tracker.registerExpansion(currentMeta, blueprint);
         }
 
         tracker.forwardMass(currentProb, currentMeta, ctx, SearchProcessor);
