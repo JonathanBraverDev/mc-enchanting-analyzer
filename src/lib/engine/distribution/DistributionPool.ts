@@ -1,4 +1,4 @@
-import { POOL_CONSTANTS } from '../../constants/engine.js';
+import { POOL_CONSTANTS } from '#constants/engine.js';
 
 /**
  * Shared memory pool for probability distributions during the search process.

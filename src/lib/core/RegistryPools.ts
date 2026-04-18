@@ -1,6 +1,6 @@
-import { EnchantUtils } from '../utils/index.js';
-import { PACKING_CONSTANTS } from '../constants/engine.js';
-import { PackedEnchant, RegistryState } from '../types/index.js';
+import { EnchantUtils } from '#utils/index.js';
+import { PACKING_CONSTANTS } from '#constants/engine.js';
+import { PackedEnchant, RegistryState } from '#types/index.js';
 
 /**
  * Service for managing enchantment pools and checking achievability.

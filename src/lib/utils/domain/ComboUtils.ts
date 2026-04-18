@@ -1,5 +1,5 @@
-import { PACKING_CONSTANTS } from '../../constants/engine.js';
-import { PackedEnchant, PackedCombo } from '../../types/index.js';
+import { PACKING_CONSTANTS } from '#constants/engine.js';
+import { PackedEnchant, PackedCombo } from '#types/index.js';
 
 /**
  * Utility for packing and unpacking enchantment combinations into numbers.

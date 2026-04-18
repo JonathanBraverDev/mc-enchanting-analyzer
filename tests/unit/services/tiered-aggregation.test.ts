@@ -10,7 +10,7 @@ import { SearchService } from '#engine/search/SearchService.js';
 import { CacheManager } from '#engine/cache/CacheManager.js';
 import { SummaryService } from '#services/SummaryService.js';
 import { DATA } from '#data/index.js';
-import { TEST_DATA } from '../../infra/test-data.js';
+import { TEST_DATA } from '#tests/infra/test-data.js';
 import { CacheConfig, AggregationResult } from '#types/index.js';
 
 const CAT = TEST_DATA.ITEMS.SWORD;

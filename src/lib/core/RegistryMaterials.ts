@@ -1,4 +1,4 @@
-import { EnchantmentData } from '../types/index.js';
+import { EnchantmentData } from '#types/index.js';
 
 /**
  * Service for material-specific logic and compatibility.

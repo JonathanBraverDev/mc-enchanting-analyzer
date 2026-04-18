@@ -47,6 +47,7 @@ class AppController {
             this.isWorkerReady = true;
 
             this.params.updateMaterials(this.getEngine());
+            this.params.updateClue(this.getEngine());
             this.run();
         } catch (err) {
             this.showError(UI_TEXTS.STATUS_ERROR_LOADING, err);
@@ -72,7 +73,7 @@ class AppController {
                 this.isWorkerReady = true;
                 const engine = this.getEngine();
                 this.params.updateMaterials(engine);
-                this.params.updateGuaranteedFirst(engine);
+                this.params.updateClue(engine);
                 this.enqueueRun();
             }).catch(err => this.showError(UI_TEXTS.STATUS_ERROR_LOADING, err));
             return;
@@ -83,9 +84,9 @@ class AppController {
         if (type === 'cat') {
             this.results.showPlaceholder(UI_TEXTS.STATUS_SWITCHING_CATEGORY);
             this.params.updateMaterials(engine);
-            this.params.updateGuaranteedFirst(engine);
+            this.params.updateClue(engine);
         } else if (type === 'mat') {
-            this.params.updateGuaranteedFirst(engine);
+            this.params.updateClue(engine);
         } else if (type === 'chart-metric') {
             this.chart.refresh(this.refinement.currentSweep, engine.registry);
             return;
@@ -118,7 +119,7 @@ class AppController {
 
         try {
             const engine = this.getEngine();
-            this.params.updateGuaranteedFirst(engine);
+            this.params.updateClue(engine);
             
             const vals = this.params.getValues();
             this.params.setEnchantability(getEnchantability(engine.registry, vals.material, vals.category));

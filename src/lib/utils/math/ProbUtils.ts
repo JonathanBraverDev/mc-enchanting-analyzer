@@ -1,4 +1,4 @@
-import { MATH_CONSTANTS, SEARCH_CONSTANTS, ENGINE_LIMITS } from '../../constants/engine.js';
+import { MATH_CONSTANTS, SEARCH_CONSTANTS, ENGINE_LIMITS } from '#constants/engine.js';
 
 /**
  * High-precision constant for BigInt fixed-point arithmetic (2^60).

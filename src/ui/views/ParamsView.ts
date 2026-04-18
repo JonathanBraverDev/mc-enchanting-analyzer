@@ -54,7 +54,7 @@ export class ParamsView {
             version: (this.elements["v-select"] as HTMLSelectElement)?.value || "",
             category: (this.elements["cat-select"] as HTMLSelectElement)?.value || "",
             material: (this.elements["mat-select"] as HTMLSelectElement)?.value || "",
-            guaranteedFirst: (this.elements["guaranteed-first-select"] as HTMLSelectElement)?.value || "",
+            clue: (this.elements["guaranteed-first-select"] as HTMLSelectElement)?.value || "",
             xpLevel: parseInt((this.elements["lvl-range"] as HTMLInputElement)?.value || "30"),
             chartMetric: (this.elements["chart-metric"] as HTMLSelectElement)?.value || "any",
             sortMode: (this.elements["combo-sort"] as HTMLSelectElement)?.value || "prob"
@@ -80,7 +80,7 @@ export class ParamsView {
         });
     }
 
-    public updateGuaranteedFirst(engine: EnchantEngine): void {
+    public updateClue(engine: EnchantEngine): void {
         const { category, material, xpLevel } = this.getValues();
         const gSelect = this.elements["guaranteed-first-select"] as HTMLSelectElement;
         if (!gSelect) return;

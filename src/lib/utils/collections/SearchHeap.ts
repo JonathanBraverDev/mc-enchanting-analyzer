@@ -1,4 +1,4 @@
-import { PACKING_CONSTANTS, POOL_CONSTANTS } from '../../constants/engine.js';
+import { PACKING_CONSTANTS, POOL_CONSTANTS } from '#constants/engine.js';
 
 /**
  * A specialized, TypedArray-backed priority queue for PackedNode data.

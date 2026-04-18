@@ -1,5 +1,5 @@
 import { AsyncUtils, ProbUtils } from '#utils/index.js';
-import { ENGINE_LIMITS, SEARCH_CONSTANTS } from '#constants/engine.js';
+import { ENGINE_LIMITS } from '#constants/engine.js';
 import { SearchState, SearchContext, ForwardingContext } from '#types/index.js';
 import { SearchProcessor } from './SearchProcessor.js';
 import { ComboUtils } from '#utils/index.js';

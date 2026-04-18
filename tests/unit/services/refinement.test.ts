@@ -1,8 +1,8 @@
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert';
-import { RefinementService } from '../../../src/ui/refinement.js';
-import { WorkerClient } from '../../../src/worker/client.js';
-import { TEST_DATA } from '../../infra/test-data.js';
+import { RefinementService, RefinementPayload } from '#ui/refinement.js';
+import { WorkerClient } from '#worker/client.js';
+import { TEST_DATA } from '#tests/infra/test-data.js';
 import { CalculationStats } from '#types/index.js';
 
 describe('RefinementService', () => {
@@ -40,7 +40,7 @@ describe('RefinementService', () => {
     it('should fire onStats for each pass in sequence', async () => {
         const accuracyValues: number[] = [];
         
-        const payload = {
+        const payload: RefinementPayload = {
             category: TEST_DATA.ITEMS.SWORD,
             material: TEST_DATA.MATERIALS.DIAMOND,
             xpLevel: 30,
@@ -63,7 +63,7 @@ describe('RefinementService', () => {
         let run1Count = 0;
         let run2Count = 0;
 
-        const payload1 = {
+        const payload1: RefinementPayload = {
             category: TEST_DATA.ITEMS.SWORD,
             material: TEST_DATA.MATERIALS.DIAMOND,
             xpLevel: 30,
@@ -105,7 +105,7 @@ describe('RefinementService', () => {
     it('should be in "calculating" state during run', async () => {
         assert.strictEqual(service.isCalculating(), false);
         
-        const payload = {
+        const payload: RefinementPayload = {
             category: TEST_DATA.ITEMS.SWORD,
             material: TEST_DATA.MATERIALS.DIAMOND,
             xpLevel: 30,

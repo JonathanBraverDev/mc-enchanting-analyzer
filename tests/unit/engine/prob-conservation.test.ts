@@ -18,7 +18,7 @@ import { describe, it, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { EngineFactory } from '#engine/factory.js';
 import { DATA } from '#data/index.js';
-import { TEST_DATA } from '../../infra/test-data.js';
+import { TEST_DATA } from '#tests/infra/test-data.js';
 
 // Matches the tolerance used in engine.test.ts "Frontier Mass Tracking" test.
 const TOLERANCE = TEST_DATA.THRESHOLDS.PROB_MIN;

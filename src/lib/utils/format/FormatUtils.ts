@@ -1,4 +1,4 @@
-import { UI_CONSTANTS } from '../../constants/engine.js';
+import { UI_CONSTANTS } from '#constants/engine.js';
 
 /**
  * Utility for string formatting.

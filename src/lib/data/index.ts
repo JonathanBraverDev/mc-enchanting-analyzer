@@ -1,4 +1,4 @@
-import { EnchantmentData } from '../types/index.js';
+import { EnchantmentData } from '#types/index.js';
 import { global_enchantments, enchantment_groups } from './enchantments.js';
 import { versions } from './versions.js';
 import { material_values } from './materials.js';
