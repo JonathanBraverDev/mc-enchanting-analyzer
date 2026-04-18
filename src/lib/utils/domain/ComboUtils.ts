@@ -136,6 +136,18 @@ export class ComboUtils {
     }
 
     /**
+     * Iterates over each packed enchantment index in a combo without unpacking into an array.
+     */
+    static forEach(packed: PackedCombo, count: number, cb: (idx: number, slot: number) => void): void {
+        let mult = 1;
+        for (let i = 0; i < count; i++, mult *= PACKING_CONSTANTS.BYTE_BASIS) {
+            const idx = Math.floor(packed / mult) % PACKING_CONSTANTS.BYTE_BASIS;
+            if (idx === 0) break;
+            cb(idx, i);
+        }
+    }
+
+    /**
      * For books: returns all possible combinations after removing one "selected at random" enchantment.
      * Based on Minecraft Wiki: "If multiple enchantments were generated, then one selected at random is removed."
      *

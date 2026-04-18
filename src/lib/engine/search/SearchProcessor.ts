@@ -96,12 +96,9 @@ export class SearchProcessor {
         const finalCount = currentCount - 1;
         ProbUtils.addItemMass(countMass, finalCount, prob);
 
-        // Bitwise iteration instead of array iteration to avoid allocations
-        let loopMult = 1;
-        for (let i = 0; i < currentCount; i++, loopMult *= PACKING_CONSTANTS.BYTE_BASIS) {
-            const idx = Math.floor(packedChosen / loopMult) % PACKING_CONSTANTS.BYTE_BASIS;
+        ComboUtils.forEach(packedChosen, currentCount, (idx) => {
             const e = indexToEnchant[idx] as PackedEnchant;
-            if (e === undefined) continue;
+            if (e === undefined) return;
 
             const id = ComboUtils.getEnchantId(e);
             const isGuaranteed = guaranteedFirstId !== null && id === guaranteedFirstId;
@@ -113,7 +110,7 @@ export class SearchProcessor {
                 ProbUtils.addItemMass(anyMass, id, -loss);
                 ProbUtils.addItemMass(rankMass, e, -loss);
             }
-        }
+        });
 
         return { rem: 0n };
     }
