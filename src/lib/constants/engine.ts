@@ -1,5 +1,3 @@
-import { ProbUtils } from '../utils/math/ProbUtils.js';
-
 /**
  * Technical limits for enchantment bit-packing and search.
  */
@@ -14,7 +12,46 @@ export const ENGINE_LIMITS = {
     UNKNOWN_ENCHANT_ID: 255,
     UNKNOWN_MATERIAL_ID: 255,
     MAX_RESULTS_UNBOUNDED: 1000000,
-    MAX_ITERATIONS_UNBOUNDED: 1000000
+    MAX_ITERATIONS_UNBOUNDED: 1000000,
+    DEFAULT_THRESHOLD: 0.0001,
+    DEFAULT_BUFFER_SIZE: 1024
+};
+
+/**
+ * Constants for enchantment bit-packing and fixed-point arithmetic.
+ */
+export const PACKING_CONSTANTS = {
+    /** 
+     * Basis for byte-slot encoding (256). 
+     * Used for both individual enchants (Id << 8 | Rank) and combo packing.
+     */
+    BYTE_BASIS: 256,
+    
+    /** Bit shift for separating Enchant Id and Rank. */
+    ENCHANT_SHIFT: 8,
+    
+    /** Mask for extracting Rank from a packed enchantment. */
+    RANK_MASK: 0xFF,
+    
+    /** Max possible packed rank-id index for bookkeeping arrays. */
+    MAX_RANKED_INDEX: 16384, // (256 max enchants * 64 possible internal ids)
+    
+    /** Max possible count index for bookkeeping arrays. */
+    MAX_COUNT_INDEX: 16
+};
+
+/**
+ * High-precision math constants.
+ */
+export const MATH_CONSTANTS = {
+    /** Fixed-point precision shift (2^60). */
+    PRECISION_SHIFT: 60n,
+    
+    /** IEEE 754 mantissa bits for safe float-to-int conversion. */
+    FLOAT_MANTISSA_BITS: 53,
+    
+    /** The scale difference between mantissa bits and our precision target (60 - 53). */
+    MANTISSA_TO_FIXED_SHIFT: 7n
 };
 
 /**
@@ -31,12 +68,9 @@ export const CACHE_CONFIG = {
  * Search logic constants.
  */
 export const SEARCH_CONSTANTS = {
-    /** Target mass coverage percentages where checkpoints are recorded. */
-    CHECKPOINT_TARGETS: [0.1, 0.25, 0.5, 0.75, 0.8, 0.85, 0.9, 0.95, 0.99, 0.999].map(t => ProbUtils.toBigInt(t)),
+    /** Target mass coverage percentages where checkpoints are recorded. (As floats) */
+    CHECKPOINT_TARGET_FLOATS: [0.1, 0.25, 0.5, 0.75, 0.8, 0.85, 0.9, 0.95, 0.99, 0.999],
     
-    /** Probability table for continuing to add more enchantments at a given modified level. */
-    PROB_CONTINUE_TABLE: Array.from({ length: 65 }, (_, ml) => {
-        const val = Math.min((ml + 1) / 50, 1.0); // 50 is ENGINE_LIMITS.MAX_MODIFIED_LEVEL
-        return ProbUtils.toBigInt(val);
-    })
+    /** Max length for the continue table. */
+    CONTINUE_TABLE_SIZE: 65
 };

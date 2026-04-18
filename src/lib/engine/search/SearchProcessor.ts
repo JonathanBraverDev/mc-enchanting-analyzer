@@ -1,6 +1,6 @@
 import { ForwardingContext, PackedCombo, PackedEnchant, SearchTiming, ExpansionBlueprint } from '#types/index.js';
 import { ComboUtils, ProbUtils } from '#utils/index.js';
-import { ENGINE_LIMITS, SEARCH_CONSTANTS } from '#constants/engine.js';
+import { ENGINE_LIMITS, PACKING_CONSTANTS } from '#constants/engine.js';
 import { DistributionPool } from '#engine/distribution/DistributionPool.js';
 import { SearchManager } from '#engine/search/SearchManager.js';
 
@@ -151,7 +151,7 @@ export class SearchProcessor {
                 if (pNext === undefined || pNext === 0n) continue;
                 
                 const nextId = ComboUtils.getEnchantId(e);
-                const nextMeta = ((1n << BigInt(nextId)) << 8n) | BigInt(currentLevel);
+                const nextMeta = ((1n << BigInt(nextId)) << BigInt(PACKING_CONSTANTS.ENCHANT_SHIFT)) | BigInt(currentLevel);
                 const nextPacked = ComboUtils.pack([e], guaranteedFirstId, registry.enchantToIndex) as PackedCombo;
 
                 ProbUtils.addItemMass(ctx.anyMass, nextId, pNext);
@@ -177,8 +177,8 @@ export class SearchProcessor {
     ): void {
         const { registry, timing, cat, pool } = ctx;
         const { indexToEnchant } = registry;
-        const currentBitset = currentMeta >> 8n;
-        const currentLevel = Number(currentMeta & 0xFFn);
+        const currentBitset = currentMeta >> BigInt(PACKING_CONSTANTS.ENCHANT_SHIFT);
+        const currentLevel = Number(currentMeta & BigInt(PACKING_CONSTANTS.RANK_MASK));
         const isBook = cat === "book";
 
         const currentEnchants = (isBook && currentCount > 1)
@@ -187,7 +187,7 @@ export class SearchProcessor {
 
         const probContinue = (isBook && !registry.multiEnchantBooks && currentCount >= 1)
             ? 0n
-            : (SEARCH_CONSTANTS.PROB_CONTINUE_TABLE[currentLevel] || 0n);
+            : (ProbUtils.PROB_CONTINUE_TABLE[currentLevel] || 0n);
 
         if (!tracker.has(currentMeta)) {
             this.withTiming(timing, 'filteringMs', () => {

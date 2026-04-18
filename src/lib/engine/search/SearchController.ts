@@ -75,8 +75,8 @@ export class SearchController {
 
             // Checkpoints
             const bk = tracker.getBookkeeping();
-            while (checkpointIdx < SEARCH_CONSTANTS.CHECKPOINT_TARGETS.length) {
-                const targetMass = SEARCH_CONSTANTS.CHECKPOINT_TARGETS[checkpointIdx];
+            while (checkpointIdx < ProbUtils.CHECKPOINT_TARGETS.length) {
+                const targetMass = ProbUtils.CHECKPOINT_TARGETS[checkpointIdx];
                 if (targetMass === undefined) break;
                 const currentSettledMass = bk.resolved + bk.sieved + bk.overflow;
                 if (currentSettledMass < targetMass) break;

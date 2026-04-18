@@ -1,3 +1,4 @@
+import { PACKING_CONSTANTS } from '../../constants/engine.js';
 
 /**
  * A specialized, TypedArray-backed priority queue for PackedNode data.
@@ -64,7 +65,7 @@ export class SearchHeap {
 
         const dataId = this.freeCount > 0 ? this.nextFreeId() : this._nextId++;
         this.probBuffer[dataId] = prob;
-        this.bitsetBuffer[dataId] = meta >> 8n;
+        this.bitsetBuffer[dataId] = meta >> BigInt(PACKING_CONSTANTS.ENCHANT_SHIFT);
         this.levelBuffer[dataId] = level;
         this.comboBuffer[dataId] = combo;
 
@@ -80,7 +81,7 @@ export class SearchHeap {
         const dataId = this.heapAt(0);
         const bitset = this.bitsetBuffer[dataId] ?? 0n;
         const level = this.levelBuffer[dataId] ?? 0;
-        const meta = (bitset << 8n) | BigInt(level);
+        const meta = (bitset << BigInt(PACKING_CONSTANTS.ENCHANT_SHIFT)) | BigInt(level);
         const prob = this.probBuffer[dataId] ?? 0n;
         const combo = this.comboBuffer[dataId] ?? 0;
 
@@ -92,7 +93,7 @@ export class SearchHeap {
             this.heap[0] = lastDataId;
             const lastBitset = this.bitsetBuffer[lastDataId] ?? 0n;
             const lastLevel = this.levelBuffer[lastDataId] ?? 0;
-            this.indexMap.set((lastBitset << 8n) | BigInt(lastLevel), 0);
+            this.indexMap.set((lastBitset << BigInt(PACKING_CONSTANTS.ENCHANT_SHIFT)) | BigInt(lastLevel), 0);
             this.sinkDown(0);
         }
 
@@ -108,7 +109,7 @@ export class SearchHeap {
         const dataId = this.heapAt(0);
         const bitset = this.bitsetBuffer[dataId] ?? 0n;
         const level = this.levelBuffer[dataId] ?? 0;
-        const meta = (bitset << 8n) | BigInt(level);
+        const meta = (bitset << BigInt(PACKING_CONSTANTS.ENCHANT_SHIFT)) | BigInt(level);
         
         out.meta = meta;
         out.prob = this.probBuffer[dataId] ?? 0n;
@@ -123,7 +124,7 @@ export class SearchHeap {
             this.heap[0] = lastDataId;
             const lastBitset = this.bitsetBuffer[lastDataId] ?? 0n;
             const lastLevel = this.levelBuffer[lastDataId] ?? 0;
-            this.indexMap.set((lastBitset << 8n) | BigInt(lastLevel), 0);
+            this.indexMap.set((lastBitset << BigInt(PACKING_CONSTANTS.ENCHANT_SHIFT)) | BigInt(lastLevel), 0);
             this.sinkDown(0);
         }
 
@@ -154,7 +155,7 @@ export class SearchHeap {
             this.heap[idx] = parentDataId;
             const pBitset = this.bitsetBuffer[parentDataId] ?? 0n;
             const pLevel = this.levelBuffer[parentDataId] ?? 0;
-            this.indexMap.set((pBitset << 8n) | BigInt(pLevel), idx);
+            this.indexMap.set((pBitset << BigInt(PACKING_CONSTANTS.ENCHANT_SHIFT)) | BigInt(pLevel), idx);
             
             idx = parentIdx;
         }
@@ -162,7 +163,7 @@ export class SearchHeap {
         this.heap[idx] = dataId;
         const bitset = this.bitsetBuffer[dataId] ?? 0n;
         const level = this.levelBuffer[dataId] ?? 0;
-        this.indexMap.set((bitset << 8n) | BigInt(level), idx);
+        this.indexMap.set((bitset << BigInt(PACKING_CONSTANTS.ENCHANT_SHIFT)) | BigInt(level), idx);
     }
 
     private sinkDown(idx: number): void {
@@ -198,7 +199,7 @@ export class SearchHeap {
             this.heap[idx] = swapDataId;
             const sBitset = this.bitsetBuffer[swapDataId] ?? 0n;
             const sLevel = this.levelBuffer[swapDataId] ?? 0;
-            this.indexMap.set((sBitset << 8n) | BigInt(sLevel), idx);
+            this.indexMap.set((sBitset << BigInt(PACKING_CONSTANTS.ENCHANT_SHIFT)) | BigInt(sLevel), idx);
 
             idx = swapIdx;
         }
@@ -206,7 +207,7 @@ export class SearchHeap {
         this.heap[idx] = dataId;
         const bitset = this.bitsetBuffer[dataId] ?? 0n;
         const level = this.levelBuffer[dataId] ?? 0;
-        this.indexMap.set((bitset << 8n) | BigInt(level), idx);
+        this.indexMap.set((bitset << BigInt(PACKING_CONSTANTS.ENCHANT_SHIFT)) | BigInt(level), idx);
     }
 
     private grow(): void {

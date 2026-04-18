@@ -1,6 +1,6 @@
 import { PRECISION, ProbUtils, AsyncUtils, EnchantUtils } from '#utils/index.js';
 import { getEnchantability } from '#core/registry.js';
-import { ENGINE_LIMITS } from '#constants/engine.js';
+import { ENGINE_LIMITS, PACKING_CONSTANTS, SEARCH_CONSTANTS } from '#constants/engine.js';
 import { getSearchLimit } from '#core/config.js';
 import { PackedCombo, SearchState, RegistryState, InternalSearchConfig, EngineInstrumentation, MassCheckpoint, CheckpointSummary, AggregationResult } from '#types/index.js';
 import { DistributionService } from '#engine/distribution/DistributionService.js';
@@ -59,9 +59,9 @@ export class StatAggregator {
         let lastResult: AggregationResult = {
             combos: new Map(),
             tracker: initialTracker,
-            anyMass: new BigUint64Array(256),
-            rankMass: new BigUint64Array(16384),
-            countMass: new BigUint64Array(16),
+            anyMass: new BigUint64Array(PACKING_CONSTANTS.BYTE_BASIS),
+            rankMass: new BigUint64Array(PACKING_CONSTANTS.MAX_RANKED_INDEX),
+            countMass: new BigUint64Array(PACKING_CONSTANTS.MAX_COUNT_INDEX),
             threshold: 0
         };
 
@@ -73,9 +73,9 @@ export class StatAggregator {
             const activeThreshold = ProbUtils.toBigInt(tier.threshold);
 
             const finalCombos = new Map<PackedCombo, bigint>();
-            const totalAnyMass = new BigUint64Array(256);
-            const totalRankMass = new BigUint64Array(16384);
-            const totalCountMass = new BigUint64Array(16);
+            const totalAnyMass = new BigUint64Array(PACKING_CONSTANTS.BYTE_BASIS);
+            const totalRankMass = new BigUint64Array(PACKING_CONSTANTS.MAX_RANKED_INDEX);
+            const totalCountMass = new BigUint64Array(PACKING_CONSTANTS.MAX_COUNT_INDEX);
             let tierTracker = new SearchManager();
 
             let processedMProb = 0n;
@@ -171,7 +171,7 @@ export class StatAggregator {
         config: InternalSearchConfig = {}
     ): Promise<AggregationResult> {
         const {
-            threshold = 0.0001,
+            threshold = ENGINE_LIMITS.DEFAULT_THRESHOLD,
             signal,
             maxIterations,
             resultsLimit = ENGINE_LIMITS.MAX_RESULTS_SIZE,
@@ -188,9 +188,9 @@ export class StatAggregator {
         const levels = Object.keys(modDist).map(Number).sort((a, b) => b - a);
 
         const finalCombos = new Map<PackedCombo, bigint>();
-        const totalAnyMass = new BigUint64Array(256);
-        const totalRankMass = new BigUint64Array(16384);
-        const totalCountMass = new BigUint64Array(16);
+        const totalAnyMass = new BigUint64Array(PACKING_CONSTANTS.BYTE_BASIS);
+        const totalRankMass = new BigUint64Array(PACKING_CONSTANTS.MAX_RANKED_INDEX);
+        const totalCountMass = new BigUint64Array(PACKING_CONSTANTS.MAX_COUNT_INDEX);
         let globalTracker = new SearchManager();
 
         let processedMProb = 0n;
@@ -362,7 +362,7 @@ export class StatAggregator {
 
         if (gId !== undefined) {
             totalAnyMass[gId] = PRECISION;
-            const fullId = (gId << 8) | (parsed?.rank ?? 1);
+            const fullId = (gId << PACKING_CONSTANTS.ENCHANT_SHIFT) | (parsed?.rank ?? 1);
             totalRankMass[fullId] = PRECISION;
         }
     }

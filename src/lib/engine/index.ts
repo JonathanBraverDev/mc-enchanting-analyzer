@@ -1,7 +1,7 @@
 import { CalculationStats, SearchState, RegistryState, SearchConfig, InternalSearchConfig, EngineInstrumentation, } from '#types/index.js';
 import { ProbUtils, RomanUtils, EnchantUtils } from '#utils/index.js';
 import { getMaterialId, getEnchantId, getEligiblePool, isCategoryAvailable, getEnchantability } from '#core/registry.js';
-import { ENGINE_LIMITS } from '#constants/engine.js';
+import { ENGINE_LIMITS, PACKING_CONSTANTS } from '#constants/engine.js';
 import { getSearchLimit } from '#core/config.js';
 import { CacheManager } from './cache/CacheManager.js';
 import { KeyService } from '#services/KeyService.js';
@@ -83,7 +83,7 @@ export class EnchantEngine {
         modLevel: number,
         mat: string,
         guaranteedFirst: string | null = null,
-        threshold: bigint = ProbUtils.toBigInt(0.0001),
+        threshold: bigint = ProbUtils.toBigInt(ENGINE_LIMITS.DEFAULT_THRESHOLD),
         maxIterations?: number,
         resultsLimit: number = ENGINE_LIMITS.MAX_RESULTS_SIZE,
         instrumentation?: EngineInstrumentation
@@ -135,7 +135,7 @@ export class EnchantEngine {
         this.validateRequest(cat, xp, mat, config ?? {});
 
         const {
-            threshold = 0.0001,
+            threshold = ENGINE_LIMITS.DEFAULT_THRESHOLD,
             signal,
             onProgress,
             maxIterations,
@@ -215,7 +215,7 @@ export class EnchantEngine {
 
         const {
             guaranteedFirst = null,
-            threshold = 0.0001,
+            threshold = ENGINE_LIMITS.DEFAULT_THRESHOLD,
             signal,
             onProgress,
             maxIterations,
@@ -344,7 +344,7 @@ export class EnchantEngine {
         
         const isPossible = levels.some(ml => {
             const elPool = getEligiblePool(this.registry, cat, ml, this.cache, this.registry.version);
-            return elPool.some(p => (p >> 8) === id && (p & 0xFF) === parsed.rank);
+            return elPool.some(p => (p >> PACKING_CONSTANTS.ENCHANT_SHIFT) === id && (p & PACKING_CONSTANTS.RANK_MASK) === parsed.rank);
         });
 
         if (!isPossible) {

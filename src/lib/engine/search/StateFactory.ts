@@ -1,5 +1,6 @@
 import { SearchHeap } from '#utils/collections/SearchHeap.js';
 import { PRECISION, ComboUtils, EnchantUtils } from '#utils/index.js';
+import { PACKING_CONSTANTS } from '#constants/engine.js';
 import { ENGINE_DEFAULTS } from '#core/config.js';
 import { getEnchantId } from '#core/registry.js';
 import { PackedCombo, PackedEnchant, SearchState, RegistryState } from '#types/index.js';
@@ -34,9 +35,9 @@ export class StateFactory {
 
         const results = new Map<PackedCombo, bigint>();
         const queue = new SearchHeap();
-        const anyMass = new BigUint64Array(256);
-        const rankMass = new BigUint64Array(16384);
-        const countMass = new BigUint64Array(16);
+        const anyMass = new BigUint64Array(PACKING_CONSTANTS.BYTE_BASIS);
+        const rankMass = new BigUint64Array(PACKING_CONSTANTS.MAX_RANKED_INDEX);
+        const countMass = new BigUint64Array(PACKING_CONSTANTS.MAX_COUNT_INDEX);
 
         const romanMap = registry.data.constants.ROMAN_MAP;
         const parsed = EnchantUtils.parse(guaranteedFirst, romanMap);
@@ -44,7 +45,7 @@ export class StateFactory {
         const hasGuaranteed = guaranteedId !== ENGINE_DEFAULTS.UNKNOWN_ENCHANT_ID;
 
         const rank = parsed?.rank ?? 1;
-        const full = hasGuaranteed ? (guaranteedId << 8 | rank) as PackedEnchant : null;
+        const full = hasGuaranteed ? (guaranteedId << PACKING_CONSTANTS.ENCHANT_SHIFT | rank) as PackedEnchant : null;
 
         const initialPacked = full !== null ? ComboUtils.pack([full], guaranteedId, registry.enchantToIndex) : 0 as PackedCombo;
         const initialBitset = hasGuaranteed ? (1n << BigInt(guaranteedId)) : 0n;
@@ -54,7 +55,7 @@ export class StateFactory {
             rankMass[full] = PRECISION;
         }
 
-        queue.pushOrMerge((initialBitset << 8n) | BigInt(modLevel), PRECISION, modLevel, initialPacked);
+        queue.pushOrMerge((initialBitset << BigInt(PACKING_CONSTANTS.ENCHANT_SHIFT)) | BigInt(modLevel), PRECISION, modLevel, initialPacked);
 
         return {
             queue, results, anyMass, rankMass, countMass,

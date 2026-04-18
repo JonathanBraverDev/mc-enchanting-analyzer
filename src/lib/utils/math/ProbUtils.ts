@@ -1,8 +1,10 @@
+import { MATH_CONSTANTS, SEARCH_CONSTANTS, ENGINE_LIMITS } from '../../constants/engine.js';
+
 /**
  * High-precision constant for BigInt fixed-point arithmetic (2^60).
  * Kept together with ProbUtils as they are tightly coupled.
  */
-export const PRECISION = 1n << 60n;
+export const PRECISION = 1n << MATH_CONSTANTS.PRECISION_SHIFT;
 
 /**
  * Probability conversion helpers for BigInt fixed-point arithmetic.
@@ -15,8 +17,12 @@ export const ProbUtils = {
         if (typeof p === 'bigint') return p;
         if (p <= 0) return 0n;
         if (p >= 1) return PRECISION;
-        return BigInt(Math.floor(p * 9007199254740992)) << 7n; // 9007199254740992 is 2**53
+        
+        // Use FLOAT_MANTISSA_BITS to capture full double precision before shifting to target PRECISION
+        const mantissaScale = 2 ** MATH_CONSTANTS.FLOAT_MANTISSA_BITS;
+        return BigInt(Math.floor(p * mantissaScale)) << MATH_CONSTANTS.MANTISSA_TO_FIXED_SHIFT;
     },
+
 
     /**
      * Converts a BigInt fixed-point value back to a floating-point probability.
@@ -193,5 +199,26 @@ export const ProbUtils = {
                 }
             }
         }
-    }
+    },
+
+    /**
+     * Pre-computed BigInt versions of search constants to avoid repeated conversion.
+     */
+    CHECKPOINT_TARGETS: SEARCH_CONSTANTS.CHECKPOINT_TARGET_FLOATS.map(t => {
+        if (t <= 0) return 0n;
+        if (t >= 1) return PRECISION;
+        const mantissaScale = 2 ** MATH_CONSTANTS.FLOAT_MANTISSA_BITS;
+        return BigInt(Math.floor(t * mantissaScale)) << MATH_CONSTANTS.MANTISSA_TO_FIXED_SHIFT;
+    }),
+
+    /**
+     * Probability table for continuing to add more enchantments at a given modified level.
+     */
+    PROB_CONTINUE_TABLE: Array.from({ length: SEARCH_CONSTANTS.CONTINUE_TABLE_SIZE }, (_, ml) => {
+        const val = Math.min((ml + 1) / ENGINE_LIMITS.MAX_MODIFIED_LEVEL, 1.0);
+        // Manual conversion to avoid referencing ProbUtils.toBigInt during initialization if it causes issues
+        const mantissaScale = 2 ** MATH_CONSTANTS.FLOAT_MANTISSA_BITS;
+        return BigInt(Math.floor(val * mantissaScale)) << MATH_CONSTANTS.MANTISSA_TO_FIXED_SHIFT;
+    })
 };
+

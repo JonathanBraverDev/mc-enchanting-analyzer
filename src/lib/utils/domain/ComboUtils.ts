@@ -1,3 +1,4 @@
+import { PACKING_CONSTANTS } from '../../constants/engine.js';
 import { PackedEnchant, PackedCombo } from '../../types/index.js';
 
 /**
@@ -6,15 +7,22 @@ import { PackedEnchant, PackedCombo } from '../../types/index.js';
  * All methods that need lookup tables take them explicitly as parameters.
  */
 export class ComboUtils {
-    static getEnchantId(packed: PackedEnchant): number { return packed >> 8; }
-    static getEnchantRank(packed: PackedEnchant): number { return packed & 0xFF; }
+    static getEnchantId(packed: PackedEnchant): number { return packed >> PACKING_CONSTANTS.ENCHANT_SHIFT; }
+    static getEnchantRank(packed: PackedEnchant): number { return packed & PACKING_CONSTANTS.RANK_MASK; }
 
-    static readonly BYTE_MULTIPLIERS = [1, 256, 65536, 16777216, 4294967296, 1099511627776];
+    static readonly BYTE_MULTIPLIERS = [
+        1, 
+        PACKING_CONSTANTS.BYTE_BASIS, 
+        PACKING_CONSTANTS.BYTE_BASIS ** 2, 
+        PACKING_CONSTANTS.BYTE_BASIS ** 3, 
+        PACKING_CONSTANTS.BYTE_BASIS ** 4, 
+        PACKING_CONSTANTS.BYTE_BASIS ** 5
+    ];
 
     static getCount(packed: PackedCombo): number {
         let mult = 1;
-        for (let i = 0; i < 6; i++, mult *= 256) {
-            if (Math.floor(packed / mult) % 256 === 0) return i;
+        for (let i = 0; i < 6; i++, mult *= PACKING_CONSTANTS.BYTE_BASIS) {
+            if (Math.floor(packed / mult) % PACKING_CONSTANTS.BYTE_BASIS === 0) return i;
         }
         return 6;
     }
@@ -30,7 +38,7 @@ export class ComboUtils {
         const others: number[] = [];
 
         for (const c of chosen) {
-            const id = c >> 8;
+            const id = c >> PACKING_CONSTANTS.ENCHANT_SHIFT;
             const idx = enchantToIndex.get(c);
             if (idx === undefined) continue;
 
@@ -48,7 +56,7 @@ export class ComboUtils {
         let mult = 1;
         for (const v of others) {
             packed += v * mult;
-            mult *= 256;
+            mult *= PACKING_CONSTANTS.BYTE_BASIS;
         }
 
         return packed as PackedCombo;
@@ -62,8 +70,8 @@ export class ComboUtils {
 
         const out: PackedEnchant[] = [];
         let mult = 1;
-        for (let i = 0; i < 6; i++, mult *= 256) {
-            const idx = Math.floor(packed / mult) % 256;
+        for (let i = 0; i < 6; i++, mult *= PACKING_CONSTANTS.BYTE_BASIS) {
+            const idx = Math.floor(packed / mult) % PACKING_CONSTANTS.BYTE_BASIS;
             if (idx === 0) break;
             const enchant = indexToEnchant[idx];
             if (enchant === undefined) break;
@@ -88,20 +96,20 @@ export class ComboUtils {
         if (newIdx === undefined) return existing;
 
         const count = this.getCount(existing);
-        const newId = newItem >> 8;
+        const newId = newItem >> PACKING_CONSTANTS.ENCHANT_SHIFT;
         const isNewGuaranteed = guaranteedFirstId !== null && newId === guaranteedFirstId;
 
         if (count === 0) {
-            return newIdx as PackedCombo; // BYTE_MULTIPLIERS[0] = 1
+            return newIdx as PackedCombo; 
         }
 
         if (isNewGuaranteed) {
             // Guaranteed enchant goes to position 0; shift all existing bytes right
             let packed = newIdx;
             let mult = 1;
-            for (let i = 0; i < count; i++, mult *= 256) {
-                const b = Math.floor(existing / mult) % 256;
-                packed += b * (mult * 256);
+            for (let i = 0; i < count; i++, mult *= PACKING_CONSTANTS.BYTE_BASIS) {
+                const b = Math.floor(existing / mult) % PACKING_CONSTANTS.BYTE_BASIS;
+                packed += b * (mult * PACKING_CONSTANTS.BYTE_BASIS);
             }
             return packed as PackedCombo;
         }
@@ -110,9 +118,9 @@ export class ComboUtils {
         const sortStart = (guaranteedFirstId !== null && guaranteedInCombo) ? 1 : 0;
 
         let insertPos = count;
-        let multScan = 256 ** sortStart;
-        for (let i = sortStart; i < count; i++, multScan *= 256) {
-            const b = Math.floor(existing / multScan) % 256;
+        let multScan = PACKING_CONSTANTS.BYTE_BASIS ** sortStart;
+        for (let i = sortStart; i < count; i++, multScan *= PACKING_CONSTANTS.BYTE_BASIS) {
+            const b = Math.floor(existing / multScan) % PACKING_CONSTANTS.BYTE_BASIS;
             if (newIdx > b) {
                 insertPos = i;
                 break;
@@ -121,15 +129,15 @@ export class ComboUtils {
 
         let packed = 0;
         let mult = 1;
-        for (let i = 0; i < insertPos; i++, mult *= 256) {
-            const b = Math.floor(existing / mult) % 256;
+        for (let i = 0; i < insertPos; i++, mult *= PACKING_CONSTANTS.BYTE_BASIS) {
+            const b = Math.floor(existing / mult) % PACKING_CONSTANTS.BYTE_BASIS;
             packed += b * mult;
         }
-        // mult is now 256^insertPos
+        // mult is now BYTE_BASIS^insertPos
         packed += newIdx * mult;
-        for (let i = insertPos; i < count; i++, mult *= 256) {
-            const b = Math.floor(existing / mult) % 256;
-            packed += b * (mult * 256);
+        for (let i = insertPos; i < count; i++, mult *= PACKING_CONSTANTS.BYTE_BASIS) {
+            const b = Math.floor(existing / mult) % PACKING_CONSTANTS.BYTE_BASIS;
+            packed += b * (mult * PACKING_CONSTANTS.BYTE_BASIS);
         }
         return packed as PackedCombo;
     }
@@ -146,11 +154,11 @@ export class ComboUtils {
 
         const possibleResults: PackedCombo[] = [];
         let mult = 1;
-        for (let i = 0; i < count; i++, mult *= 256) {
-            const byteVal = Math.floor(packed / mult) % 256;
+        for (let i = 0; i < count; i++, mult *= PACKING_CONSTANTS.BYTE_BASIS) {
+            const byteVal = Math.floor(packed / mult) % PACKING_CONSTANTS.BYTE_BASIS;
             const enchant = indexToEnchant[byteVal];
             if (enchant === undefined) continue;
-            const enchantId = enchant >> 8;
+            const enchantId = enchant >> PACKING_CONSTANTS.ENCHANT_SHIFT;
 
             // Strategy: filter out outcomes where the guaranteed enchant was the one removed.
             if (guaranteedFirstId !== null && enchantId === guaranteedFirstId) continue;
@@ -158,7 +166,7 @@ export class ComboUtils {
             // Mathematically remove the i-th byte by zeroing it and shifting the upper bytes down
             const lowerPart = packed % mult;
             const nextPacked = (i + 1 < count)
-                ? lowerPart + (Math.floor(packed / (mult * 256)) * mult)
+                ? lowerPart + (Math.floor(packed / (mult * PACKING_CONSTANTS.BYTE_BASIS)) * mult)
                 : lowerPart;
             
             possibleResults.push(nextPacked as PackedCombo);
@@ -167,3 +175,4 @@ export class ComboUtils {
         return possibleResults;
     }
 }
+
