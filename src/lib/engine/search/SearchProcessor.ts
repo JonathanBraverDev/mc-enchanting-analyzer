@@ -13,11 +13,13 @@ export class SearchProcessor {
      * Used for detailed performance instrumentation of specific engine subsystems.
      */
     public static withTiming<T>(timing: SearchTiming | undefined, bucket: keyof Omit<SearchTiming, 'totalMs'>, fn: () => T): T {
-        if (!timing) return fn();
-        const start = performance.now();
-        const result = fn();
-        timing[bucket] += performance.now() - start;
-        return result;
+        if (timing) {
+            const start = performance.now();
+            const result = fn();
+            timing[bucket] += performance.now() - start;
+            return result;
+        }
+        return fn();
     }
 
     /**
@@ -138,14 +140,22 @@ export class SearchProcessor {
     ): void {
         const { registry, timing, queue, guaranteedFirstId, pool, poolWeights, initialTotalWeight } = ctx;
         
-        const splits = this.withTiming(timing, 'distributionMs', () => {
+        const splits = timing ? (() => {
+            const start = performance.now();
+            const buffer = DistributionPool.getBuffer(0);
+            const splitRemainder = ProbUtils.distributeDetailed(currentProb, poolWeights, initialTotalWeight, buffer);
+            tracker.record('sieved', splitRemainder);
+            timing.distributionMs += performance.now() - start;
+            return buffer;
+        })() : (() => {
             const buffer = DistributionPool.getBuffer(0);
             const splitRemainder = ProbUtils.distributeDetailed(currentProb, poolWeights, initialTotalWeight, buffer);
             tracker.record('sieved', splitRemainder);
             return buffer;
-        });
+        })();
 
-        this.withTiming(timing, 'heapMs', () => {
+        if (timing) {
+            const start = performance.now();
             for (const [i, e] of pool.entries()) {
                 const pNext = splits[i];
                 if (pNext === undefined || pNext === 0n) continue;
@@ -154,13 +164,29 @@ export class SearchProcessor {
                 const nextMeta = ((1n << BigInt(nextId)) << BigInt(PACKING_CONSTANTS.ENCHANT_SHIFT)) | BigInt(currentLevel);
                 const nextPacked = ComboUtils.pack([e], guaranteedFirstId, registry.enchantToIndex) as PackedCombo;
 
-                ProbUtils.addItemMass(ctx.anyMass, nextId, pNext);
-                ProbUtils.addItemMass(ctx.rankMass, e, pNext);
+                ctx.anyMass[nextId]! += pNext;
+                ctx.rankMass[e]! += pNext;
 
                 tracker.record('pending', pNext);
                 queue.pushOrMerge(nextMeta, pNext, currentLevel, nextPacked);
             }
-        });
+            timing.heapMs += performance.now() - start;
+        } else {
+            for (const [i, e] of pool.entries()) {
+                const pNext = splits[i];
+                if (pNext === undefined || pNext === 0n) continue;
+                
+                const nextId = ComboUtils.getEnchantId(e);
+                const nextMeta = ((1n << BigInt(nextId)) << BigInt(PACKING_CONSTANTS.ENCHANT_SHIFT)) | BigInt(currentLevel);
+                const nextPacked = ComboUtils.pack([e], guaranteedFirstId, registry.enchantToIndex) as PackedCombo;
+
+                ctx.anyMass[nextId]! += pNext;
+                ctx.rankMass[e]! += pNext;
+
+                tracker.record('pending', pNext);
+                queue.pushOrMerge(nextMeta, pNext, currentLevel, nextPacked);
+            }
+        }
     }
 
     /**
@@ -190,18 +216,26 @@ export class SearchProcessor {
             : (ProbUtils.PROB_CONTINUE_TABLE[currentLevel] || 0n);
 
         if (!tracker.has(currentMeta)) {
-            this.withTiming(timing, 'filteringMs', () => {
+            const filterFn = () => {
                 const tempEligible: PackedEnchant[] = [];
                 const tempWeights: number[] = [];
                 let eligibleCount = 0;
                 let totalWeight = 0;
 
-                for (const [i, e] of pool.entries()) {
+                const poolLen = pool.length;
+                const poolWeights = ctx.poolWeights;
+                const conflictBitsets = registry.conflictBitsets;
+
+                for (let i = 0; i < poolLen; i++) {
+                    const e = pool[i]!;
                     const id = ComboUtils.getEnchantId(e);
-                    if ((currentBitset & (1n << BigInt(id))) !== 0n) continue;
-                    const conflictBitset = registry.conflictBitsets[id];
+                    const idBit = 1n << BigInt(id);
+                    if ((currentBitset & idBit) !== 0n) continue;
+                    
+                    const conflictBitset = conflictBitsets[id];
                     if (conflictBitset !== undefined && (currentBitset & conflictBitset) !== 0n) continue;
-                    const weight = ctx.poolWeights[i];
+                    
+                    const weight = poolWeights[i];
                     if (weight === undefined) continue;
                     tempEligible.push(e);
                     tempWeights.push(weight);
@@ -210,22 +244,29 @@ export class SearchProcessor {
                 }
                 
                 const nextLevel = currentCount >= 1 ? Math.floor(currentLevel / 2) : currentLevel;
-                const blueprint: ExpansionBlueprint = {
+                const blueprint = new ExpansionBlueprint(
                     probContinue,
                     totalWeight,
                     eligibleCount,
-                    eligibleEnchants: tempEligible,
-                    eligibleWeights: new Int32Array(tempWeights),
+                    tempEligible,
+                    new Int32Array(tempWeights),
                     nextLevel,
                     currentCount,
                     currentCombo,
-                    currentEnchants,
-                    residue: 0n
-                };
+                    currentEnchants
+                );
                 tracker.registerExpansion(currentMeta, blueprint);
-            });
+            };
+
+            if (timing) {
+                const start = performance.now();
+                filterFn();
+                timing.filteringMs += performance.now() - start;
+            } else {
+                filterFn();
+            }
         }
 
-        tracker.forwardMass(currentProb, currentMeta, currentCombo, ctx, SearchProcessor);
+        tracker.forwardMass(currentProb, currentMeta, ctx, SearchProcessor);
     }
 }

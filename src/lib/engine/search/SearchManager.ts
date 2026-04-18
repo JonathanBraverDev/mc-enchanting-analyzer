@@ -4,7 +4,6 @@ import { ProbUtils, ComboUtils, PRECISION } from '#utils/index.js';
 
 import { DistributionPool } from '#engine/distribution/DistributionPool.js';
 import { ENGINE_LIMITS, PACKING_CONSTANTS, SEARCH_CONSTANTS } from '#constants/engine.js';
-import { MassAccountant } from './MassAccountant.js';
 
 /**
  * Unified state tracker for probability mass and expanded node blueprints.
@@ -13,36 +12,81 @@ import { MassAccountant } from './MassAccountant.js';
 export class SearchManager {
     private static readonly MAX_RECURSION_DEPTH = SEARCH_CONSTANTS.MAX_RECURSION_DEPTH;
     
-    private readonly accountant: MassAccountant;
+    /** Scratch stacks for synchronous tree forwarding to avoid per-node allocations. */
+    private static readonly STACK_MASS = new BigUint64Array(1024);
+    private static readonly STACK_META = new BigUint64Array(1024);
+    private static readonly STACK_DEPTH = new Int32Array(1024);
+    private static STACK_PTR = 0;
+    
+    private readonly buckets: Record<MassEventType, bigint>;
     private readonly expansionCache: Map<bigint, ExpansionBlueprint>;
 
-    constructor(initialMass?: MassBookkeeping, initialCache?: Map<bigint, ExpansionBlueprint>) {
-        this.accountant = new MassAccountant(initialMass);
+    constructor(initialBuckets?: MassBookkeeping, initialCache?: Map<bigint, ExpansionBlueprint>) {
+        this.buckets = initialBuckets ? { ...initialBuckets } : {
+            resolved: 0n,
+            pending: 0n,
+            sieved: 0n,
+            overflow: 0n,
+            capped: 0n,
+            rounding: 0n,
+            recoveredRounding: 0n,
+            recoveredSieved: 0n
+        };
         this.expansionCache = initialCache || new Map();
     }
 
     public record(type: MassEventType, prob: bigint): void {
-        this.accountant.record(type, prob);
+        this.buckets[type] += prob;
     }
 
     public subtract(type: MassEventType, prob: bigint): void {
-        this.accountant.subtract(type, prob);
+        this.buckets[type] -= prob;
     }
 
     public addScaled(other: SearchManager, factor: bigint): void {
-        this.accountant.addScaled(other.accountant, factor);
+        const b = this.buckets;
+        const o = other.buckets;
+        b.resolved += ProbUtils.scale(o.resolved, factor);
+        b.pending += ProbUtils.scale(o.pending, factor);
+        b.sieved += ProbUtils.scale(o.sieved, factor);
+        b.overflow += ProbUtils.scale(o.overflow, factor);
+        b.capped += ProbUtils.scale(o.capped, factor);
+        b.rounding += ProbUtils.scale(o.rounding, factor);
+        b.recoveredRounding += ProbUtils.scale(o.recoveredRounding, factor);
+        b.recoveredSieved += ProbUtils.scale(o.recoveredSieved, factor);
     }
 
     public getTotalMass(): bigint {
-        return this.accountant.getTotalMass();
+        const b = this.buckets;
+        return b.resolved + b.pending + b.sieved + b.overflow + b.capped + b.rounding;
     }
 
     public getBookkeeping(): MassBookkeeping {
-        return this.accountant.getBookkeeping();
+        return { ...this.buckets };
     }
 
     public toPublic(): MassAccounting {
-        return this.accountant.toPublic();
+        const b = this.buckets;
+        return {
+            resolved: ProbUtils.toNumber(b.resolved),
+            pending: ProbUtils.toNumber(b.pending),
+            sieved: ProbUtils.toNumber(b.sieved),
+            overflow: ProbUtils.toNumber(b.overflow),
+            capped: ProbUtils.toNumber(b.capped),
+            rounding: ProbUtils.toNumber(b.rounding),
+            recoveredRounding: ProbUtils.toNumber(b.recoveredRounding),
+            recoveredSieved: ProbUtils.toNumber(b.recoveredSieved),
+            units: {
+                resolved: b.resolved.toString(),
+                pending: b.pending.toString(),
+                sieved: b.sieved.toString(),
+                overflow: b.overflow.toString(),
+                capped: b.capped.toString(),
+                rounding: b.rounding.toString(),
+                recoveredRounding: b.recoveredRounding.toString(),
+                recoveredSieved: b.recoveredSieved.toString()
+            }
+        };
     }
 
     // --- Expansion Caching ---
@@ -72,60 +116,96 @@ export class SearchManager {
     public forwardMass(
         initialMass: bigint,
         initialMeta: bigint,
-        initialCombo: PackedCombo,
         ctx: ForwardingContext,
         searchProcessor: {
-            withTiming: <T>(timing: any, bucket: any, fn: () => T) => T;
             settleMass: (...args: any[]) => bigint;
-            isTerminalCondition: (...args: any[]) => any;
         }
     ): bigint {
-        const stack: Array<{ mass: bigint, meta: bigint, combo: PackedCombo, depth: number }> = [
-            { mass: initialMass, meta: initialMeta, combo: initialCombo, depth: 0 }
-        ];
+        SearchManager.STACK_PTR = 0;
+        const ptr = SearchManager.STACK_PTR++;
+        SearchManager.STACK_MASS[ptr] = initialMass;
+        SearchManager.STACK_META[ptr] = initialMeta;
+        SearchManager.STACK_DEPTH[ptr] = 0;
 
         let totalResolvedFromTrees = 0n;
 
-        while (stack.length > 0) {
-            const { mass: incomingMass, meta, depth } = stack.pop()! ;
+        while (SearchManager.STACK_PTR > 0) {
+            const currentPtr = --SearchManager.STACK_PTR;
+            const incomingMass = SearchManager.STACK_MASS[currentPtr]!;
+            const meta = SearchManager.STACK_META[currentPtr]!;
+            const depth = SearchManager.STACK_DEPTH[currentPtr]!;
             
             const blueprint = this.expansionCache.get(meta);
             if (!blueprint) continue;
 
-            const { registry, timing, cat, guaranteedFirstId } = ctx;
-            const currentBitset = meta >> BigInt(PACKING_CONSTANTS.ENCHANT_SHIFT);
-            const probContinue = blueprint.probContinue;
+            const { registry, timing, cat, guaranteedFirstId, resultsLimit } = ctx;
             
             // Split mass into stop vs forward
-            const { probStop, probForward, scaleLoss } = searchProcessor.withTiming(timing, 'settlingMs', () => {
-                const pStop = ProbUtils.scale(incomingMass, (PRECISION - probContinue));
-                const pForward = ProbUtils.scale(incomingMass, probContinue);
-                const loss = incomingMass - (pStop + pForward);
-                return { probStop: pStop, probForward: pForward, scaleLoss: loss };
-            });
+            let probStop: bigint;
+            let probForward: bigint;
+            let scaleLoss: bigint;
+            
+            const probContinue = blueprint.probContinue;
+            if (timing) {
+                const start = performance.now();
+                probStop = ProbUtils.scale(incomingMass, (PRECISION - probContinue));
+                probForward = ProbUtils.scale(incomingMass, probContinue);
+                scaleLoss = incomingMass - (probStop + probForward);
+                timing.settlingMs += performance.now() - start;
+            } else {
+                probStop = ProbUtils.scale(incomingMass, (PRECISION - probContinue));
+                probForward = ProbUtils.scale(incomingMass, probContinue);
+                scaleLoss = incomingMass - (probStop + probForward);
+            }
 
-            const remStop = searchProcessor.withTiming(timing, 'settlingMs', () => 
-                searchProcessor.settleMass(
-                    cat === "book", blueprint.currentCount, blueprint.currentCombo, blueprint.currentEnchants, 
-                    probStop, guaranteedFirstId, registry.enchantToIndex, registry.indexToEnchant, 
-                    ctx.results, ctx.countMass, ctx.anyMass, ctx.rankMass
-                )
-            );
+            const isBook = cat === "book";
+            const currentCount = blueprint.currentCount;
+            const currentCombo = blueprint.currentCombo;
+            let remStop = 0n;
+
+            if (timing) {
+                const start = performance.now();
+                if (isBook && currentCount > 1) {
+                    remStop = searchProcessor.settleMass(
+                        true, currentCount, currentCombo, blueprint.currentEnchants,
+                        probStop, guaranteedFirstId, registry.enchantToIndex, registry.indexToEnchant,
+                        ctx.results, ctx.countMass, ctx.anyMass, ctx.rankMass
+                    );
+                } else {
+                    ProbUtils.addItemMass(ctx.results, currentCombo, probStop);
+                    ctx.countMass[currentCount]! += probStop;
+                }
+                timing.settlingMs += performance.now() - start;
+            } else {
+                if (isBook && currentCount > 1) {
+                    remStop = searchProcessor.settleMass(
+                        true, currentCount, currentCombo, blueprint.currentEnchants,
+                        probStop, guaranteedFirstId, registry.enchantToIndex, registry.indexToEnchant,
+                        ctx.results, ctx.countMass, ctx.anyMass, ctx.rankMass
+                    );
+                } else {
+                    ProbUtils.addItemMass(ctx.results, currentCombo, probStop);
+                    ctx.countMass[currentCount]! += probStop;
+                }
+            }
 
             // Terminal Check
-            const term = searchProcessor.isTerminalCondition(
-                blueprint.currentCount, cat === "book", probForward, ctx.results.size, ctx.resultsLimit, 
-                ctx.results.has(blueprint.currentCombo), registry.multiEnchantBooks, 
-                ProbUtils.toBigInt(ENGINE_LIMITS.SYSTEM_THRESHOLD_FLOOR) // SYSTEM_THRESHOLD_FLOOR
-            );
-
-            if (term.isTerminal || blueprint.totalWeight === 0) {
-                totalResolvedFromTrees += this.handleTerminal(incomingMass, probStop, probForward, remStop, scaleLoss, blueprint, term, ctx, searchProcessor);
+            const isLimitReached = currentCount >= (isBook && !registry.multiEnchantBooks ? 1 : ENGINE_LIMITS.MAX_ENCHANTS_PER_ITEM);
+            const isTooSmall = probForward < ENGINE_LIMITS.SYSTEM_THRESHOLD_UNIT;
+            const isMapFull = ctx.results.size >= resultsLimit && !ctx.results.has(currentCombo);
+            
+            if (isLimitReached || isTooSmall || isMapFull || blueprint.totalWeight === 0) {
+                totalResolvedFromTrees += this.handleTerminal(
+                    incomingMass, probStop, probForward, remStop, scaleLoss, blueprint, 
+                    { isLimitReached, isTooSmall, isMapFull }, ctx, searchProcessor
+                );
                 continue;
             }
 
             // Standard expansion path
-            const resolvedSub = this.processExpansionStep(probStop, probForward, remStop, scaleLoss, currentBitset, blueprint, ctx, depth, stack, searchProcessor);
+            const resolvedSub = this.processExpansionStep(probStop, probForward, remStop, scaleLoss, 
+                meta >> BigInt(PACKING_CONSTANTS.ENCHANT_SHIFT), 
+                blueprint, ctx, depth);
             totalResolvedFromTrees += resolvedSub;
         }
 
@@ -142,34 +222,54 @@ export class SearchManager {
         term: { isLimitReached: boolean; isTooSmall: boolean; isMapFull: boolean },
         ctx: ForwardingContext,
         searchProcessor: {
-            withTiming: <T>(timing: any, bucket: string, fn: () => T) => T;
             settleMass: (...args: any[]) => bigint;
         }
     ): bigint {
         const { registry, timing, cat, guaranteedFirstId, instrumentation } = ctx;
         
-        const remForward = searchProcessor.withTiming(timing, 'settlingMs', () => 
-            searchProcessor.settleMass(
-                cat === "book", blueprint.currentCount, blueprint.currentCombo, blueprint.currentEnchants, 
-                probForward, guaranteedFirstId, registry.enchantToIndex, registry.indexToEnchant, 
-                ctx.results, ctx.countMass, ctx.anyMass, ctx.rankMass
-            )
-        );
+        let remForward = 0n;
+        const isBook = cat === "book";
+        
+        if (timing) {
+            const start = performance.now();
+            if (isBook && blueprint.currentCount > 1) {
+                remForward = searchProcessor.settleMass(
+                    true, blueprint.currentCount, blueprint.currentCombo, blueprint.currentEnchants, 
+                    probForward, guaranteedFirstId, registry.enchantToIndex, registry.indexToEnchant, 
+                    ctx.results, ctx.countMass, ctx.anyMass, ctx.rankMass
+                );
+            } else {
+                ProbUtils.addItemMass(ctx.results, blueprint.currentCombo, probForward);
+                ctx.countMass[blueprint.currentCount]! += probForward;
+            }
+            timing.settlingMs += performance.now() - start;
+        } else {
+            if (isBook && blueprint.currentCount > 1) {
+                remForward = searchProcessor.settleMass(
+                    true, blueprint.currentCount, blueprint.currentCombo, blueprint.currentEnchants, 
+                    probForward, guaranteedFirstId, registry.enchantToIndex, registry.indexToEnchant, 
+                    ctx.results, ctx.countMass, ctx.anyMass, ctx.rankMass
+                );
+            } else {
+                ProbUtils.addItemMass(ctx.results, blueprint.currentCombo, probForward);
+                ctx.countMass[blueprint.currentCount]! += probForward;
+            }
+        }
 
         const localRounding = remStop + remForward + scaleLoss;
         
-        this.accountant.record('resolved', probStop - remStop);
-        this.accountant.record('rounding', localRounding);
+        this.buckets.resolved += (probStop - remStop);
+        this.buckets.rounding += localRounding;
         
         if (term.isTooSmall) {
             if (instrumentation) instrumentation.totalPrunedNodes++;
-            this.accountant.record('sieved', probForward - remForward);
+            this.buckets.sieved += (probForward - remForward);
         } else if (term.isLimitReached) {
-            this.accountant.record('overflow', probForward - remForward);
+            this.buckets.overflow += (probForward - remForward);
         } else if (term.isMapFull) {
-            this.accountant.record('capped', probForward - remForward);
+            this.buckets.capped += (probForward - remForward);
         } else if (blueprint.totalWeight === 0) {
-            this.accountant.record('resolved', probForward - remForward);
+            this.buckets.resolved += (probForward - remForward);
         }
 
         if (localRounding > 0n && instrumentation) instrumentation.roundingErrorEvents++;
@@ -184,29 +284,35 @@ export class SearchManager {
         currentBitset: bigint,
         blueprint: ExpansionBlueprint,
         ctx: ForwardingContext,
-        depth: number,
-        stack: Array<{ mass: bigint, meta: bigint, combo: PackedCombo, depth: number }>,
-        searchProcessor: any
+        depth: number
     ): bigint {
         const { registry, timing, instrumentation, queue, guaranteedFirstId } = ctx;
 
         const eligibleCount = blueprint.eligibleCount;
         const splits = DistributionPool.getBuffer(depth);
 
-        searchProcessor.withTiming(timing, 'distributionMs', () => {
-            const individualRemainder = probForward % BigInt(blueprint.totalWeight);
-            this.accountant.record('rounding', individualRemainder);
-
+        if (timing) {
+            const start = performance.now();
+            this.buckets.rounding += (probForward % BigInt(blueprint.totalWeight));
             const { recovered } = ProbUtils.distributeWithResidue(
                 probForward, blueprint.eligibleWeights, blueprint.totalWeight, splits, blueprint, eligibleCount
             );
-            
             if (recovered > 0n) {
-                this.accountant.subtract('rounding', recovered);
-                this.accountant.record('recoveredRounding', recovered);
+                this.buckets.rounding -= recovered;
+                this.buckets.recoveredRounding += recovered;
                 if (instrumentation) instrumentation.roundingErrorEvents++;
             }
-        });
+            timing.distributionMs += performance.now() - start;
+        } else {
+            this.buckets.rounding += (probForward % BigInt(blueprint.totalWeight));
+            const { recovered } = ProbUtils.distributeWithResidue(
+                probForward, blueprint.eligibleWeights, blueprint.totalWeight, splits, blueprint, eligibleCount
+            );
+            if (recovered > 0n) {
+                this.buckets.rounding -= recovered;
+                this.buckets.recoveredRounding += recovered;
+            }
+        }
 
         const guaranteedInCombo = guaranteedFirstId != null && (currentBitset & (1n << BigInt(guaranteedFirstId))) !== 0n;
 
@@ -219,19 +325,22 @@ export class SearchManager {
             const nextId = ComboUtils.getEnchantId(e);
             const nextMeta = ((currentBitset | (1n << BigInt(nextId))) << BigInt(PACKING_CONSTANTS.ENCHANT_SHIFT)) | BigInt(blueprint.nextLevel);
 
-            ProbUtils.addItemMass(ctx.anyMass, nextId, pNext);
-            ProbUtils.addItemMass(ctx.rankMass, e, pNext);
+            ctx.anyMass[nextId]! += pNext;
+            ctx.rankMass[e]! += pNext;
 
             if (this.expansionCache.has(nextMeta) && depth < SearchManager.MAX_RECURSION_DEPTH) {
-                stack.push({ mass: pNext, meta: nextMeta, combo: nextPacked, depth: depth + 1 });
+                const nextPtr = SearchManager.STACK_PTR++;
+                SearchManager.STACK_MASS[nextPtr] = pNext;
+                SearchManager.STACK_META[nextPtr] = nextMeta;
+                SearchManager.STACK_DEPTH[nextPtr] = depth + 1;
             } else {
-                this.accountant.record('pending', pNext);
+                this.buckets.pending += pNext;
                 queue.pushOrMerge(nextMeta, pNext, blueprint.nextLevel, nextPacked);
             }
         }
 
-        this.accountant.record('resolved', probStop - remStop);
-        this.accountant.record('rounding', remStop + scaleLoss);
+        this.buckets.resolved += (probStop - remStop);
+        this.buckets.rounding += (remStop + scaleLoss);
         
         return (probStop - remStop);
     }

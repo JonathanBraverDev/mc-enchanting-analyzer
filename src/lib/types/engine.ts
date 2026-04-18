@@ -130,21 +130,19 @@ export interface PackedNode {
     prob: bigint;
 }
 
-/**
- * Blueprint caching for already-expanded nodes.
- */
-export interface ExpansionBlueprint {
-    probContinue: bigint;
-    totalWeight: number;
-    eligibleCount: number;
-    eligibleEnchants: PackedEnchant[];
-    eligibleWeights: Int32Array;
-    nextLevel: number;
-    currentCount: number;
-    currentCombo: PackedCombo;
-    currentEnchants: PackedEnchant[];
-    /** Rounding residue accumulated from previous arrivals at this node. */
-    residue: bigint;
+export class ExpansionBlueprint {
+    constructor(
+        public readonly probContinue: bigint,
+        public readonly totalWeight: number,
+        public readonly eligibleCount: number,
+        public readonly eligibleEnchants: PackedEnchant[],
+        public readonly eligibleWeights: Int32Array,
+        public readonly nextLevel: number,
+        public readonly currentCount: number,
+        public readonly currentCombo: PackedCombo,
+        public readonly currentEnchants: PackedEnchant[],
+        public residue: bigint = 0n
+    ) {}
 }
 
 /**
