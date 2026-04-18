@@ -170,11 +170,13 @@ export class SearchProcessor {
         const currentLevel = Number(currentMeta & BigInt(PACKING_CONSTANTS.RANK_MASK));
         const isBook = cat === "book";
 
-        const probContinue = (isBook && !registry.multiEnchantBooks && currentCount >= 1)
-            ? 0n
-            : (ProbUtils.PROB_CONTINUE_TABLE[currentLevel] || 0n);
+        let catCache = registry.expansionCache.get(cat);
+        if (!catCache) {
+            catCache = new Map();
+            registry.expansionCache.set(cat, catCache);
+        }
 
-        if (!tracker.has(currentMeta)) {
+        if (!catCache.has(currentMeta)) {
             const poolLen = pool.length;
             const poolWeights = ctx.poolWeights;
             const conflictBitsets = registry.conflictBitsets;
@@ -199,6 +201,10 @@ export class SearchProcessor {
                 totalWeight += weight;
             }
             
+            const probContinue = (isBook && !registry.multiEnchantBooks && currentCount >= 1)
+                ? 0n
+                : (ProbUtils.PROB_CONTINUE_TABLE[currentLevel] || 0n);
+
             const nextLevel = currentCount >= 1 ? Math.floor(currentLevel / 2) : currentLevel;
             const blueprint = new ExpansionBlueprint(
                 probContinue,
@@ -210,9 +216,10 @@ export class SearchProcessor {
                 currentCount,
                 currentCombo
             );
-            tracker.registerExpansion(currentMeta, blueprint);
+            catCache.set(currentMeta, blueprint);
         }
 
+        tracker.markVisited(currentMeta);
         tracker.forwardMass(currentProb, currentMeta, ctx, SearchProcessor);
     }
 }

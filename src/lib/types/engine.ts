@@ -152,6 +152,7 @@ export interface ForwardingContext {
     rankMass: BigUint64Array;
     countMass: BigUint64Array;
     resultsLimit: number;
+    threshold?: bigint | undefined;
     instrumentation?: EngineInstrumentation | undefined;
     timing?: SearchTiming | undefined;
     
@@ -203,6 +204,7 @@ export interface RegistryState {
     versionPool: Map<string, string[]>;
     enchantToIndex: Map<number, number>;
     indexToEnchant: number[];
+    expansionCache: Map<string, Map<bigint, ExpansionBlueprint>>;
 }
 
 export type PackedEnchant = number & { __brand: "PackedEnchant" };

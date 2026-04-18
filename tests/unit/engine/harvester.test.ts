@@ -29,22 +29,10 @@ describe('SearchManager', () => {
         assert.strictEqual(tracker.toPublic().resolved, 0.25);
     });
 
-    it('should register and retrieve expansion blueprints', () => {
+    it('should track visitation correctly', () => {
         const tracker = new SearchManager();
-        const mockBlueprint: ExpansionBlueprint = {
-            probContinue: 0n,
-            totalWeight: 100,
-            eligibleCount: 1,
-            eligibleEnchants: [] as any,
-            eligibleWeights: new Int32Array([100]),
-            nextLevel: 30,
-            currentCount: 0,
-            currentCombo: 0 as any,
-            residue: 0n
-        };
-        tracker.registerExpansion(1n, mockBlueprint);
+        tracker.markVisited(1n);
         assert.ok(tracker.has(1n));
-        assert.deepStrictEqual(tracker.get(1n), mockBlueprint);
         assert.strictEqual(tracker.getCacheSize(), 1);
     });
 
@@ -67,12 +55,20 @@ describe('SearchManager', () => {
         (tracker as any).processExpansionStep(
             0n, PRECISION, 0n, 0n,
             0n, blueprint, 
-            { registry: { enchantToIndex: new Map() }, timing: {}, resultsLimit: 100, anyMass: new BigUint64Array(10), rankMass: new BigUint64Array(10), queue: { pushOrMerge: () => {} } } as any, 
+            { 
+                registry: { enchantToIndex: new Map(), expansionCache: new Map() }, 
+                cat: 'test',
+                timing: {}, 
+                resultsLimit: 100, 
+                anyMass: new BigUint64Array(10), 
+                rankMass: new BigUint64Array(10), 
+                queue: { pushOrMerge: () => {} } 
+            } as any, 
             0, [], 
-            { withTiming: (_t: any, _b: any, fn: any) => fn() }
+            { settleMass: () => 0n }
         );
 
         const bk = tracker.getBookkeeping();
-        assert.ok(bk.recoveredRounding > 0n || bk.resolved > 0n, 'Should have accounted for recovered mass or resolved it');
+        assert.ok(bk.rounding > 0n || bk.resolved > 0n, 'Should have accounted for mass');
     });
 });

@@ -1,28 +1,23 @@
-import { MassBookkeeping, MassAccounting, MassEventType } from '#types/mass.js';
-import { ExpansionBlueprint, ForwardingContext, PackedCombo } from '#types/index.js';
-import { ProbUtils, ComboUtils, PRECISION } from '#utils/index.js';
-
+import { ExpansionBlueprint, ForwardingContext, MassBookkeeping, PackedCombo } from '#types/index.js';
 import { DistributionPool } from '#engine/distribution/DistributionPool.js';
-import { ENGINE_LIMITS, PACKING_CONSTANTS, SEARCH_CONSTANTS } from '#constants/engine.js';
+import { PRECISION, ProbUtils, ComboUtils } from '#utils/index.js';
+import { PACKING_CONSTANTS, ENGINE_LIMITS } from '#constants/engine.js';
 
 /**
- * Unified state tracker for probability mass and expanded node blueprints.
- * Facilitates high-speed forwarding through cached search subtrees.
+ * Manages probability mass tracking and iterative expansion.
+ * Acts as the "Accountant" for the search engine, ensuring mass conservation.
  */
 export class SearchManager {
-    private static readonly MAX_RECURSION_DEPTH = SEARCH_CONSTANTS.MAX_RECURSION_DEPTH;
-    
-    /** Scratch stacks for synchronous tree forwarding to avoid per-node allocations. */
+    private static STACK_PTR = 0;
     private static readonly STACK_MASS = new BigUint64Array(1024);
     private static readonly STACK_META = new BigUint64Array(1024);
     private static readonly STACK_DEPTH = new Int32Array(1024);
-    private static STACK_PTR = 0;
-    
-    private readonly buckets: Record<MassEventType, bigint>;
-    private readonly expansionCache: Map<bigint, ExpansionBlueprint>;
 
-    constructor(initialBuckets?: MassBookkeeping, initialCache?: Map<bigint, ExpansionBlueprint>) {
-        this.buckets = initialBuckets ? { ...initialBuckets } : {
+    private visited = new Set<bigint>();
+    private buckets: MassBookkeeping;
+
+    constructor(initialBuckets?: MassBookkeeping) {
+        this.buckets = initialBuckets ?? {
             resolved: 0n,
             pending: 0n,
             sieved: 0n,
@@ -32,79 +27,26 @@ export class SearchManager {
             recoveredRounding: 0n,
             recoveredSieved: 0n
         };
-        this.expansionCache = initialCache || new Map();
     }
 
-    public record(type: MassEventType, prob: bigint): void {
-        this.buckets[type] += prob;
+    public record(bucket: keyof MassBookkeeping, mass: bigint): void {
+        this.buckets[bucket] += mass;
     }
 
-    public subtract(type: MassEventType, prob: bigint): void {
-        this.buckets[type] -= prob;
-    }
-
-    public addScaled(other: SearchManager, factor: bigint): void {
-        const b = this.buckets;
-        const o = other.buckets;
-        b.resolved += ProbUtils.scale(o.resolved, factor);
-        b.pending += ProbUtils.scale(o.pending, factor);
-        b.sieved += ProbUtils.scale(o.sieved, factor);
-        b.overflow += ProbUtils.scale(o.overflow, factor);
-        b.capped += ProbUtils.scale(o.capped, factor);
-        b.rounding += ProbUtils.scale(o.rounding, factor);
-        b.recoveredRounding += ProbUtils.scale(o.recoveredRounding, factor);
-        b.recoveredSieved += ProbUtils.scale(o.recoveredSieved, factor);
-    }
-
-    public getTotalMass(): bigint {
-        const b = this.buckets;
-        return b.resolved + b.pending + b.sieved + b.overflow + b.capped + b.rounding;
-    }
-
-    public getBookkeeping(): MassBookkeeping {
-        return { ...this.buckets };
-    }
-
-    public toPublic(): MassAccounting {
-        const b = this.buckets;
-        return {
-            resolved: ProbUtils.toNumber(b.resolved),
-            pending: ProbUtils.toNumber(b.pending),
-            sieved: ProbUtils.toNumber(b.sieved),
-            overflow: ProbUtils.toNumber(b.overflow),
-            capped: ProbUtils.toNumber(b.capped),
-            rounding: ProbUtils.toNumber(b.rounding),
-            recoveredRounding: ProbUtils.toNumber(b.recoveredRounding),
-            recoveredSieved: ProbUtils.toNumber(b.recoveredSieved),
-            units: {
-                resolved: b.resolved.toString(),
-                pending: b.pending.toString(),
-                sieved: b.sieved.toString(),
-                overflow: b.overflow.toString(),
-                capped: b.capped.toString(),
-                rounding: b.rounding.toString(),
-                recoveredRounding: b.recoveredRounding.toString(),
-                recoveredSieved: b.recoveredSieved.toString()
-            }
-        };
-    }
-
-    // --- Expansion Caching ---
-
-    public registerExpansion(key: bigint, blueprint: ExpansionBlueprint): void {
-        this.expansionCache.set(key, blueprint);
+    public subtract(bucket: keyof MassBookkeeping, mass: bigint): void {
+        this.buckets[bucket] -= mass;
     }
 
     public has(key: bigint): boolean {
-        return this.expansionCache.has(key);
+        return this.visited.has(key);
     }
 
-    public get(key: bigint): ExpansionBlueprint | undefined {
-        return this.expansionCache.get(key);
+    public markVisited(key: bigint): void {
+        this.visited.add(key);
     }
 
     public getCacheSize(): number {
-        return this.expansionCache.size;
+        return this.visited.size;
     }
 
     // --- Mass Forwarding ---
@@ -121,6 +63,13 @@ export class SearchManager {
             settleMass: (...args: any[]) => bigint;
         }
     ): bigint {
+        const { registry, cat, guaranteedFirstId, resultsLimit } = ctx;
+        let catCache = registry.expansionCache.get(cat);
+        if (!catCache) {
+            catCache = new Map();
+            registry.expansionCache.set(cat, catCache);
+        }
+
         SearchManager.STACK_PTR = 0;
         const ptr = SearchManager.STACK_PTR++;
         SearchManager.STACK_MASS[ptr] = initialMass;
@@ -135,11 +84,9 @@ export class SearchManager {
             const meta = SearchManager.STACK_META[currentPtr]!;
             const depth = SearchManager.STACK_DEPTH[currentPtr]!;
             
-            const blueprint = this.expansionCache.get(meta);
+            const blueprint = catCache.get(meta);
             if (!blueprint) continue;
 
-            const { registry, cat, guaranteedFirstId, resultsLimit } = ctx;
-            
             // Split mass into stop vs forward
             const probContinue = blueprint.probContinue;
             const probStop = ProbUtils.scale(incomingMass, (PRECISION - probContinue));
@@ -164,7 +111,7 @@ export class SearchManager {
 
             // Terminal Check
             const isLimitReached = currentCount >= (isBook && !registry.multiEnchantBooks ? 1 : ENGINE_LIMITS.MAX_ENCHANTS_PER_ITEM);
-            const isTooSmall = probForward < ENGINE_LIMITS.SYSTEM_THRESHOLD_UNIT;
+            const isTooSmall = probForward < (ctx.threshold || ENGINE_LIMITS.SYSTEM_THRESHOLD_UNIT);
             const isMapFull = ctx.results.size >= resultsLimit && !ctx.results.has(currentCombo);
             
             if (isLimitReached || isTooSmall || isMapFull || blueprint.totalWeight === 0) {
@@ -244,53 +191,101 @@ export class SearchManager {
         ctx: ForwardingContext,
         depth: number
     ): bigint {
-        const { registry, instrumentation, queue, guaranteedFirstId } = ctx;
+        const { registry, queue, guaranteedFirstId } = ctx;
 
         const eligibleCount = blueprint.eligibleCount;
         const splits = DistributionPool.getBuffer(depth);
-
-        this.buckets.rounding += (probForward % BigInt(blueprint.totalWeight));
+        
+        const oldResidue = blueprint.residue;
         const { recovered } = ProbUtils.distributeWithResidue(
             probForward, blueprint.eligibleWeights, blueprint.totalWeight, splits, blueprint, eligibleCount
         );
-        if (recovered > 0n) {
-            this.buckets.rounding -= recovered;
-            this.buckets.recoveredRounding += recovered;
-            if (instrumentation) instrumentation.roundingErrorEvents++;
-        }
 
-        const guaranteedInCombo = guaranteedFirstId != null && (currentBitset & (1n << BigInt(guaranteedFirstId))) !== 0n;
+        this.buckets.rounding += (remStop + (blueprint.residue - oldResidue) + scaleLoss);
+        this.buckets.resolved += (probStop - remStop);
+        this.buckets.recoveredRounding += recovered;
+        
+        const eligibleEnchants = blueprint.eligibleEnchants;
+        let localResolved = 0n;
 
-        for (const [i, e] of blueprint.eligibleEnchants.entries()) {
-            if (i >= eligibleCount) break;
-            const pNext = splits[i];
-            if (pNext === undefined || pNext === 0n) continue;
+        for (let i = 0; i < eligibleCount; i++) {
+            const pNext = splits[i]!;
+            if (pNext === 0n) continue;
 
-            const nextPacked = ComboUtils.packAppend(blueprint.currentCombo, e, guaranteedFirstId, guaranteedInCombo, registry.enchantToIndex) as PackedCombo;
-            const nextId = ComboUtils.getEnchantId(e);
+            const nextItem = eligibleEnchants[i]!;
+            const nextId = nextItem >> PACKING_CONSTANTS.ENCHANT_SHIFT;
             const nextMeta = ((currentBitset | (1n << BigInt(nextId))) << BigInt(PACKING_CONSTANTS.ENCHANT_SHIFT)) | BigInt(blueprint.nextLevel);
+            
+            const nextPacked = ComboUtils.packAppend(
+                blueprint.currentCombo, nextItem, guaranteedFirstId, (currentBitset & (1n << BigInt(guaranteedFirstId ?? -1))) !== 0n, registry.enchantToIndex
+            ) as PackedCombo;
 
             ctx.anyMass[nextId]! += pNext;
-            ctx.rankMass[e]! += pNext;
+            ctx.rankMass[nextItem]! += pNext;
 
-            if (this.expansionCache.has(nextMeta) && depth < SearchManager.MAX_RECURSION_DEPTH) {
-                const nextPtr = SearchManager.STACK_PTR++;
-                SearchManager.STACK_MASS[nextPtr] = pNext;
-                SearchManager.STACK_META[nextPtr] = nextMeta;
-                SearchManager.STACK_DEPTH[nextPtr] = depth + 1;
+            if (this.has(nextMeta)) {
+                // Iterative forward via stack
+                if (SearchManager.STACK_PTR < SearchManager.STACK_MASS.length) {
+                    const ptr = SearchManager.STACK_PTR++;
+                    SearchManager.STACK_MASS[ptr] = pNext;
+                    SearchManager.STACK_META[ptr] = nextMeta;
+                    SearchManager.STACK_DEPTH[ptr] = depth + 1;
+                } else {
+                    // Safety valve
+                    queue.pushOrMerge(nextMeta, pNext, blueprint.nextLevel, nextPacked);
+                    this.buckets.pending += pNext;
+                }
             } else {
-                this.buckets.pending += pNext;
                 queue.pushOrMerge(nextMeta, pNext, blueprint.nextLevel, nextPacked);
+                this.buckets.pending += pNext;
             }
         }
 
-        this.buckets.resolved += (probStop - remStop);
-        this.buckets.rounding += (remStop + scaleLoss);
-        
-        return (probStop - remStop);
+        return (probStop - remStop) + localResolved;
+    }
+
+    public getTotalMass(): bigint {
+        return this.buckets.resolved + 
+               this.buckets.pending + 
+               this.buckets.sieved + 
+               this.buckets.overflow + 
+               this.buckets.capped + 
+               this.buckets.rounding;
+    }
+
+    public addScaled(other: SearchManager, factor: bigint): void {
+        const otherBk = other.buckets;
+        this.buckets.resolved += ProbUtils.scale(otherBk.resolved, factor);
+        this.buckets.pending += ProbUtils.scale(otherBk.pending, factor);
+        this.buckets.sieved += ProbUtils.scale(otherBk.sieved, factor);
+        this.buckets.overflow += ProbUtils.scale(otherBk.overflow, factor);
+        this.buckets.capped += ProbUtils.scale(otherBk.capped, factor);
+        this.buckets.rounding += ProbUtils.scale(otherBk.rounding, factor);
+        this.buckets.recoveredRounding += ProbUtils.scale(otherBk.recoveredRounding, factor);
+        this.buckets.recoveredSieved += ProbUtils.scale(otherBk.recoveredSieved, factor);
+    }
+
+    public getBookkeeping(): MassBookkeeping {
+        return { ...this.buckets };
+    }
+
+    public toPublic(): { resolved: number, pending: number, sieved: number, rounding: number, overflow: number, capped: number, recoveredRounding: number, recoveredSieved: number } {
+        const factor = Number(PRECISION);
+        return {
+            resolved: Number(this.buckets.resolved) / factor,
+            pending: Number(this.buckets.pending) / factor,
+            sieved: Number(this.buckets.sieved) / factor,
+            rounding: Number(this.buckets.rounding) / factor,
+            overflow: Number(this.buckets.overflow) / factor,
+            capped: Number(this.buckets.capped) / factor,
+            recoveredRounding: Number(this.buckets.recoveredRounding) / factor,
+            recoveredSieved: Number(this.buckets.recoveredSieved) / factor
+        };
     }
 
     public clone(): SearchManager {
-        return new SearchManager(this.getBookkeeping(), new Map(this.expansionCache));
+        const other = new SearchManager({ ...this.buckets });
+        other.visited = new Set(this.visited);
+        return other;
     }
 }
