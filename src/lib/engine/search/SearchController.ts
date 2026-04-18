@@ -60,18 +60,20 @@ export class SearchController {
             iterations++;
             state.nodesProcessed++;
             
-            if (!SearchProcessor.withTiming(timing, 'heapMs', () => queue.popFast(current as any))) break;
+            if (!queue.popFast(current as any)) break;
 
             tracker.subtract('pending', current.prob);
             const currentCount = ComboUtils.getCount(current.combo);
 
-            SearchProcessor.withTiming(timing, 'searchMs', () => {
-                if (currentCount === 0) {
-                    SearchProcessor.processInitialNode(current.prob, modLevel, ctx, tracker);
-                } else {
-                    SearchProcessor.processSearchNode(current.prob, current.meta, current.combo, currentCount, ctx, tracker);
-                }
-            });
+            const start = timing ? performance.now() : 0;
+            if (currentCount === 0) {
+                SearchProcessor.processInitialNode(current.prob, modLevel, ctx, tracker);
+            } else {
+                SearchProcessor.processSearchNode(current.prob, current.meta, current.combo, currentCount, ctx, tracker);
+            }
+            if (timing) {
+                timing.searchMs += performance.now() - start;
+            }
 
             // Checkpoints
             const bk = tracker.getBookkeeping();

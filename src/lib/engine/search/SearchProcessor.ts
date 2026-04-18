@@ -1,4 +1,4 @@
-import { ForwardingContext, PackedCombo, PackedEnchant, SearchTiming, ExpansionBlueprint } from '#types/index.js';
+import { ForwardingContext, PackedCombo, PackedEnchant, ExpansionBlueprint } from '#types/index.js';
 import { ComboUtils, ProbUtils } from '#utils/index.js';
 import { ENGINE_LIMITS, PACKING_CONSTANTS } from '#constants/engine.js';
 import { DistributionPool } from '#engine/distribution/DistributionPool.js';
@@ -8,20 +8,6 @@ import { SearchManager } from '#engine/search/SearchManager.js';
  * Low-level primitives for the enchantment search engine.
  */
 export class SearchProcessor {
-    /**
-     * Executes a function and records its duration to the specified timing bucket.
-     * Used for detailed performance instrumentation of specific engine subsystems.
-     */
-    public static withTiming<T>(timing: SearchTiming | undefined, bucket: keyof Omit<SearchTiming, 'totalMs'>, fn: () => T): T {
-        if (timing) {
-            const start = performance.now();
-            const result = fn();
-            timing[bucket] += performance.now() - start;
-            return result;
-        }
-        return fn();
-    }
-
     /**
      * Reusable terminal check for mass distribution.
      * Returns true if expansion should stop (limit reached, threshold too low, or results map full).
@@ -138,54 +124,28 @@ export class SearchProcessor {
         ctx: ForwardingContext,
         tracker: SearchManager
     ): void {
-        const { registry, timing, queue, guaranteedFirstId, pool, poolWeights, initialTotalWeight } = ctx;
+        const { registry, queue, guaranteedFirstId, pool, poolWeights, initialTotalWeight } = ctx;
         
-        const splits = timing ? (() => {
-            const start = performance.now();
-            const buffer = DistributionPool.getBuffer(0);
-            const splitRemainder = ProbUtils.distributeDetailed(currentProb, poolWeights, initialTotalWeight, buffer);
-            tracker.record('sieved', splitRemainder);
-            timing.distributionMs += performance.now() - start;
-            return buffer;
-        })() : (() => {
+        const splits = (() => {
             const buffer = DistributionPool.getBuffer(0);
             const splitRemainder = ProbUtils.distributeDetailed(currentProb, poolWeights, initialTotalWeight, buffer);
             tracker.record('sieved', splitRemainder);
             return buffer;
         })();
 
-        if (timing) {
-            const start = performance.now();
-            for (const [i, e] of pool.entries()) {
-                const pNext = splits[i];
-                if (pNext === undefined || pNext === 0n) continue;
-                
-                const nextId = ComboUtils.getEnchantId(e);
-                const nextMeta = ((1n << BigInt(nextId)) << BigInt(PACKING_CONSTANTS.ENCHANT_SHIFT)) | BigInt(currentLevel);
-                const nextPacked = ComboUtils.pack([e], guaranteedFirstId, registry.enchantToIndex) as PackedCombo;
+        for (const [i, e] of pool.entries()) {
+            const pNext = splits[i];
+            if (pNext === undefined || pNext === 0n) continue;
+            
+            const nextId = ComboUtils.getEnchantId(e);
+            const nextMeta = ((1n << BigInt(nextId)) << BigInt(PACKING_CONSTANTS.ENCHANT_SHIFT)) | BigInt(currentLevel);
+            const nextPacked = ComboUtils.pack([e], guaranteedFirstId, registry.enchantToIndex) as PackedCombo;
 
-                ctx.anyMass[nextId]! += pNext;
-                ctx.rankMass[e]! += pNext;
+            ctx.anyMass[nextId]! += pNext;
+            ctx.rankMass[e]! += pNext;
 
-                tracker.record('pending', pNext);
-                queue.pushOrMerge(nextMeta, pNext, currentLevel, nextPacked);
-            }
-            timing.heapMs += performance.now() - start;
-        } else {
-            for (const [i, e] of pool.entries()) {
-                const pNext = splits[i];
-                if (pNext === undefined || pNext === 0n) continue;
-                
-                const nextId = ComboUtils.getEnchantId(e);
-                const nextMeta = ((1n << BigInt(nextId)) << BigInt(PACKING_CONSTANTS.ENCHANT_SHIFT)) | BigInt(currentLevel);
-                const nextPacked = ComboUtils.pack([e], guaranteedFirstId, registry.enchantToIndex) as PackedCombo;
-
-                ctx.anyMass[nextId]! += pNext;
-                ctx.rankMass[e]! += pNext;
-
-                tracker.record('pending', pNext);
-                queue.pushOrMerge(nextMeta, pNext, currentLevel, nextPacked);
-            }
+            tracker.record('pending', pNext);
+            queue.pushOrMerge(nextMeta, pNext, currentLevel, nextPacked);
         }
     }
 
@@ -201,7 +161,7 @@ export class SearchProcessor {
         ctx: ForwardingContext,
         tracker: SearchManager
     ): void {
-        const { registry, timing, cat, pool } = ctx;
+        const { registry, cat, pool } = ctx;
         const { indexToEnchant } = registry;
         const currentBitset = currentMeta >> BigInt(PACKING_CONSTANTS.ENCHANT_SHIFT);
         const currentLevel = Number(currentMeta & BigInt(PACKING_CONSTANTS.RANK_MASK));
@@ -258,13 +218,7 @@ export class SearchProcessor {
                 tracker.registerExpansion(currentMeta, blueprint);
             };
 
-            if (timing) {
-                const start = performance.now();
-                filterFn();
-                timing.filteringMs += performance.now() - start;
-            } else {
-                filterFn();
-            }
+            filterFn();
         }
 
         tracker.forwardMass(currentProb, currentMeta, ctx, SearchProcessor);

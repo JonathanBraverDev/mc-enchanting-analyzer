@@ -138,55 +138,28 @@ export class SearchManager {
             const blueprint = this.expansionCache.get(meta);
             if (!blueprint) continue;
 
-            const { registry, timing, cat, guaranteedFirstId, resultsLimit } = ctx;
+            const { registry, cat, guaranteedFirstId, resultsLimit } = ctx;
             
             // Split mass into stop vs forward
-            let probStop: bigint;
-            let probForward: bigint;
-            let scaleLoss: bigint;
-            
             const probContinue = blueprint.probContinue;
-            if (timing) {
-                const start = performance.now();
-                probStop = ProbUtils.scale(incomingMass, (PRECISION - probContinue));
-                probForward = ProbUtils.scale(incomingMass, probContinue);
-                scaleLoss = incomingMass - (probStop + probForward);
-                timing.settlingMs += performance.now() - start;
-            } else {
-                probStop = ProbUtils.scale(incomingMass, (PRECISION - probContinue));
-                probForward = ProbUtils.scale(incomingMass, probContinue);
-                scaleLoss = incomingMass - (probStop + probForward);
-            }
+            const probStop = ProbUtils.scale(incomingMass, (PRECISION - probContinue));
+            const probForward = ProbUtils.scale(incomingMass, probContinue);
+            const scaleLoss = incomingMass - (probStop + probForward);
 
             const isBook = cat === "book";
             const currentCount = blueprint.currentCount;
             const currentCombo = blueprint.currentCombo;
             let remStop = 0n;
 
-            if (timing) {
-                const start = performance.now();
-                if (isBook && currentCount > 1) {
-                    remStop = searchProcessor.settleMass(
-                        true, currentCount, currentCombo, blueprint.currentEnchants,
-                        probStop, guaranteedFirstId, registry.enchantToIndex, registry.indexToEnchant,
-                        ctx.results, ctx.countMass, ctx.anyMass, ctx.rankMass
-                    );
-                } else {
-                    ProbUtils.addItemMass(ctx.results, currentCombo, probStop);
-                    ctx.countMass[currentCount]! += probStop;
-                }
-                timing.settlingMs += performance.now() - start;
+            if (isBook && currentCount > 1) {
+                remStop = searchProcessor.settleMass(
+                    true, currentCount, currentCombo, blueprint.currentEnchants,
+                    probStop, guaranteedFirstId, registry.enchantToIndex, registry.indexToEnchant,
+                    ctx.results, ctx.countMass, ctx.anyMass, ctx.rankMass
+                );
             } else {
-                if (isBook && currentCount > 1) {
-                    remStop = searchProcessor.settleMass(
-                        true, currentCount, currentCombo, blueprint.currentEnchants,
-                        probStop, guaranteedFirstId, registry.enchantToIndex, registry.indexToEnchant,
-                        ctx.results, ctx.countMass, ctx.anyMass, ctx.rankMass
-                    );
-                } else {
-                    ProbUtils.addItemMass(ctx.results, currentCombo, probStop);
-                    ctx.countMass[currentCount]! += probStop;
-                }
+                ProbUtils.addItemMass(ctx.results, currentCombo, probStop);
+                ctx.countMass[currentCount]! += probStop;
             }
 
             // Terminal Check
@@ -225,35 +198,20 @@ export class SearchManager {
             settleMass: (...args: any[]) => bigint;
         }
     ): bigint {
-        const { registry, timing, cat, guaranteedFirstId, instrumentation } = ctx;
+        const { registry, cat, guaranteedFirstId, instrumentation } = ctx;
         
         let remForward = 0n;
         const isBook = cat === "book";
         
-        if (timing) {
-            const start = performance.now();
-            if (isBook && blueprint.currentCount > 1) {
-                remForward = searchProcessor.settleMass(
-                    true, blueprint.currentCount, blueprint.currentCombo, blueprint.currentEnchants, 
-                    probForward, guaranteedFirstId, registry.enchantToIndex, registry.indexToEnchant, 
-                    ctx.results, ctx.countMass, ctx.anyMass, ctx.rankMass
-                );
-            } else {
-                ProbUtils.addItemMass(ctx.results, blueprint.currentCombo, probForward);
-                ctx.countMass[blueprint.currentCount]! += probForward;
-            }
-            timing.settlingMs += performance.now() - start;
+        if (isBook && blueprint.currentCount > 1) {
+            remForward = searchProcessor.settleMass(
+                true, blueprint.currentCount, blueprint.currentCombo, blueprint.currentEnchants, 
+                probForward, guaranteedFirstId, registry.enchantToIndex, registry.indexToEnchant, 
+                ctx.results, ctx.countMass, ctx.anyMass, ctx.rankMass
+            );
         } else {
-            if (isBook && blueprint.currentCount > 1) {
-                remForward = searchProcessor.settleMass(
-                    true, blueprint.currentCount, blueprint.currentCombo, blueprint.currentEnchants, 
-                    probForward, guaranteedFirstId, registry.enchantToIndex, registry.indexToEnchant, 
-                    ctx.results, ctx.countMass, ctx.anyMass, ctx.rankMass
-                );
-            } else {
-                ProbUtils.addItemMass(ctx.results, blueprint.currentCombo, probForward);
-                ctx.countMass[blueprint.currentCount]! += probForward;
-            }
+            ProbUtils.addItemMass(ctx.results, blueprint.currentCombo, probForward);
+            ctx.countMass[blueprint.currentCount]! += probForward;
         }
 
         const localRounding = remStop + remForward + scaleLoss;
@@ -286,32 +244,19 @@ export class SearchManager {
         ctx: ForwardingContext,
         depth: number
     ): bigint {
-        const { registry, timing, instrumentation, queue, guaranteedFirstId } = ctx;
+        const { registry, instrumentation, queue, guaranteedFirstId } = ctx;
 
         const eligibleCount = blueprint.eligibleCount;
         const splits = DistributionPool.getBuffer(depth);
 
-        if (timing) {
-            const start = performance.now();
-            this.buckets.rounding += (probForward % BigInt(blueprint.totalWeight));
-            const { recovered } = ProbUtils.distributeWithResidue(
-                probForward, blueprint.eligibleWeights, blueprint.totalWeight, splits, blueprint, eligibleCount
-            );
-            if (recovered > 0n) {
-                this.buckets.rounding -= recovered;
-                this.buckets.recoveredRounding += recovered;
-                if (instrumentation) instrumentation.roundingErrorEvents++;
-            }
-            timing.distributionMs += performance.now() - start;
-        } else {
-            this.buckets.rounding += (probForward % BigInt(blueprint.totalWeight));
-            const { recovered } = ProbUtils.distributeWithResidue(
-                probForward, blueprint.eligibleWeights, blueprint.totalWeight, splits, blueprint, eligibleCount
-            );
-            if (recovered > 0n) {
-                this.buckets.rounding -= recovered;
-                this.buckets.recoveredRounding += recovered;
-            }
+        this.buckets.rounding += (probForward % BigInt(blueprint.totalWeight));
+        const { recovered } = ProbUtils.distributeWithResidue(
+            probForward, blueprint.eligibleWeights, blueprint.totalWeight, splits, blueprint, eligibleCount
+        );
+        if (recovered > 0n) {
+            this.buckets.rounding -= recovered;
+            this.buckets.recoveredRounding += recovered;
+            if (instrumentation) instrumentation.roundingErrorEvents++;
         }
 
         const guaranteedInCombo = guaranteedFirstId != null && (currentBitset & (1n << BigInt(guaranteedFirstId))) !== 0n;

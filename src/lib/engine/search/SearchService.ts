@@ -58,7 +58,7 @@ export class SearchService {
             countMass: state.countMass,
             resultsLimit,
             instrumentation: config?.instrumentation,
-            timing: timingResult ? { totalMs: 0, searchMs: 0, filteringMs: 0, distributionMs: 0, settlingMs: 0, heapMs: 0 } : undefined,
+            timing: timingResult ? { totalMs: 0, searchMs: 0 } : undefined,
             cat,
             guaranteedFirstId,
             pool: initialPool,
@@ -77,10 +77,6 @@ export class SearchService {
             const totalMs = performance.now() - startTime;
             timingResult.totalMs += totalMs;
             timingResult.searchMs += ctx.timing.searchMs;
-            timingResult.filteringMs += ctx.timing.filteringMs;
-            timingResult.distributionMs += ctx.timing.distributionMs;
-            timingResult.settlingMs += ctx.timing.settlingMs;
-            timingResult.heapMs += ctx.timing.heapMs;
         }
         
         return state;
