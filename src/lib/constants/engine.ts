@@ -37,7 +37,24 @@ export const PACKING_CONSTANTS = {
     MAX_RANKED_INDEX: 16384, // (256 max enchants * 64 possible internal ids)
     
     /** Max possible count index for bookkeeping arrays. */
-    MAX_COUNT_INDEX: 16
+    MAX_COUNT_INDEX: 16,
+
+    /** Max slots in a single packed combo number. */
+    MAX_COMBO_SLOTS: 6
+};
+
+/**
+ * Shared memory pool and heap limits.
+ */
+export const POOL_CONSTANTS = {
+    /** Maximum depth for nested distribution calls. */
+    DIST_POOL_DEPTH: 8,
+    
+    /** Buffer size for individual distribution calculations. */
+    DIST_POOL_SLOT_SIZE: 128,
+    
+    /** Initial capacity for the SearchHeap (TypedArrays). */
+    INITIAL_HEAP_CAPACITY: 131072
 };
 
 /**
@@ -53,6 +70,7 @@ export const MATH_CONSTANTS = {
     /** The scale difference between mantissa bits and our precision target (60 - 53). */
     MANTISSA_TO_FIXED_SHIFT: 7n
 };
+
 
 /**
  * Default cache configurations.

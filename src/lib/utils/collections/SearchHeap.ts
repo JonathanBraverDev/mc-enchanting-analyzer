@@ -1,4 +1,4 @@
-import { PACKING_CONSTANTS } from '../../constants/engine.js';
+import { PACKING_CONSTANTS, POOL_CONSTANTS } from '../../constants/engine.js';
 
 /**
  * A specialized, TypedArray-backed priority queue for PackedNode data.
@@ -21,7 +21,7 @@ export class SearchHeap {
     private freeIds: Uint32Array;
     private freeCount: number = 0;
 
-    constructor(initialCapacity: number = 131072) {
+    constructor(initialCapacity: number = POOL_CONSTANTS.INITIAL_HEAP_CAPACITY) {
         this.capacity = initialCapacity;
         this.probBuffer = new BigUint64Array(initialCapacity);
         this.bitsetBuffer = new BigUint64Array(initialCapacity);

@@ -10,21 +10,14 @@ export class ComboUtils {
     static getEnchantId(packed: PackedEnchant): number { return packed >> PACKING_CONSTANTS.ENCHANT_SHIFT; }
     static getEnchantRank(packed: PackedEnchant): number { return packed & PACKING_CONSTANTS.RANK_MASK; }
 
-    static readonly BYTE_MULTIPLIERS = [
-        1, 
-        PACKING_CONSTANTS.BYTE_BASIS, 
-        PACKING_CONSTANTS.BYTE_BASIS ** 2, 
-        PACKING_CONSTANTS.BYTE_BASIS ** 3, 
-        PACKING_CONSTANTS.BYTE_BASIS ** 4, 
-        PACKING_CONSTANTS.BYTE_BASIS ** 5
-    ];
+    static readonly BYTE_MULTIPLIERS = Array.from({ length: PACKING_CONSTANTS.MAX_COMBO_SLOTS }, (_, i) => PACKING_CONSTANTS.BYTE_BASIS ** i);
 
     static getCount(packed: PackedCombo): number {
         let mult = 1;
-        for (let i = 0; i < 6; i++, mult *= PACKING_CONSTANTS.BYTE_BASIS) {
+        for (let i = 0; i < PACKING_CONSTANTS.MAX_COMBO_SLOTS; i++, mult *= PACKING_CONSTANTS.BYTE_BASIS) {
             if (Math.floor(packed / mult) % PACKING_CONSTANTS.BYTE_BASIS === 0) return i;
         }
-        return 6;
+        return PACKING_CONSTANTS.MAX_COMBO_SLOTS;
     }
 
     /**
@@ -70,7 +63,7 @@ export class ComboUtils {
 
         const out: PackedEnchant[] = [];
         let mult = 1;
-        for (let i = 0; i < 6; i++, mult *= PACKING_CONSTANTS.BYTE_BASIS) {
+        for (let i = 0; i < PACKING_CONSTANTS.MAX_COMBO_SLOTS; i++, mult *= PACKING_CONSTANTS.BYTE_BASIS) {
             const idx = Math.floor(packed / mult) % PACKING_CONSTANTS.BYTE_BASIS;
             if (idx === 0) break;
             const enchant = indexToEnchant[idx];
