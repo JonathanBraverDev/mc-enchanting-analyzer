@@ -27,29 +27,10 @@ jobs:
     - run: npm run build
     - run: npm test
 
-  check-tag:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push'
-    outputs:
-      has_tag: ${{ steps.check.outputs.has_tag }}
-      tag_name: ${{ steps.check.outputs.tag_name }}
-    steps:
-    - uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-    - id: check
-      run: |
-        TAG_NAME=$(git tag --points-at HEAD | head -n 1)
-        if [ -n "$TAG_NAME" ]; then
-          echo "has_tag=true" >> $GITHUB_OUTPUT
-          echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
-        else
-          echo "has_tag=false" >> $GITHUB_OUTPUT
-        fi
-
   release:
-    needs: [build, check-tag]
-    if: needs.check-tag.outputs.has_tag == 'true'
+    needs: build
+    # Only run on pushes (tags are handled internally), never on PRs
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -58,9 +39,19 @@ jobs:
       with:
         fetch-depth: 0
     
-    - name: Determine Type
+    - name: Detect Tag and Environment
       id: meta
       run: |
+        # Check if the current commit has a tag
+        TAG_NAME=$(git tag --points-at HEAD | head -n 1)
+        if [ -z "$TAG_NAME" ]; then
+          echo "HAS_TAG=false" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        
+        echo "HAS_TAG=true" >> $GITHUB_OUTPUT
+        echo "TAG_NAME=$TAG_NAME" >> $GITHUB_OUTPUT
+        
         if [ "${{ github.ref_name }}" = "main" ]; then
           echo "PRERELEASE=false" >> $GITHUB_OUTPUT
           echo "IS_OFFICIAL=true" >> $GITHUB_OUTPUT
@@ -70,32 +61,40 @@ jobs:
         fi
 
     - name: Extract Changelog
+      if: steps.meta.outputs.HAS_TAG == 'true'
       id: changelog
       run: |
-        BODY=$(node scripts/extract-changelog.js ${{ needs.check-tag.outputs.tag_name }})
+        BODY=$(node scripts/extract-changelog.js ${{ steps.meta.outputs.TAG_NAME }})
         echo "body<<EOF" >> $GITHUB_OUTPUT
         echo "$BODY" >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
 
     - name: Use Node.js 22.x
+      if: steps.meta.outputs.HAS_TAG == 'true'
       uses: actions/setup-node@v4
       with:
         node-version: 22.x
         cache: 'npm'
 
     - run: npm ci
+      if: steps.meta.outputs.HAS_TAG == 'true'
+      
     - name: Install Playwright Chromium
+      if: steps.meta.outputs.HAS_TAG == 'true'
       run: npx playwright install chromium --with-deps
+
     - name: Standalone Build
+      if: steps.meta.outputs.HAS_TAG == 'true'
       run: npm run build:standalone
 
     - name: Create GitHub Release
+      if: steps.meta.outputs.HAS_TAG == 'true'
       uses: softprops/action-gh-release@v2
       with:
-        tag_name: ${{ needs.check-tag.outputs.tag_name }}
+        tag_name: ${{ steps.meta.outputs.TAG_NAME }}
         files: dist/analyzer-standalone.html
         prerelease: ${{ steps.meta.outputs.PRERELEASE == 'true' }}
         body: ${{ steps.changelog.outputs.body }}
-        name: "Portable Analyzer: ${{ needs.check-tag.outputs.tag_name }}$([ \"${{ steps.meta.outputs.IS_OFFICIAL }}\" = \"true\" ] && echo \"\" || echo \" (Pre-release)\")"
+        name: "Portable Analyzer: ${{ steps.meta.outputs.TAG_NAME }}$([ \"${{ steps.meta.outputs.IS_OFFICIAL }}\" = \"true\" ] && echo \"\" || echo \" (Pre-release)\")"
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
