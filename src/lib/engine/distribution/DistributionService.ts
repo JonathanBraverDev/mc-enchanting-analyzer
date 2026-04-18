@@ -1,5 +1,6 @@
 import { PRECISION, ProbUtils } from '#utils/index.js';
 import { ENGINE_DEFAULTS } from '#core/config.js';
+import { ENGINE_LIMITS } from '#constants/engine.js';
 import { RegistryState, LevelDistribution, EngineInstrumentation } from '#types/index.js';
 import { CacheManager } from '#services/CacheManager.js';
 
@@ -10,7 +11,7 @@ import { CacheManager } from '#services/CacheManager.js';
 export class DistributionService {
     private readonly buffer: BigUint64Array;
 
-    constructor(bufferSize: number = 1024) {
+    constructor(bufferSize: number = ENGINE_LIMITS.DEFAULT_BUFFER_SIZE) {
         this.buffer = new BigUint64Array(bufferSize);
     }
 

@@ -3,6 +3,7 @@ import { ExpansionBlueprint, ForwardingContext, PackedCombo } from '#types/index
 import { ProbUtils, ComboUtils, PRECISION } from '#utils/index.js';
 
 import { DistributionPool } from '#engine/distribution/DistributionPool.js';
+import { ENGINE_LIMITS, PACKING_CONSTANTS, SEARCH_CONSTANTS } from '#constants/engine.js';
 import { MassAccountant } from './MassAccountant.js';
 
 /**
@@ -10,7 +11,7 @@ import { MassAccountant } from './MassAccountant.js';
  * Facilitates high-speed forwarding through cached search subtrees.
  */
 export class SearchManager {
-    private static readonly MAX_RECURSION_DEPTH = 10;
+    private static readonly MAX_RECURSION_DEPTH = SEARCH_CONSTANTS.MAX_RECURSION_DEPTH;
     
     private readonly accountant: MassAccountant;
     private readonly expansionCache: Map<bigint, ExpansionBlueprint>;
@@ -92,7 +93,7 @@ export class SearchManager {
             if (!blueprint) continue;
 
             const { registry, timing, cat, guaranteedFirstId } = ctx;
-            const currentBitset = meta >> 8n;
+            const currentBitset = meta >> BigInt(PACKING_CONSTANTS.ENCHANT_SHIFT);
             const probContinue = blueprint.probContinue;
             
             // Split mass into stop vs forward
@@ -115,7 +116,7 @@ export class SearchManager {
             const term = searchProcessor.isTerminalCondition(
                 blueprint.currentCount, cat === "book", probForward, ctx.results.size, ctx.resultsLimit, 
                 ctx.results.has(blueprint.currentCombo), registry.multiEnchantBooks, 
-                ProbUtils.toBigInt(0.0000000001) // SYSTEM_THRESHOLD_FLOOR
+                ProbUtils.toBigInt(ENGINE_LIMITS.SYSTEM_THRESHOLD_FLOOR) // SYSTEM_THRESHOLD_FLOOR
             );
 
             if (term.isTerminal || blueprint.totalWeight === 0) {
@@ -216,7 +217,7 @@ export class SearchManager {
 
             const nextPacked = ComboUtils.packAppend(blueprint.currentCombo, e, guaranteedFirstId, guaranteedInCombo, registry.enchantToIndex) as PackedCombo;
             const nextId = ComboUtils.getEnchantId(e);
-            const nextMeta = ((currentBitset | (1n << BigInt(nextId))) << 8n) | BigInt(blueprint.nextLevel);
+            const nextMeta = ((currentBitset | (1n << BigInt(nextId))) << BigInt(PACKING_CONSTANTS.ENCHANT_SHIFT)) | BigInt(blueprint.nextLevel);
 
             ProbUtils.addItemMass(ctx.anyMass, nextId, pNext);
             ProbUtils.addItemMass(ctx.rankMass, e, pNext);

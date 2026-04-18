@@ -90,5 +90,8 @@ export const SEARCH_CONSTANTS = {
     CHECKPOINT_TARGET_FLOATS: [0.1, 0.25, 0.5, 0.75, 0.8, 0.85, 0.9, 0.95, 0.99, 0.999],
     
     /** Max length for the continue table. */
-    CONTINUE_TABLE_SIZE: 65
+    CONTINUE_TABLE_SIZE: 65,
+
+    /** Max recursion depth for iterative mass forwarding. */
+    MAX_RECURSION_DEPTH: 10
 };
