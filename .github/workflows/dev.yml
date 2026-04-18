@@ -54,7 +54,6 @@ jobs:
         files: dist/analyzer-standalone.html
         prerelease: true
         body: |
-          # Development Snapshot: ${{ steps.check.outputs.TAG_NAME }}
           *Experimental feature snapshot from dev branch.*
         name: "Dev Preview: ${{ steps.check.outputs.TAG_NAME }}"
       env:
