@@ -1,10 +1,4 @@
-/**
- * Constants for bit-packing cache keys for enchantment calculations.
- */
-export const KEY_SHIFT_CAT = 0;
-export const KEY_SHIFT_MAT = 6;
-export const KEY_SHIFT_LEVEL = 12;
-export const KEY_SHIFT_GUARANTEED = 20;
+import { KEY_PACKING_CONSTANTS } from '#constants/engine.js';
 
 /**
  * Utility for generating bit-packed cache keys.
@@ -23,7 +17,10 @@ export class KeyUtils {
         modLevel: number,
         guaranteedId: number
     ): number {
-        return (catId << KEY_SHIFT_CAT) | (matId << KEY_SHIFT_MAT) | (modLevel << KEY_SHIFT_LEVEL) | (guaranteedId << KEY_SHIFT_GUARANTEED);
+        return (catId << KEY_PACKING_CONSTANTS.SHIFT_CAT) | 
+               (matId << KEY_PACKING_CONSTANTS.SHIFT_MAT) | 
+               (modLevel << KEY_PACKING_CONSTANTS.SHIFT_LEVEL) | 
+               (guaranteedId << KEY_PACKING_CONSTANTS.SHIFT_GUARANTEED);
     }
 
     /**
@@ -37,6 +34,9 @@ export class KeyUtils {
         level: number,
         guaranteedId: number
     ): number {
-        return (catId << KEY_SHIFT_CAT) | (matId << KEY_SHIFT_MAT) | (level << KEY_SHIFT_LEVEL) | (guaranteedId << KEY_SHIFT_GUARANTEED);
+        return (catId << KEY_PACKING_CONSTANTS.SHIFT_CAT) | 
+               (matId << KEY_PACKING_CONSTANTS.SHIFT_MAT) | 
+               (level << KEY_PACKING_CONSTANTS.SHIFT_LEVEL) | 
+               (guaranteedId << KEY_PACKING_CONSTANTS.SHIFT_GUARANTEED);
     }
 }

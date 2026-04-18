@@ -1,5 +1,6 @@
 import { ProbUtils } from '#utils/math/ProbUtils.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
+import { ENGINE_DEFAULTS } from '#core/config.js';
 import { CalculationStats } from '#types/index.js';
 import { SearchManager } from '#engine/search/SearchManager.js';
 
@@ -44,7 +45,7 @@ export class SummaryService {
         if (comboLimit > 0) {
             if (combos.size <= comboLimit) {
                 comboSource = [...combos.entries()].sort(compareProbDesc);
-            } else if (comboLimit <= 250) { // Using absolute number instead of soft-coded limit for simplicity
+            } else if (comboLimit <= ENGINE_DEFAULTS.MAX_RESULTS_SUMMARY_OPTIMIZED_THRESHOLD) { // Using centralized limit for efficiency
                 const results: [number, bigint][] = [];
                 for (const entry of combos.entries()) {
                     const prob = entry[1];

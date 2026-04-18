@@ -1,6 +1,7 @@
 import { RegistryState } from '#types/index.js';
 import { getEligiblePool } from '#core/registry.js';
 import { CacheManager } from '#engine/cache/CacheManager.js';
+import { PACKING_CONSTANTS } from '#constants/engine.js';
 
 /**
  * Service for registry-aware pool operations and filtering.
@@ -16,7 +17,7 @@ export class PoolService {
         if (bitset === 0n) return pool;
         
         return pool.filter(p => {
-            const id = p >> 8;
+            const id = p >> PACKING_CONSTANTS.ENCHANT_SHIFT;
             return (bitset & (1n << BigInt(id))) === 0n;
         });
     }

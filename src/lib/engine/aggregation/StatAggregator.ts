@@ -1,6 +1,6 @@
 import { PRECISION, ProbUtils, AsyncUtils, EnchantUtils } from '#utils/index.js';
 import { getEnchantability } from '#core/registry.js';
-import { ENGINE_LIMITS, PACKING_CONSTANTS, SEARCH_CONSTANTS } from '#constants/engine.js';
+import { ENGINE_LIMITS, PACKING_CONSTANTS, SEARCH_CONSTANTS, UI_CONSTANTS } from '#constants/engine.js';
 import { getSearchLimit } from '#core/config.js';
 import { PackedCombo, SearchState, RegistryState, InternalSearchConfig, EngineInstrumentation, MassCheckpoint, CheckpointSummary, AggregationResult } from '#types/index.js';
 import { DistributionService } from '#engine/distribution/DistributionService.js';
@@ -247,7 +247,7 @@ export class StatAggregator {
             globalTracker.addScaled(result.tracker, mProb);
 
             processedMProb += mProb;
-            if (++iterCount % 3 === 0) {
+            if (++iterCount % UI_CONSTANTS.PROGRESS_UPDATE_FREQUENCY === 0) {
                 if (config.onProgress) {
                     const accuracy = globalTracker.toPublic().resolved;
                     config.onProgress({

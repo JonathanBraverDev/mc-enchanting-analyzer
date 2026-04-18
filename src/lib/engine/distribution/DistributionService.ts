@@ -1,6 +1,6 @@
 import { PRECISION, ProbUtils } from '#utils/index.js';
 import { ENGINE_DEFAULTS } from '#core/config.js';
-import { ENGINE_LIMITS } from '#constants/engine.js';
+import { ENGINE_LIMITS, MINECRAFT_DEFAULTS } from '#constants/engine.js';
 import { RegistryState, LevelDistribution, EngineInstrumentation } from '#types/index.js';
 import { CacheManager } from '#services/CacheManager.js';
 
@@ -36,8 +36,8 @@ export class DistributionService {
         // 1.0 in BigInt fixed-point
         if (enchantability <= 0) return { [xp]: PRECISION };
 
-        const div = mech.enchantability_bonus_divisor ?? 4;
-        const rngRange = mech.random_bonus_range ?? 0.15;
+        const div = mech.enchantability_bonus_divisor ?? MINECRAFT_DEFAULTS.ENCHANTABILITY_DIVISOR;
+        const rngRange = mech.random_bonus_range ?? MINECRAFT_DEFAULTS.RANDOM_BONUS_RANGE;
         const N = Math.floor(enchantability / div) + 1;
 
         // Ensure buffer is large enough for N or RNG_STEPS

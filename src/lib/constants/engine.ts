@@ -95,3 +95,38 @@ export const SEARCH_CONSTANTS = {
     /** Max recursion depth for iterative mass forwarding. */
     MAX_RECURSION_DEPTH: 10
 };
+
+/**
+ * Constants for bit-packing cache keys for enchantment calculations.
+ */
+export const KEY_PACKING_CONSTANTS = {
+    SHIFT_CAT: 0,
+    SHIFT_MAT: 6,
+    SHIFT_LEVEL: 12,
+    SHIFT_GUARANTEED: 20
+};
+
+/**
+ * UI and display constants.
+ */
+export const UI_CONSTANTS = {
+    /** How often to fire progress callbacks during search (every N levels). */
+    PROGRESS_UPDATE_FREQUENCY: 3,
+    
+    /** Decimal places for percentage formatting. */
+    PERCENT_DECIMAL_PLACES: 1,
+
+    /** Default max entries for generic LRU caches. */
+    DEFAULT_LRU_MAX_ENTRIES: 500
+};
+
+/**
+ * Logic-specific Minecraft defaults.
+ */
+export const MINECRAFT_DEFAULTS = {
+    /** Default divisor for enchantability bonuses if missing from registry. */
+    ENCHANTABILITY_DIVISOR: 4,
+    
+    /** Default random multiplier range if missing from registry. */
+    RANDOM_BONUS_RANGE: 0.15
+};

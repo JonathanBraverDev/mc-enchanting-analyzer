@@ -1,4 +1,5 @@
 import { EnchantUtils } from '../utils/index.js';
+import { PACKING_CONSTANTS } from '../constants/engine.js';
 import { PackedEnchant, RegistryState } from '../types/index.js';
 
 /**
@@ -33,7 +34,7 @@ export class PoolService {
             for (const [r, rankVal] of state.sortedRanks) {
                 const range = props.levels[r];
                 if (range && level >= range[0] && level <= range[1]) {
-                    out.push(((id << 8) | rankVal) as PackedEnchant);
+                    out.push(((id << PACKING_CONSTANTS.ENCHANT_SHIFT) | rankVal) as PackedEnchant);
                     break;
                 }
             }
@@ -63,7 +64,7 @@ export class PoolService {
 
         for (const ml of levels) {
             const pool = this.getEligiblePool(state, cat, ml, cache, version);
-            if (pool.some(p => (p >> 8) === targetId && (p & 0xFF) === targetRank)) return true;
+            if (pool.some(p => (p >> PACKING_CONSTANTS.ENCHANT_SHIFT) === targetId && (p & PACKING_CONSTANTS.RANK_MASK) === targetRank)) return true;
         }
         return false;
     }

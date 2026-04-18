@@ -1,3 +1,5 @@
+import { UI_CONSTANTS } from '../../constants/engine.js';
+
 /**
  * Simple LRU Cache implementation using Map's insertion order.
  */
@@ -5,7 +7,7 @@ export class LRUCache<K, V> {
     private cache = new Map<K, V>();
     private maxEntries: number;
 
-    constructor(maxEntries: number = 500) {
+    constructor(maxEntries: number = UI_CONSTANTS.DEFAULT_LRU_MAX_ENTRIES) {
         this.maxEntries = maxEntries;
     }
 

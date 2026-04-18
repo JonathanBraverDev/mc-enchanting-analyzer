@@ -8,7 +8,8 @@ import { ProbUtils, PRECISION } from '#utils/math/ProbUtils.js';
 import { VersionUtils } from '#utils/domain/VersionUtils.js';
 import { StringUtils, UIUtils } from '#utils/format/FormatUtils.js';
 import { RomanUtils } from '#utils/format/RomanUtils.js';
-import { KeyUtils, KEY_SHIFT_GUARANTEED, KEY_SHIFT_LEVEL } from '#utils/domain/KeyUtils.js';
+import { KeyUtils } from '#utils/domain/KeyUtils.js';
+import { KEY_PACKING_CONSTANTS } from '#constants/engine.js';
 import { EnchantUtils } from '#utils/domain/EnchantUtils.js';
 
 const ROMAN_MAP = { "I": 1, "II": 2, "III": 3, "IV": 4, "V": 5 };
@@ -301,7 +302,7 @@ describe('KeyUtils.getPackedKey', () => {
 
     it('encodes UNKNOWN_ENCHANT_ID (255) in the guaranteed slot', () => {
         const key = KeyUtils.getPackedKey(0, 0, 0, UNKNOWN_ENCHANT_ID);
-        const extracted = (key >> KEY_SHIFT_GUARANTEED) & 0xFF;
+        const extracted = (key >> KEY_PACKING_CONSTANTS.SHIFT_GUARANTEED) & 0xFF;
         assert.strictEqual(extracted, UNKNOWN_ENCHANT_ID);
     });
 
@@ -315,7 +316,7 @@ describe('KeyUtils.getPackedKey', () => {
     it('encodes modLevel in the correct bit position', () => {
         const modLevel = 42;
         const key = KeyUtils.getPackedKey(0, 0, modLevel, 0);
-        const extracted = (key >> KEY_SHIFT_LEVEL) & 0xFF;
+        const extracted = (key >> KEY_PACKING_CONSTANTS.SHIFT_LEVEL) & 0xFF;
         assert.strictEqual(extracted, modLevel);
     });
 

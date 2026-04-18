@@ -1,3 +1,5 @@
+import { UI_CONSTANTS } from '../../constants/engine.js';
+
 /**
  * Utility for string formatting.
  */
@@ -18,6 +20,6 @@ export class UIUtils {
      * Formats a probability as a percentage string.
      */
     static formatPercent(prob: number): string {
-        return (prob * 100).toFixed(1) + "%";
+        return (prob * 100).toFixed(UI_CONSTANTS.PERCENT_DECIMAL_PLACES) + "%";
     }
 }
