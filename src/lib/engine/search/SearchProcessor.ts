@@ -1,4 +1,4 @@
-import { ForwardingContext, PackedCombo, PackedEnchant, SearchTiming, ExpansionBlueprint } from '#types/index.js';
+import { ForwardingContext, PackedCombo, PackedEnchant, ExpansionBlueprint } from '#types/index.js';
 import { ComboUtils, ProbUtils } from '#utils/index.js';
 import { ENGINE_LIMITS, SEARCH_CONSTANTS } from '#constants/engine.js';
 import { DistributionPool } from '#engine/distribution/DistributionPool.js';
@@ -9,15 +9,13 @@ import { SearchManager } from '#engine/search/SearchManager.js';
  */
 export class SearchProcessor {
     /**
-     * Executes a function and records its duration to the specified timing bucket.
-     * Used for detailed performance instrumentation of specific engine subsystems.
+     * No-op timing shim retained for API compatibility with SearchManager.
+     * Fine-grained per-subsystem timing has been removed; only aggregate totalMs
+     * and searchMs are tracked. Callers that still reference this method compile
+     * without changes while the overhead is eliminated.
      */
-    public static withTiming<T>(timing: SearchTiming | undefined, bucket: keyof Omit<SearchTiming, 'totalMs'>, fn: () => T): T {
-        if (!timing) return fn();
-        const start = performance.now();
-        const result = fn();
-        timing[bucket] += performance.now() - start;
-        return result;
+    public static withTiming<T>(_timing: any, _bucket: string, fn: () => T): T {
+        return fn();
     }
 
     /**

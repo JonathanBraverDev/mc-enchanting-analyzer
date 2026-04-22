@@ -1,5 +1,5 @@
 import { AsyncUtils, ProbUtils } from '#utils/index.js';
-import { ENGINE_LIMITS, SEARCH_CONSTANTS } from '#constants/engine.js';
+import { ENGINE_LIMITS } from '#constants/engine.js';
 import { SearchState, SearchContext, ForwardingContext } from '#types/index.js';
 import { SearchProcessor } from './SearchProcessor.js';
 import { ComboUtils } from '#utils/index.js';
@@ -12,7 +12,7 @@ export class SearchController {
     /**
      * Executes the search loop on the given state until a limit or threshold is reached.
      * This is the generic Best-First Search orchestrator, agnostic of Minecraft pooling details.
-     * 
+     *
      * @param state The current search state (queue, results, mass maps).
      * @param ctx Forwarding context for expansion.
      * @param modLevel The modified level context.
@@ -31,16 +31,24 @@ export class SearchController {
         let checkpointIdx = 0;
         const current = { meta: 0n, prob: 0n, level: 0, combo: 0 as any as PackedCombo };
 
+        let aggregateStart = performance.now();
+
         while (queue.size() > 0 && iterations < limit) {
             const nextProb = queue.peekProb();
 
             if (iterations > 0 && iterations % 1000 === 0) {
+                if (timing) {
+                    timing.searchMs += performance.now() - aggregateStart;
+                }
                 if (instrumentation) {
                     instrumentation.queueSize = queue.size();
                     instrumentation.indexMapSize = queue.indexMapSize;
                     instrumentation.resultsSize = results.size;
                 }
                 await AsyncUtils.yield();
+                if (timing) {
+                    aggregateStart = performance.now();
+                }
                 if (signal?.aborted) {
                     state.exitReason = 'aborted';
                     break;
@@ -59,24 +67,22 @@ export class SearchController {
 
             iterations++;
             state.nodesProcessed++;
-            
-            if (!SearchProcessor.withTiming(timing, 'heapMs', () => queue.popFast(current as any))) break;
+
+            if (!queue.popFast(current as any)) break;
 
             tracker.subtract('pending', current.prob);
             const currentCount = ComboUtils.getCount(current.combo);
 
-            SearchProcessor.withTiming(timing, 'searchMs', () => {
-                if (currentCount === 0) {
-                    SearchProcessor.processInitialNode(current.prob, modLevel, ctx, tracker);
-                } else {
-                    SearchProcessor.processSearchNode(current.prob, current.meta, current.combo, currentCount, ctx, tracker);
-                }
-            });
+            if (currentCount === 0) {
+                SearchProcessor.processInitialNode(current.prob, modLevel, ctx, tracker);
+            } else {
+                SearchProcessor.processSearchNode(current.prob, current.meta, current.combo, currentCount, ctx, tracker);
+            }
 
             // Checkpoints
             const bk = tracker.getBookkeeping();
-            while (checkpointIdx < SEARCH_CONSTANTS.CHECKPOINT_TARGETS.length) {
-                const targetMass = SEARCH_CONSTANTS.CHECKPOINT_TARGETS[checkpointIdx];
+            while (checkpointIdx < ProbUtils.CHECKPOINT_TARGETS.length) {
+                const targetMass = ProbUtils.CHECKPOINT_TARGETS[checkpointIdx];
                 if (targetMass === undefined) break;
                 const currentSettledMass = bk.resolved + bk.sieved + bk.overflow;
                 if (currentSettledMass < targetMass) break;
@@ -89,6 +95,10 @@ export class SearchController {
                 });
                 checkpointIdx++;
             }
+        }
+
+        if (timing) {
+            timing.searchMs += performance.now() - aggregateStart;
         }
 
         if (!state.exitReason) {
