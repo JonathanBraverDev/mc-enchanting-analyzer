@@ -296,7 +296,8 @@ export class EnchantEngine {
         return finalStats;
     }    /**
      * Aggregates statistics conditioned on a specific observed clue.
-     * This is the modern replacement for the legacy guaranteedFirst parameter.
+     * This performs the normal search flow first, then applies clue conditioning
+     * to the aggregated results.
      * 
      * @param cat Item category.
      * @param xp Base XP level.
