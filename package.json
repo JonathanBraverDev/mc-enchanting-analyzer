@@ -30,8 +30,12 @@
     "test:engine": "tsx --test tests/unit/**/*.test.ts tests/integration/**/*.test.ts tests/diagnostics/**/*.test.ts tests/infra/*.test.ts",
     "test:snapshots": "tsx --test --test-name-pattern=\"Snapshot:\" tests/unit/engine/engine.test.ts",
     "test:ui": "playwright test",
-    "benchmark": "tsx tests/benchmarks/engine-perf.bench.ts",
+    "benchmark": "tsx scripts/profile_snapshot.ts",
+    "benchmark:cpu": "tsx --cpu-prof scripts/profile_snapshot.ts",
+    "benchmark:compare": "tsx scripts/compare_profiles.ts",
+    "benchmark:clean": "node -e \"const fs = require('fs'); const files = fs.readdirSync('.').filter(f => f.endsWith('.cpuprofile')); console.log(`Cleaning ${files.length} root profiles...`); files.forEach(f => fs.unlinkSync(f));\"",
     "update-snapshots": "tsx scripts/update-snapshots.ts",
+    "lint": "tsc --noEmit",
     "release": "npm run test:all && npm run build:standalone"
   },
   "imports": {
