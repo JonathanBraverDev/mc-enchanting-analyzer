@@ -181,7 +181,7 @@ export const SnapshotUtils = {
     /**
      * Saves a set of statistics as a snapshot.
      */
-    async saveSnapshot(name: string, stats: any): Promise<void> {
+    async saveSnapshot(name: string, stats: any, registry?: any): Promise<void> {
         const snapshotDir = path.resolve(process.cwd(), 'tests', 'snapshots');
         const snapshotPath = path.join(snapshotDir, `${name}.json`);
 
@@ -191,7 +191,15 @@ export const SnapshotUtils = {
 
         const cleanStats = this.sanitize(stats);
         fs.writeFileSync(snapshotPath, JSON.stringify(cleanStats, null, 2));
-        console.log(`Snapshot saved: ${name}`);
+
+        if (registry) {
+            const humanPath = path.join(snapshotDir, `${name}.human.json`);
+            const humanStats = HumanizationService.humanize(cleanStats, registry);
+            fs.writeFileSync(humanPath, JSON.stringify(humanStats, null, 2));
+            console.log(`Snapshots saved: ${name} (+human)`);
+        } else {
+            console.log(`Snapshot saved: ${name}`);
+        }
     },
 
     /**
