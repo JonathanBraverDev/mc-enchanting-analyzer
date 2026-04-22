@@ -411,11 +411,11 @@ describe('Integration: Version switch and book state reset', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Guaranteed enchantment accuracy tests (engine direct, no worker mock needed)
+// Clue-conditioned certainty checks (engine direct, no worker mock needed)
 // Converted from src/tests/ui-performance.test.ts
 // ---------------------------------------------------------------------------
 
-describe('Integration: Guaranteed enchantment accuracy (engine direct)', () => {
+describe('Integration: Clue-conditioned certainty checks (engine direct)', () => {
 
     it('clue conditioning (Sword): Sharpness probability >= 99.99% at level 30', async () => {
         const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
