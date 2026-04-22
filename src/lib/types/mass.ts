@@ -21,6 +21,8 @@ export interface MassAccounting {
   recoveredSieved: number;
   /** Diagnostic: Precise mass counts as strings to preserve BigInt precision in JSON. */
   units?: { [K in keyof MassBookkeeping]: string };
+  /** Diagnostic: Mass of generation paths compatible with the observed clue (pClue). */
+  clueKnownSpace?: number | undefined;
 }
 
 /**
@@ -35,6 +37,8 @@ export interface MassBookkeeping {
     rounding: bigint;
     recoveredRounding: bigint;
     recoveredSieved: bigint;
+    /** Diagnostic: pClue — mass of generation paths compatible with the observed clue. */
+    clueKnownSpace: bigint;
 }
 
 export type MassEventType = keyof MassBookkeeping;

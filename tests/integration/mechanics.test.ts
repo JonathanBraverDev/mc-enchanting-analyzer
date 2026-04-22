@@ -92,6 +92,41 @@ describe('Minecraft Mechanics Integration Tests', () => {
             const humanGold = await EngineTestUtils.getHumanStats(engine, 'sword', 30, 'gold');
             assert.ok(!!humanGold.ranks['Sharpness V']);
         });
+
+        it('1.14: Should ALLOW multi-protection (God Armor)', async () => {
+            const engine114 = EngineFactory.create(DATA, '1.14');
+            const human = await EngineTestUtils.getHumanStats(engine114, 'chestplate', 30, 'diamond');
+            
+            const protNames = ["Protection", "Fire Protection", "Blast Protection", "Projectile Protection"];
+            const multiProtFound = Object.keys(human.combos).some(combo => {
+                const partsClean = combo.split("+").map(p => p.trim().split(" "));
+                const names = partsClean.map(p => p.slice(0, -1).join(" "));
+                return names.filter(p => protNames.includes(p)).length > 1;
+            });
+
+            assert.ok(multiProtFound, '1.14 should have at least one multi-protection combo');
+        });
+
+        it('1.14.3: Should BLOCK multi-protection (Normal & Conditioned)', async () => {
+            const engine1143 = EngineFactory.create(DATA, '1.14.3');
+            const protNames = ["Protection", "Fire Protection", "Blast Protection", "Projectile Protection"];
+            
+            // Unconditioned
+            const humanNormal = await EngineTestUtils.getHumanStats(engine1143, 'chestplate', 30, 'diamond');
+            for (const combo of Object.keys(humanNormal.combos)) {
+                const partsClean = combo.split("+").map(p => p.trim().split(" "));
+                const names = partsClean.map(p => p.slice(0, -1).join(" "));
+                assert.ok(names.filter(p => protNames.includes(p)).length <= 1, `1.14.3 (Normal) fail: ${combo}`);
+            }
+
+            // Conditioned on Protection IV
+            const humanConditioned = await EngineTestUtils.getHumanStats(engine1143, 'chestplate', 30, 'diamond', 'Protection IV');
+            for (const combo of Object.keys(humanConditioned.combos)) {
+                const partsClean = combo.split("+").map(p => p.trim().split(" "));
+                const names = partsClean.map(p => p.slice(0, -1).join(" "));
+                assert.ok(names.filter(p => protNames.includes(p)).length <= 1, `1.14.3 (Conditioned) fail: ${combo}`);
+            }
+        });
     });
 });
 

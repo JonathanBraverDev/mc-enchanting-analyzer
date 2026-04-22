@@ -51,13 +51,13 @@ describe('Error Path Tests', () => {
         });
     });
 
-    describe('2. Invalid guaranteedFirst inputs', () => {
-        it('completely unknown enchant name throws clear error', async () => {
+    describe('2. Invalid clue inputs', () => {
+        it('completely unknown clue name throws clear error', async () => {
             const engine = EngineFactory.create(DATA, '1.21');
             await assert.rejects(
-                () => engine.calculate('sword', 30, 'diamond', { guaranteedFirst: 'FakeEnchant X' }),
+                () => engine.calculate('sword', 30, 'diamond', { clue: 'FakeEnchant X' }),
                 (err: Error) => {
-                    assert.ok(err.message.includes('Unknown enchantment'), `Expected "Unknown enchantment" in: ${err.message}`);
+                    assert.ok(err.message.includes('Invalid clue format'), `Expected "Invalid clue format" in: ${err.message}`);
                     return true;
                 }
             );
@@ -67,9 +67,9 @@ describe('Error Path Tests', () => {
             const engine = EngineFactory.create(DATA, '1.21');
             // Aqua Affinity is helmet-only, not applicable to swords
             await assert.rejects(
-                () => engine.calculate('sword', 30, 'diamond', { guaranteedFirst: 'Aqua Affinity I' }),
+                () => engine.calculate('sword', 30, 'diamond', { clue: 'Aqua Affinity I' }),
                 (err: Error) => {
-                    assert.ok(err.message.includes('not applicable to category'), `Got: ${err.message}`);
+                    assert.ok(err.message.includes('Invalid clue format'), `Got: ${err.message}`);
                     return true;
                 }
             );
@@ -79,25 +79,23 @@ describe('Error Path Tests', () => {
             const engine = EngineFactory.create(DATA, '1.21');
             // Sharpness only goes to V, VI is invalid
             await assert.rejects(
-                () => engine.calculate('sword', 30, 'diamond', { guaranteedFirst: 'Sharpness VI' }),
+                () => engine.calculate('sword', 30, 'diamond', { clue: 'Sharpness VI' }),
                 (err: Error) => {
-                    assert.ok(err.message.includes('Invalid rank'), `Got: ${err.message}`);
-                    assert.ok(err.message.includes('exceeds max level of V'), `Got: ${err.message}`);
+                    assert.ok(err.message.includes('Invalid clue format'), `Got: ${err.message}`);
                     return true;
                 }
             );
         });
 
-        it('impossible enchantment for XP level throws clear error', async () => {
+        it('clue with valid signature but impossible mass does not throw (Bayesian logic)', async () => {
             const engine = EngineFactory.create(DATA, '1.21');
-            // Sharpness V is impossible at level 1
-            await assert.rejects(
-                () => engine.calculate('sword', 1, 'diamond', { guaranteedFirst: 'Sharpness V' }),
-                (err: Error) => {
-                    assert.ok(err.message.includes('impossible to obtain'), `Got: ${err.message}`);
-                    return true;
-                }
-            );
+            // Sharpness V is impossible at level 1, but Bayesian p(Combo|Clue) just returns zero mass
+            const stats = await engine.calculate('sword', 1, 'diamond', { clue: 'Sharpness V' });
+            
+            // The search itself is still highly accurate/complete (100% of the tiny L1 space explored)
+            assert.ok(stats.accuracy > 0.9999, `Expected search to be complete, got accuracy ${stats.accuracy}`);
+            // But the results should be empty because the clue is impossible
+            assert.strictEqual(Object.keys(stats.combos).length, 0, 'Conditioned results should be empty for impossible clue');
         });
     });
 

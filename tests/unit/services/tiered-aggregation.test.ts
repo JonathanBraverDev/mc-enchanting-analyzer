@@ -39,14 +39,14 @@ describe('Tiered Aggregation: StatAggregator.getFullStatsTiered', () => {
 
         // Sequential
         const seqRaw = await aggregator.calculate(
-            engine.registry, CAT, XP, MAT, null,
+            engine.registry, CAT, XP, MAT,
             { threshold: TEST_DATA.THRESHOLDS.PROB_MIN, resultsLimit: 10000 }
         );
-        const seqStats = SummaryService.summarize(seqRaw.combos, seqRaw.tracker, seqRaw.anyMass, seqRaw.rankMass, seqRaw.countMass, 10000, seqRaw.threshold);
+        const seqStats = SummaryService.summarize(seqRaw.combos, seqRaw.tracker, engine.registry.indexToEnchant, seqRaw.anyMass, seqRaw.rankMass, seqRaw.countMass, 10000, seqRaw.threshold);
 
         // Tiered
         const tieredRaw = await aggregator.calculateTiered(
-            engine.registry, CAT, XP, MAT, null,
+            engine.registry, CAT, XP, MAT,
             [
                 { threshold: 0.01,   limit: 500 },
                 { threshold: TEST_DATA.THRESHOLDS.PROB_MIN, limit: 10000 },
@@ -54,7 +54,7 @@ describe('Tiered Aggregation: StatAggregator.getFullStatsTiered', () => {
             () => {},
             { threshold: TEST_DATA.THRESHOLDS.PROB_MIN, resultsLimit: 10000 }
         );
-        const tieredStats = SummaryService.summarize(tieredRaw.combos, tieredRaw.tracker, tieredRaw.anyMass, tieredRaw.rankMass, tieredRaw.countMass, 10000, tieredRaw.threshold);
+        const tieredStats = SummaryService.summarize(tieredRaw.combos, tieredRaw.tracker, engine.registry.indexToEnchant, tieredRaw.anyMass, tieredRaw.rankMass, tieredRaw.countMass, 10000, tieredRaw.threshold);
 
         const accuracyDiff = Math.abs(tieredStats.accuracy - seqStats.accuracy);
         assert.ok(accuracyDiff < 0.001, `Accuracy diff too high: ${accuracyDiff}`);
@@ -73,7 +73,7 @@ describe('Tiered Aggregation: StatAggregator.getFullStatsTiered', () => {
         const callbackIndices: number[] = [];
 
         await aggregator.calculateTiered(
-            engine.registry, CAT, XP, MAT, null,
+            engine.registry, CAT, XP, MAT,
             tiers,
             (_raw: AggregationResult, tierIndex: number) => { callbackIndices.push(tierIndex); },
             {}
@@ -90,7 +90,7 @@ describe('Tiered Aggregation: StatAggregator.getFullStatsTiered', () => {
         const accuracies: number[] = [];
 
         await aggregator.calculateTiered(
-            engine.registry, TEST_DATA.ITEMS.BOOK, 30, TEST_DATA.MATERIALS.BOOK, null,
+            engine.registry, TEST_DATA.ITEMS.BOOK, 30, TEST_DATA.MATERIALS.BOOK,
             [
                 { threshold: 0.1,    limit: 100 },
                 { threshold: 0.01,   limit: 500 },
@@ -121,7 +121,7 @@ describe('EnchantEngine.calculateProgressive', () => {
         engine.resetCaches();
 
         const progressiveStats = await engine.calculateProgressive(
-            CAT, XP, MAT, null,
+            CAT, XP, MAT,
             [
                 { threshold: 0.01,   limit: 500 },
                 { threshold: TEST_DATA.THRESHOLDS.PROB_MIN, limit: 10000 },
@@ -147,7 +147,7 @@ describe('EnchantEngine.calculateProgressive', () => {
         const tierAccuracies: number[] = [];
 
         await engine.calculateProgressive(
-            CAT, XP, MAT, null,
+            CAT, XP, MAT,
             [
                 { threshold: 0.1,    limit: 100 },
                 { threshold: 0.01,   limit: 500 },

@@ -7,13 +7,13 @@ interface BaseSearchPayload {
     cat: string;
     xp: number;
     mat: string;
-    guaranteedFirst: string | null;
+    clue: string | null;
 }
 
 export interface RefinementPayload {
     category: string;
     material: string;
-    guaranteedFirst: string | null;
+    clue: string | null;
     xpLevel: number;
     version: string;
 }
@@ -66,7 +66,7 @@ export class RefinementService {
                 cat: payload.category,
                 xp: payload.xpLevel,
                 mat: payload.material,
-                guaranteedFirst: payload.guaranteedFirst
+                clue: payload.clue
             };
             const isBook = payload.category === "book";
 

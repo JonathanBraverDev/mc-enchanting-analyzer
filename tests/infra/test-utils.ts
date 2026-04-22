@@ -242,8 +242,8 @@ export const EngineTestUtils = {
     /**
      * Performs a full enchantment simulation and returns human-readable results.
      */
-    async getHumanStats(engine: EnchantEngine, cat: string, xp: number, mat: string, guaranteedFirst: string | null = null, threshold = 0.0001): Promise<any> {
-        const stats = await engine.calculate(cat, xp, mat, { guaranteedFirst, threshold });
+    async getHumanStats(engine: EnchantEngine, cat: string, xp: number, mat: string, clue: string | null = null, threshold = 0.0001): Promise<any> {
+        const stats = await engine.calculate(cat, xp, mat, { clue, threshold });
         return HumanizationService.humanize(stats, engine.registry);
     }
 };

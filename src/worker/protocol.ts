@@ -6,16 +6,23 @@ export type WorkerRequest =
         cat: string;
         xp: number;
         mat: string;
-        guaranteedFirst?: string | null;
+        clue?: string | null;
         threshold?: bigint;
         maxIterations?: number;
         source?: string;
       }}
     | { type: "calculateProgressive"; id: number; payload: {
-        cat: string; xp: number; mat: string; guaranteedFirst: string | null;
+        cat: string; xp: number; mat: string; clue?: string | null;
         source: string;
         tiers: Array<{ threshold: number; limit: number }>;
         summaryLimit?: number; resultsLimit?: number;
+      }}
+    | { type: "calculateConditioned"; id: number; payload: {
+        cat: string; xp: number; mat: string; clue: string;
+        source?: string;
+        threshold?: number;
+        summaryLimit?: number;
+        resultsLimit?: number;
       }};
 
 export type WorkerResponse =

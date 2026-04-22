@@ -28,7 +28,7 @@ class AppController {
 
     constructor() {
         this.params = new ParamsView(
-            ["v-select", "cat-select", "mat-select", "guaranteed-first-select", "lvl-range", "chart-metric", "combo-sort"],
+            ["v-select", "cat-select", "mat-select", "clue-select", "lvl-range", "chart-metric", "combo-sort"],
             (type) => this.onParamsChange(type)
         );
         this.results = new ResultsView();
@@ -72,7 +72,7 @@ class AppController {
                 this.isWorkerReady = true;
                 const engine = this.getEngine();
                 this.params.updateMaterials(engine);
-                this.params.updateGuaranteedFirst(engine);
+                this.params.updateClueTarget(engine);
                 this.enqueueRun();
             }).catch(err => this.showError(UI_TEXTS.STATUS_ERROR_LOADING, err));
             return;
@@ -83,12 +83,14 @@ class AppController {
         if (type === 'cat') {
             this.results.showPlaceholder(UI_TEXTS.STATUS_SWITCHING_CATEGORY);
             this.params.updateMaterials(engine);
-            this.params.updateGuaranteedFirst(engine);
+            this.params.updateClueTarget(engine);
         } else if (type === 'mat') {
-            this.params.updateGuaranteedFirst(engine);
+            this.params.updateClueTarget(engine);
         } else if (type === 'chart-metric') {
             this.chart.refresh(this.refinement.currentSweep, engine.registry);
             return;
+        } else if (type === 'clue') {
+            this.results.showPlaceholder(UI_TEXTS.STATUS_REFINING);
         } else if (type === 'combo-sort') {
             this.updateInsightsFromRaw(this.lastRawStats, true);
             return;
@@ -98,6 +100,7 @@ class AppController {
     }
 
     private enqueueRun(): void {
+        this.bestInsights = null; // Clear latch to prevent stable-result blocking
         if (this.runDebounceTimeout) window.clearTimeout(this.runDebounceTimeout);
         this.runDebounceTimeout = window.setTimeout(() => this.run(), 50);
     }
@@ -118,7 +121,7 @@ class AppController {
 
         try {
             const engine = this.getEngine();
-            this.params.updateGuaranteedFirst(engine);
+            this.params.updateClueTarget(engine);
             
             const vals = this.params.getValues();
             this.params.setEnchantability(getEnchantability(engine.registry, vals.material, vals.category));

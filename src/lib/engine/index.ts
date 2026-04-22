@@ -1,6 +1,6 @@
 import { CalculationStats, SearchState, RegistryState, SearchConfig, InternalSearchConfig, EngineInstrumentation, } from '#types/index.js';
-import { ProbUtils, RomanUtils, EnchantUtils } from '#utils/index.js';
-import { getMaterialId, getEnchantId, getEligiblePool, isCategoryAvailable, getEnchantability } from '#core/registry.js';
+import { ProbUtils, EnchantUtils } from '#utils/index.js';
+import { getMaterialId, getEnchantId, isCategoryAvailable } from '#core/registry.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import { getSearchLimit } from '#core/config.js';
 import { CacheManager } from './cache/CacheManager.js';
@@ -72,7 +72,6 @@ export class EnchantEngine {
      * @param cat Item category.
      * @param modLevel The pre-computed modified level for this search.
      * @param mat Item material.
-     * @param guaranteedFirst Optional guaranteed enchantment.
      * @param threshold High-precision bigint threshold (1.0 = 10^18).
      * @param maxIterations Max nodes to process.
      * @param resultsLimit Max unique combinations to return.
@@ -82,21 +81,20 @@ export class EnchantEngine {
         cat: string,
         modLevel: number,
         mat: string,
-        guaranteedFirst: string | null = null,
         threshold: bigint = ProbUtils.toBigInt(0.0001),
         maxIterations?: number,
         resultsLimit: number = ENGINE_LIMITS.MAX_RESULTS_SIZE,
         instrumentation?: EngineInstrumentation
     ): Promise<SearchState> {
         const limit = getSearchLimit(cat, ProbUtils.toNumber(threshold), maxIterations);
-        const cacheKey = this.keyService.getPackedKey(this.registry, cat, modLevel, mat, guaranteedFirst);
+        const cacheKey = this.keyService.getPackedKey(this.registry, cat, modLevel, mat);
         
         const cached = cat === "book" ? this.cache.getBook(this.registry.version, cacheKey) : this.cache.getCombo(this.registry.version, cacheKey);
         // Cast cached to SearchState if needed, but the cache should already store SearchState 3.0 types
         if (cached && cached.threshold <= threshold) return cached as SearchState;
 
         const result = await this.searchService.search(
-            this.registry, cat, modLevel, guaranteedFirst, cached as SearchState, {
+            this.registry, cat, modLevel, cached as SearchState, {
                 threshold,
                 limit,
                 resultsLimit,
@@ -118,7 +116,6 @@ export class EnchantEngine {
      * @param cat The item category.
      * @param xp The base XP level.
      * @param mat The item material.
-     * @param guaranteedFirst Optional name of a guaranteed enchantment (e.g. "Sharpness IV").
      * @param tiers Array of search depths (thresholds and iteration limits).
      * @param onTierComplete Callback fired when a tier finishing aggregating.
      * @param config Optional base configuration.
@@ -127,7 +124,6 @@ export class EnchantEngine {
         cat: string,
         xp: number,
         mat: string,
-        guaranteedFirst: string | null,
         tiers: Array<{ threshold: number; limit: number }>,
         onTierComplete: (stats: CalculationStats, tierIndex: number) => void,
         config?: Partial<SearchConfig>
@@ -135,6 +131,7 @@ export class EnchantEngine {
         this.validateRequest(cat, xp, mat, config ?? {});
 
         const {
+            clue,
             threshold = 0.0001,
             signal,
             onProgress,
@@ -145,7 +142,9 @@ export class EnchantEngine {
             timing
         } = config ?? {};
 
-        const cacheKey = this.keyService.getStatsKey(this.registry, cat, xp, mat, guaranteedFirst);
+        const packedClue = clue ? this.getPackedClue(cat, clue) : null;
+
+        const cacheKey = this.keyService.getStatsKey(this.registry, cat, xp, mat, packedClue);
 
         const cachedStats = this.cache.getStats(this.registry.version, cacheKey);
         const lastTier = tiers[tiers.length - 1];
@@ -168,7 +167,10 @@ export class EnchantEngine {
         };
 
         const wrappedOnTierComplete = (raw: any, tierIndex: number) => {
-            const stats = SummaryService.summarize(raw.combos, raw.tracker, raw.anyMass, raw.rankMass, raw.countMass, summaryLimit, raw.threshold);
+            const stats = packedClue
+                ? SummaryService.summarizeConditioned(raw.combos, raw.tracker, this.registry.indexToEnchant, packedClue, summaryLimit)
+                : SummaryService.summarize(raw.combos, raw.tracker, this.registry.indexToEnchant, raw.anyMass, raw.rankMass, raw.countMass, summaryLimit, raw.threshold);
+            
             stats.instrumentation = raw.instrumentation;
             stats.timing = raw.timing;
             
@@ -180,10 +182,22 @@ export class EnchantEngine {
         };
 
         const finalRaw = await this.statAggregator.calculateTiered(
-            this.registry, cat, xp, mat, guaranteedFirst, tiers, wrappedOnTierComplete, internalConfig
+            this.registry, cat, xp, mat, tiers, wrappedOnTierComplete, internalConfig
         );
 
-        const finalStats = SummaryService.summarize(finalRaw.combos, finalRaw.tracker, finalRaw.anyMass, finalRaw.rankMass, finalRaw.countMass, summaryLimit, finalRaw.threshold);
+        const finalStats = packedClue
+            ? SummaryService.summarizeConditioned(finalRaw.combos, finalRaw.tracker, this.registry.indexToEnchant, packedClue, summaryLimit)
+            : SummaryService.summarize(
+                finalRaw.combos,
+                finalRaw.tracker,
+                this.registry.indexToEnchant,
+                finalRaw.anyMass,
+                finalRaw.rankMass,
+                finalRaw.countMass,
+                summaryLimit,
+                finalRaw.threshold
+            );
+
         finalStats.instrumentation = finalRaw.instrumentation;
         finalStats.timing = finalRaw.timing;
 
@@ -214,7 +228,7 @@ export class EnchantEngine {
         this.validateRequest(cat, xp, mat, config);
 
         const {
-            guaranteedFirst = null,
+            clue,
             threshold = 0.0001,
             signal,
             onProgress,
@@ -225,7 +239,9 @@ export class EnchantEngine {
             timing
         } = config;
 
-        const cacheKey = this.keyService.getStatsKey(this.registry, cat, xp, mat, guaranteedFirst);
+        const packedClue = clue ? this.getPackedClue(cat, clue) : null;
+
+        const cacheKey = this.keyService.getStatsKey(this.registry, cat, xp, mat, packedClue);
 
         const cachedStats = this.cache.getStats(this.registry.version, cacheKey);
         if (cachedStats && cachedStats.threshold <= threshold) return cachedStats;
@@ -238,11 +254,11 @@ export class EnchantEngine {
             summaryLimit,
             resultsLimit,
             getExtendedCache: (ml) => {
-                const pk = this.keyService.getPackedKey(this.registry, cat, ml, mat, guaranteedFirst);
+                const pk = this.keyService.getPackedKey(this.registry, cat, ml, mat);
                 return (cat === "book" ? this.cache.getBook(this.registry.version, pk) : this.cache.getCombo(this.registry.version, pk)) as SearchState;
             },
             setExtendedCache: (ml, state) => {
-                const pk = this.keyService.getPackedKey(this.registry, cat, ml, mat, guaranteedFirst);
+                const pk = this.keyService.getPackedKey(this.registry, cat, ml, mat);
                 if (cat === "book") this.cache.setBook(this.registry.version, pk, state);
                 else this.cache.setCombo(this.registry.version, pk, state);
             },
@@ -255,10 +271,22 @@ export class EnchantEngine {
         };
 
         const finalRaw = await this.statAggregator.calculate(
-            this.registry, cat, xp, mat, guaranteedFirst, internalConfig
+            this.registry, cat, xp, mat, internalConfig
         );
 
-        const finalStats = SummaryService.summarize(finalRaw.combos, finalRaw.tracker, finalRaw.anyMass, finalRaw.rankMass, finalRaw.countMass, summaryLimit, finalRaw.threshold);
+        const finalStats = packedClue
+            ? SummaryService.summarizeConditioned(finalRaw.combos, finalRaw.tracker, this.registry.indexToEnchant, packedClue, summaryLimit)
+            : SummaryService.summarize(
+                finalRaw.combos,
+                finalRaw.tracker,
+                this.registry.indexToEnchant,
+                finalRaw.anyMass,
+                finalRaw.rankMass,
+                finalRaw.countMass,
+                summaryLimit,
+                finalRaw.threshold
+            );
+
         finalStats.instrumentation = finalRaw.instrumentation;
         finalStats.timing = finalRaw.timing;
 
@@ -268,12 +296,85 @@ export class EnchantEngine {
         }
 
         return finalStats;
+    }    /**
+     * Aggregates statistics conditioned on a specific observed clue.
+     * This is the modern replacement for the legacy guaranteedFirst parameter.
+     * 
+     * @param cat Item category.
+     * @param xp Base XP level.
+     * @param mat Item material.
+     * @param clue The observed enchantment clue (e.g. "Sharpness IV").
+     * @param config Optional search configuration.
+     */
+    public async calculateConditioned(
+        cat: string,
+        xp: number,
+        mat: string,
+        clue: string,
+        config: SearchConfig = {}
+    ): Promise<CalculationStats> {
+        this.validateRequest(cat, xp, mat, config);
+        
+        const romanMap = this.registry.data.constants.ROMAN_MAP;
+        const parsed = EnchantUtils.parse(clue, romanMap);
+        if (!parsed) throw new Error(`Invalid clue format: "${clue}"`);
+        
+        const clueId = getEnchantId(this.registry, parsed.name);
+        const packedClue = (clueId << 8) | (parsed.rank ?? 1);
+
+        // Perform raw calculation first (or retrieve from internal cache if possible)
+        const internalConfig: InternalSearchConfig = {
+            ...config,
+            threshold: ProbUtils.toBigInt(config.threshold ?? 0.0001),
+            summaryLimit: config.summaryLimit ?? ENGINE_LIMITS.MAX_RESULTS_SUMMARY,
+            resultsLimit: config.resultsLimit ?? ENGINE_LIMITS.MAX_RESULTS_SIZE
+        };
+
+        const finalRaw = await this.statAggregator.calculate(
+            this.registry, cat, xp, mat, internalConfig
+        );
+
+        // Apply Bayesian conditioning
+        return SummaryService.summarizeConditioned(
+            finalRaw.combos,
+            finalRaw.tracker,
+            this.registry.indexToEnchant,
+            packedClue,
+            internalConfig.summaryLimit
+        );
+    }
+
+    private getPackedClue(cat: string, clue: string): number {
+        const romanMap = this.registry.data.constants.ROMAN_MAP;
+        const parsed = EnchantUtils.parse(clue, romanMap);
+        if (!parsed) throw new Error(`Invalid clue format: "${clue}"`);
+        
+        const clueId = getEnchantId(this.registry, parsed.name);
+        if (clueId === ENGINE_LIMITS.UNKNOWN_ENCHANT_ID) {
+            throw new Error(`Invalid clue format: Unknown enchantment "${parsed.name}"`);
+        }
+
+        const enchantData = this.registry.resolvedRegistry[parsed.name];
+        if (!enchantData) {
+            throw new Error(`Invalid clue format: Unknown enchantment "${parsed.name}"`);
+        }
+
+        // Check if applicable to category
+        const pool = this.registry.mergedItems[cat] || [];
+        if (!pool.includes(parsed.name)) {
+            throw new Error(`Invalid clue format: Enchantment "${parsed.name}" is not applicable to category "${cat}"`);
+        }
+
+        const maxRank = Object.keys(enchantData.levels).length;
+        if (parsed.rank > maxRank) {
+            throw new Error(`Invalid clue format: Rank ${parsed.rank} exceeds max for ${parsed.name}`);
+        }
+
+        return (clueId << 8) | (parsed.rank ?? 1);
     }
 
 
-    private validateRequest(cat: string, xp: number, mat: string, configOrGuaranteed: string | null | SearchConfig): void {
-        const guaranteedFirst = typeof configOrGuaranteed === 'string' ? configOrGuaranteed : (configOrGuaranteed as SearchConfig)?.guaranteedFirst ?? null;
-        const config = typeof configOrGuaranteed === 'string' ? {} : (configOrGuaranteed as SearchConfig ?? {});
+    private validateRequest(cat: string, xp: number, mat: string, config: SearchConfig): void {
 
         if (!Number.isFinite(xp) || !Number.isInteger(xp) || xp <= 0) {
             throw new Error(`Invalid XP level: ${xp}. XP must be a positive integer.`);
@@ -302,53 +403,5 @@ export class EnchantEngine {
             throw new Error(`Invalid resultsLimit: ${config.resultsLimit}. Must be between 1 and 1,000,000.`);
         }
 
-        if (guaranteedFirst) {
-            this.validateGuaranteedFirst(cat, xp, mat, guaranteedFirst);
-        }
-    }
-
-    /**
-     * Validates that the requested guaranteedFirst enchantment is possible.
-     */
-    private validateGuaranteedFirst(cat: string, xp: number, mat: string, guaranteedFirst: string): void {
-        const romanMap = this.registry.data.constants.ROMAN_MAP;
-        const parsed = EnchantUtils.parse(guaranteedFirst, romanMap);
-        if (!parsed) {
-            throw new Error(`Invalid enchantment format: "${guaranteedFirst}". Expected "Name Rank".`);
-        }
-
-        const id = getEnchantId(this.registry, parsed.name);
-        if (id === ENGINE_LIMITS.UNKNOWN_ENCHANT_ID) {
-            throw new Error(`Unknown enchantment: "${parsed.name}".`);
-        }
-
-        const props = this.registry.resolvedRegistry[parsed.name];
-        if (!props) {
-            throw new Error(`Unknown enchantment: "${parsed.name}".`);
-        }
-        
-        const maxLevel = Math.max(...Object.keys(props.levels).map(k => RomanUtils.getRomanValue(k, romanMap)));
-        if (parsed.rank < 1 || parsed.rank > maxLevel) {
-            const romanMax = RomanUtils.rankToRoman(maxLevel, romanMap);
-            throw new Error(`Invalid rank: "${guaranteedFirst}" exceeds max level of ${romanMax}.`);
-        }
-
-        const pool = this.registry.versionPool.get(cat);
-        if (!pool || !pool.includes(parsed.name)) {
-            throw new Error(`Enchantment "${parsed.name}" is not applicable to category "${cat}".`);
-        }
-
-        const enchantability = getEnchantability(this.registry, mat, cat);
-        const dist = this.getModifiedLevelDist(xp, enchantability);
-        const levels = Object.keys(dist).map(Number);
-        
-        const isPossible = levels.some(ml => {
-            const elPool = getEligiblePool(this.registry, cat, ml, this.cache, this.registry.version);
-            return elPool.some(p => (p >> 8) === id && (p & 0xFF) === parsed.rank);
-        });
-
-        if (!isPossible) {
-            throw new Error(`Enchantment "${guaranteedFirst}" is impossible to obtain for category "${cat}" at XP level ${xp} with "${mat}".`);
-        }
     }
 }

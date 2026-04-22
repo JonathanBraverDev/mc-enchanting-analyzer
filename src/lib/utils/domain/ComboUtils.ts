@@ -23,30 +23,20 @@ export class ComboUtils {
      * Packs a set of enchantments into a number.
      * Uses a flat byte-per-slot encoding with a prebuilt lookup table.
      */
-    static pack(chosen: PackedEnchant[], guaranteedFirstId: number | null, enchantToIndex: Map<number, number>): PackedCombo {
+    static pack(chosen: PackedEnchant[], enchantToIndex: Map<number, number>): PackedCombo {
         if (chosen.length === 0) return 0 as PackedCombo;
 
-        let firstPicked: number | null = null;
-        const others: number[] = [];
-
+        const indices: number[] = [];
         for (const c of chosen) {
-            const id = c >> 8;
             const idx = enchantToIndex.get(c);
-            if (idx === undefined) continue;
-
-            if (guaranteedFirstId !== null && id === guaranteedFirstId && firstPicked === null) {
-                firstPicked = idx;
-            } else {
-                others.push(idx);
-            }
+            if (idx !== undefined) indices.push(idx);
         }
 
-        others.sort((a, b) => b - a);
-        if (firstPicked !== null) others.unshift(firstPicked);
+        indices.sort((a, b) => b - a);
 
         let packed = 0;
         let mult = 1;
-        for (const v of others) {
+        for (const v of indices) {
             packed += v * mult;
             mult *= 256;
         }
@@ -80,38 +70,21 @@ export class ComboUtils {
     static packAppend(
         existing: PackedCombo,
         newItem: PackedEnchant,
-        guaranteedFirstId: number | null,
-        guaranteedInCombo: boolean,
         enchantToIndex: Map<number, number>
     ): PackedCombo {
         const newIdx = enchantToIndex.get(newItem);
         if (newIdx === undefined) return existing;
 
         const count = this.getCount(existing);
-        const newId = newItem >> 8;
-        const isNewGuaranteed = guaranteedFirstId !== null && newId === guaranteedFirstId;
 
         if (count === 0) {
-            return newIdx as PackedCombo; // BYTE_MULTIPLIERS[0] = 1
+            return newIdx as PackedCombo;
         }
 
-        if (isNewGuaranteed) {
-            // Guaranteed enchant goes to position 0; shift all existing bytes right
-            let packed = newIdx;
-            let mult = 1;
-            for (let i = 0; i < count; i++, mult *= 256) {
-                const b = Math.floor(existing / mult) % 256;
-                packed += b * (mult * 256);
-            }
-            return packed as PackedCombo;
-        }
-
-        // Non-guaranteed: insert in descending idx order, after guaranteed slot if present
-        const sortStart = (guaranteedFirstId !== null && guaranteedInCombo) ? 1 : 0;
-
+        // Insert in descending idx order to maintain canonical representation
         let insertPos = count;
-        let multScan = 256 ** sortStart;
-        for (let i = sortStart; i < count; i++, multScan *= 256) {
+        let multScan = 1;
+        for (let i = 0; i < count; i++, multScan *= 256) {
             const b = Math.floor(existing / multScan) % 256;
             if (newIdx > b) {
                 insertPos = i;
@@ -125,7 +98,6 @@ export class ComboUtils {
             const b = Math.floor(existing / mult) % 256;
             packed += b * mult;
         }
-        // mult is now 256^insertPos
         packed += newIdx * mult;
         for (let i = insertPos; i < count; i++, mult *= 256) {
             const b = Math.floor(existing / mult) % 256;
@@ -140,7 +112,7 @@ export class ComboUtils {
      *
      * OPTIMIZED BITWISE VERSION: Avoids unpack/sort/pack cycle and array allocations.
      */
-    static removeAdditional(packed: PackedCombo, guaranteedFirstId: number | null, indexToEnchant: number[]): PackedCombo[] {
+    static removeAdditional(packed: PackedCombo): PackedCombo[] {
         const count = this.getCount(packed);
         if (count <= 1) return [packed];
 
@@ -148,12 +120,7 @@ export class ComboUtils {
         let mult = 1;
         for (let i = 0; i < count; i++, mult *= 256) {
             const byteVal = Math.floor(packed / mult) % 256;
-            const enchant = indexToEnchant[byteVal];
-            if (enchant === undefined) continue;
-            const enchantId = enchant >> 8;
-
-            // Strategy: filter out outcomes where the guaranteed enchant was the one removed.
-            if (guaranteedFirstId !== null && enchantId === guaranteedFirstId) continue;
+            if (byteVal === 0) continue;
 
             // Mathematically remove the i-th byte by zeroing it and shifting the upper bytes down
             const lowerPart = packed % mult;

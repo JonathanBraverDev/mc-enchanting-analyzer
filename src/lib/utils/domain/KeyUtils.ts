@@ -4,26 +4,17 @@
 export const KEY_SHIFT_CAT = 0;
 export const KEY_SHIFT_MAT = 6;
 export const KEY_SHIFT_LEVEL = 12;
-export const KEY_SHIFT_GUARANTEED = 20;
 
 /**
  * Utility for generating bit-packed cache keys.
  */
 export class KeyUtils {
-    /**
-     * Packs enchantment search parameters into a single number key.
-     * Used for frontier/combo caches. `limit` is intentionally excluded so that
-     * a deeper search tier can resume the frontier cached by a coarser tier
-     * (cross-tier resumability).
-     * Total bits: cat(6) + mat(6) + level(8) + guaranteed(8) = 28 bits — fits in a JS safe integer.
-     */
     public static getPackedKey(
         catId: number,
         matId: number,
-        modLevel: number,
-        guaranteedId: number
+        modLevel: number
     ): number {
-        return (catId << KEY_SHIFT_CAT) | (matId << KEY_SHIFT_MAT) | (modLevel << KEY_SHIFT_LEVEL) | (guaranteedId << KEY_SHIFT_GUARANTEED);
+        return (catId << KEY_SHIFT_CAT) | (matId << KEY_SHIFT_MAT) | (modLevel << KEY_SHIFT_LEVEL);
     }
 
     /**
@@ -34,9 +25,8 @@ export class KeyUtils {
     public static getStatsKey(
         catId: number,
         matId: number,
-        level: number,
-        guaranteedId: number
+        level: number
     ): number {
-        return (catId << KEY_SHIFT_CAT) | (matId << KEY_SHIFT_MAT) | (level << KEY_SHIFT_LEVEL) | (guaranteedId << KEY_SHIFT_GUARANTEED);
+        return (catId << KEY_SHIFT_CAT) | (matId << KEY_SHIFT_MAT) | (level << KEY_SHIFT_LEVEL);
     }
 }

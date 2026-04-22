@@ -45,12 +45,12 @@ describe('Frontier Resumability & Cache Behavior', () => {
 
         // First pass: 500 iterations from the initial state
         const result500 = await searchService.search(
-            engine.registry, cat, ml, null, undefined, { threshold, limit: 500, resultsLimit: 1000 }
+            engine.registry, cat, ml, undefined, { threshold, limit: 500, resultsLimit: 1000 }
         );
 
         // Second pass: 2 000 more iterations, resuming from result500
         const result2000 = await searchService.search(
-            engine.registry, cat, ml, null, result500, { threshold, limit: 2000, resultsLimit: 1000 }
+            engine.registry, cat, ml, result500, { threshold, limit: 2000, resultsLimit: 1000 }
         );
 
         assert.ok(result500.results.size > 0, 'First run should have produced results');

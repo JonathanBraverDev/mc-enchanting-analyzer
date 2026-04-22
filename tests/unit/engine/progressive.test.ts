@@ -26,9 +26,9 @@ describe('EnchantEngine: Progressive Search', () => {
         ];
 
         await engine.calculateProgressive(
-            TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND, null,
+            TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND,
             tiers,
-            (stats) => {
+            (stats: any) => {
                 accuracies.push(stats.accuracy);
             }
         );
@@ -47,7 +47,7 @@ describe('EnchantEngine: Progressive Search', () => {
         ];
 
         const stats = await engine.calculateProgressive(
-            TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND, null,
+            TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND,
             tiers,
             () => {
                 tierCount++;
@@ -66,9 +66,9 @@ describe('EnchantEngine: Progressive Search', () => {
         ];
 
         await engine.calculateProgressive(
-            TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND, null,
+            TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND,
             tiers,
-            (stats) => {
+            (stats: any) => {
                 roundingValues.push(stats.accounting.rounding);
             }
         );

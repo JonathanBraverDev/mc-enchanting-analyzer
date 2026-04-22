@@ -1,7 +1,8 @@
 import { ProbUtils } from '#utils/math/ProbUtils.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
-import { CalculationStats } from '#types/index.js';
+import { CalculationStats, PackedCombo } from '#types/index.js';
 import { SearchManager } from '#engine/search/SearchManager.js';
+import { ClueAnalysisService } from '#services/ClueAnalysisService.js';
 
 /**
  * Service for summarizing raw engine results into a standard JSON format.
@@ -11,8 +12,9 @@ export class SummaryService {
      * Summarizes raw engine results into a CalculationStats object.
      */
     public static summarize(
-        combos: Map<number, bigint>,
+        combos: Map<PackedCombo, bigint>,
         tracker: SearchManager,
+        indexToEnchant: number[],
         anyMass?: Map<number, bigint> | BigUint64Array,
         rankMass?: Map<number, bigint> | BigUint64Array,
         countMass?: Map<number, bigint> | BigUint64Array,
@@ -25,6 +27,7 @@ export class SummaryService {
             any: {},
             count: {},
             combos: {},
+            clues: {},
             threshold,
             accuracy: accounting.resolved,
             accounting
@@ -33,6 +36,9 @@ export class SummaryService {
         if (anyMass) SummaryService.populateStats(stats.any, anyMass);
         if (rankMass) SummaryService.populateStats(stats.ranks, rankMass);
         if (countMass) SummaryService.populateStats(stats.count, countMass);
+
+        const clueMass = ClueAnalysisService.calculateClueMass(combos, indexToEnchant);
+        SummaryService.populateStats(stats.clues, clueMass);
 
         // Ensure we always return sorted results if a limit is set > 0
         let comboSource: Iterable<[number, bigint]> = [];
@@ -44,11 +50,11 @@ export class SummaryService {
         if (comboLimit > 0) {
             if (combos.size <= comboLimit) {
                 comboSource = [...combos.entries()].sort(compareProbDesc);
-            } else if (comboLimit <= 250) { // Using absolute number instead of soft-coded limit for simplicity
+            } else if (comboLimit <= 250) {
                 const results: [number, bigint][] = [];
                 for (const entry of combos.entries()) {
                     const prob = entry[1];
-                const lastEntry = results[results.length - 1];
+                    const lastEntry = results[results.length - 1];
                     if (results.length < comboLimit || (lastEntry !== undefined && prob > lastEntry[1])) {
                         let low = 0, high = results.length;
                         while (low < high) {
@@ -64,6 +70,71 @@ export class SummaryService {
                 comboSource = results;
             } else {
                 comboSource = [...combos.entries()].sort(compareProbDesc).slice(0, comboLimit);
+            }
+        }
+
+        for (const [packed, probBig] of comboSource) {
+            stats.combos[packed.toString(16)] = ProbUtils.toNumber(probBig);
+        }
+
+        return stats;
+    }
+
+    /**
+     * Summarizes statistics under the condition that a specific clue is shown.
+     * 
+     * @param rawCombos Raw combination distribution.
+     * @param tracker Original search manager (for metadata).
+     * @param indexToEnchant Registry mapping.
+     * @param targetClueId The observed clue ID.
+     * @param comboLimit Result set limit.
+     * @returns Conditioned calculation statistics.
+     */
+    public static summarizeConditioned(
+        rawCombos: Map<PackedCombo, bigint>,
+        tracker: SearchManager,
+        indexToEnchant: number[],
+        targetClueId: number,
+        comboLimit: number = ENGINE_LIMITS.MAX_RESULTS_SUMMARY
+    ): CalculationStats {
+        // 1. Get honest baseline stats (invariants, absolute accuracy)
+        const stats = SummaryService.summarize(rawCombos, tracker, indexToEnchant, undefined, undefined, undefined, 0);
+
+        // 2. Perform Bayesian conditioning
+        const conditioned = ClueAnalysisService.conditionOnClue(rawCombos, targetClueId, indexToEnchant);
+        
+        // 3. Update top-level accuracy and inject absolute clue mass
+        stats.accounting.clueKnownSpace = ProbUtils.toNumber(conditioned.clueKnownSpace);
+
+        // Reset result maps for conditioned population
+        stats.any = {};
+        stats.ranks = {};
+        stats.count = {};
+        stats.combos = {};
+        stats.clues = {};
+
+        // 4. Populate result maps directly (now normalized to 1.0/100% certainty within the service)
+        const populatePlain = (target: Record<string, number>, source: Map<number, bigint>) => {
+            for (const [key, prob] of source) {
+                target[key] = ProbUtils.toNumber(prob);
+            }
+        };
+
+        populatePlain(stats.any, conditioned.anyMass);
+        populatePlain(stats.ranks, conditioned.rankMass);
+        populatePlain(stats.count, conditioned.countMass);
+        
+        // 5. Populate and rank conditioned combos
+        let comboSource: [number, bigint][] = [];
+        const compareProbDesc = (a: [any, bigint], b: [any, bigint]) => {
+            if (a[1] !== b[1]) return a[1] > b[1] ? -1 : 1;
+            return a[0] < b[0] ? 1 : (a[0] > b[0] ? -1 : 0);
+        };
+
+        if (comboLimit > 0) {
+            comboSource = [...conditioned.combos.entries()].sort(compareProbDesc);
+            if (comboSource.length > comboLimit) {
+                comboSource = comboSource.slice(0, comboLimit);
             }
         }
 

@@ -42,21 +42,21 @@ export const TEST_DATA = {
         BASE_SWORD: {
             category: 'sword',
             material: 'diamond',
-            guaranteedFirst: null as any,
+            clue: null,
             xpLevel: 30,
             version: '1.21'
         },
         BASE_PICKAXE: {
             category: 'pickaxe',
             material: 'diamond',
-            guaranteedFirst: null as any,
+            clue: null,
             xpLevel: 30,
             version: '1.21'
         },
         MODERN_BOOK: {
             category: 'book',
             material: 'book',
-            guaranteedFirst: null as any,
+            clue: null,
             xpLevel: 30,
             version: '1.21' // Internal ref
         }

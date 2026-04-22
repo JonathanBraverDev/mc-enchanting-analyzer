@@ -95,7 +95,7 @@ describe('Worker: calculateProgressive handler', () => {
                 cat: TEST_DATA.ITEMS.SWORD,
                 xp: 30,
                 mat: TEST_DATA.MATERIALS.DIAMOND,
-                guaranteedFirst: null,
+                clue: null,
                 source: 'test-prog',
                 tiers: [
                     { threshold: 0.01,   limit: 500 },
@@ -152,7 +152,7 @@ describe('Worker: calculateProgressive handler', () => {
         // Compare against a fresh direct engine call
         const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
         const directStats = await engine.calculateProgressive(
-            TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND, null,
+            TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND,
             [
                 { threshold: 0.01,   limit: 500 },
                 { threshold: TEST_DATA.THRESHOLDS.PROB_MIN, limit: 5000 },

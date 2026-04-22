@@ -47,14 +47,14 @@ test.describe('UI Performance & Stability', () => {
 
     test('should display 100% probability for guaranteed Sharpness IV on Sword', async () => {
         await analyzer.selectCategory('sword');
-        await analyzer.selectGuaranteed('Sharpness IV');
+        await analyzer.selectClue('Sharpness IV');
         await analyzer.waitForRefinementComplete();
         await expect(analyzer.rankSection).toContainText('100.0%');
     });
 
     test('should update result probabilities correctly when scrubbing the enchanting level slider', async () => {
         await analyzer.selectCategory('pickaxe');
-        await analyzer.selectGuaranteed('Efficiency IV');
+        await analyzer.selectClue('Efficiency IV');
         
         const levelsToTest = [25, 28, 30];
         for (const lvl of levelsToTest) {

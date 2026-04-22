@@ -14,6 +14,8 @@ export interface EnchantInsights {
     accuracy: number;
     /** Complete diagnostic breakdown of all mass states. */
     accounting: MassAccounting;
+    /** Map of possible clue enchantments to their original unconditioned probabilities. */
+    clues: Record<string, number>;
 }
 
 export interface NameResolver {

@@ -96,7 +96,7 @@ describe('Probability Conservation', () => {
     it('guaranteed enchant accuracy is 1.0 for bow (Power IV)', async () => {
         const engine  = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
         const stats   = await engine.calculate('bow', 30, 'bow', {
-            guaranteedFirst: 'Power IV',
+            clue: 'Power IV',
             threshold: TEST_DATA.THRESHOLDS.PROB_MIN,
         });
 

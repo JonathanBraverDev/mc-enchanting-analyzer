@@ -53,16 +53,13 @@ export class SearchProcessor {
         packedChosen: PackedCombo,
         currentEnchants: PackedEnchant[],
         prob: bigint,
-        guaranteedFirstId: number | null,
-        enchantToIndex: Map<number, number>,
-        indexToEnchant: number[],
         results: Map<PackedCombo, bigint>,
         countMass: BigUint64Array,
         anyMass: BigUint64Array,
         rankMass: BigUint64Array
     ): bigint {
         if (isBook && currentCount > 1) {
-            const { rem } = this.redistributeBookProb(packedChosen, currentEnchants, prob, currentCount, guaranteedFirstId, enchantToIndex, indexToEnchant, results, countMass, anyMass, rankMass);
+            const { rem } = this.redistributeBookProb(packedChosen, currentEnchants, prob, currentCount, results, countMass, anyMass, rankMass);
             return rem;
         } else {
             ProbUtils.addItemMass(results, packedChosen, prob);
@@ -80,15 +77,12 @@ export class SearchProcessor {
         originalEnchants: PackedEnchant[],
         prob: bigint,
         currentCount: number,
-        guaranteedFirstId: number | null,
-        _enchantToIndex: Map<number, number>,
-        indexToEnchant: number[],
         results: Map<PackedCombo, bigint>,
         countMass: BigUint64Array,
         anyMass: BigUint64Array,
         rankMass: BigUint64Array
     ): { rem: bigint } {
-        const redistributed = ComboUtils.removeAdditional(packedChosen, guaranteedFirstId, indexToEnchant) as PackedCombo[];
+        const redistributed = ComboUtils.removeAdditional(packedChosen) as PackedCombo[]; 
         const nOutcomes = redistributed.length;
         
         let quotient = 0n;
@@ -110,16 +104,14 @@ export class SearchProcessor {
         const finalCount = currentCount - 1;
         ProbUtils.addItemMass(countMass, finalCount, prob);
 
+        const survivorMass = ProbUtils.roundScale(prob, BigInt(nOutcomes - 1), BigInt(nOutcomes));
+        const lossPerEnchant = prob - survivorMass;
+
         for (const e of originalEnchants) {
             const id = ComboUtils.getEnchantId(e);
-            const isGuaranteed = guaranteedFirstId !== null && id === guaranteedFirstId;
-            const nSurvivors = isGuaranteed ? nOutcomes : nOutcomes - 1;
-            
-            const survivorMass = ProbUtils.roundScale(prob, BigInt(nSurvivors), BigInt(nOutcomes));
-            const loss = prob - survivorMass;
-            if (loss > 0n) {
-                ProbUtils.addItemMass(anyMass, id, -loss);
-                ProbUtils.addItemMass(rankMass, e, -loss);
+            if (lossPerEnchant > 0n) {
+                ProbUtils.addItemMass(anyMass, id, -lossPerEnchant);
+                ProbUtils.addItemMass(rankMass, e, -lossPerEnchant);
             }
         }
 
@@ -136,7 +128,7 @@ export class SearchProcessor {
         ctx: ForwardingContext,
         tracker: SearchManager
     ): void {
-        const { registry, timing, queue, guaranteedFirstId, pool, poolWeights, initialTotalWeight } = ctx;
+        const { registry, timing, queue, pool, poolWeights, initialTotalWeight } = ctx;
         
         const splits = this.withTiming(timing, 'distributionMs', () => {
             const buffer = DistributionPool.getBuffer(0);
@@ -152,7 +144,7 @@ export class SearchProcessor {
                 
                 const nextId = ComboUtils.getEnchantId(e);
                 const nextMeta = ((1n << BigInt(nextId)) << 8n) | BigInt(currentLevel);
-                const nextPacked = ComboUtils.pack([e], guaranteedFirstId, registry.enchantToIndex) as PackedCombo;
+                const nextPacked = ComboUtils.pack([e], registry.enchantToIndex) as PackedCombo;
 
                 ProbUtils.addItemMass(ctx.anyMass, nextId, pNext);
                 ProbUtils.addItemMass(ctx.rankMass, e, pNext);

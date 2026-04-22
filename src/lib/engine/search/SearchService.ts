@@ -22,7 +22,6 @@ export class SearchService {
         registry: RegistryState,
         cat: string,
         modLevel: number,
-        guaranteedFirst: string | null = null,
         existingState?: SearchState,
         config?: SearchContext
     ): Promise<SearchState> {
@@ -36,10 +35,9 @@ export class SearchService {
         let startTime = 0;
         if (timingResult) startTime = performance.now();
         
-        const state = StateFactory.create(registry, modLevel, guaranteedFirst, existingState, threshold);
+        const state = StateFactory.create(modLevel, existingState, threshold);
         const { results, queue } = state;
         
-        const guaranteedFirstId = StateFactory.getGuaranteedFirstId(registry, guaranteedFirst);
         const initialPool = getEligiblePool(registry, cat, modLevel, this.cache, registry.version);
         
         const poolWeights: number[] = initialPool.map(e => registry.weightMap[e >> 8] ?? 0);
@@ -60,7 +58,6 @@ export class SearchService {
             instrumentation: config?.instrumentation,
             timing: timingResult ? { totalMs: 0, searchMs: 0, filteringMs: 0, distributionMs: 0, settlingMs: 0, heapMs: 0 } : undefined,
             cat,
-            guaranteedFirstId,
             pool: initialPool,
             poolWeights,
             initialTotalWeight

@@ -35,6 +35,22 @@ describe('Registry & Data Rules Test Suite', () => {
             assert.ok(getCategoryPool(v111, 'sword').includes('Sweeping Edge'), '1.11.1: Sword pool SHOULD include Sweeping Edge');
         });
 
+        it('should correctly handle Netherite availability (1.16+)', () => {
+             const v115 = EngineFactory.create(DATA, '1.15').registry;
+             assert.ok(!getEligibleMaterials(v115, 'sword').includes('netherite'), '1.15: Should not have netherite');
+
+             const v116 = EngineFactory.create(DATA, '1.16').registry;
+             assert.ok(getEligibleMaterials(v116, 'sword').includes('netherite'), '1.16: SHOULD have netherite');
+        });
+
+        it('should correctly handle Copper availability (1.21.9+)', () => {
+             const v121 = EngineFactory.create(DATA, '1.21').registry;
+             assert.ok(!getEligibleMaterials(v121, 'sword').includes('copper'), '1.21: Should not have copper');
+
+             const v1219 = EngineFactory.create(DATA, '1.21.9').registry;
+             assert.ok(getEligibleMaterials(v1219, 'sword').includes('copper'), '1.21.9: SHOULD have copper');
+        });
+
         it('should correctly handle Protection conflicts (1.14 vs 1.14.3)', () => {
             const reg114 = EngineFactory.create(DATA, '1.14').registry;
             const protId = getEnchantId(reg114, 'Protection')!;
@@ -115,6 +131,13 @@ describe('Registry & Data Rules Test Suite', () => {
                 assert.ok(!ids.has(id), `Material "${mat}" should have a unique ID, but ${id} is already taken`);
                 ids.add(id);
             });
+        });
+
+        it('should return correct enchantability values for classic materials', () => {
+            // Diamond sword enchantability is 10
+            assert.strictEqual(reg.data.material_values.tools['diamond'], 10);
+            // Gold sword enchantability is 22
+            assert.strictEqual(reg.data.material_values.tools['gold'], 22);
         });
     });
 });

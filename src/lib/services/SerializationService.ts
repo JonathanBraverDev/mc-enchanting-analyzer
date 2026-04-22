@@ -38,6 +38,16 @@ export class SerializationService {
             anyProbs[ai] = prob as number;
             ai++;
         }
+        
+        const clueEntries = Object.entries(stats.clues);
+        const clueKeys = new Uint32Array(clueEntries.length);
+        const clueProbs = new Float64Array(clueEntries.length);
+        let cli = 0;
+        for (const [key, prob] of clueEntries) {
+            clueKeys[cli] = Number(key);
+            clueProbs[cli] = prob as number;
+            cli++;
+        }
 
         const counts = new Float64Array(ENGINE_DEFAULTS.MAX_COUNT_STATS);
         for (let i = 0; i < ENGINE_DEFAULTS.MAX_COUNT_STATS; i++) counts[i] = (stats.count[i] || 0);
@@ -46,6 +56,7 @@ export class SerializationService {
             comboKeys, comboProbs,
             rankKeys, rankProbs,
             anyKeys, anyProbs,
+            clueKeys, clueProbs,
             counts, 
             accuracy: stats.accuracy,
             accounting: stats.accounting,
@@ -58,6 +69,7 @@ export class SerializationService {
                 comboKeys.buffer, comboProbs.buffer,
                 rankKeys.buffer, rankProbs.buffer,
                 anyKeys.buffer, anyProbs.buffer,
+                clueKeys.buffer, clueProbs.buffer,
                 counts.buffer
             ]
         };
@@ -68,7 +80,7 @@ export class SerializationService {
      */
     public static deserialize(compact: CompactStats): CalculationStats {
         const stats: CalculationStats = { 
-            ranks: {}, any: {}, count: {}, combos: {}, 
+            ranks: {}, any: {}, count: {}, combos: {}, clues: {}, 
             accuracy: compact.accuracy,
             accounting: compact.accounting,
             threshold: compact.threshold
@@ -88,6 +100,11 @@ export class SerializationService {
             const prob = compact.anyProbs[i];
             if (prob === undefined) continue;
             stats.any[key] = prob;
+        }
+        for (const [i, key] of compact.clueKeys.entries()) {
+            const prob = compact.clueProbs[i];
+            if (prob === undefined) continue;
+            stats.clues[key] = prob;
         }
         for (const [i, val] of compact.counts.entries()) {
             if (val > 0) stats.count[i] = val;

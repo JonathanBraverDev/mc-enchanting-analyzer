@@ -103,12 +103,12 @@ test.describe('UI Regression & Edge Cases', () => {
         await analyzer.selectCategory('pickaxe');
         
         // Random First (None)
-        await analyzer.selectGuaranteed('');
+        await analyzer.selectClue('');
         await analyzer.waitForRefinementComplete();
         await expect(analyzer.rankSection).not.toContainText('100.0%'); // Usually not 100% for specific one if random
 
         // Guaranteed Efficiency IV
-        await analyzer.selectGuaranteed('Efficiency IV');
+        await analyzer.selectClue('Efficiency IV');
         await analyzer.waitForRefinementComplete();
         // Check for base name (Any Efficiency) and 100.0% separately to avoid roman numeral rank mismatch in rank section
         await expect(analyzer.rankSection).toContainText('Any Efficiency');
@@ -130,7 +130,7 @@ test.describe('UI Regression & Edge Cases', () => {
     test('should allow multi-protection in God Armor period (1.14)', async () => {
         await analyzer.selectVersion(TEST_DATA.GOD_ARMOR.START);
         await analyzer.selectCategory(TEST_DATA.ITEMS.CHESTPLATE);
-        await analyzer.selectGuaranteed('Protection IV');
+        await analyzer.selectClue('Protection IV');
         
         await analyzer.waitForRefinementComplete();
         
@@ -141,7 +141,7 @@ test.describe('UI Regression & Edge Cases', () => {
     test('should block multi-protection after God Armor period (1.14.3)', async () => {
         await analyzer.selectVersion(TEST_DATA.GOD_ARMOR.END);
         await analyzer.selectCategory(TEST_DATA.ITEMS.CHESTPLATE);
-        await analyzer.selectGuaranteed('Protection IV');
+        await analyzer.selectClue('Protection IV');
         
         await analyzer.waitForRefinementComplete();
         

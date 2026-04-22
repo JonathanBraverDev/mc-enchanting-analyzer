@@ -12,9 +12,9 @@ async function updateSnapshots() {
     const HI_RES_THRESHOLD = 0.00000001; // 1e-8: Full accurate resolution
 
     // Helper to generate snapshots with new API signature
-    const getStats = async (engine: EnchantEngine, cat: string, xp: number, mat: string, guaranteedFirst: string | null = null) => {
+    const getStats = async (engine: EnchantEngine, cat: string, xp: number, mat: string, clue: string | null = null) => {
         return await engine.calculate(cat, xp, mat, {
-            guaranteedFirst,
+            clue,
             threshold: HI_RES_THRESHOLD,
             maxIterations: SNAPSHOT_ITERATIONS,
             resultsLimit: SNAPSHOT_LIMIT,
@@ -58,18 +58,18 @@ async function updateSnapshots() {
     
 
     // 1.21 Sword @ Level 30 with Guaranteed Sharpness IV
-    console.log('Generating 1.21_sword_30_diamond_guaranteed_sharpness...');
+    console.log('Generating 1.21_sword_30_diamond_clue_sharpness...');
     const v121g = EngineFactory.create(DATA, '1.21');
     const s121g = await getStats(v121g, 'sword', 30, 'diamond', 'Sharpness IV');
-    await SnapshotUtils.saveSnapshot('1.21_sword_30_diamond_guaranteed_sharpness', s121g);
+    await SnapshotUtils.saveSnapshot('1.21_sword_30_diamond_clue_sharpness', s121g);
     
     v121g.resetCaches();
 
     // 1.8 Bow @ Level 30 with Guaranteed Power IV
-    console.log('Generating 1.8_bow_30_bow_guaranteed_power...');
+    console.log('Generating 1.8_bow_30_bow_clue_power...');
     const e18g = EngineFactory.create(DATA, '1.8');
     const s18g = await getStats(e18g, 'bow', 30, 'bow', 'Power IV');
-    await SnapshotUtils.saveSnapshot('1.8_bow_30_bow_guaranteed_power', s18g);
+    await SnapshotUtils.saveSnapshot('1.8_bow_30_bow_clue_power', s18g);
     e18g.resetCaches();
 
     console.log('Snapshots updated successfully.');

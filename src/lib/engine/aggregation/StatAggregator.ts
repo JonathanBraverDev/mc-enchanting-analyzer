@@ -1,4 +1,4 @@
-import { PRECISION, ProbUtils, AsyncUtils, EnchantUtils } from '#utils/index.js';
+import { PRECISION, ProbUtils, AsyncUtils } from '#utils/index.js';
 import { getEnchantability } from '#core/registry.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import { getSearchLimit } from '#core/config.js';
@@ -38,7 +38,6 @@ export class StatAggregator {
         cat: string,
         xp: number,
         mat: string,
-        guaranteedFirst: string | null,
         tiers: Array<{ threshold: number; limit: number }>,
         onTierComplete: (result: AggregationResult, tierIndex: number) => void,
         config: InternalSearchConfig
@@ -93,7 +92,7 @@ export class StatAggregator {
                 const existingState = stateMap.get(ml);
 
                 const result = await this.searchService.search(
-                    registry, cat, ml, guaranteedFirst,
+                    registry, cat, ml,
                     existingState, {
                         threshold: activeThreshold,
                         limit: tier.limit,
@@ -126,9 +125,6 @@ export class StatAggregator {
             const distRoundingError = PRECISION - processedMProb;
             tierTracker.record('rounding', distRoundingError);
 
-            if (guaranteedFirst) {
-                this.reconcileGuaranteedMass(registry, guaranteedFirst, totalAnyMass, totalRankMass);
-            }
 
             const tierResult: AggregationResult = {
                 combos: finalCombos,
@@ -159,7 +155,6 @@ export class StatAggregator {
      * @param cat Item category.
      * @param xp Base XP level.
      * @param mat Item material.
-     * @param guaranteedFirst Optional guaranteed enchantment.
      * @param config Internal search configuration.
      */
     public async calculate(
@@ -167,7 +162,6 @@ export class StatAggregator {
         cat: string,
         xp: number,
         mat: string,
-        guaranteedFirst: string | null = null,
         config: InternalSearchConfig = {}
     ): Promise<AggregationResult> {
         const {
@@ -216,7 +210,7 @@ export class StatAggregator {
             }
 
             const result = await this.searchService.search(
-                registry, cat, ml, guaranteedFirst,
+                registry, cat, ml,
                 cached, {
                     threshold: bThreshold,
                     limit,
@@ -263,9 +257,6 @@ export class StatAggregator {
         const distRoundingError = PRECISION - processedMProb;
         globalTracker.record('rounding', distRoundingError);
 
-        if (guaranteedFirst) {
-            this.reconcileGuaranteedMass(registry, guaranteedFirst, totalAnyMass, totalRankMass);
-        }
 
         return {
             combos: finalCombos,
@@ -343,27 +334,5 @@ export class StatAggregator {
         const checkpointSummary = this.buildCheckpointSummary(checkpoints);
         instr.checkpointSummary = checkpointSummary;
         return { ...instr, checkpoints, checkpointSummary };
-    }
-
-    /**
-     * Final mass reconciliation for guaranteed enchantments.
-     * Ensures that if the search was aborted or thresholded early, the guaranteed
-     * enchantment still reflects 100% mass in the summary counters.
-     */
-    private reconcileGuaranteedMass(
-        registry: RegistryState,
-        guaranteedFirst: string,
-        totalAnyMass: BigUint64Array,
-        totalRankMass: BigUint64Array
-    ): void {
-        const romanMap = registry.data.constants.ROMAN_MAP;
-        const parsed = EnchantUtils.parse(guaranteedFirst, romanMap);
-        const gId = parsed ? registry.idMap.get(parsed.name) : undefined;
-
-        if (gId !== undefined) {
-            totalAnyMass[gId] = PRECISION;
-            const fullId = (gId << 8) | (parsed?.rank ?? 1);
-            totalRankMass[fullId] = PRECISION;
-        }
     }
 }

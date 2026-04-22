@@ -103,9 +103,9 @@ describe('Enchantment Engine Test Suite', () => {
             assert.ok(prob > 0.0001);
         });
 
-        it('Guaranteed First should yield 100% total probability', async () => {
-            const guaranteedFirst = "Efficiency IV";
-            const stats = await engine.calculate(TEST_DATA.ITEMS.PICKAXE, 30, TEST_DATA.MATERIALS.DIAMOND, { guaranteedFirst, threshold: TEST_DATA.THRESHOLDS.PROB_MIN });
+        it('Clue conditioning should yield 100% total probability (Pickaxe)', async () => {
+            const clue = "Efficiency IV";
+            const stats = await engine.calculate(TEST_DATA.ITEMS.PICKAXE, 30, TEST_DATA.MATERIALS.DIAMOND, { clue, threshold: TEST_DATA.THRESHOLDS.PROB_MIN });
             const effId = engine.registry.idMap.get('Efficiency')!;
             const probAnyEff = stats.any[effId];
             
@@ -113,8 +113,9 @@ describe('Enchantment Engine Test Suite', () => {
             for (const p of Object.values(stats.combos)) {
                 totalComboProb += Number(p);
             }
-            assert.ok((probAnyEff ?? 0) > 0.999);
-            assert.ok(totalComboProb > 0.999);
+            // Conditioned results should target 1.0 (100% conditional certainty)
+            assert.ok((probAnyEff ?? 0) > 0.9999, `Expected ~1.0, got ${probAnyEff}`);
+            assert.ok(totalComboProb > 0.9999, `Expected ~1.0, got ${totalComboProb}`);
         });
 
         it('should maintain high precision for complex enchantment results', async () => {
@@ -126,29 +127,31 @@ describe('Enchantment Engine Test Suite', () => {
             assert.ok(Math.abs(totalProb - 1.0) < 1e-12);
         });
 
-        it('Frontier Mass Tracking: Guaranteed enchantment must be 100% even with high uncertainty', async () => {
+        it('Frontier Mass Tracking: Clue conditioning must be 100% even with high uncertainty', async () => {
              const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
              
              // Force a high-uncertainty search by setting extremely low maxIterations (e.g., 5)
              const stats = await engine.calculate(
                  TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND,
-                 { guaranteedFirst: 'Sharpness IV', threshold: 0.000001, maxIterations: 5 }
+                 { clue: 'Sharpness IV', threshold: 0.000001, maxIterations: 5 }
              );
      
              const sharpnessId = getEnchantId(engine.registry,'Sharpness');
              const anySharpness = stats.any[sharpnessId];
              
              assert.ok(stats.accounting.pending > 0.1, `Expected high uncertainty, got ${stats.accounting.pending}`);
-             assert.ok(Math.abs((anySharpness ?? 0) - 1.0) < 0.0001, `Guaranteed enchantment should be ~100%, got ${anySharpness}`);
+             assert.ok((anySharpness ?? 0) > 0.9999, 'Any Sharpness prob should be ~1.0 even with high search uncertainty');
              
-             const totalCounted = Object.values(stats.count).reduce((a: any, b: any) => a + b, 0) as number;
-             assert.ok(Math.abs(totalCounted + stats.accounting.pending - 1.0) < 0.0001, 'Total probability including uncertainty must be 1.0');
+             // Conditioned results target 1.0 to reflect absolute posterior certainty,
+             // while stats.accuracy preserves the search progress.
+             const totalComboProb = Object.values(stats.combos).reduce((a: number, b: any) => a + Number(b), 0);
+             assert.ok(Math.abs(totalComboProb - 1.0) < 0.0001, 'Conditioned results should sum to 1.0');
          });
 
-         it('Regression: Guaranteed first must still allow single-enchant outcomes (Match Wiki)', async () => {
+         it('Regression: Clue conditioning must still allow single-enchant outcomes (Match Wiki)', async () => {
              const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.LAPIS_PIVOT);
              const stats = await engine.calculate(TEST_DATA.ITEMS.BOW, 30, TEST_DATA.MATERIALS.BOW, { 
-                 guaranteedFirst: 'Power IV', 
+                 clue: 'Power IV', 
                  threshold: 0.0001 
              });
              
@@ -156,11 +159,11 @@ describe('Enchantment Engine Test Suite', () => {
              assert.ok(count1 > 0.2, `Expected single-enchant probability to be > 20%, got ${count1}`);
          });
 
-         it('Guaranteed book enchant should be exactly 100%', async () => {
+         it('Clue conditioned book enchant should be exactly 100%', async () => {
              const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.POST_NETHERITE);
-             const stats = await engine.calculate(TEST_DATA.ITEMS.BOOK, 30, TEST_DATA.MATERIALS.BOOK, { guaranteedFirst: 'Silk Touch I', threshold: TEST_DATA.THRESHOLDS.PROB_MIN, summaryLimit: 1000 });
+             const stats = await engine.calculate(TEST_DATA.ITEMS.BOOK, 30, TEST_DATA.MATERIALS.BOOK, { clue: 'Silk Touch I', threshold: TEST_DATA.THRESHOLDS.PROB_MIN, summaryLimit: 1000 });
              const silkTouchId = getEnchantId(engine.registry,'Silk Touch');
-             assert.strictEqual(stats.any[silkTouchId], 1.0, 'Guaranteed book enchant should be 100%');
+             assert.strictEqual(stats.any[silkTouchId], 1.0, 'Guaranteed book enchant should be exactly 100%');
          });
     });
 
@@ -195,20 +198,23 @@ describe('Enchantment Engine Test Suite', () => {
 
         it('Snapshot: 1.21.11 Book @ Level 30', async () => {
             const engine = EngineFactory.create(DATA, '1.21.11');
+            engine.resetCaches();
             const stats = await engine.calculate(TEST_DATA.ITEMS.BOOK, 30, TEST_DATA.MATERIALS.BOOK, { threshold: SNAPSHOT_THRESHOLD, maxIterations: SNAPSHOT_ITERATIONS, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false });
             await SnapshotUtils.assertSnapshot('1.21.11_book_30_book', stats);
         });
 
-        it('Snapshot: 1.21 Diamond Sword @ Level 30 (Guaranteed Sharpness IV)', async () => {
+        it('Snapshot: 1.21 Diamond Sword @ Level 30 (Clue Sharpness IV)', async () => {
             const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
-            const stats = await engine.calculate(TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND, { threshold: SNAPSHOT_THRESHOLD, maxIterations: SNAPSHOT_LIMIT, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false, guaranteedFirst: 'Sharpness IV' });
-            await SnapshotUtils.assertSnapshot('1.21_sword_30_diamond_guaranteed_sharpness', stats);
+            engine.resetCaches();
+            const stats = await engine.calculate(TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND, { threshold: SNAPSHOT_THRESHOLD, maxIterations: SNAPSHOT_ITERATIONS, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false, clue: 'Sharpness IV' });
+            await SnapshotUtils.assertSnapshot('1.21_sword_30_diamond_clue_sharpness', stats);
         });
 
-        it('Snapshot: 1.8 Bow @ Level 30 (Guaranteed Power IV)', async () => {
+        it('Snapshot: 1.8 Bow @ Level 30 (Clue Power IV)', async () => {
             const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.LAPIS_PIVOT);
-            const stats = await engine.calculate(TEST_DATA.ITEMS.BOW, 30, TEST_DATA.MATERIALS.BOW, { threshold: SNAPSHOT_THRESHOLD, maxIterations: SNAPSHOT_ITERATIONS, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false, guaranteedFirst: 'Power IV' });
-            await SnapshotUtils.assertSnapshot('1.8_bow_30_bow_guaranteed_power', stats);
+            engine.resetCaches();
+            const stats = await engine.calculate(TEST_DATA.ITEMS.BOW, 30, TEST_DATA.MATERIALS.BOW, { threshold: SNAPSHOT_THRESHOLD, maxIterations: SNAPSHOT_ITERATIONS, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false, clue: 'Power IV' });
+            await SnapshotUtils.assertSnapshot('1.8_bow_30_bow_clue_power', stats);
         });
     });
 

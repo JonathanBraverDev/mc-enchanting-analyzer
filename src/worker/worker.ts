@@ -49,7 +49,6 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
                         payload.xp,
                         payload.mat,
                         {
-                            guaranteedFirst: payload.guaranteedFirst,
                             threshold: payload.threshold,
                             signal,
                             onProgress: (update) => {
@@ -97,7 +96,6 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
                         payload.cat,
                         payload.xp,
                         payload.mat,
-                        payload.guaranteedFirst,
                         payload.tiers,
                         (tierStats) => {
                             const { compact, transferables } = SerializationService.serialize(tierStats);
@@ -105,8 +103,51 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
                         },
                         {
                             signal,
+                            clue: payload.clue,
                             summaryLimit: payload.summaryLimit,
                             resultsLimit: payload.resultsLimit,
+                        }
+                    );
+
+                    const { compact, transferables } = SerializationService.serialize(stats);
+                    workerScope.postMessage({ type: 'result', id, payload: { stats: compact } }, transferables);
+                } catch (err: unknown) {
+                    if (err instanceof Error && err.message === "Aborted") {
+                        self.postMessage({ type: 'error', id, payload: 'Aborted' });
+                        return;
+                    }
+                    throw err;
+                } finally {
+                    if (abortControllers.get(source) === ctrl) {
+                        abortControllers.delete(source);
+                    }
+                }
+                break;
+            }
+
+            case 'calculateConditioned': {
+                const source = payload.source || 'main_conditioned';
+
+                const existing = abortControllers.get(source);
+                if (existing) {
+                    existing.abort();
+                }
+
+                const ctrl = new AbortController();
+                abortControllers.set(source, ctrl);
+                const signal = ctrl.signal;
+
+                try {
+                    const stats = await engine.calculateConditioned(
+                        payload.cat,
+                        payload.xp,
+                        payload.mat,
+                        payload.clue,
+                        {
+                            threshold: payload.threshold,
+                            summaryLimit: payload.summaryLimit,
+                            resultsLimit: payload.resultsLimit,
+                            signal
                         }
                     );
 

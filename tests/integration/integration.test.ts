@@ -417,10 +417,10 @@ describe('Integration: Version switch and book state reset', () => {
 
 describe('Integration: Guaranteed enchantment accuracy (engine direct)', () => {
 
-    it('guaranteed enchantment (Sword): Sharpness probability >= 99.99% at level 30', async () => {
+    it('clue conditioning (Sword): Sharpness probability >= 99.99% at level 30', async () => {
         const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
         const stats = await engine.calculate(TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND, {
-            guaranteedFirst: 'Sharpness IV',
+            clue: 'Sharpness IV',
             threshold: TEST_DATA.THRESHOLDS.PROB_MIN,
         });
         const sharpnessId = engine.registry.idMap.get('Sharpness')!;
@@ -430,14 +430,14 @@ describe('Integration: Guaranteed enchantment accuracy (engine direct)', () => {
         );
     });
 
-    it('guaranteed enchantment (Pickaxe): Efficiency probability >= 99.99% at levels 25, 28, 30', async () => {
+    it('clue conditioning (Pickaxe): Efficiency probability >= 99.99% at levels 25, 28, 30', async () => {
         const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
         const effId = engine.registry.idMap.get('Efficiency')!;
         // Efficiency IV is impossible at Level 10/20 for Diamond (Enchantability 10). 
         // Using 25, 28, 30 instead.
         for (const level of [25, 28, 30]) {
             const stats = await engine.calculate(TEST_DATA.ITEMS.PICKAXE, level, TEST_DATA.MATERIALS.DIAMOND, {
-                guaranteedFirst: 'Efficiency IV',
+                clue: 'Efficiency IV',
                 threshold: TEST_DATA.THRESHOLDS.PROB_MIN,
             });
             const prob = stats.any[effId] ?? 0;
@@ -449,10 +449,10 @@ describe('Integration: Guaranteed enchantment accuracy (engine direct)', () => {
         }
     });
 
-    it('guaranteed book enchantment: Silk Touch exactly 100%', async () => {
+    it('clue conditioning (Book): Silk Touch exactly 100%', async () => {
         const engine = EngineFactory.create(DATA, '1.20.1');
         const stats = await engine.calculate('book', 30, 'book', {
-            guaranteedFirst: 'Silk Touch I',
+            clue: 'Silk Touch I',
             threshold: 0.0001,
         });
         const silkTouchId = engine.registry.idMap.get('Silk Touch')!;

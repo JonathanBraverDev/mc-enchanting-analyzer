@@ -15,6 +15,8 @@ export interface CalculationStats {
   count: { [count: number]: number };
   /** Map of bit-packed hexadecimal combo strings to their joint probability. */
   combos: { [packed: string]: number };
+  /** Map of enchantment rank IDs to their total probability of being the shown clue. Key is (enchantId << 8 | rank). */
+  clues: { [idAndRank: number]: number };
   
   /** The minimum probability threshold used for this search. */
   threshold: number;
@@ -164,7 +166,6 @@ export interface ForwardingContext {
     
     // Search-global parameters
     cat: string;
-    guaranteedFirstId: number | null;
     pool: PackedEnchant[];
     poolWeights: number[];
     initialTotalWeight: number;
@@ -216,11 +217,9 @@ export type PackedEnchant = number & { __brand: "PackedEnchant" };
 export type PackedCombo = number & { __brand: "PackedCombo" };
 export type ProbabilityValue = bigint & { __brand: "ProbabilityValue" };
 
-/**
- * Public configuration options for a full statistics calculation.
- */
 export interface SearchConfig {
-    guaranteedFirst?: string | null | undefined;
+    /** The observed enchantment clue (e.g. "Sharpness IV"). Trigger Bayesian conditioning if set. */
+    clue?: string | null | undefined;
     threshold?: number | bigint | undefined;
     signal?: AbortSignal | undefined;
     onProgress?: ((update: ProgressUpdate) => void) | undefined;

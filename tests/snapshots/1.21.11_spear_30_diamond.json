@@ -494,6 +494,7 @@
     "rounding": 1.465841337200402e-16,
     "recoveredRounding": 6.505213034913027e-16,
     "recoveredSieved": 0,
+    "clueKnownSpace": 0,
     "units": {
       "resolved": "1152911531077485487",
       "pending": "0",
@@ -502,7 +503,8 @@
       "capped": "0",
       "rounding": "169",
       "recoveredRounding": "750",
-      "recoveredSieved": "0"
+      "recoveredSieved": "0",
+      "clueKnownSpace": "0"
     }
   }
 }

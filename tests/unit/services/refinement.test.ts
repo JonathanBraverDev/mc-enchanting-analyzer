@@ -17,7 +17,7 @@ describe('RefinementService', () => {
                 const tiers = (payload as any).tiers;
                 for (let i = 0; i < tiers.length; i++) {
                     // Small delay to ensure it's truly async
-                    await new Promise(r => setTimeout(r, 1));
+                    await new Promise(r => setTimeout(r, 10));
                     onProgress?.({
                         stats: {
                             accuracy: 1.0 - tiers[i].threshold,
@@ -44,7 +44,7 @@ describe('RefinementService', () => {
             category: TEST_DATA.ITEMS.SWORD,
             material: TEST_DATA.MATERIALS.DIAMOND,
             xpLevel: 30,
-            guaranteedFirst: null,
+            clue: null,
             version: TEST_DATA.VERSIONS.MODERN
         };
 
@@ -67,7 +67,7 @@ describe('RefinementService', () => {
             category: TEST_DATA.ITEMS.SWORD,
             material: TEST_DATA.MATERIALS.DIAMOND,
             xpLevel: 30,
-            guaranteedFirst: null,
+            clue: null,
             version: TEST_DATA.VERSIONS.MODERN
         };
 
@@ -75,7 +75,7 @@ describe('RefinementService', () => {
             category: TEST_DATA.ITEMS.BOW,
             material: TEST_DATA.MATERIALS.DIAMOND,
             xpLevel: 30,
-            guaranteedFirst: null,
+            clue: null,
             version: TEST_DATA.VERSIONS.MODERN
         };
 
@@ -109,7 +109,7 @@ describe('RefinementService', () => {
             category: TEST_DATA.ITEMS.SWORD,
             material: TEST_DATA.MATERIALS.DIAMOND,
             xpLevel: 30,
-            guaranteedFirst: null,
+            clue: null,
             version: TEST_DATA.VERSIONS.MODERN
         };
 

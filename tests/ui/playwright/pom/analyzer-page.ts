@@ -9,7 +9,7 @@ export class AnalyzerPage {
     readonly versionSelect: Locator;
     readonly categorySelect: Locator;
     readonly materialSelect: Locator;
-    readonly guaranteedSelect: Locator;
+    readonly clueSelect: Locator;
     readonly levelSlider: Locator;
     readonly levelValue: Locator;
     readonly enchantabilityValue: Locator;
@@ -31,7 +31,7 @@ export class AnalyzerPage {
         this.versionSelect = page.getByLabel('Version');
         this.categorySelect = page.getByLabel('Item Category');
         this.materialSelect = page.getByLabel('Material');
-        this.guaranteedSelect = page.getByLabel('Guaranteed First');
+        this.clueSelect = page.getByLabel('Shown in Table');
         
         // Level slider label contains dynamic text, so we use the slider role or specific text
         this.levelSlider = page.getByRole('slider');
@@ -66,8 +66,8 @@ export class AnalyzerPage {
         await this.materialSelect.selectOption(material);
     }
 
-    async selectGuaranteed(enchantment: string) {
-        await this.guaranteedSelect.selectOption(enchantment);
+    async selectClue(enchantment: string) {
+        await this.clueSelect.selectOption(enchantment);
     }
 
     async setLevel(level: number) {

@@ -22,7 +22,8 @@ export class HumanizationService {
             count: { ...stats.count },
             combos: {},
             accuracy: stats.accuracy,
-            accounting: stats.accounting
+            accounting: stats.accounting,
+            clues: {}
         };
 
         for (const [idAndRank, prob] of Object.entries(stats.ranks)) {
@@ -33,6 +34,13 @@ export class HumanizationService {
         for (const [id, prob] of Object.entries(stats.any)) {
             const name = getEnchantName(resolver, Number(id));
             human.any[name] = prob as number;
+        }
+
+        if (stats.clues) {
+            for (const [idAndRank, prob] of Object.entries(stats.clues)) {
+                const name = getFullEnchantName(resolver, Number(idAndRank));
+                human.clues[name] = prob as number;
+            }
         }
 
         const rawCombos: Record<string, number> = {};

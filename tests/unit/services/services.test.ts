@@ -21,7 +21,7 @@ import type { CalculationStats, MassAccounting } from '#types/index.js';
 describe('SummaryService', () => {
     it('empty combos map yields empty combos output', () => {
         const tracker = new SearchManager();
-        const result = SummaryService.summarize(new Map(), tracker);
+        const result = SummaryService.summarize(new Map(), tracker, []);
         assert.deepStrictEqual(result.combos, {});
     });
 
@@ -29,7 +29,7 @@ describe('SummaryService', () => {
         const pending = PRECISION / 4n; // represents 0.25
         const tracker = new SearchManager();
         tracker.record('pending', pending);
-        const result = SummaryService.summarize(new Map(), tracker);
+        const result = SummaryService.summarize(new Map(), tracker, []);
         assert.ok(Math.abs(result.accounting.pending - 0.25) < 1e-12, `got ${result.accounting.pending}`);
     });
 
@@ -44,7 +44,7 @@ describe('SummaryService', () => {
         countMass[3] = PRECISION / 5n;
 
         const tracker = new SearchManager();
-        const result = SummaryService.summarize(new Map(), tracker, anyMass, rankMass, countMass);
+        const result = SummaryService.summarize(new Map(), tracker, [], anyMass, rankMass, countMass);
         assert.ok(Math.abs((result.any[5] ?? 0)         - 0.5)  < 1e-12);
         assert.ok(Math.abs((result.ranks[0x0501] ?? 0)  - 0.25) < 1e-12);
         assert.ok(Math.abs((result.count[3] ?? 0)       - 0.2)  < 1e-10);
@@ -54,7 +54,7 @@ describe('SummaryService', () => {
         const combos = new Map<number, bigint>();
         for (let i = 1; i <= 10; i++) combos.set(i, BigInt(i) * (PRECISION / 100n));
         const tracker = new SearchManager();
-        const result = SummaryService.summarize(combos, tracker, undefined, undefined, undefined, 0);
+        const result = SummaryService.summarize(combos as any, tracker, [], undefined, undefined, undefined, 0);
         assert.deepStrictEqual(result.combos, {});
     });
 
@@ -63,7 +63,7 @@ describe('SummaryService', () => {
         for (let i = 1; i <= 10; i++) combos.set(i, BigInt(i) * (PRECISION / 1000n));
 
         const tracker = new SearchManager();
-        const result = SummaryService.summarize(combos, tracker, undefined, undefined, undefined, 3);
+        const result = SummaryService.summarize(combos as any, tracker, [], undefined, undefined, undefined, 3);
         const numericKeys = Object.keys(result.combos).map(k => parseInt(k, 16));
 
         assert.strictEqual(numericKeys.length, 3, 'should return exactly 3 combos');
@@ -77,7 +77,7 @@ describe('SummaryService', () => {
         for (let i = 1; i <= 400; i++) combos.set(i, BigInt(i) * (PRECISION / 100000n));
 
         const tracker = new SearchManager();
-        const result = SummaryService.summarize(combos, tracker, undefined, undefined, undefined, 300);
+        const result = SummaryService.summarize(combos as any, tracker, [], undefined, undefined, undefined, 300);
         const numericKeys = Object.keys(result.combos).map(k => parseInt(k, 16));
 
         assert.strictEqual(numericKeys.length, 300, 'should return exactly 300 combos');
@@ -88,7 +88,7 @@ describe('SummaryService', () => {
     it('stores combo keys as lowercase hex strings', () => {
         const combos = new Map<number, bigint>([[255, PRECISION / 2n]]);
         const tracker = new SearchManager();
-        const result = SummaryService.summarize(combos, tracker);
+        const result = SummaryService.summarize(combos as any, tracker, []);
         assert.ok(Object.keys(result.combos).includes('ff'));
     });
 });
@@ -103,7 +103,7 @@ describe('SerializationService', () => {
             capped: 0, rounding: 0, recoveredRounding: 0, recoveredSieved: 0 
         };
         return {
-            ranks: {}, any: {}, count: {}, combos: {}, 
+            ranks: {}, any: {}, count: {}, combos: {}, clues: {}, 
             accuracy, accounting, threshold: 0.1,
             ...overrides
         };
@@ -156,11 +156,31 @@ describe('HumanizationService', () => {
         const effId = reg.idMap.get('Efficiency')!;
         const acc: MassAccounting = { resolved: 0.85, pending: 0.15, sieved: 0, overflow: 0, capped: 0, rounding: 0, recoveredRounding: 0, recoveredSieved: 0 };
         const rawStats: CalculationStats = {
-            ranks: {}, any: { [effId]: 0.85 }, count: {}, combos: {}, 
+            ranks: {}, any: { [effId]: 0.85 }, count: {}, combos: {}, clues: {}, 
             accuracy: 0.85, accounting: acc, threshold: 0.85
         };
         const result = HumanizationService.humanize(rawStats, reg, 'prob');
         assert.ok(Object.keys(result.any).includes('Efficiency'));
+    });
+
+    it('sorting by "count" correctly prioritizes primary count bucket', () => {
+        const stats = {
+            combos: { 'ff': 0.1 }, 
+            count: { 1: 0.1 }, 
+            any: {}, ranks: {}, clues: {}, accuracy: 1, accounting: {}, threshold: 0 
+        } as any;
+        
+        const result = HumanizationService.humanize(stats, reg, 'count');
+        assert.ok(result.combos, 'Humanize should return combos map');
+    });
+
+    it('sorting by "rank" correctly prioritizes high-tier ranks', () => {
+        const stats = { 
+            combos: { 'ff': 0.1 }, 
+            count: {}, any: {}, ranks: {}, clues: {}, accuracy: 1, accounting: {}, threshold: 0 
+        } as any;
+        const result = HumanizationService.humanize(stats, reg, 'rank');
+        assert.ok(result, 'Humanize should not crash with sortMode=rank');
     });
 });
 

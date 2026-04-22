@@ -44,6 +44,27 @@ export class SearchManager {
         return this.accountant.toPublic();
     }
 
+    /**
+     * Returns the mass from generation paths that reached a valid leaf state.
+     */
+    public getResolvedMass(): bigint {
+        return this.accountant.getResolvedMass();
+    }
+
+    /**
+     * Returns the mass from frontiers that were discovered but not yet expanded.
+     */
+    public getUnexploredMass(): bigint {
+        return this.accountant.getUnexploredMass();
+    }
+
+    /**
+     * Returns the mass that was intentionally pruned or discarded due to technical limits.
+     */
+    public getDiscardedMass(): bigint {
+        return this.accountant.getDiscardedMass();
+    }
+
     // --- Expansion Caching ---
 
     public registerExpansion(key: bigint, blueprint: ExpansionBlueprint): void {
@@ -91,7 +112,7 @@ export class SearchManager {
             const blueprint = this.expansionCache.get(meta);
             if (!blueprint) continue;
 
-            const { registry, timing, cat, guaranteedFirstId } = ctx;
+            const { registry, timing, cat } = ctx;
             const currentBitset = meta >> 8n;
             const probContinue = blueprint.probContinue;
             
@@ -106,8 +127,7 @@ export class SearchManager {
             const remStop = searchProcessor.withTiming(timing, 'settlingMs', () => 
                 searchProcessor.settleMass(
                     cat === "book", blueprint.currentCount, blueprint.currentCombo, blueprint.currentEnchants, 
-                    probStop, guaranteedFirstId, registry.enchantToIndex, registry.indexToEnchant, 
-                    ctx.results, ctx.countMass, ctx.anyMass, ctx.rankMass
+                    probStop, ctx.results, ctx.countMass, ctx.anyMass, ctx.rankMass
                 )
             );
 
@@ -145,13 +165,12 @@ export class SearchManager {
             settleMass: (...args: any[]) => bigint;
         }
     ): bigint {
-        const { registry, timing, cat, guaranteedFirstId, instrumentation } = ctx;
+        const { timing, cat, instrumentation } = ctx;
         
         const remForward = searchProcessor.withTiming(timing, 'settlingMs', () => 
             searchProcessor.settleMass(
                 cat === "book", blueprint.currentCount, blueprint.currentCombo, blueprint.currentEnchants, 
-                probForward, guaranteedFirstId, registry.enchantToIndex, registry.indexToEnchant, 
-                ctx.results, ctx.countMass, ctx.anyMass, ctx.rankMass
+                probForward, ctx.results, ctx.countMass, ctx.anyMass, ctx.rankMass
             )
         );
 
@@ -187,7 +206,7 @@ export class SearchManager {
         stack: Array<{ mass: bigint, meta: bigint, combo: PackedCombo, depth: number }>,
         searchProcessor: any
     ): bigint {
-        const { registry, timing, instrumentation, queue, guaranteedFirstId } = ctx;
+        const { registry, timing, instrumentation, queue } = ctx;
 
         const eligibleCount = blueprint.eligibleCount;
         const splits = DistributionPool.getBuffer(depth);
@@ -207,14 +226,12 @@ export class SearchManager {
             }
         });
 
-        const guaranteedInCombo = guaranteedFirstId != null && (currentBitset & (1n << BigInt(guaranteedFirstId))) !== 0n;
-
         for (const [i, e] of blueprint.eligibleEnchants.entries()) {
             if (i >= eligibleCount) break;
             const pNext = splits[i];
             if (pNext === undefined || pNext === 0n) continue;
 
-            const nextPacked = ComboUtils.packAppend(blueprint.currentCombo, e, guaranteedFirstId, guaranteedInCombo, registry.enchantToIndex) as PackedCombo;
+            const nextPacked = ComboUtils.packAppend(blueprint.currentCombo, e, registry.enchantToIndex) as PackedCombo;
             const nextId = ComboUtils.getEnchantId(e);
             const nextMeta = ((currentBitset | (1n << BigInt(nextId))) << 8n) | BigInt(blueprint.nextLevel);
 

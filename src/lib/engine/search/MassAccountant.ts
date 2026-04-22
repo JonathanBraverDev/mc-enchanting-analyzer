@@ -17,7 +17,8 @@ export class MassAccountant {
             capped: 0n,
             rounding: 0n,
             recoveredRounding: 0n,
-            recoveredSieved: 0n
+            recoveredSieved: 0n,
+            clueKnownSpace: 0n
         };
     }
 
@@ -42,7 +43,11 @@ export class MassAccountant {
         const b = other.buckets;
         for (const key in b) {
             const type = key as MassEventType;
-            this.buckets[type] += ProbUtils.scale(b[type], factor);
+            const val = b[type];
+            if (val !== undefined && val !== 0n) {
+                const current = this.buckets[type] ?? 0n;
+                this.buckets[type] = current + ProbUtils.scale(val, factor);
+            }
         }
     }
 
@@ -80,6 +85,7 @@ export class MassAccountant {
             rounding: ProbUtils.toNumber(b.rounding),
             recoveredRounding: ProbUtils.toNumber(b.recoveredRounding),
             recoveredSieved: ProbUtils.toNumber(b.recoveredSieved),
+            clueKnownSpace: b.clueKnownSpace !== undefined ? ProbUtils.toNumber(b.clueKnownSpace) : undefined,
             units: {
                 resolved: b.resolved.toString(),
                 pending: b.pending.toString(),
@@ -88,9 +94,32 @@ export class MassAccountant {
                 capped: b.capped.toString(),
                 rounding: b.rounding.toString(),
                 recoveredRounding: b.recoveredRounding.toString(),
-                recoveredSieved: b.recoveredSieved.toString()
+                recoveredSieved: b.recoveredSieved.toString(),
+                clueKnownSpace: b.clueKnownSpace?.toString() ?? "0"
             }
         };
+    }
+
+    /**
+     * Returns the mass from generation paths that reached a valid leaf state.
+     */
+    public getResolvedMass(): bigint {
+        return this.buckets.resolved;
+    }
+
+    /**
+     * Returns the mass from frontiers that were discovered but not yet expanded.
+     */
+    public getUnexploredMass(): bigint {
+        return this.buckets.pending;
+    }
+
+    /**
+     * Returns the mass that was intentionally pruned or discarded due to technical limits.
+     */
+    public getDiscardedMass(): bigint {
+        const b = this.buckets;
+        return b.sieved + b.overflow + b.capped;
     }
 
     public clone(): MassAccountant {

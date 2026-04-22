@@ -10,6 +10,8 @@ export interface CompactStats {
     rankProbs: Float64Array;
     anyKeys: Uint32Array;
     anyProbs: Float64Array;
+    clueKeys: Uint32Array;
+    clueProbs: Float64Array;
     counts: Float64Array;
     
     accuracy: number;
