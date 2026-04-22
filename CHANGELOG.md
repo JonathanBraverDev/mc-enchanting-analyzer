@@ -1,5 +1,17 @@
 # Changelog
 
+## v4.1.0 (2026-04-20)
+
+### Improved
+- **Reliable Timing**: Implemented a more accurate system for tracking calculation time that provides precise metrics without slowing down the engine during deep searches.
+- **Engine Standardization**: Cleaned up internal "magic numbers" and centralized all engine rules and limits to ensure consistent behavior across all supported Minecraft versions.
+- **Concurrent Search Safety**: Implemented better internal data handling to ensure that overlapping searches can execute without interfering with each other.
+
+### Fixed
+- **Accuracy Regressions**: Resolved several small bit-level discrepancies introduced during the recent modernization.
+- **Stability**: Fixed potential runtime crashes related to numerical conversions in the search expansion path.
+
+
 ## v4.0.0 (2026-04-18)
 
 ### The "Modernization Update"
