@@ -1,7 +1,7 @@
 import { ProbUtils } from '#utils/math/ProbUtils.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import { CalculationStats, PackedCombo } from '#types/index.js';
-import { SearchManager } from '#engine/search/SearchManager.js';
+import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
 import { ClueAnalysisService } from '#services/ClueAnalysisService.js';
 
 /**
@@ -13,7 +13,7 @@ export class SummaryService {
      */
     public static summarize(
         combos: Map<PackedCombo, bigint>,
-        tracker: SearchManager,
+        tracker: SearchStateTracker,
         indexToEnchant: number[],
         anyMass?: Map<number, bigint> | BigUint64Array,
         rankMass?: Map<number, bigint> | BigUint64Array,
@@ -92,7 +92,7 @@ export class SummaryService {
      */
     public static summarizeConditioned(
         rawCombos: Map<PackedCombo, bigint>,
-        tracker: SearchManager,
+        tracker: SearchStateTracker,
         indexToEnchant: number[],
         targetClueId: number,
         comboLimit: number = ENGINE_LIMITS.MAX_RESULTS_SUMMARY

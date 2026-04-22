@@ -1,15 +1,15 @@
 import { ForwardingContext, PackedCombo, PackedEnchant, ExpansionBlueprint } from '#types/index.js';
 import { ComboUtils, ProbUtils } from '#utils/index.js';
 import { ENGINE_LIMITS, BIGINT_CONSTANTS } from '#constants/engine.js';
-import { DistributionPool } from '#engine/distribution/DistributionPool.js';
-import { SearchManager } from '#engine/search/SearchManager.js';
+import { DistributionBufferPool } from '#engine/distribution/DistributionBufferPool.js';
+import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
 
 /**
  * Low-level primitives for the enchantment search engine.
  */
 export class SearchProcessor {
     /**
-     * No-op timing shim retained for API compatibility with SearchManager.
+     * No-op timing shim retained for API compatibility with SearchStateTracker.
      * Fine-grained per-subsystem timing has been removed; only aggregate totalMs
      * and searchMs are tracked. Callers that still reference this method compile
      * without changes while the overhead is eliminated.
@@ -124,11 +124,11 @@ export class SearchProcessor {
         currentProb: bigint,
         currentLevel: number,
         ctx: ForwardingContext,
-        tracker: SearchManager
+        tracker: SearchStateTracker
     ): void {
         const { registry, queue, pool, poolWeights, initialTotalWeight } = ctx;
 
-        const buffer = DistributionPool.getBuffer(0);
+        const buffer = DistributionBufferPool.getBuffer(0);
         const splitRemainder = ProbUtils.distributeDetailed(currentProb, poolWeights, initialTotalWeight, buffer);
         tracker.record('sieved', splitRemainder);
 
@@ -158,7 +158,7 @@ export class SearchProcessor {
         currentCombo: PackedCombo,
         currentCount: number,
         ctx: ForwardingContext,
-        tracker: SearchManager
+        tracker: SearchStateTracker
     ): void {
         const { registry, cat, pool } = ctx;
         const { indexToEnchant } = registry;

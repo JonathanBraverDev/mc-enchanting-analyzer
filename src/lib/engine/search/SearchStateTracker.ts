@@ -2,22 +2,22 @@ import { MassBookkeeping, MassAccounting, MassEventType } from '#types/mass.js';
 import { ExpansionBlueprint, ForwardingContext, PackedCombo } from '#types/index.js';
 import { ProbUtils, ComboUtils, PRECISION } from '#utils/index.js';
 
-import { DistributionPool } from '#engine/distribution/DistributionPool.js';
+import { DistributionBufferPool } from '#engine/distribution/DistributionBufferPool.js';
 import { ENGINE_LIMITS, SEARCH_CONSTANTS, BIGINT_CONSTANTS } from '#constants/engine.js';
-import { MassAccountant } from './MassAccountant.js';
+import { ProbabilityMassBookkeeper } from './ProbabilityMassBookkeeper.js';
 
 /**
  * Unified state tracker for probability mass and expanded node blueprints.
  * Facilitates high-speed forwarding through cached search subtrees.
  */
-export class SearchManager {
+export class SearchStateTracker {
     private static readonly MAX_RECURSION_DEPTH = SEARCH_CONSTANTS.MAX_RECURSION_DEPTH;
     
-    private readonly accountant: MassAccountant;
+    private readonly accountant: ProbabilityMassBookkeeper;
     private readonly expansionCache: Map<bigint, ExpansionBlueprint>;
 
     constructor(initialMass?: MassBookkeeping, initialCache?: Map<bigint, ExpansionBlueprint>) {
-        this.accountant = new MassAccountant(initialMass);
+        this.accountant = new ProbabilityMassBookkeeper(initialMass);
         this.expansionCache = initialCache || new Map();
     }
 
@@ -29,7 +29,7 @@ export class SearchManager {
         this.accountant.subtract(type, prob);
     }
 
-    public addScaled(other: SearchManager, factor: bigint): void {
+    public addScaled(other: SearchStateTracker, factor: bigint): void {
         this.accountant.addScaled(other.accountant, factor);
     }
 
@@ -209,7 +209,7 @@ export class SearchManager {
         const { registry, instrumentation, queue } = ctx;
 
         const eligibleCount = blueprint.eligibleCount;
-        const splits = DistributionPool.getBuffer(depth);
+        const splits = DistributionBufferPool.getBuffer(depth);
 
         const individualRemainder = probForward % BigInt(blueprint.totalWeight);
         this.accountant.record('rounding', individualRemainder);
@@ -236,7 +236,7 @@ export class SearchManager {
             ProbUtils.addItemMass(ctx.anyMass, nextId, pNext);
             ProbUtils.addItemMass(ctx.rankMass, e, pNext);
 
-            if (this.expansionCache.has(nextMeta) && depth < SearchManager.MAX_RECURSION_DEPTH) {
+            if (this.expansionCache.has(nextMeta) && depth < SearchStateTracker.MAX_RECURSION_DEPTH) {
                 stack.push({ mass: pNext, meta: nextMeta, combo: nextPacked, depth: depth + 1 });
             } else {
                 this.accountant.record('pending', pNext);
@@ -250,7 +250,7 @@ export class SearchManager {
         return (probStop - remStop);
     }
 
-    public clone(): SearchManager {
-        return new SearchManager(this.getBookkeeping(), new Map(this.expansionCache));
+    public clone(): SearchStateTracker {
+        return new SearchStateTracker(this.getBookkeeping(), new Map(this.expansionCache));
     }
 }

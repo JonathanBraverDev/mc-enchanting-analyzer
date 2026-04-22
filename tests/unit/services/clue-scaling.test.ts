@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { PRECISION } from '#utils/math/ProbUtils.js';
 import { SummaryService } from '#services/SummaryService.js';
-import { SearchManager } from '#engine/search/SearchManager.js';
+import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
 
 describe('Clue Conditioning Scaling diagnostics', () => {
     // Mock indexToEnchant: 1 -> Sharpness I, 2 -> Sharpness II
@@ -14,7 +14,7 @@ describe('Clue Conditioning Scaling diagnostics', () => {
         // Combo with only Sharpness II
         rawCombos.set(2, PRECISION); 
 
-        const tracker = new SearchManager();
+        const tracker = new SearchStateTracker();
         tracker.record('resolved', PRECISION); 
         const stats = SummaryService.summarizeConditioned(rawCombos as any, tracker, indexToEnchant, targetClueId);
 
@@ -28,7 +28,7 @@ describe('Clue Conditioning Scaling diagnostics', () => {
         // Combo with only Sharpness I
         rawCombos.set(1, PRECISION); 
 
-        const tracker = new SearchManager();
+        const tracker = new SearchStateTracker();
         tracker.record('resolved', PRECISION);
         const stats = SummaryService.summarizeConditioned(rawCombos as any, tracker, indexToEnchant, targetClueId);
 
@@ -46,7 +46,7 @@ describe('Clue Conditioning Scaling diagnostics', () => {
         rawCombos.set(1, PRECISION / 2n); 
         rawCombos.set(2, PRECISION / 2n);
 
-        const tracker = new SearchManager();
+        const tracker = new SearchStateTracker();
         tracker.record('resolved', PRECISION); // Search is 100% accurate
         const stats = SummaryService.summarizeConditioned(rawCombos as any, tracker, indexToEnchant, targetClueId);
 
@@ -60,7 +60,7 @@ describe('Clue Conditioning Scaling diagnostics', () => {
         const rawCombos = new Map<number, bigint>();
         rawCombos.set(1, PRECISION / 4n); // 25% compatible resolved mass
 
-        const tracker = new SearchManager();
+        const tracker = new SearchStateTracker();
         tracker.record('resolved', PRECISION / 2n); // Only 50% search accuracy
         tracker.record('pending', PRECISION / 2n);
         

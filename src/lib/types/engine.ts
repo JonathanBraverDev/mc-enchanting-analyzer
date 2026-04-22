@@ -177,7 +177,7 @@ export interface SearchState {
     anyMass: BigUint64Array;
     rankMass: BigUint64Array;
     countMass: BigUint64Array;
-    tracker: import('../engine/search/SearchManager.js').SearchManager;
+    tracker: import('../engine/search/SearchStateTracker.js').SearchStateTracker;
     threshold: bigint;
     iterations: number;
     nodesProcessed: number;
@@ -261,7 +261,7 @@ export interface ProgressReporter {
  */
 export interface AggregationResult {
     combos: Map<PackedCombo, bigint>;
-    tracker: import('../engine/search/SearchManager.js').SearchManager;
+    tracker: import('../engine/search/SearchStateTracker.js').SearchStateTracker;
     anyMass: BigUint64Array;
     rankMass: BigUint64Array;
     countMass: BigUint64Array;

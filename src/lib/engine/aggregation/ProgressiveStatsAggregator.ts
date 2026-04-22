@@ -3,18 +3,18 @@ import { getEnchantability } from '#core/registry.js';
 import { ENGINE_LIMITS, PACKING_CONSTANTS, SEARCH_CONSTANTS, UI_CONSTANTS } from '#constants/engine.js';
 import { getSearchLimit } from '#core/config.js';
 import { PackedCombo, SearchState, RegistryState, InternalSearchConfig, EngineInstrumentation, MassCheckpoint, CheckpointSummary, AggregationResult } from '#types/index.js';
-import { DistributionService } from '#engine/distribution/DistributionService.js';
+import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { SearchService } from '#engine/search/SearchService.js';
-import { SearchManager } from '#engine/search/SearchManager.js';
+import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
 import { CacheManager } from '#engine/cache/CacheManager.js';
 
 /**
  * Service for aggregating enchantment statistics across multiple modified levels.
  */
-export class StatAggregator {
+export class ProgressiveStatsAggregator {
     constructor(
         private readonly cache: CacheManager,
-        private readonly distributionService: DistributionService,
+        private readonly distributionService: ModifiedLevelDistributionService,
         private readonly searchService: SearchService
     ) {}
 
@@ -52,7 +52,7 @@ export class StatAggregator {
         const levels = Object.keys(modDist).map(Number).sort((a, b) => b - a);
 
         const stateMap = new Map<number, SearchState>();
-        const initialTracker = new SearchManager();
+        const initialTracker = new SearchStateTracker();
         initialTracker.record('pending', PRECISION);
         
         let lastResult: AggregationResult = {
@@ -75,7 +75,7 @@ export class StatAggregator {
             const totalAnyMass = new BigUint64Array(PACKING_CONSTANTS.BYTE_BASIS);
             const totalRankMass = new BigUint64Array(PACKING_CONSTANTS.MAX_RANKED_INDEX);
             const totalCountMass = new BigUint64Array(PACKING_CONSTANTS.MAX_COUNT_INDEX);
-            let tierTracker = new SearchManager();
+            let tierTracker = new SearchStateTracker();
 
             let processedMProb = 0n;
             let abortedMidTier = false;
@@ -185,7 +185,7 @@ export class StatAggregator {
         const totalAnyMass = new BigUint64Array(PACKING_CONSTANTS.BYTE_BASIS);
         const totalRankMass = new BigUint64Array(PACKING_CONSTANTS.MAX_RANKED_INDEX);
         const totalCountMass = new BigUint64Array(PACKING_CONSTANTS.MAX_COUNT_INDEX);
-        let globalTracker = new SearchManager();
+        let globalTracker = new SearchStateTracker();
 
         let processedMProb = 0n;
         let iterCount = 0;
