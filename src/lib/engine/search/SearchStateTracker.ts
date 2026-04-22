@@ -236,6 +236,9 @@ export class SearchStateTracker {
             ProbUtils.addItemMass(ctx.anyMass, nextId, pNext);
             ProbUtils.addItemMass(ctx.rankMass, e, pNext);
 
+            // If the child is cached but we've reached max stack depth, fall back to the main queue
+            // rather than recursing further. Mass is not lost — it enters 'pending' and the main
+            // search loop will re-process it through the same cache fast-path next iteration.
             if (this.expansionCache.has(nextMeta) && depth < SearchStateTracker.MAX_RECURSION_DEPTH) {
                 stack.push({ mass: pNext, meta: nextMeta, combo: nextPacked, depth: depth + 1 });
             } else {
