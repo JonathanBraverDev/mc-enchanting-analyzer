@@ -81,7 +81,7 @@ export class EnchantEngine {
         cat: string,
         modLevel: number,
         mat: string,
-        threshold: bigint = ProbUtils.toBigInt(0.0001),
+        threshold: bigint = ProbUtils.toBigInt(ENGINE_LIMITS.DEFAULT_THRESHOLD),
         maxIterations?: number,
         resultsLimit: number = ENGINE_LIMITS.MAX_RESULTS_SIZE,
         instrumentation?: EngineInstrumentation
@@ -132,7 +132,7 @@ export class EnchantEngine {
 
         const {
             clue,
-            threshold = 0.0001,
+            threshold = ENGINE_LIMITS.DEFAULT_THRESHOLD,
             signal,
             onProgress,
             maxIterations,
@@ -229,7 +229,7 @@ export class EnchantEngine {
 
         const {
             clue,
-            threshold = 0.0001,
+            threshold = ENGINE_LIMITS.DEFAULT_THRESHOLD,
             signal,
             onProgress,
             maxIterations,
@@ -325,7 +325,7 @@ export class EnchantEngine {
         // Perform raw calculation first (or retrieve from internal cache if possible)
         const internalConfig: InternalSearchConfig = {
             ...config,
-            threshold: ProbUtils.toBigInt(config.threshold ?? 0.0001),
+            threshold: ProbUtils.toBigInt(config.threshold ?? ENGINE_LIMITS.DEFAULT_THRESHOLD),
             summaryLimit: config.summaryLimit ?? ENGINE_LIMITS.MAX_RESULTS_SUMMARY,
             resultsLimit: config.resultsLimit ?? ENGINE_LIMITS.MAX_RESULTS_SIZE
         };

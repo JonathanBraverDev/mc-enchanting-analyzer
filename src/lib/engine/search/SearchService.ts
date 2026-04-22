@@ -1,6 +1,6 @@
 import { PRECISION } from '#utils/index.js';
 import { getEligiblePool } from '#core/registry.js';
-import { ENGINE_LIMITS } from '#constants/engine.js';
+import { ENGINE_LIMITS, PACKING_CONSTANTS } from '#constants/engine.js';
 import { SearchState, RegistryState, SearchContext, ForwardingContext } from '#types/index.js';
 import { StateFactory } from './StateFactory.js';
 import { SearchManager } from './SearchManager.js';
@@ -40,7 +40,7 @@ export class SearchService {
         
         const initialPool = getEligiblePool(registry, cat, modLevel, this.cache, registry.version);
         
-        const poolWeights: number[] = initialPool.map(e => registry.weightMap[e >> 8] ?? 0);
+        const poolWeights: number[] = initialPool.map(e => registry.weightMap[e >> PACKING_CONSTANTS.ENCHANT_SHIFT] ?? 0);
         const initialTotalWeight = poolWeights.reduce((a, b) => a + b, 0);
 
         if (initialPool.length === 0) {
@@ -81,9 +81,9 @@ export class SearchService {
     private handleEmptyPool(threshold: bigint): SearchState {
         const rootTracker = new SearchManager();
         rootTracker.record('resolved', PRECISION);
-        const anyMass = new BigUint64Array(256);
-        const rankMass = new BigUint64Array(16384);
-        const countMass = new BigUint64Array(16);
+        const anyMass = new BigUint64Array(PACKING_CONSTANTS.BYTE_BASIS);
+        const rankMass = new BigUint64Array(PACKING_CONSTANTS.MAX_RANKED_INDEX);
+        const countMass = new BigUint64Array(PACKING_CONSTANTS.MAX_COUNT_INDEX);
         countMass[0] = PRECISION;
 
         return {
