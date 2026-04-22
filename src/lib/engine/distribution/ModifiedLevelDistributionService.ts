@@ -8,7 +8,7 @@ import { CacheManager } from '#services/CacheManager.js';
  * Service for calculating the probability distribution of Modified Levels.
  * Modularized for testability and thread-safety.
  */
-export class DistributionService {
+export class ModifiedLevelDistributionService {
     private readonly buffer: BigUint64Array;
 
     constructor(bufferSize: number = ENGINE_LIMITS.DEFAULT_BUFFER_SIZE) {

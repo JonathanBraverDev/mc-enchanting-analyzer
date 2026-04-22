@@ -5,7 +5,7 @@ import { CacheManager } from '#engine/cache/CacheManager.js';
 /**
  * Service for registry-aware pool operations and filtering.
  */
-export class PoolService {
+export class EligibleListService {
     constructor(private readonly cache: CacheManager) {}
 
     /**

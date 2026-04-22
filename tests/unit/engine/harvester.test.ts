@@ -1,26 +1,26 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { SearchManager } from '#engine/search/SearchManager.js';
+import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
 import { ExpansionBlueprint } from '#types/index.js';
 import { PRECISION } from '#utils/index.js';
 
-describe('SearchManager', () => {
+describe('SearchStateTracker', () => {
 
     it('should initialize with empty mass bookkeeping', () => {
-        const tracker = new SearchManager();
+        const tracker = new SearchStateTracker();
         const mass = tracker.toPublic();
         assert.strictEqual(mass.resolved, 0);
         assert.strictEqual(mass.pending, 0);
     });
 
     it('should record mass events correctly', () => {
-        const tracker = new SearchManager();
+        const tracker = new SearchStateTracker();
         tracker.record('resolved', PRECISION / 2n);
         assert.strictEqual(tracker.toPublic().resolved, 0.5);
     });
 
     it('should handle cloning correctly', () => {
-        const tracker = new SearchManager();
+        const tracker = new SearchStateTracker();
         tracker.record('resolved', PRECISION / 4n);
         const clone = tracker.clone();
         assert.strictEqual(clone.toPublic().resolved, 0.25);
@@ -30,7 +30,7 @@ describe('SearchManager', () => {
     });
 
     it('should register and retrieve expansion blueprints', () => {
-        const tracker = new SearchManager();
+        const tracker = new SearchStateTracker();
         const mockBlueprint: ExpansionBlueprint = {
             probContinue: 0n,
             totalWeight: 100,
@@ -50,7 +50,7 @@ describe('SearchManager', () => {
     });
 
     it('should recover rounding residue from blueprints during mass distribution', () => {
-        const tracker = new SearchManager();
+        const tracker = new SearchStateTracker();
         const weights = new Int32Array([10, 10]);
         // With totalWeight 20, a prob of 15 would have individualRemainder 15.
         // If we have a residue of 5 already, then 15 + 5 = 20, which divides perfectly.

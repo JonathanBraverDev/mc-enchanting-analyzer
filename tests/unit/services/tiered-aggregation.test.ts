@@ -1,11 +1,11 @@
 /**
- * Tests for StatAggregator.getFullStatsTiered — tiered search depth aggregation.
+ * Tests for ProgressiveStatsAggregator.getFullStatsTiered — tiered search depth aggregation.
  */
 import { describe, it, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { EngineFactory } from '#engine/factory.js';
-import { StatAggregator } from '#engine/aggregation/StatAggregator.js';
-import { DistributionService } from '#engine/distribution/DistributionService.js';
+import { ProgressiveStatsAggregator } from '#engine/aggregation/ProgressiveStatsAggregator.js';
+import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { SearchService } from '#engine/search/SearchService.js';
 import { CacheManager } from '#engine/cache/CacheManager.js';
 import { SummaryService } from '#services/SummaryService.js';
@@ -18,12 +18,12 @@ const XP = 30;
 const MAT = TEST_DATA.MATERIALS.DIAMOND;
 const VERSION = TEST_DATA.VERSIONS.MODERN;
 
-describe('Tiered Aggregation: StatAggregator.getFullStatsTiered', () => {
+describe('Tiered Aggregation: ProgressiveStatsAggregator.getFullStatsTiered', () => {
     const cacheConfig: CacheConfig = { comboOtherSize: 1000, comboBookSize: 1000, statsSize: 100, poolSize: 1000 };
     const cache = new CacheManager(cacheConfig);
-    const distService = new DistributionService(1024);
+    const distService = new ModifiedLevelDistributionService(1024);
     const searchService = new SearchService(cache);
-    const aggregator = new StatAggregator(cache, distService, searchService);
+    const aggregator = new ProgressiveStatsAggregator(cache, distService, searchService);
 
     afterEach(() => {
         cache.clearAll();

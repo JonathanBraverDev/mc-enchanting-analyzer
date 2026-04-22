@@ -1,11 +1,11 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { MassAccountant } from '#engine/search/MassAccountant.js';
+import { ProbabilityMassBookkeeper } from '#engine/search/ProbabilityMassBookkeeper.js';
 import { PRECISION } from '#utils/math/ProbUtils.js';
 
-describe('MassAccountant', () => {
+describe('ProbabilityMassBookkeeper', () => {
     it('should initialize with zero mass in all buckets', () => {
-        const accountant = new MassAccountant();
+        const accountant = new ProbabilityMassBookkeeper();
         const bk = accountant.getBookkeeping();
         assert.strictEqual(bk.resolved, 0n);
         assert.strictEqual(bk.pending, 0n);
@@ -13,7 +13,7 @@ describe('MassAccountant', () => {
     });
 
     it('should record mass events', () => {
-        const accountant = new MassAccountant();
+        const accountant = new ProbabilityMassBookkeeper();
         accountant.record('resolved', 100n);
         accountant.record('pending', 50n);
         assert.strictEqual(accountant.getBookkeeping().resolved, 100n);
@@ -21,14 +21,14 @@ describe('MassAccountant', () => {
     });
 
     it('should subtract mass', () => {
-        const accountant = new MassAccountant();
+        const accountant = new ProbabilityMassBookkeeper();
         accountant.record('pending', 100n);
         accountant.subtract('pending', 40n);
         assert.strictEqual(accountant.getBookkeeping().pending, 60n);
     });
 
     it('should calculate total mass correctly', () => {
-        const accountant = new MassAccountant();
+        const accountant = new ProbabilityMassBookkeeper();
         accountant.record('resolved', 100n);
         accountant.record('pending', 200n);
         accountant.record('sieved', 50n);
@@ -40,7 +40,7 @@ describe('MassAccountant', () => {
     });
 
     it('should assert conservation', () => {
-        const accountant = new MassAccountant();
+        const accountant = new ProbabilityMassBookkeeper();
         accountant.record('resolved', PRECISION);
         assert.doesNotThrow(() => accountant.assertConservation());
 
@@ -49,7 +49,7 @@ describe('MassAccountant', () => {
     });
 
     it('should clone correctly', () => {
-        const accountant = new MassAccountant();
+        const accountant = new ProbabilityMassBookkeeper();
         accountant.record('resolved', 100n);
         const clone = accountant.clone();
         clone.record('resolved', 50n);

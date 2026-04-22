@@ -2,7 +2,7 @@ import { SearchHeap } from '#utils/collections/SearchHeap.js';
 import { PRECISION } from '#utils/index.js';
 import { PACKING_CONSTANTS } from '#constants/engine.js';
 import { PackedCombo, SearchState } from '#types/index.js';
-import { SearchManager } from './SearchManager.js';
+import { SearchStateTracker } from './SearchStateTracker.js';
 
 export class StateFactory {
     /**
@@ -42,7 +42,7 @@ export class StateFactory {
 
         return {
             queue, results, anyMass, rankMass, countMass,
-            tracker: new SearchManager({ 
+            tracker: new SearchStateTracker({ 
                 resolved: 0n, 
                 pending: PRECISION, 
                 sieved: 0n, 

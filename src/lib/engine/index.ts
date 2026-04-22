@@ -5,11 +5,11 @@ import { ENGINE_LIMITS } from '#constants/engine.js';
 import { getSearchLimit } from '#core/config.js';
 import { CacheManager } from './cache/CacheManager.js';
 import { KeyService } from '#services/KeyService.js';
-import { PoolService } from '#services/PoolService.js';
+import { EligibleListService } from '#services/EligibleListService.js';
 import { SummaryService } from '#services/SummaryService.js';
-import { DistributionService } from './distribution/DistributionService.js';
+import { ModifiedLevelDistributionService } from './distribution/ModifiedLevelDistributionService.js';
 import { SearchService } from './search/SearchService.js';
-import { StatAggregator } from './aggregation/StatAggregator.js';
+import { ProgressiveStatsAggregator } from './aggregation/ProgressiveStatsAggregator.js';
 export { EngineFactory } from './factory.js';
 
 /**
@@ -25,10 +25,10 @@ export class EnchantEngine {
         registry: RegistryState,
         private readonly cache: CacheManager,
         private readonly keyService: KeyService,
-        private readonly poolService: PoolService,
-        private readonly distributionService: DistributionService,
+        private readonly poolService: EligibleListService,
+        private readonly distributionService: ModifiedLevelDistributionService,
         private readonly searchService: SearchService,
-        private readonly statAggregator: StatAggregator
+        private readonly statAggregator: ProgressiveStatsAggregator
     ) {
         this._registry = registry;
     }

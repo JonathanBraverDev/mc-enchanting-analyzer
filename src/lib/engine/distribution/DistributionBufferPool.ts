@@ -4,7 +4,7 @@ import { POOL_CONSTANTS } from '#constants/engine.js';
  * Shared memory pool for probability distributions during the search process.
  * Uses a multiplexed buffer to allow safe reuse across recursive/nested calls.
  */
-export class DistributionPool {
+export class DistributionBufferPool {
     /**
      * Shared memory pool for probability distributions.
      * Uses a fixed number of slots (sufficiently covers the 6-enchant limit) x outcomes per slot.
@@ -21,6 +21,6 @@ export class DistributionPool {
      */
     public static getBuffer(depth: number): BigUint64Array {
         const start = (depth % POOL_CONSTANTS.DIST_POOL_DEPTH) * POOL_CONSTANTS.DIST_POOL_SLOT_SIZE;
-        return DistributionPool._buffer.subarray(start, start + POOL_CONSTANTS.DIST_POOL_SLOT_SIZE);
+        return DistributionBufferPool._buffer.subarray(start, start + POOL_CONSTANTS.DIST_POOL_SLOT_SIZE);
     }
 }
