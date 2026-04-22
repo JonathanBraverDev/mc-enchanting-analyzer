@@ -174,6 +174,9 @@ export class SearchProcessor {
             ? ComboUtils.unpack(currentCombo, indexToEnchant)
             : [] as PackedEnchant[];
 
+        // currentLevel only drives the probability of earning another enchant slot from this node.
+        // Eligibility still comes from ctx.pool, which SearchService fixed from the initial full
+        // modified level before the search started.
         const probContinue = (isBook && !registry.multiEnchantBooks && currentCount >= 1)
             ? 0n
             : (ProbUtils.PROB_CONTINUE_TABLE[currentLevel] || 0n);
@@ -197,9 +200,11 @@ export class SearchProcessor {
                 totalWeight += weight;
             }
 
-            // Minecraft mechanic: each additional enchant slot draws from half the previous effective level.
+            // Minecraft halves the effective level between additional enchant rolls, but it does not
+            // rebuild the eligible pool from that halved level. The pool stays frozen from the initial
+            // full modified level; this nextLevel only feeds the continuation roll for the next slot.
             // currentCount >= 1 is always true here (count-0 nodes take the processInitialNode path),
-            // but the halving is the real invariant: 2nd enchant sees level/2, 3rd sees level/4, etc.
+            // so the real invariant is the halving sequence: 2nd enchant sees level/2, 3rd sees level/4, etc.
             const nextLevel = currentCount >= 1 ? Math.floor(currentLevel / 2) : currentLevel;
             const blueprint: ExpansionBlueprint = {
                 probContinue,
