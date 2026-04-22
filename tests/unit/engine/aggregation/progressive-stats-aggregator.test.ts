@@ -10,7 +10,7 @@ import { SearchService } from '#engine/search/SearchService.js';
 import { CacheManager } from '#engine/cache/CacheManager.js';
 import { SummaryService } from '#services/SummaryService.js';
 import { DATA } from '#data/index.js';
-import { TEST_DATA } from '../../infra/test-data.js';
+import { TEST_DATA } from '../../../infra/test-data.js';
 import { CacheConfig, AggregationResult } from '#types/index.js';
 
 const CAT = TEST_DATA.ITEMS.SWORD;
@@ -18,7 +18,7 @@ const XP = 30;
 const MAT = TEST_DATA.MATERIALS.DIAMOND;
 const VERSION = TEST_DATA.VERSIONS.MODERN;
 
-describe('Tiered Aggregation: ProgressiveStatsAggregator.getFullStatsTiered', () => {
+describe('ProgressiveStatsAggregator: tiered aggregation', () => {
     const cacheConfig: CacheConfig = { comboOtherSize: 1000, comboBookSize: 1000, statsSize: 100, poolSize: 1000 };
     const cache = new CacheManager(cacheConfig);
     const distService = new ModifiedLevelDistributionService(1024);
