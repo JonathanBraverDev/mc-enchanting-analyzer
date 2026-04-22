@@ -1,11 +1,10 @@
 import { CalculationStats, SearchState, RegistryState, SearchConfig, InternalSearchConfig, EngineInstrumentation, } from '#types/index.js';
 import { ProbUtils, EnchantUtils } from '#utils/index.js';
-import { getMaterialId, getEnchantId, isCategoryAvailable } from '#core/registry.js';
+import { getMaterialId, getEnchantId, isCategoryAvailable, getEligibleListNumeric as getRegistryEligibleListNumeric } from '#core/registry.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import { getSearchLimit } from '#core/config.js';
 import { CacheManager } from './cache/CacheManager.js';
 import { KeyService } from '#services/KeyService.js';
-import { EligibleListService } from '#services/EligibleListService.js';
 import { SummaryService } from '#services/SummaryService.js';
 import { ModifiedLevelDistributionService } from './distribution/ModifiedLevelDistributionService.js';
 import { SearchService } from './search/SearchService.js';
@@ -25,7 +24,6 @@ export class EnchantEngine {
         registry: RegistryState,
         private readonly cache: CacheManager,
         private readonly keyService: KeyService,
-        private readonly poolService: EligibleListService,
         private readonly distributionService: ModifiedLevelDistributionService,
         private readonly searchService: SearchService,
         private readonly statAggregator: ProgressiveStatsAggregator
@@ -63,7 +61,7 @@ export class EnchantEngine {
      * Returns a list of eligible enchantments filtered by conflict bitset.
      */
     public getEligibleListNumeric(cat: string, level: number, bitset: bigint = 0n): number[] {
-        return this.poolService.getEligibleListNumeric(this.registry, cat, level, bitset);
+        return getRegistryEligibleListNumeric(this._registry, cat, level, bitset, this.cache, this._registry.version);
     }
 
     /**

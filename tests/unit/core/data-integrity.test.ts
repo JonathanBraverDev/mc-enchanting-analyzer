@@ -19,10 +19,9 @@ import assert from 'node:assert';
 import { global_enchantments, enchantment_groups } from '#data/enchantments.js';
 import { EngineFactory } from '#engine/factory.js';
 import { DATA } from '#data/index.js';
-import { hasConflict, getEnchantId } from '#core/registry.js';
+import { hasConflict, getEnchantId, getEnchantability } from '#core/registry.js';;
 import { versions } from '#data/versions.js';
 import { material_values } from '#data/materials.js';
-import { MaterialService } from '#core/RegistryMaterials.js';
 
 const enchantNames = Object.keys(global_enchantments);
 
@@ -248,7 +247,7 @@ describe('Data integrity: material enchantability coverage', () => {
 
             for (const mat of candidateMats) {
                 try {
-                    MaterialService.getEnchantability(DATA, mat, cat);
+                    getEnchantability(reg, mat, cat);
                 } catch (e: any) {
                     bad.push(`${cat}/${mat}: ${e.message}`);
                 }
