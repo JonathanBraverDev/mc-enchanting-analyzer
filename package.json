@@ -27,7 +27,7 @@
     "build:standalone": "npm run build && node scripts/inline-assets.js",
     "test": "npm run test:all",
     "test:all": "npm run build && npm run test:engine && npm run test:ui",
-    "test:engine": "tsx --test tests/unit/**/*.test.ts tests/integration/**/*.test.ts tests/diagnostics/**/*.test.ts tests/infra/*.test.ts",
+    "test:engine": "tsx --test tests/unit/**/*.test.ts tests/unit/engine/**/*.test.ts tests/unit/engine/search/**/*.test.ts tests/unit/engine/aggregation/**/*.test.ts tests/integration/**/*.test.ts tests/diagnostics/**/*.test.ts tests/infra/*.test.ts",
     "test:snapshots": "tsx --test --test-name-pattern=\"Snapshot:\" tests/unit/engine/engine.test.ts",
     "test:ui": "playwright test",
     "benchmark": "tsx scripts/profile_snapshot.ts",
