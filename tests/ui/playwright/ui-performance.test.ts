@@ -45,7 +45,7 @@ test.describe('UI Performance & Stability', () => {
         expect(flickerDetected, 'UI should not flicker/empty during refinement').toBe(false);
     });
 
-    test('should display 100% probability for guaranteed Sharpness IV on Sword', async () => {
+    test('should display 100% probability for clue-conditioned Sharpness IV on Sword', async () => {
         await analyzer.selectCategory('sword');
         await analyzer.selectClue('Sharpness IV');
         await analyzer.waitForRefinementComplete();
