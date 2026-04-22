@@ -134,7 +134,7 @@ describe('Worker: calculateProgressive handler', () => {
                 cat: TEST_DATA.ITEMS.SWORD,
                 xp: 30,
                 mat: TEST_DATA.MATERIALS.DIAMOND,
-                guaranteedFirst: null,
+                clue: null,
                 source: 'test-prog-final',
                 tiers: [
                     { threshold: 0.01,   limit: 500 },

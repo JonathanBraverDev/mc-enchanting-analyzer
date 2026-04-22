@@ -27,7 +27,6 @@ export class ProgressiveStatsAggregator {
      * @param cat Item category.
      * @param xp Base XP level.
      * @param mat Item material.
-     * @param guaranteedFirst Optional guaranteed enchantment.
      * @param tiers Array of (threshold, limit) configs for each pass.
      * @param onTierComplete Callback fired with results after each tier.
      * @param config Internal search configuration.
