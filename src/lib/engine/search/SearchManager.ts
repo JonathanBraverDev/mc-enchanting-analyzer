@@ -243,7 +243,7 @@ export class SearchManager {
                 stack.push({ mass: pNext, meta: nextMeta, combo: nextPacked, depth: depth + 1 });
             } else {
                 this.accountant.record('pending', pNext);
-                queue.pushOrMerge(nextMeta, pNext, blueprint.nextLevel, nextPacked);
+                queue.pushOrMerge(nextMeta, pNext, nextPacked);
             }
         }
 

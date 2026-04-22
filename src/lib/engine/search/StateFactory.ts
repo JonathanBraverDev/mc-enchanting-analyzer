@@ -38,7 +38,7 @@ export class StateFactory {
         const initialPacked = 0 as PackedCombo;
         const initialBitset = 0n;
 
-        queue.pushOrMerge((initialBitset << 8n) | BigInt(modLevel), PRECISION, modLevel, initialPacked);
+        queue.pushOrMerge((initialBitset << 8n) | BigInt(modLevel), PRECISION, initialPacked);
 
         return {
             queue, results, anyMass, rankMass, countMass,
