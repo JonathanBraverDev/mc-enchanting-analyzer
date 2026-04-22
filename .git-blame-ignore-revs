@@ -15,3 +15,6 @@
 578fe6d01dddbbc21532572d06ce4667a96d14f3
 # refactor(imports): migrate cross-module imports to aliases
 f909e4817fc73db0cc13a8e5c6fba0bd09045ee4
+
+# refactor: rename engine and ui symbols for clarity
+c7c47f8f3f34cbba88ab3a47d9cfe3e5d6ccfec4
