@@ -148,7 +148,7 @@ export class SearchProcessor {
                 ProbUtils.addItemMass(ctx.rankMass, e, pNext);
 
                 tracker.record('pending', pNext);
-                queue.pushOrMerge(nextMeta, pNext, currentLevel, nextPacked);
+                queue.pushOrMerge(nextMeta, pNext, nextPacked);
             }
         });
     }
