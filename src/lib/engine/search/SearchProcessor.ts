@@ -102,6 +102,10 @@ export class SearchProcessor {
         const finalCount = currentCount - 1;
         ProbUtils.addItemMass(countMass, finalCount, prob);
 
+        // anyMass and rankMass were pre-credited with `prob` for each enchant when this combo
+        // was first pushed (in processInitialNode / processExpansionStep). After redistribution
+        // into (N-1)-enchant outcomes, each enchant only survives in (N-1)/N of them, so we
+        // subtract lossPerEnchant ≈ prob/N per enchant to keep anyMass and rankMass accurate.
         const survivorMass = ProbUtils.roundScale(prob, BigInt(nOutcomes - 1), BigInt(nOutcomes));
         const lossPerEnchant = prob - survivorMass;
 
@@ -193,6 +197,9 @@ export class SearchProcessor {
                 totalWeight += weight;
             }
 
+            // Minecraft mechanic: each additional enchant slot draws from half the previous effective level.
+            // currentCount >= 1 is always true here (count-0 nodes take the processInitialNode path),
+            // but the halving is the real invariant: 2nd enchant sees level/2, 3rd sees level/4, etc.
             const nextLevel = currentCount >= 1 ? Math.floor(currentLevel / 2) : currentLevel;
             const blueprint: ExpansionBlueprint = {
                 probContinue,
