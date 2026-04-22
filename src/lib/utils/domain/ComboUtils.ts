@@ -68,8 +68,8 @@ export class ComboUtils {
 
     /**
      * Appends a single enchant to an already-packed combo without creating an intermediate array.
-     * guaranteedInCombo must be true iff the guaranteed enchant is already present in existing.
-     * The caller must guarantee that newItem is not already in existing.
+     * The caller must ensure that newItem is not already present in existing.
+     * For performance-critical paths where intermediate arrays would be wasteful.
      */
     static packAppend(
         existing: PackedCombo,

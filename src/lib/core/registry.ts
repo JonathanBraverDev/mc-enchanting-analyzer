@@ -3,6 +3,13 @@ import { RomanUtils, EnchantUtils } from '../utils/index.js';
 import { PACKING_CONSTANTS } from '../constants/engine.js';
 import { ENGINE_DEFAULTS } from './config.js';
 
+/**
+ * Returns the list of materials compatible with a given category.
+ * Armor materials and tool-specific categories are handled separately.
+ * @param state The resolved registry state.
+ * @param cat The item category (e.g., "sword", "armor").
+ * @returns Sorted list of compatible material names.
+ */
 export function getEligibleMaterials(state: RegistryState, cat: string): string[] {
     const itemSpecific = state.data.constants.ITEM_SPECIFIC_CATS;
     const isArmor = state.data.constants.ARMOR_CATS.includes(cat);
@@ -16,47 +23,115 @@ export function getEligibleMaterials(state: RegistryState, cat: string): string[
     return sortMaterials(state.data, eligible);
 }
 
+/**
+ * Gets the display name of an enchantment by its ID.
+ * @param state The resolved registry state.
+ * @param id The enchantment ID.
+ * @returns The enchantment name (e.g., "Sharpness", "Protection").
+ * @throws If the ID is not found in the registry.
+ */
 export function getEnchantName(state: RegistryState, id: number): string {
     const name = state.revIdMap[id];
     if (name === undefined) throw new Error(`Unknown enchant ID ${id}`);
     return name;
 }
 
+/**
+ * Converts a rank number to Roman numeral representation.
+ * @param state The resolved registry state.
+ * @param rank The rank level (1-based).
+ * @returns Roman numeral string (e.g., "I", "II", "III").
+ */
 export function getRankRoman(state: RegistryState, rank: number): string {
     return RomanUtils.rankToRoman(rank, state.data.constants.ROMAN_MAP);
 }
 
+/**
+ * Gets the internal ID for a category.
+ * @param state The resolved registry state.
+ * @param cat The category name (e.g., "sword", "helmet").
+ * @returns The category ID, or UNKNOWN_CATEGORY_ID if not found.
+ */
 export function getCategoryId(state: RegistryState, cat: string): number {
     return state.catIdMap.get(cat) ?? ENGINE_DEFAULTS.UNKNOWN_CATEGORY_ID;
 }
 
+/**
+ * Gets the internal ID for a material.
+ * @param state The resolved registry state.
+ * @param mat The material name (e.g., "diamond", "wood").
+ * @returns The material ID, or UNKNOWN_MATERIAL_ID if not found.
+ */
 export function getMaterialId(state: RegistryState, mat: string): number {
     return state.matIdMap.get(mat) ?? ENGINE_DEFAULTS.UNKNOWN_MATERIAL_ID;
 }
 
+/**
+ * Gets the internal ID for an enchantment by name.
+ * @param state The resolved registry state.
+ * @param name The enchantment name (e.g., "sharpness").
+ * @returns The enchantment ID, or UNKNOWN_ENCHANT_ID if not found.
+ */
 export function getEnchantId(state: RegistryState, name: string): number {
     return state.idMap.get(name) ?? ENGINE_DEFAULTS.UNKNOWN_ENCHANT_ID;
 }
 
+/**
+ * Checks if two enchantments have a conflict relationship.
+ * @param state The resolved registry state.
+ * @param idA First enchantment ID.
+ * @param idB Second enchantment ID.
+ * @returns True if idA and idB conflict.
+ */
 export function hasConflict(state: RegistryState, idA: number, idB: number): boolean {
     return ((state.conflictBitsets[idA] ?? 0n) & (1n << BigInt(idB))) !== 0n;
 }
 
+/**
+ * Checks if a category has any enchantable items.
+ * @param state The resolved registry state.
+ * @param cat The category name.
+ * @returns True if the category has at least one item.
+ */
 export function isCategoryAvailable(state: RegistryState, cat: string): boolean {
     const pool = state.mergedItems[cat];
     return !!(pool && pool.length > 0);
 }
 
+/**
+ * Gets the list of item names in a category.
+ * @param state The resolved registry state.
+ * @param cat The category name.
+ * @returns Array of item names, or empty array if category not found.
+ */
 export function getCategoryPool(state: RegistryState, cat: string): string[] {
     return state.mergedItems[cat] || [];
 }
 
+/**
+ * Gets the full display name of an enchantment at a specific rank.
+ * @param state The resolved registry state.
+ * @param idAndRank Packed (id << 8 | rank) value.
+ * @returns Full name including rank (e.g., "Sharpness III").
+ */
 export function getFullEnchantName(state: RegistryState, idAndRank: number): string {
     const id = idAndRank >> 8;
     const rank = idAndRank & 0xFF;
     return `${getEnchantName(state, id)} ${getRankRoman(state, rank)}`;
 }
 
+/**
+ * Gets the list of enchantments applicable at a specific modified level.
+ * Caches results by version and level key for performance.
+ * Each enchantment is returned as a packed (id << 8 | rank) value.
+ *
+ * @param state The resolved registry state.
+ * @param cat Item category.
+ * @param level The modified level.
+ * @param cache Optional cache for pool results (per-version).
+ * @param version Optional version key for cache lookup.
+ * @returns Array of packed enchantment values available at this level.
+ */
 export function getEligiblePool(
     state: RegistryState,
     cat: string,

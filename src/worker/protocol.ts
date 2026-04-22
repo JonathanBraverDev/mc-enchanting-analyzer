@@ -1,5 +1,16 @@
 import { CompactStats, ProgressUpdate } from '#types/index.js';
 
+/**
+ * Request messages for the enchanting analyzer worker.
+ *
+ * - **init**: Initialize the worker engine for a specific game version.
+ * - **calculate**: Single-pass search for a fixed category/xp/material combo.
+ * - **calculateProgressive**: Tiered refinement search with progress callbacks.
+ * - **calculateConditioned**: Bayesian search conditioned on an observed clue.
+ *
+ * The `source` field allows multiple UI components to run concurrent searches
+ * without interfering with each other (abort is per-source).
+ */
 export type WorkerRequest =
     | { type: "init"; id: number; payload: { version: string } }
     | { type: "calculate"; id: number; payload: {
@@ -25,6 +36,14 @@ export type WorkerRequest =
         resultsLimit?: number;
       }};
 
+/**
+ * Response messages from the worker.
+ *
+ * - **ready**: Worker initialized and ready for calculations.
+ * - **result**: Final calculation results (correlates with a request id).
+ * - **progress**: Intermediate progress update (for progressive/tiered searches).
+ * - **error**: Calculation failed or was aborted.
+ */
 export type WorkerResponse =
     | { type: "ready"; id: number; payload?: undefined }
     | { type: "result"; id: number; payload: { stats: CompactStats } }

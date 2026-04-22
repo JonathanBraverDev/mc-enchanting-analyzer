@@ -14,6 +14,17 @@ const workerScope = self as unknown as WorkerPostable;
 let engine: EnchantEngine | null = null;
 const abortControllers = new Map<string, AbortController>();
 
+/**
+ * Message handler for the enchanting analyzer worker.
+ * Supports:
+ * - 'init': Initialize engine with a specific version
+ * - 'calculate': Single-pass search at a fixed modified level
+ * - 'calculateProgressive': Tiered search with refinement callbacks
+ * - 'calculateConditioned': Search conditioned on a displayed clue (Bayesian)
+ *
+ * Aborts are per-source, allowing multiple concurrent searches from different UI sources.
+ * Results are serialized with TypedArray transferables for zero-copy messaging.
+ */
 self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
     const { type, payload, id } = e.data;
 
