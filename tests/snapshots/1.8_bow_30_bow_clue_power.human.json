@@ -1,0 +1,74 @@
+{
+  "ranks": {
+    "Unbreaking III": 0.360340655202,
+    "Power IV": 1,
+    "Punch I": 0.052910248117,
+    "Punch II": 0.115496241709,
+    "Flame I": 0.168406489826,
+    "Infinity I": 0.087749468093
+  },
+  "any": {
+    "Unbreaking": 0.360340655202,
+    "Power": 1,
+    "Punch": 0.168406489826,
+    "Flame": 0.168406489826,
+    "Infinity": 0.087749468093
+  },
+  "count": {
+    "1": 0.404976308823,
+    "2": 0.430021015178,
+    "3": 0.141916391626,
+    "4": 0.021295832976,
+    "5": 0.001790451397
+  },
+  "combos": {
+    "Power IV": 0.404976308823,
+    "Power IV+Unbreaking III": 0.222829071501,
+    "Flame I+Power IV": 0.083189520027,
+    "Punch II+Power IV": 0.055949556995,
+    "Flame I+Power IV+Unbreaking III": 0.046638488546,
+    "Infinity I+Power IV": 0.040812903622,
+    "Punch II+Power IV+Unbreaking III": 0.032291286297,
+    "Punch I+Power IV": 0.027239963032,
+    "Infinity I+Power IV+Unbreaking III": 0.022056969598,
+    "Punch I+Power IV+Unbreaking III": 0.014347202249,
+    "Flame I+Punch II+Power IV": 0.00952093596,
+    "Flame I+Punch II+Power IV+Unbreaking III": 0.007918540463,
+    "Infinity I+Flame I+Power IV": 0.006415651476,
+    "Infinity I+Flame I+Power IV+Unbreaking III": 0.00467459658,
+    "Infinity I+Punch II+Power IV": 0.004442031572,
+    "Flame I+Punch I+Power IV": 0.004230206024,
+    "Infinity I+Punch II+Power IV+Unbreaking III": 0.003353506747,
+    "Flame I+Punch I+Power IV+Unbreaking III": 0.00311945199,
+    "Infinity I+Punch I+Power IV": 0.001973619904,
+    "Infinity I+Flame I+Punch II+Power IV+Unbreaking III": 0.00136852955,
+    "Infinity I+Punch I+Power IV+Unbreaking III": 0.001321089833,
+    "Infinity I+Flame I+Punch II+Power IV": 0.000651854124,
+    "Infinity I+Flame I+Punch I+Power IV+Unbreaking III": 0.000421921848,
+    "Infinity I+Flame I+Punch I+Power IV": 0.000256793238
+  },
+  "accuracy": 1,
+  "accounting": {
+    "resolved": 1,
+    "pending": 0,
+    "sieved": 0,
+    "overflow": 0,
+    "capped": 0,
+    "rounding": 2.5153490401663703e-17,
+    "recoveredRounding": 1.0581813203458523e-16,
+    "recoveredSieved": 0,
+    "clueKnownSpace": 0.2472811318053629,
+    "units": {
+      "resolved": "1152921504606846947",
+      "pending": "0",
+      "sieved": "0",
+      "overflow": "0",
+      "capped": "0",
+      "rounding": "29",
+      "recoveredRounding": "122",
+      "recoveredSieved": "0",
+      "clueKnownSpace": "0"
+    }
+  },
+  "clues": {}
+}
