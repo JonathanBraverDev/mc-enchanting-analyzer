@@ -1,6 +1,6 @@
 {
   "name": "mc-enchanting-analyzer",
-  "version": "4.2.0",
+  "version": "4.3.0",
   "devDependencies": {
     "@playwright/test": "^1.58.2",
     "@types/chart.js": "^2.9.41",
@@ -27,21 +27,16 @@
     "build:standalone": "npm run build && node scripts/inline-assets.js",
     "test": "npm run test:all",
     "test:all": "npm run build && npm run lint && npm run test:engine && npm run test:ui",
-    "test:engine": "npm run test:engine:foundation && npm run test:engine:services && npm run test:engine:units && npm run test:engine:infra && npm run test:engine:integration && npm run test:engine:diagnostics && npm run test:snapshots",
-    "test:engine:foundation": "tsx --test --test-concurrency=1 tests/unit/utils/*.test.ts tests/unit/core/*.test.ts",
-    "test:engine:services": "tsx --test --test-concurrency=1 tests/unit/services/*.test.ts tests/unit/engine/probability-mass-bookkeeper.test.ts tests/unit/engine/search/search-state-tracker.test.ts tests/unit/engine/aggregation/progressive-stats-aggregator.test.ts",
-    "test:engine:units": "tsx --test --test-concurrency=1 --test-skip-pattern=\"Snapshot:\" tests/unit/engine/engine.test.ts tests/unit/engine/engine-invariants.test.ts tests/unit/engine/prob-conservation.test.ts tests/unit/engine/progressive.test.ts",
-    "test:engine:infra": "tsx --test --test-concurrency=1 tests/infra/*.test.ts",
-    "test:engine:integration": "tsx --test --test-concurrency=1 tests/integration/integration.test.ts tests/integration/mechanics.test.ts tests/integration/refinement-chart.integration.test.ts",
-    "test:engine:diagnostics": "tsx --test --test-concurrency=1 tests/diagnostics/*.test.ts",
-    "test:snapshots": "tsx --test --test-concurrency=1 --test-name-pattern=\"Snapshot:\" tests/unit/engine/engine.test.ts",
-    "test:ui": "playwright test tests/ui/playwright/ui-basic.test.ts && playwright test tests/ui/playwright/ui-regression.test.ts && playwright test tests/ui/playwright/ui-chart.test.ts && playwright test tests/ui/playwright/ui-performance.test.ts",
+    "test:engine": "tsx --test --test-concurrency=1 tests/unit/utils/*.test.ts tests/unit/core/*.test.ts tests/unit/services/*.test.ts tests/unit/engine/probability-mass-bookkeeper.test.ts tests/unit/engine/search/search-state-tracker.test.ts tests/unit/engine/aggregation/progressive-stats-aggregator.test.ts tests/unit/engine/engine.test.ts tests/unit/engine/engine-invariants.test.ts tests/unit/engine/prob-conservation.test.ts tests/unit/engine/progressive.test.ts tests/infra/*.test.ts tests/integration/integration.test.ts tests/integration/mechanics.test.ts tests/integration/refinement-chart.integration.test.ts tests/diagnostics/*.test.ts tests/unit/engine/engine.snapshots.test.ts",
+    "test:snapshots": "tsx --test tests/unit/engine/engine.snapshots.test.ts",
+    "test:ui": "playwright test tests/ui/playwright",
     "benchmark": "tsx scripts/profile_snapshot.ts",
     "benchmark:cpu": "tsx --cpu-prof scripts/profile_snapshot.ts",
     "benchmark:compare": "tsx scripts/compare_profiles.ts",
     "benchmark:clean": "node -e \"const fs = require('fs'); const files = fs.readdirSync('.').filter(f => f.endsWith('.cpuprofile')); console.log(`Cleaning ${files.length} root profiles...`); files.forEach(f => fs.unlinkSync(f));\"",
     "update-snapshots": "tsx scripts/update-snapshots.ts",
     "lint": "tsc --noEmit",
+    "lint:imports": "tsx scripts/lint-imports.ts",
     "release": "npm run test:all && npm run build:standalone"
   },
   "imports": {
