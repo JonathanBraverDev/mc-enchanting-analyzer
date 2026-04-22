@@ -1,6 +1,6 @@
 import { ForwardingContext, PackedCombo, PackedEnchant, ExpansionBlueprint } from '#types/index.js';
 import { ComboUtils, ProbUtils } from '#utils/index.js';
-import { ENGINE_LIMITS, SEARCH_CONSTANTS } from '#constants/engine.js';
+import { ENGINE_LIMITS, BIGINT_CONSTANTS } from '#constants/engine.js';
 import { DistributionPool } from '#engine/distribution/DistributionPool.js';
 import { SearchManager } from '#engine/search/SearchManager.js';
 
@@ -126,31 +126,26 @@ export class SearchProcessor {
         ctx: ForwardingContext,
         tracker: SearchManager
     ): void {
-        const { registry, timing, queue, pool, poolWeights, initialTotalWeight } = ctx;
-        
-        const splits = this.withTiming(timing, 'distributionMs', () => {
-            const buffer = DistributionPool.getBuffer(0);
-            const splitRemainder = ProbUtils.distributeDetailed(currentProb, poolWeights, initialTotalWeight, buffer);
-            tracker.record('sieved', splitRemainder);
-            return buffer;
-        });
+        const { registry, queue, pool, poolWeights, initialTotalWeight } = ctx;
 
-        this.withTiming(timing, 'heapMs', () => {
-            for (const [i, e] of pool.entries()) {
-                const pNext = splits[i];
-                if (pNext === undefined || pNext === 0n) continue;
-                
-                const nextId = ComboUtils.getEnchantId(e);
-                const nextMeta = ((1n << BigInt(nextId)) << 8n) | BigInt(currentLevel);
-                const nextPacked = ComboUtils.pack([e], registry.enchantToIndex) as PackedCombo;
+        const buffer = DistributionPool.getBuffer(0);
+        const splitRemainder = ProbUtils.distributeDetailed(currentProb, poolWeights, initialTotalWeight, buffer);
+        tracker.record('sieved', splitRemainder);
 
-                ProbUtils.addItemMass(ctx.anyMass, nextId, pNext);
-                ProbUtils.addItemMass(ctx.rankMass, e, pNext);
+        for (const [i, e] of pool.entries()) {
+            const pNext = buffer[i];
+            if (pNext === undefined || pNext === 0n) continue;
 
-                tracker.record('pending', pNext);
-                queue.pushOrMerge(nextMeta, pNext, nextPacked);
-            }
-        });
+            const nextId = ComboUtils.getEnchantId(e);
+            const nextMeta = (BIGINT_CONSTANTS.ID_BIT_LOOKUP[nextId]! << BIGINT_CONSTANTS.ENCHANT_SHIFT) | BIGINT_CONSTANTS.LEVEL_LOOKUP[currentLevel]!;
+            const nextPacked = ComboUtils.pack([e], registry.enchantToIndex) as PackedCombo;
+
+            ProbUtils.addItemMass(ctx.anyMass, nextId, pNext);
+            ProbUtils.addItemMass(ctx.rankMass, e, pNext);
+
+            tracker.record('pending', pNext);
+            queue.pushOrMerge(nextMeta, pNext, nextPacked);
+        }
     }
 
     /**
@@ -165,10 +160,10 @@ export class SearchProcessor {
         ctx: ForwardingContext,
         tracker: SearchManager
     ): void {
-        const { registry, timing, cat, pool } = ctx;
+        const { registry, cat, pool } = ctx;
         const { indexToEnchant } = registry;
-        const currentBitset = currentMeta >> 8n;
-        const currentLevel = Number(currentMeta & 0xFFn);
+        const currentBitset = currentMeta >> BIGINT_CONSTANTS.ENCHANT_SHIFT;
+        const currentLevel = Number(currentMeta & BIGINT_CONSTANTS.RANK_MASK);
         const isBook = cat === "book";
 
         const currentEnchants = (isBook && currentCount > 1)
@@ -177,43 +172,41 @@ export class SearchProcessor {
 
         const probContinue = (isBook && !registry.multiEnchantBooks && currentCount >= 1)
             ? 0n
-            : (SEARCH_CONSTANTS.PROB_CONTINUE_TABLE[currentLevel] || 0n);
+            : (ProbUtils.PROB_CONTINUE_TABLE[currentLevel] || 0n);
 
         if (!tracker.has(currentMeta)) {
-            this.withTiming(timing, 'filteringMs', () => {
-                const tempEligible: PackedEnchant[] = [];
-                const tempWeights: number[] = [];
-                let eligibleCount = 0;
-                let totalWeight = 0;
+            const tempEligible: PackedEnchant[] = [];
+            const tempWeights: number[] = [];
+            let eligibleCount = 0;
+            let totalWeight = 0;
 
-                for (const [i, e] of pool.entries()) {
-                    const id = ComboUtils.getEnchantId(e);
-                    if ((currentBitset & (1n << BigInt(id))) !== 0n) continue;
-                    const conflictBitset = registry.conflictBitsets[id];
-                    if (conflictBitset !== undefined && (currentBitset & conflictBitset) !== 0n) continue;
-                    const weight = ctx.poolWeights[i];
-                    if (weight === undefined) continue;
-                    tempEligible.push(e);
-                    tempWeights.push(weight);
-                    eligibleCount++;
-                    totalWeight += weight;
-                }
-                
-                const nextLevel = currentCount >= 1 ? Math.floor(currentLevel / 2) : currentLevel;
-                const blueprint: ExpansionBlueprint = {
-                    probContinue,
-                    totalWeight,
-                    eligibleCount,
-                    eligibleEnchants: tempEligible,
-                    eligibleWeights: new Int32Array(tempWeights),
-                    nextLevel,
-                    currentCount,
-                    currentCombo,
-                    currentEnchants,
-                    residue: 0n
-                };
-                tracker.registerExpansion(currentMeta, blueprint);
-            });
+            for (const [i, e] of pool.entries()) {
+                const id = ComboUtils.getEnchantId(e);
+                if ((currentBitset & BIGINT_CONSTANTS.ID_BIT_LOOKUP[id]!) !== 0n) continue;
+                const conflictBitset = registry.conflictBitsets[id];
+                if (conflictBitset !== undefined && (currentBitset & conflictBitset) !== 0n) continue;
+                const weight = ctx.poolWeights[i];
+                if (weight === undefined) continue;
+                tempEligible.push(e);
+                tempWeights.push(weight);
+                eligibleCount++;
+                totalWeight += weight;
+            }
+
+            const nextLevel = currentCount >= 1 ? Math.floor(currentLevel / 2) : currentLevel;
+            const blueprint: ExpansionBlueprint = {
+                probContinue,
+                totalWeight,
+                eligibleCount,
+                eligibleEnchants: tempEligible,
+                eligibleWeights: new Int32Array(tempWeights),
+                nextLevel,
+                currentCount,
+                currentCombo,
+                currentEnchants,
+                residue: 0n
+            };
+            tracker.registerExpansion(currentMeta, blueprint);
         }
 
         tracker.forwardMass(currentProb, currentMeta, currentCombo, ctx, SearchProcessor);
