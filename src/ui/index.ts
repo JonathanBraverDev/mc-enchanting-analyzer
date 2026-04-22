@@ -5,7 +5,7 @@ import { UI_TEXTS } from '#core/config.js';
 import { WorkerClient } from '#worker/client.js';
 import { ParamsView } from '#ui/views/ParamsView.js';
 import { ResultsView } from '#ui/views/ResultsView.js';
-import { ChartController } from '#ui/chart.js';
+import { ChartController } from '#ui/results-chart-controller.js';
 import { RefinementService } from '#ui/refinement.js';
 import { HumanizationService } from '#services/index.js';
 import { getEnchantability } from '#core/registry.js';
