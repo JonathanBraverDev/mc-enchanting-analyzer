@@ -1,5 +1,6 @@
 import { SearchHeap } from '#utils/collections/SearchHeap.js';
 import { PRECISION } from '#utils/index.js';
+import { PACKING_CONSTANTS } from '#constants/engine.js';
 import { PackedCombo, SearchState } from '#types/index.js';
 import { SearchManager } from './SearchManager.js';
 
@@ -29,9 +30,9 @@ export class StateFactory {
 
         const results = new Map<PackedCombo, bigint>();
         const queue = new SearchHeap();
-        const anyMass = new BigUint64Array(256);
-        const rankMass = new BigUint64Array(16384);
-        const countMass = new BigUint64Array(16);
+        const anyMass = new BigUint64Array(PACKING_CONSTANTS.BYTE_BASIS);
+        const rankMass = new BigUint64Array(PACKING_CONSTANTS.MAX_RANKED_INDEX);
+        const countMass = new BigUint64Array(PACKING_CONSTANTS.MAX_COUNT_INDEX);
 
         // Always start from an empty generation state (0 packed, 0 bitset)
         const initialPacked = 0 as PackedCombo;
