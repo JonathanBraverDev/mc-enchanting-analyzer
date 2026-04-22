@@ -1,4 +1,5 @@
 import { PackedEnchant, PackedCombo } from '../../types/index.js';
+import { PACKING_CONSTANTS } from '#constants/engine.js';
 
 /**
  * Utility for packing and unpacking enchantment combinations into numbers.
@@ -6,17 +7,20 @@ import { PackedEnchant, PackedCombo } from '../../types/index.js';
  * All methods that need lookup tables take them explicitly as parameters.
  */
 export class ComboUtils {
-    static getEnchantId(packed: PackedEnchant): number { return packed >> 8; }
-    static getEnchantRank(packed: PackedEnchant): number { return packed & 0xFF; }
+    static getEnchantId(packed: PackedEnchant): number { return packed >> PACKING_CONSTANTS.ENCHANT_SHIFT; }
+    static getEnchantRank(packed: PackedEnchant): number { return packed & PACKING_CONSTANTS.RANK_MASK; }
 
-    static readonly BYTE_MULTIPLIERS = [1, 256, 65536, 16777216, 4294967296, 1099511627776];
+    static readonly BYTE_MULTIPLIERS: number[] = Array.from(
+        { length: PACKING_CONSTANTS.MAX_COMBO_SLOTS },
+        (_, i) => PACKING_CONSTANTS.BYTE_BASIS ** i
+    );
 
     static getCount(packed: PackedCombo): number {
         let mult = 1;
-        for (let i = 0; i < 6; i++, mult *= 256) {
-            if (Math.floor(packed / mult) % 256 === 0) return i;
+        for (let i = 0; i < PACKING_CONSTANTS.MAX_COMBO_SLOTS; i++, mult *= PACKING_CONSTANTS.BYTE_BASIS) {
+            if (Math.floor(packed / mult) % PACKING_CONSTANTS.BYTE_BASIS === 0) return i;
         }
-        return 6;
+        return PACKING_CONSTANTS.MAX_COMBO_SLOTS;
     }
 
     /**
@@ -38,7 +42,7 @@ export class ComboUtils {
         let mult = 1;
         for (const v of indices) {
             packed += v * mult;
-            mult *= 256;
+            mult *= PACKING_CONSTANTS.BYTE_BASIS;
         }
 
         return packed as PackedCombo;
@@ -52,8 +56,8 @@ export class ComboUtils {
 
         const out: PackedEnchant[] = [];
         let mult = 1;
-        for (let i = 0; i < 6; i++, mult *= 256) {
-            const idx = Math.floor(packed / mult) % 256;
+        for (let i = 0; i < PACKING_CONSTANTS.MAX_COMBO_SLOTS; i++, mult *= PACKING_CONSTANTS.BYTE_BASIS) {
+            const idx = Math.floor(packed / mult) % PACKING_CONSTANTS.BYTE_BASIS;
             if (idx === 0) break;
             const enchant = indexToEnchant[idx];
             if (enchant === undefined) break;
@@ -84,8 +88,8 @@ export class ComboUtils {
         // Insert in descending idx order to maintain canonical representation
         let insertPos = count;
         let multScan = 1;
-        for (let i = 0; i < count; i++, multScan *= 256) {
-            const b = Math.floor(existing / multScan) % 256;
+        for (let i = 0; i < count; i++, multScan *= PACKING_CONSTANTS.BYTE_BASIS) {
+            const b = Math.floor(existing / multScan) % PACKING_CONSTANTS.BYTE_BASIS;
             if (newIdx > b) {
                 insertPos = i;
                 break;
@@ -94,14 +98,14 @@ export class ComboUtils {
 
         let packed = 0;
         let mult = 1;
-        for (let i = 0; i < insertPos; i++, mult *= 256) {
-            const b = Math.floor(existing / mult) % 256;
+        for (let i = 0; i < insertPos; i++, mult *= PACKING_CONSTANTS.BYTE_BASIS) {
+            const b = Math.floor(existing / mult) % PACKING_CONSTANTS.BYTE_BASIS;
             packed += b * mult;
         }
         packed += newIdx * mult;
-        for (let i = insertPos; i < count; i++, mult *= 256) {
-            const b = Math.floor(existing / mult) % 256;
-            packed += b * (mult * 256);
+        for (let i = insertPos; i < count; i++, mult *= PACKING_CONSTANTS.BYTE_BASIS) {
+            const b = Math.floor(existing / mult) % PACKING_CONSTANTS.BYTE_BASIS;
+            packed += b * (mult * PACKING_CONSTANTS.BYTE_BASIS);
         }
         return packed as PackedCombo;
     }
@@ -118,16 +122,16 @@ export class ComboUtils {
 
         const possibleResults: PackedCombo[] = [];
         let mult = 1;
-        for (let i = 0; i < count; i++, mult *= 256) {
-            const byteVal = Math.floor(packed / mult) % 256;
+        for (let i = 0; i < count; i++, mult *= PACKING_CONSTANTS.BYTE_BASIS) {
+            const byteVal = Math.floor(packed / mult) % PACKING_CONSTANTS.BYTE_BASIS;
             if (byteVal === 0) continue;
 
             // Mathematically remove the i-th byte by zeroing it and shifting the upper bytes down
             const lowerPart = packed % mult;
             const nextPacked = (i + 1 < count)
-                ? lowerPart + (Math.floor(packed / (mult * 256)) * mult)
+                ? lowerPart + (Math.floor(packed / (mult * PACKING_CONSTANTS.BYTE_BASIS)) * mult)
                 : lowerPart;
-            
+
             possibleResults.push(nextPacked as PackedCombo);
         }
 

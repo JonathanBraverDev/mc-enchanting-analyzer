@@ -46,9 +46,9 @@ export const ProbUtils = {
      * Specialized fast-path for PRECISION (2^60) using bitwise logic.
      */
     roundDiv60: (a: bigint): bigint => {
-        const q = a >> 60n;
-        const r = a & 0xFFFFFFFFFFFFFFFn; // (1n << 60n) - 1n
-        const half = 1n << 59n;
+        const q = a >> MATH_CONSTANTS.PRECISION_SHIFT;
+        const r = a & (PRECISION - 1n);
+        const half = PRECISION >> 1n;
 
         if (r < half) return q;
         if (r > half) return q + 1n;
