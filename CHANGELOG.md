@@ -1,5 +1,22 @@
 # Changelog
 
+## v4.2.1 (2026-04-22)
+
+### Changed
+- **Internal naming cleanup**: Renamed internal engine and UI symbols to better match their real responsibilities, including `SearchManager` → `SearchStateTracker`, `MassAccountant` → `ProbabilityMassBookkeeper`, `DistributionPool` → `DistributionBufferPool`, `DistributionService` → `ModifiedLevelDistributionService`, and `StatAggregator` → `ProgressiveStatsAggregator`.
+- **Registry consolidation**: Inlined the thin `RegistryMaterials` and `RegistryPools` helpers into `registry.ts`, and folded the tiny eligible-list helper into the registry layer to simplify ownership and reduce indirection.
+- **UI/test naming alignment**: Renamed the chart files to `results-chart-controller.ts` and `results-chart-manager.ts`, aligned test filenames with the classes they cover, and cleaned up remaining clue-oriented naming leftovers.
+
+### Developer Experience
+- **Test workflow cleanup**: Restored the staged sequential test script flow and aligned script names with the updated test layout.
+- **Blame hygiene**: Added the pure-rename and chart-rename commits to `.git-blame-ignore-revs` so future blame stays readable.
+- **Code documentation**: Added high-value JSDoc and invariant comments around the registry, search pipeline, worker protocol, and clue-analysis path.
+
+### Verified
+- **Snapshot parity**: Regression snapshots remain identical to the rebuilt v4.2.0 baseline.
+- **Release validation**: The full release pipeline passes, including build, lint, engine tests, snapshots, Playwright UI tests, and standalone bundle generation.
+- **Scope discipline**: This release stays a cleanup-and-clarification pass. The later clue-semantics correction work is not folded into v4.2.1.
+
 ## v4.2.0 (2026-04-21)
 
 ### Improved
