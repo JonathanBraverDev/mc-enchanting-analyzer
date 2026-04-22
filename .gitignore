@@ -15,3 +15,6 @@ scripts/matrix-output/
 
 # Scratch / temporary analysis files
 scratch/
+
+# Profiling Artifacts
+/*.cpuprofile
