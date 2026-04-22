@@ -38,6 +38,9 @@ export class SearchService {
         const state = StateFactory.create(modLevel, existingState, threshold);
         const { results, queue } = state;
         
+        // Minecraft fixes the eligible enchant/rank pool from the initial full modified level once.
+        // Later level halving affects only the chance to continue to another enchant slot, not which
+        // enchantments can appear in this run, so downstream search nodes must keep reusing this pool.
         const initialPool = getEligiblePool(registry, cat, modLevel, this.cache, registry.version);
         
         const poolWeights: number[] = initialPool.map(e => registry.weightMap[e >> PACKING_CONSTANTS.ENCHANT_SHIFT] ?? 0);
