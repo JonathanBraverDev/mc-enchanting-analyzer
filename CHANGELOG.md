@@ -1,5 +1,19 @@
 # Changelog
 
+## v4.2.0 (2026-04-21)
+
+### Improved
+- **Heap Performance**: Reworked the frontier queue around an optimized 4-ary `SearchHeap` with lower-overhead metadata tracking and faster lookup behavior, substantially improving heavy searches while keeping result output stable.
+- **Probability Accounting Efficiency**: Replaced `MassAccountant`'s internal record storage with a TypedArray-backed layout to reduce overhead without changing reported search totals.
+- **Developer Tooling**: Aligned the benchmark, CPU profiling, profile-comparison, and lint script surface with the intended 4.2 developer workflow.
+
+### Added
+- **SearchHeap Regression Coverage**: Added a dedicated regression suite for heap behavior so the queue rewrite stays protected by targeted tests.
+- **Performance Comparison Helper**: Added a profile-comparison script for comparing CPU captures from different optimization passes.
+
+### Verified
+- **Snapshot Parity**: Machine and human snapshot artifacts remain byte-for-byte identical to the fixed `v4.0.0` clue-conditioned baseline.
+
 ## v4.1.0 (2026-04-20)
 
 ### Improved
