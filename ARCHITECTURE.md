@@ -13,34 +13,34 @@
 
 ```
 src/lib/
+  constants/       ← Minecraft rules, XP caps, search limits (new)
   data/            ← pure JSON-shaped data (no imports)
   types/           ← type definitions only (no runtime deps)
   utils/           ← stateless math, BinaryHeap, LRUCache, etc.
-  core/            ← RegistryFactory, config, materials/pools
-  engine/          ← EnchantEngine, StatAggregator, SearchService, etc.
+  core/            ← RegistryFactory, builder logic
+  engine/          ← EnchantEngine, SearchStateTracker, SearchService, etc.
   services/        ← CacheManager, SummaryService, HumanizationService, etc.
   index.ts         ← Public library API (re-exports)
 
 src/ui/            ← UI layer only
-  components/      ← Future DOM modules (ResultsView, ChartController, etc.)
-  styles/
-    style.css
   index.ts         ← UI bundle entry
   analyzer.html     ← Entry template
+  ... (ResultsView, ChartController, Refinement, etc.)
 
 src/worker/
   worker.ts        ← Web Worker entry
 
 tests/             ← Root-level test suite
-  ... (moved from src/tests)
+  unit/            ← Logic isolation tests
+  integration/     ← Cross-module flow tests
+  snapshots/       ← Mathematical gold standards
 
 scripts/           ← Build, profiling, snapshot tools
-  ... (moved from root and src/tests/profiler.ts)
+  ... (benchmark_engine.ts, update-snapshots.ts, etc.)
 ```
 
-Dependency direction: `lib/data` ← `lib/types` ← `lib/utils` ← `lib/core` ← `lib/engine` ← `lib/services` ← `worker` ← `ui`
-(Each layer imports only from layers to its left, with one noted exception: `engine/aggregator.ts` imports `SummaryService` from `services` for inline progress callbacks.)
-rvice` from `services` for inline progress callbacks.)
+Dependency direction: `lib/constants` ← `lib/data` ← `lib/types` ← `lib/utils` ← `lib/core` ← `lib/engine` ← `lib/services` ← `worker` ← `ui`
+(Each layer imports only from layers to its left, with one noted exception: `engine/aggregation/ProgressiveStatsAggregator.ts` imports `SummaryService` from `services` for inline progress callbacks.)
 
 ---
 
@@ -54,32 +54,30 @@ UI (src/ui/index.ts)
   WorkerClient.request('getFullStats', payload)   ← sends message to Web Worker
     │
     ▼  [postMessage over structured clone]
+    ▼
 Worker (src/worker/worker.ts)
   engine.getFullStats(cat, xp, mat, config)
     │
     ▼
-EnchantEngine.getFullStats (src/engine/index.ts)
+EnchantEngine.getFullStats (src/lib/engine/index.ts)
   ├─ validates inputs (xp range, known category/material, guaranteed-first validity)
   ├─ checks CacheManager (stats cache, threshold-aware hit detection)
-  └─ StatAggregator.getFullStats(registry, cat, xp, mat, guaranteedFirst, config)
+  └─ ProgressiveStatsAggregator.getFullStats(registry, cat, xp, mat, guaranteedFirst, config)
         │
-        ├─ DistributionService.getModifiedLevelDist(version, xp, enchantability)
+        ├─ ModifiedLevelDistributionService.getModifiedLevelDist(version, xp, enchantability)
         │    → bigint probability map  { modifiedLevel → P(level) }
         │
         └─ for each modifiedLevel (highest→lowest):
              SearchService.calculateCombinations(registry, cat, ml, mat, ...)
-               ├─ CacheManager (combo/book cache hit/resumption detection)
-               ├─ FrontierFactory.create()   → initialises BinaryHeap + mass maps
-               ├─ SearchProcessor: high-speed search primitives
-               ├─ best-first search loop:
-               │    getEligiblePool()        → PackedEnchant[] for (cat, level, mat)
-               │    processInitialNode()     → expand root into first enchants
-               │    processSearchNode()      → branch, conflict-prune, merge duplicates
-               ├─ SearchProcessor.redistributeBookProb() → split prob for multi-enchant books
-               └─ returns SearchFrontier { results, anyMass, rankMass, countMass, accounting (ProbabilityMassTracker) }
+                ├─ CacheManager (combo/book cache hit/resumption detection)
+                ├─ FrontierFactory.create()   → initialises BinaryHeap + mass maps
+                ├─ SearchProcessor: high-speed search primitives
+                ├─ best-first search loop (using SearchStateTracker)
+                ├─ SearchProcessor.redistributeBookProb() → split prob for multi-enchant books
+                └─ returns SearchFrontier { results, anyMass, rankMass, countMass, accounting (ProbabilityMassBookkeeper) }
 
         ↓ accumulate frontier results weighted by modLevel probabilities
-        SummaryService.summarize()   → CalculationStats { ..., accuracy, accounting (MassAccounting), threshold }
+        SummaryService.summarize()   → CalculationStats { ..., accuracy, accounting, threshold }
     │
     ▼
 CacheManager.setStats(version, key, CalculationStats)
@@ -88,14 +86,14 @@ CacheManager.setStats(version, key, CalculationStats)
 SerializationService.serialize()   → CompactStats (TypedArrays for transferable transfer)
     │
     ▼  [postMessage + transferables]
-WorkerClient (src/worker/client.ts)
+WorkerClient (src/ui/worker-client.ts)
   SerializationService.deserialize() → CalculationStats
     │
     ├─ onProgress callback → intermediate UI update
     └─ final result
     │
     ▼
-UI (HumanizationService.humanize + ResultsView.render + ChartController.update)
+UI (HumanizationService.humanize + ResultsChartController + RefinementController)
 ```
 
 ---
@@ -114,7 +112,7 @@ UI (HumanizationService.humanize + ResultsView.render + ChartController.update)
 | `static clearAllEngines()` | Clears all caches AND removes all engine refs from the global tracking set |
 | `destroy()` | Clears caches and removes this engine from the global tracking set |
 
-### `src/lib/engine/aggregator.ts` — `StatAggregator`
+### `src/lib/engine/aggregator.ts` — `ProgressiveStatsAggregator`
 | Signature | What it does |
 |---|---|
 | `static getFullStats(registry, cat, xp, mat, guaranteedFirst?, config?) → Promise<CalculationStats>` | Loops over all modified levels, runs search per level, accumulates weighted mass maps |
@@ -127,7 +125,7 @@ UI (HumanizationService.humanize + ResultsView.render + ChartController.update)
 ### `src/lib/engine/search.ts` — `SearchService`
 | Signature | What it does |
 |---|---|
-| `static calculateCombinations(registry, cat, modLevel, mat, guaranteedFirst?, threshold?, limit, existingFrontier?, resultsLimit?, poolCache?, instrumentation?, floor?) → SearchFrontier` | Best-first iterative search; resumes from existing frontier if provided; uses MassAccountant for bookkeeping |
+| `static calculateCombinations(registry, cat, modLevel, mat, guaranteedFirst?, threshold?, limit, existingFrontier?, resultsLimit?, poolCache?, instrumentation?, floor?) → SearchFrontier` | Best-first iterative search; resumes from existing frontier if provided; uses ProbabilityMassBookkeeper for bookkeeping |
 
 ### `src/lib/engine/frontier.ts` — `FrontierFactory`
 | Signature | What it does |
@@ -154,7 +152,7 @@ UI (HumanizationService.humanize + ResultsView.render + ChartController.update)
 ### `src/lib/services/SummaryService.ts`
 | Signature | What it does |
 |---|---|
-| `static summarize(combos, accountant, anyMass?, rankMass?, countMass?, comboLimit?) → CalculationStats` | Converts raw BigInt mass maps and MassAccountant into a number-based CalculationStats object |
+| `static summarize(combos, accountant, anyMass?, rankMass?, countMass?, comboLimit?) → CalculationStats` | Converts raw BigInt mass maps and ProbabilityMassBookkeeper into a number-based CalculationStats object |
 
 ### `src/lib/services/HumanizationService.ts`
 | Signature | What it does |
@@ -176,19 +174,13 @@ UI (HumanizationService.humanize + ResultsView.render + ChartController.update)
 
 ---
 
-## Key Constants (`src/lib/core/config.ts`)
+## Key Constants (`src/lib/constants/*.ts`)
 
-| Constant | Value | Meaning |
+| Constant | Source | Meaning |
 |---|---|---|
-| `ENGINE_DEFAULTS.MAX_XP_LEVEL` | 50 | Maximum XP level accepted by the engine (covers legacy 1.0 level-50 cap) |
-| `UI_DEFAULTS.MAX_XP_LEVEL` | 30 | Maximum level shown in the UI (modern enchanting table cap) |
-| `ENGINE_DEFAULTS.UNKNOWN_CATEGORY_ID` | 63 | Sentinel returned by getCategoryId for unknown categories |
-| `ENGINE_DEFAULTS.UNKNOWN_MATERIAL_ID` | 63 | Sentinel returned by getMaterialId for unknown materials |
-| `ENGINE_DEFAULTS.UNKNOWN_ENCHANT_ID` | 255 | Sentinel returned by getEnchantId for unknown enchantments |
-| `ENGINE_DEFAULTS.MAX_RESULTS_SIZE` | 5000 | Hard cap on combos stored in a SearchFrontier |
-| `ENGINE_DEFAULTS.CACHE_SIZE_COMBO_BOOK` | 64 | LRU size for book combo cache (larger search space) |
-| `ENGINE_DEFAULTS.CACHE_SIZE_COMBO_OTHER` | 128 | LRU size for non-book combo cache |
-| `ENGINE_DEFAULTS.CACHE_SIZE_STATS` | 8 | LRU size for the unified stats cache |
+| `MINECRAFT.MAX_XP_LEVEL` | `minecraft.ts` | Maximum XP level (modern 30, legacy 50) |
+| `ENGINE.MAX_RESULTS_SIZE` | `engine.ts` | Hard cap on combos stored in a SearchFrontier |
+| `ENGINE.CACHE_SIZE_STATS` | `engine.ts` | LRU size for the unified stats cache |
 
 ---
 
@@ -199,7 +191,7 @@ The engine uses a centralized, singleton `CacheManager` to manage memory and lif
 ```mermaid
 graph TD
     EE[EnchantEngine] --> CM[CacheManager]
-    SA[StatAggregator] --> CM
+    PSA[ProgressiveStatsAggregator] --> CM
     DS[DistributionService] --> CM
     PS[PoolService] --> CM
     
@@ -218,9 +210,9 @@ graph TD
     CM -.-> S
 ```
 
-### Probability Accounting (ProbabilityMassTracker)
+### Probability Accounting (ProbabilityMassBookkeeper)
 
-The `ProbabilityMassTracker` unifies mass tracking and residue harvesting into a single class, ensuring 100% mass conservation across the complex branching search.
+The `ProbabilityMassBookkeeper` unifies mass tracking and residue harvesting into a single class, ensuring 100% mass conservation across the complex branching search.
 
 ```mermaid
 stateDiagram-v2
@@ -249,7 +241,7 @@ stateDiagram-v2
 
 The best-first search maintains strict invariants to ensure stability and accuracy:
 - **`floor < threshold`**: The engine maintains a system-level `floor` (lower limit) and a user-level `threshold`. Nodes are only branched if `prob > threshold`, but they may be settled into the results map even if below `threshold` as long as they are above `floor`. This ensures that guaranteed enchantments (which may have low probability branches) are still accounted for correctly.
-- **Mass Conservation**: Every call to `StatAggregator.addScaled` ensures that the sum of all buckets matches the input probability, with discrepancies handled by `rounding`.
+- **Mass Conservation**: Every call to `ProgressiveStatsAggregator.addScaled` ensures that the sum of all buckets matches the input probability, with discrepancies handled by `rounding`.
 
 ## Performance & Caching
 
@@ -271,7 +263,7 @@ The engine uses a rigorous probability accounting system to ensure no probabilit
 
 This categorization allows us to distinguish between losses due to game rules (`overflow`) and losses due to engine performance optimizations (`capped` and `sieved`), providing a clear "accuracy" metric (the `resolved` mass).
 
-The `MassAccountant` class manages these buckets and provides an `addScaled` method to combine results from multiple tiers or levels while maintaining perfect conservation.
+The `ProbabilityMassBookkeeper` class manages these buckets and provides an `addScaled` method to combine results from multiple tiers or levels while maintaining perfect conservation.
 
 ---
 
