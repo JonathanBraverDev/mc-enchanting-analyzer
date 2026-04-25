@@ -1,4 +1,4 @@
-import { ENGINE_DEFAULTS } from '#core/config.js';
+import { ENGINE_LIMITS } from '#constants/engine.js';
 import { CompactStats, CalculationStats } from '#types/index.js';
 
 /**
@@ -49,8 +49,8 @@ export class SerializationService {
             cli++;
         }
 
-        const counts = new Float64Array(ENGINE_DEFAULTS.MAX_COUNT_STATS);
-        for (let i = 0; i < ENGINE_DEFAULTS.MAX_COUNT_STATS; i++) counts[i] = (stats.count[i] || 0);
+        const counts = new Float64Array(ENGINE_LIMITS.MAX_COUNT_STATS);
+        for (let i = 0; i < ENGINE_LIMITS.MAX_COUNT_STATS; i++) counts[i] = (stats.count[i] || 0);
 
         const compact: CompactStats = {
             comboKeys, comboProbs,

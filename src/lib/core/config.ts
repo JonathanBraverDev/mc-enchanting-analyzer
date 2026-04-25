@@ -30,7 +30,7 @@ export const UI_TEXTS = {
 
 export const UI_DEFAULTS = {
     MAX_TOP_COMBOS_DISPLAY: 10,
-    MAX_XP_LEVEL: 30,
+    DEFAULT_VIEW_XP_CAP: 30, // Default for modern UI, overridden by version cap
     DEFAULT_XP_LEVEL: 30,
     INPUT_DEBOUNCE_MS: 50,
     CHART_METRIC_ANY: "any",
@@ -84,42 +84,4 @@ export function getParamsForMode(level: Exclude<SearchLevel, 'done'>, isBook: bo
         limit: isBook ? mode.limitBook : mode.limitOther,
         status: mode.status
     };
-}
-
-export const ENGINE_DEFAULTS = {
-    MAX_ENCHANTS_PER_ITEM: 6, // 6-enchant technical limit (byte-packing encoding in double-precision float)
-    SYSTEM_THRESHOLD_FLOOR: 0.0000000001, // 1e-10 Global resolution floor for pruning (Data persistence)
-    MAX_MODIFIED_LEVEL_FOR_CONTINUING: 50,
-    RNG_STEPS_FOR_DISTRIBUTION: 100,
-    MAX_COUNT_STATS: 8,
-    FALLBACK_LIMIT_BOOK: 25000,
-    FALLBACK_LIMIT_HIGH_RES: 25000,
-    FALLBACK_LIMIT_LOW_RES: 10000,
-    MAX_QUEUE_SIZE: 60000,
-    MAX_RESULTS_SIZE: 5000,
-    CACHE_SIZE_COMBO_OTHER: 128,
-    CACHE_SIZE_COMBO_BOOK: 64,
-    CACHE_SIZE_STATS: 8,
-    MAX_RESULTS_SUMMARY: 100,
-    MAX_RESULTS_SUMMARY_OPTIMIZED_THRESHOLD: 250,
-    MAX_RESULTS_SNAPSHOT: 5000,
-    MAX_RESULTS_HI_RES: 65535,
-    MAX_RESULTS_UNBOUNDED: 1000000,
-    MAX_ITERATIONS_UNBOUNDED: 1000000,
-    UNKNOWN_CATEGORY_ID: 63,
-    UNKNOWN_MATERIAL_ID: 63,
-    UNKNOWN_ENCHANT_ID: 255,
-    MAX_XP_LEVEL: 50
-};
-
-import { ProbUtils } from '#utils/index.js';
-
-/**
- * Shared threshold-to-limit lookup used by both EnchantEngine and StatAggregator.
- */
-export function getSearchLimit(cat: string, threshold: number | bigint, maxIterations?: number): number {
-    const t = typeof threshold === 'number' ? threshold : ProbUtils.toNumber(threshold);
-    if (maxIterations !== undefined) return maxIterations;
-    if (cat === "book") return ENGINE_DEFAULTS.FALLBACK_LIMIT_BOOK;
-    return t < 0.0001 ? ENGINE_DEFAULTS.FALLBACK_LIMIT_HIGH_RES : ENGINE_DEFAULTS.FALLBACK_LIMIT_LOW_RES;
 }
