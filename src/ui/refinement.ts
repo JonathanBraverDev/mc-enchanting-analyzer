@@ -60,7 +60,8 @@ export class RefinementService {
         const currentId = ++this.activeId;
         this.isRefining = true;
         try {
-            this.sweep = new Array(UI_DEFAULTS.MAX_XP_LEVEL).fill(null);
+            const xpCap = registry?.mechanics?.xp_cap ?? UI_DEFAULTS.DEFAULT_VIEW_XP_CAP;
+            this.sweep = new Array(xpCap).fill(null);
 
             const basePayload = {
                 cat: payload.category,
@@ -162,7 +163,8 @@ export class RefinementService {
                 this.nextPendingRedraw = null;
                 
                 const currentPassThreshold = currentPass.threshold;
-                const labels = Array.from({ length: UI_DEFAULTS.MAX_XP_LEVEL }, (_, i) => i + 1);
+                const xpCap = _registry?.mechanics?.xp_cap ?? UI_DEFAULTS.DEFAULT_VIEW_XP_CAP;
+                const labels = Array.from({ length: xpCap }, (_, i) => i + 1);
                 
                 const passName = getParamsForMode(currentPass.level, payload.cat === "book").status;
                 const statusBase = passName + " probabilities";
@@ -193,8 +195,9 @@ export class RefinementService {
 
                         if (this.activeId !== currentId) break;
                         
+                        const xpCap = _registry?.mechanics?.xp_cap ?? UI_DEFAULTS.DEFAULT_VIEW_XP_CAP;
                         this.sweep[l - 1] = { l, s: response.stats };
-                        callbacks.onChartStatus?.(statusBase, l / UI_DEFAULTS.MAX_XP_LEVEL);
+                        callbacks.onChartStatus?.(statusBase, l / xpCap);
                         callbacks.onChart(this.sweep);
                     } catch (e: any) {
                         if (e.message === 'AbortError') break;
