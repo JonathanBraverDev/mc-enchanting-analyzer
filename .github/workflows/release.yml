@@ -1,0 +1,124 @@
+name: Release Automation
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Validate Release Conditions
+      run: |
+        git fetch origin main dev --tags
+        
+        TAG_NAME="${{ github.ref_name }}"
+        echo "Validating Tag: $TAG_NAME"
+        
+        # 1. Format Check (Strict vX.Y.Z)
+        if [[ ! "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "ERROR: Release automation requires strict semantic tags (e.g. v1.0.0). Found: $TAG_NAME"
+          exit 1
+        fi
+        
+        # 2. Origin Check (Must exist on dev)
+        if ! git branch -r --contains ${{ github.sha }} | grep -q "origin/dev"; then
+          echo "ERROR: The tagged commit is not on origin/dev. Releases must originate from the dev branch."
+          exit 1
+        fi
+        
+        # 3. Main Check (Must NOT already be on main)
+        if git branch -r --contains ${{ github.sha }} | grep -q "origin/main"; then
+          echo "ERROR: Tag $TAG_NAME is already on origin/main. Nothing to do."
+          exit 1
+        fi
+
+    - name: Use Node.js 22.x
+      uses: actions/setup-node@v4
+      with:
+        node-version: 22.x
+        cache: 'npm'
+
+    - name: Version Check
+      run: |
+        # Get latest tag on main (fallback to v0.0.0 if none exist)
+        LATEST_MAIN=$(git describe --tags --abbrev=0 origin/main 2>/dev/null || echo "v0.0.0")
+        echo "Latest tag on main: $LATEST_MAIN"
+        
+        # Compare using semver
+        if ! npx semver -r ">$LATEST_MAIN" "${{ github.ref_name }}"; then
+          echo "ERROR: Tag ${{ github.ref_name }} is not greater than the latest main tag ($LATEST_MAIN)."
+          exit 1
+        fi
+
+    - name: Extract Changelog
+      id: changelog
+      run: |
+        TAG="${{ github.ref_name }}"
+        
+        # Extract the section for this tag
+        CHANGELOG=$(awk -v tag="$TAG" '
+          $0 ~ "^## " tag { found=1; next }
+          /^## v/ { if (found) exit }
+          found { print }
+        ' CHANGELOG.md | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+        
+        if [ -z "$CHANGELOG" ]; then
+          echo "ERROR: Could not extract changelog for $TAG. Is it missing or empty in CHANGELOG.md?"
+          exit 1
+        fi
+        
+        # Prepare commit message file
+        echo "Release $TAG" > commit_msg.txt
+        echo "" >> commit_msg.txt
+        echo "$CHANGELOG" >> commit_msg.txt
+        
+        # Save output for GitHub Release body
+        EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
+        echo "body<<$EOF" >> $GITHUB_OUTPUT
+        echo "$CHANGELOG" >> $GITHUB_OUTPUT
+        echo "$EOF" >> $GITHUB_OUTPUT
+
+    - name: Squash Sync to Main
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        
+        git checkout main
+        
+        # Squashes the dev tree into the index safely without rewriting history
+        git read-tree -um HEAD ${{ github.sha }}
+        
+        # Commit using the formatted changelog
+        git commit -F commit_msg.txt
+        
+        # Push to main
+        git push origin main
+        
+        # Retarget the tag to this new commit and push
+        git tag -f ${{ github.ref_name }} HEAD
+        git push -f origin ${{ github.ref_name }}
+
+    - name: Build and Test Release
+      run: |
+        npm ci
+        npx playwright install chromium --with-deps
+        npm run build
+        npm test
+        npm run build:standalone
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: dist/analyzer-standalone.html
+        name: "Release ${{ github.ref_name }}"
+        body: ${{ steps.changelog.outputs.body }}
