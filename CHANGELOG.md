@@ -1,5 +1,16 @@
 # Changelog
 
+## v4.3.0 (2026-04-25)
+
+### Improved
+- **Historical Accuracy**: Corrected XP caps and enchantability rules for legacy Minecraft versions (e.g., 50-level cap for v1.1).
+- **Dynamic UI Constraints**: The level slider and chart now automatically adapt their range based on the selected game version.
+- **Architecture Documentation**: Updated the core documentation (Architecture, Contributing, and Mass Handling) to reflect the recent modular restructuring.
+
+### Developer Experience
+- **Subpath Import Aliases**: Switched to subpath aliases (`#`) across the entire codebase for better readability and maintainability.
+- **Streamlined Automation**: Consolidated development and release workflows into a unified automation pipeline.
+
 ## v4.2.1 (2026-04-22)
 
 ### Changed
