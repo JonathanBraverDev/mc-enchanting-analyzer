@@ -55,10 +55,23 @@ export class ParamsView {
             category: (this.elements["cat-select"] as HTMLSelectElement)?.value || "",
             material: (this.elements["mat-select"] as HTMLSelectElement)?.value || "",
             clue: (this.elements["clue-select"] as HTMLSelectElement)?.value || "",
-            xpLevel: parseInt((this.elements["lvl-range"] as HTMLInputElement)?.value || "30"),
+            xpLevel: parseInt((this.elements["lvl-range"] as HTMLInputElement)?.value || "0"),
             chartMetric: (this.elements["chart-metric"] as HTMLSelectElement)?.value || "any",
             sortMode: (this.elements["combo-sort"] as HTMLSelectElement)?.value || "prob"
         };
+    }
+
+    public updateConstraints(engine: EnchantEngine): void {
+        const xpCap = engine.registry.mechanics.xp_cap || 30;
+        const lvlRange = this.elements["lvl-range"] as HTMLInputElement;
+        if (lvlRange) {
+            lvlRange.max = xpCap.toString();
+            if (parseInt(lvlRange.value) > xpCap) {
+                lvlRange.value = xpCap.toString();
+                const lvlVal = document.getElementById("lvl-val");
+                if (lvlVal) lvlVal.textContent = xpCap.toString();
+            }
+        }
     }
 
     public updateMaterials(engine: EnchantEngine): void {

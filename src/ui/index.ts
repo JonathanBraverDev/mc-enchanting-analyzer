@@ -46,6 +46,7 @@ class AppController {
             await WorkerClient.init(version);
             this.isWorkerReady = true;
 
+            this.params.updateConstraints(this.getEngine());
             this.params.updateMaterials(this.getEngine());
             this.run();
         } catch (err) {
@@ -71,6 +72,7 @@ class AppController {
             WorkerClient.init(version).then(() => {
                 this.isWorkerReady = true;
                 const engine = this.getEngine();
+                this.params.updateConstraints(engine);
                 this.params.updateMaterials(engine);
                 this.params.updateClueTarget(engine);
                 this.enqueueRun();
