@@ -1,9 +1,9 @@
 import { describe, it } from 'node:test';
 import { EngineFactory } from '#engine/factory.js';
 import { DATA } from '#data/index.js';
-import { SnapshotUtils } from '../../infra/test-utils.js';
+import { SnapshotUtils } from '#tests/infra/test-utils.js';
 import { TEST_DEFAULTS } from '#constants/testing.js';
-import { TEST_DATA } from '../../infra/test-data.js';
+import { TEST_DATA } from '#tests/infra/test-data.js';
 
 // Polyfill for requestAnimationFrame in Node (Sync version for tests)
 if (typeof (globalThis as any).requestAnimationFrame !== 'function') {

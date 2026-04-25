@@ -11,8 +11,8 @@ import assert from 'node:assert';
 import { EngineFactory } from '#engine/factory.js';
 import { DATA } from '#data/index.js';
 import { SerializationService } from '#services/index.js';
-import type { WorkerResponse } from '../../src/worker/protocol.js';
-import { TEST_DATA } from '../infra/test-data.js';
+import type { WorkerResponse } from '#worker/protocol.js';
+import { TEST_DATA } from '#tests/infra/test-data.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -59,7 +59,7 @@ describe('Worker: calculateProgressive handler', () => {
         };
 
         // Import the worker to register self.onmessage
-        await import('../../src/worker/worker.js');
+        await import('#worker/worker.js');
 
         // Initialize the engine inside the worker
         sendMessage({ type: 'init', id: 0, payload: { version: TEST_DATA.VERSIONS.MODERN } });

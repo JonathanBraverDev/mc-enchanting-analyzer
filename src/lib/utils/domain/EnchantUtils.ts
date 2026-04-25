@@ -1,4 +1,4 @@
-import { RomanUtils } from '../format/RomanUtils.js';
+import { RomanUtils } from '#utils/format/RomanUtils.js';
 
 /**
  * Interface representing a structured enchantment name and rank.

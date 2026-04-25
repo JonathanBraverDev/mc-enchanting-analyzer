@@ -1,6 +1,6 @@
 import { RegistryState, CalculationStats, SweepData } from '#types/index.js';
 import { UI_TEXTS, UI_DEFAULTS, SearchLevel, getParamsForMode } from '#core/config.js';
-import { WorkerClient } from '#worker/client.js';
+import { WorkerClient } from '#ui/worker-client.js';
 import { AsyncUtils } from '#utils/index.js';
 
 interface BaseSearchPayload {

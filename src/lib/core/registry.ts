@@ -1,6 +1,6 @@
-import { EnchantmentData, RegistryState, PackedEnchant } from '../types/index.js';
-import { RomanUtils, EnchantUtils } from '../utils/index.js';
-import { PACKING_CONSTANTS, ENGINE_LIMITS } from '../constants/engine.js';
+import { EnchantmentData, RegistryState, PackedEnchant } from '#types/index.js';
+import { RomanUtils, EnchantUtils } from '#utils/index.js';
+import { PACKING_CONSTANTS, ENGINE_LIMITS } from '#constants/engine.js';
 
 /**
  * Returns the list of materials compatible with a given category.

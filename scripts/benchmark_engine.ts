@@ -1,5 +1,5 @@
 import { EngineFactory } from '#engine/index.js';
-import { DATA } from '../src/lib/data/index.js';
+import { DATA } from '#data/index.js';
 
 async function runProfile() {
     console.log('--- Enchantment Engine Performance Profile ---');

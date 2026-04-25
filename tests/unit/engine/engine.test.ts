@@ -4,9 +4,9 @@ import { EngineFactory } from '#engine/factory.js';
 import { DATA } from '#data/index.js';
 import { ProbUtils } from '#utils/index.js';
 import { HumanizationService } from '#services/index.js';
-import { EngineTestUtils } from '../../infra/test-utils.js';
+import { EngineTestUtils } from '#tests/infra/test-utils.js';
 import { getEnchantId } from '#core/registry.js';
-import { TEST_DATA } from '../../infra/test-data.js';
+import { TEST_DATA } from '#tests/infra/test-data.js';
 
 // Polyfill for requestAnimationFrame in Node (Sync version for tests)
 if (typeof (globalThis as any).requestAnimationFrame !== 'function') {

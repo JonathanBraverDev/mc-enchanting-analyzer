@@ -1,4 +1,4 @@
-import { ENGINE_LIMITS } from './engine.js';
+import { ENGINE_LIMITS } from '#constants/engine.js';
 
 /**
  * Standard values used for validation, snapshots, and high-precision testing.

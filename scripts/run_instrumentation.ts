@@ -1,5 +1,5 @@
 import { EngineFactory } from '#engine/index.js';
-import { DATA as data } from '../src/lib/data/index.js';
+import { DATA as data } from '#data/index.js';
 import { EngineInstrumentation } from '#types/index.js';
 
 

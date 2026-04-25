@@ -1,5 +1,5 @@
 import { EngineFactory } from '#engine/index.js';
-import { DATA } from '../src/lib/data/index.js';
+import { DATA } from '#data/index.js';
 import * as fs from 'node:fs';
 import * as assert from 'node:assert';
 import { CalculationStats } from '#types/index.js';

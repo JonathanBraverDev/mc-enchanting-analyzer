@@ -1,8 +1,8 @@
-import { EnchantmentData } from '../types/index.js';
-import { global_enchantments, enchantment_groups } from './enchantments.js';
-import { versions } from './versions.js';
-import { material_values } from './materials.js';
-import { constants, cosmetics } from './cosmetics.js';
+import { EnchantmentData } from '#types/index.js';
+import { global_enchantments, enchantment_groups } from '#data/enchantments.js';
+import { versions } from '#data/versions.js';
+import { material_values } from '#data/materials.js';
+import { constants, cosmetics } from '#data/cosmetics.js';
 
 export const DATA: EnchantmentData = {
   global_enchantments: global_enchantments as unknown as EnchantmentData["global_enchantments"],

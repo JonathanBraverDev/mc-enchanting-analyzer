@@ -2,7 +2,7 @@ import { SearchHeap } from '#utils/collections/SearchHeap.js';
 import { PRECISION } from '#utils/index.js';
 import { PACKING_CONSTANTS } from '#constants/engine.js';
 import { PackedCombo, SearchState } from '#types/index.js';
-import { SearchStateTracker } from './SearchStateTracker.js';
+import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
 
 export class StateFactory {
     /**

@@ -7,13 +7,13 @@
  */
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
-import { RefinementService } from '../../src/ui/refinement.js';
-import { WorkerClient } from '../../src/worker/client.js';
+import { RefinementService } from '#ui/refinement.js';
+import { WorkerClient } from '#ui/worker-client.js';
 import { EngineFactory } from '#engine/factory.js';
 import { DATA } from '#data/index.js';
 import { isCategoryAvailable } from '#core/registry.js';
 import { MassAccounting } from '#types/mass.js';
-import { TEST_DATA } from '../infra/test-data.js';
+import { TEST_DATA } from '#tests/infra/test-data.js';
 
 // ---------------------------------------------------------------------------
 // Helpers

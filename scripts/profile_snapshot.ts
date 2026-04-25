@@ -1,7 +1,7 @@
 import { EngineFactory } from '#engine/index.js';
-import { DATA } from '../src/lib/data/index.js';
-import { TEST_DEFAULTS } from '../src/lib/constants/testing.js';
-import { ENGINE_LIMITS } from '../src/lib/constants/engine.js';
+import { DATA } from '#data/index.js';
+import { TEST_DEFAULTS } from '#constants/testing.js';
+import { ENGINE_LIMITS } from '#constants/engine.js';
 
 async function profile() {
     const args = process.argv.slice(2);
