@@ -2,7 +2,7 @@ import { DATA } from '#data/index.js';
 import { EnchantEngine } from '#engine/index.js';
 import { EngineFactory } from '#engine/factory.js';
 import { UI_TEXTS } from '#core/config.js';
-import { WorkerClient } from '#worker/client.js';
+import { WorkerClient } from '#ui/worker-client.js';
 import { ParamsView } from '#ui/views/ParamsView.js';
 import { ResultsView } from '#ui/views/ResultsView.js';
 import { ChartController } from '#ui/results-chart-controller.js';

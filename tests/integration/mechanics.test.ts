@@ -4,7 +4,7 @@ import { EngineFactory } from '#engine/factory.js';
 import { DATA } from '#data/index.js';
 import { ProbUtils } from '#utils/index.js';
 import { getEnchantId, getCategoryPool } from '#core/registry.js';
-import { EngineTestUtils } from '../infra/test-utils.js';
+import { EngineTestUtils } from '#tests/infra/test-utils.js';
 
 describe('Minecraft Mechanics Integration Tests', () => {
 

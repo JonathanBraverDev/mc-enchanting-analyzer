@@ -2,9 +2,9 @@ import { PRECISION } from '#utils/index.js';
 import { getEligiblePool } from '#core/registry.js';
 import { ENGINE_LIMITS, PACKING_CONSTANTS } from '#constants/engine.js';
 import { SearchState, RegistryState, SearchContext, ForwardingContext } from '#types/index.js';
-import { StateFactory } from './StateFactory.js';
-import { SearchStateTracker } from './SearchStateTracker.js';
-import { SearchController } from './SearchController.js';
+import { StateFactory } from '#engine/search/StateFactory.js';
+import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
+import { SearchController } from '#engine/search/SearchController.js';
 import { SearchHeap } from '#utils/collections/SearchHeap.js';
 import { CacheManager } from '#engine/cache/CacheManager.js';
 

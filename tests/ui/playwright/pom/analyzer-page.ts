@@ -1,6 +1,6 @@
 import { Page, Locator, expect } from '@playwright/test';
-import { UI_TEXTS } from '../../../../src/lib/core/config.js';
-import { UI_TIMEOUT } from '../../../infra/test-utils.js';
+import { UI_TEXTS } from '#constants/engine.js';
+import { UI_TIMEOUT } from '#tests/infra/test-utils.js';
 
 export class AnalyzerPage {
     readonly page: Page;

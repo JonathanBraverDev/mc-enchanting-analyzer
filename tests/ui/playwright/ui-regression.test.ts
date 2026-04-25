@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
-import { AnalyzerPage } from './pom/analyzer-page.js';
-import { TEST_DATA } from '../../infra/test-data.js';
+import { AnalyzerPage } from '#tests/ui/playwright/pom/analyzer-page.js';
+import { TEST_DATA } from '#tests/infra/test-data.js';
 
 test.describe('UI Regression & Edge Cases', () => {
     let analyzer: AnalyzerPage;

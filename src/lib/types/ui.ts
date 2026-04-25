@@ -1,5 +1,5 @@
-import type { CalculationStats } from './engine.js';
-import type { MassAccounting } from './mass.js';
+import type { CalculationStats } from '#types/engine.js';
+import type { MassAccounting } from '#types/mass.js';
 
 /**
  * Human-readable enchantment calculation statistics.

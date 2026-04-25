@@ -1,4 +1,4 @@
-import type { MassAccounting } from './mass.js';
+import type { MassAccounting } from '#types/mass.js';
 
 /**
  * Compact representation of calculation statistics for efficient transfer.

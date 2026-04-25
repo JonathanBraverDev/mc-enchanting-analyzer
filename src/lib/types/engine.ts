@@ -1,7 +1,7 @@
-import { Enchantment, EnchantmentData } from './domain.js';
+import { Enchantment, EnchantmentData } from '#types/domain.js';
 import { SearchHeap } from '#utils/collections/SearchHeap.js';
 
-import { MassAccounting } from './mass.js';
+import { MassAccounting } from '#types/mass.js';
 
 /**
  * Raw calculation statistics from the search engine.

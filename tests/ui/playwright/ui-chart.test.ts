@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { UI_TEXTS } from '#core/config.js';
-import { AnalyzerPage } from './pom/analyzer-page.js';
-import { TEST_DATA } from '../../infra/test-data.js';
+import { AnalyzerPage } from '#tests/ui/playwright/pom/analyzer-page.js';
+import { TEST_DATA } from '#tests/infra/test-data.js';
 
 /**
  * Validates sequential redraw and progress feedback of the chart.

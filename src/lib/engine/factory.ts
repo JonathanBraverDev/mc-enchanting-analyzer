@@ -1,10 +1,10 @@
 import { EnchantmentData, RegistryState } from '#types/index.js';
-import { EnchantEngine } from './index.js';
-import { CacheManager } from './cache/CacheManager.js';
+import { EnchantEngine } from '#engine/index.js';
+import { CacheManager } from '#engine/cache/CacheManager.js';
 import { KeyService } from '#services/KeyService.js';
-import { ModifiedLevelDistributionService } from './distribution/ModifiedLevelDistributionService.js';
-import { SearchService } from './search/SearchService.js';
-import { ProgressiveStatsAggregator } from './aggregation/ProgressiveStatsAggregator.js';
+import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
+import { SearchService } from '#engine/search/SearchService.js';
+import { ProgressiveStatsAggregator } from '#engine/aggregation/ProgressiveStatsAggregator.js';
 import { CACHE_CONFIG } from '#constants/engine.js';
 import { RegistryFactory } from '#core/factory.js';
 

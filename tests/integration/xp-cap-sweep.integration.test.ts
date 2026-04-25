@@ -2,7 +2,7 @@ import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { RefinementService, RefinementPayload } from '#ui/refinement.js';
 import { RegistryFactory } from '#core/factory.js';
-import { WorkerClient } from '#worker/client.js';
+import { WorkerClient } from '#ui/worker-client.js';
 import { DATA } from '#data/index.js';
 
 /** Flush pending macrotasks (AsyncUtils.yield uses setTimeout 0). */
