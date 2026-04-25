@@ -122,6 +122,8 @@ jobs:
         npm run build:standalone
 
     - name: Squash Sync to Main
+      env:
+        CHANGELOG_BODY: ${{ needs.validate.outputs.changelog }}
       run: |
         # Fetch latest branches
         git fetch origin main dev
@@ -130,9 +132,9 @@ jobs:
         git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
         
         # Prepare commit message
-        echo "Release ${{ github.ref_name }}" > commit_msg.txt
+        echo "${{ github.ref_name }}" > commit_msg.txt
         echo "" >> commit_msg.txt
-        echo "${{ needs.validate.outputs.changelog }}" >> commit_msg.txt
+        echo "$CHANGELOG_BODY" >> commit_msg.txt
         
         # Checkout main and squash
         git checkout main
