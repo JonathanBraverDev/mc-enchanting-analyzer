@@ -1,5 +1,23 @@
 # Changelog
 
+## v4.0.0 (2026-04-18)
+
+### The "Modernization Update"
+This major version represents a complete structural and logical overhaul, transitioning the analyzer to a more accurate prediction model that better reflects Minecraft's internal mechanics.
+
+### Added
+- **Intelligent Clue Filtering**: You can now filter results based on the enchantment clue shown in-game. This is significantly more accurate than before, as the engine now understands that the clue could be any of the enchantments selected by the table, not just the first one.
+- **Architectural Renovation**: Completely re-built the internal systems with a modular design and a strict stability audit, making the entire application more robust and ready for future expansion.
+- **Modern Repository Structure**: Reorganized the codebase into a tiered hierarchy for better performance and easier long-term maintenance.
+
+### Improved
+- **Calculated Accuracy**: By moving to a "fully random" generation model, the analyzer's predictions now more perfectly mirror the actual random-removal mechanics used in the game.
+- **Infrastructure & Testing**: Expanded the automated testing framework to cover complex "clue-conditioned" scenarios, ensuring the results you see are always verified and reliable.
+
+### Changed
+- **Consolidated Generation**: Unified the way enchantments are analyzed, removing legacy assumptions in favor of a more flexible and realistic simulation.
+
+
 ## v3.2.0 (2026-04-12)
 
 ### Improved
