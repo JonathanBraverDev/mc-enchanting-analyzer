@@ -3,19 +3,18 @@
  */
 export const ENGINE_LIMITS = {
     MAX_ENCHANTS_PER_ITEM: 6,
-    MAX_MODIFIED_LEVEL: 50,
-    MAX_XP_LEVEL: 50,
     MAX_RESULTS_SIZE: 5000,
     MAX_QUEUE_SIZE: 1000000,
     MAX_RESULTS_SUMMARY: 100,
     SYSTEM_THRESHOLD_FLOOR: 0.0000000001,
     UNKNOWN_ENCHANT_ID: 255,
     UNKNOWN_MATERIAL_ID: 255,
+    UNKNOWN_CATEGORY_ID: 63,
     MAX_RESULTS_UNBOUNDED: 1000000,
     MAX_ITERATIONS_UNBOUNDED: 1000000,
     DEFAULT_THRESHOLD: 0.0001,
-    SNAPSHOT_THRESHOLD: 0.00000001,
-    DEFAULT_BUFFER_SIZE: 1024
+    DEFAULT_BUFFER_SIZE: 1024,
+    MAX_COUNT_STATS: 8
 };
 
 /**
@@ -82,7 +81,10 @@ export const MATH_CONSTANTS = {
     FLOAT_MANTISSA_BITS: 53,
 
     /** The scale difference between mantissa bits and our precision target (60 - 53). */
-    MANTISSA_TO_FIXED_SHIFT: 7n
+    MANTISSA_TO_FIXED_SHIFT: 7n,
+
+    /** Resolution steps for modified level probability distribution. */
+    RNG_STEPS_FOR_DISTRIBUTION: 100
 };
 
 /**
@@ -106,7 +108,13 @@ export const SEARCH_CONSTANTS = {
     CONTINUE_TABLE_SIZE: 65,
 
     /** Max recursion depth for iterative mass forwarding. */
-    MAX_RECURSION_DEPTH: 10
+    MAX_RECURSION_DEPTH: 10,
+
+    /** Search iteration limits for different modes/thresholds. */
+    FALLBACK_LIMIT_BOOK: 25000,
+    FALLBACK_LIMIT_HIGH_RES: 25000,
+    FALLBACK_LIMIT_LOW_RES: 10000,
+    MAX_RESULTS_SUMMARY_OPTIMIZED_THRESHOLD: 250
 };
 
 /**
@@ -121,15 +129,4 @@ export const UI_CONSTANTS = {
 
     /** Default max entries for generic LRU caches. */
     DEFAULT_LRU_MAX_ENTRIES: 500
-};
-
-/**
- * Logic-specific Minecraft defaults.
- */
-export const MINECRAFT_DEFAULTS = {
-    /** Default divisor for enchantability bonuses if missing from registry. */
-    ENCHANTABILITY_DIVISOR: 4,
-
-    /** Default random multiplier range if missing from registry. */
-    RANDOM_BONUS_RANGE: 0.15
 };

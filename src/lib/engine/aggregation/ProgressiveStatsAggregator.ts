@@ -1,7 +1,7 @@
 import { PRECISION, ProbUtils, AsyncUtils } from '#utils/index.js';
 import { getEnchantability } from '#core/registry.js';
 import { ENGINE_LIMITS, PACKING_CONSTANTS, SEARCH_CONSTANTS, UI_CONSTANTS } from '#constants/engine.js';
-import { getSearchLimit } from '#core/config.js';
+import { getSearchLimit } from '../utils.js';
 import { PackedCombo, SearchState, RegistryState, InternalSearchConfig, EngineInstrumentation, MassCheckpoint, CheckpointSummary, AggregationResult } from '#types/index.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { SearchService } from '#engine/search/SearchService.js';

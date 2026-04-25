@@ -1,4 +1,5 @@
-import { MATH_CONSTANTS, SEARCH_CONSTANTS, ENGINE_LIMITS } from '#constants/engine.js';
+import { MATH_CONSTANTS, SEARCH_CONSTANTS } from '#constants/engine.js';
+import { MINECRAFT_RULES } from '#constants/minecraft.js';
 
 /**
  * High-precision constant for BigInt fixed-point arithmetic (2^60).
@@ -236,7 +237,7 @@ export const ProbUtils = {
      * Probability table for continuing to add more enchantments at a given modified level.
      */
     PROB_CONTINUE_TABLE: Array.from({ length: SEARCH_CONSTANTS.CONTINUE_TABLE_SIZE }, (_, ml) => {
-        const val = Math.min((ml + 1) / ENGINE_LIMITS.MAX_MODIFIED_LEVEL, 1.0);
+        const val = Math.min((ml + 1) / MINECRAFT_RULES.CONTINUE_CHANCE_DIVISOR, 1.0);
         const mantissaScale = 2 ** MATH_CONSTANTS.FLOAT_MANTISSA_BITS;
         return BigInt(Math.floor(val * mantissaScale)) << MATH_CONSTANTS.MANTISSA_TO_FIXED_SHIFT;
     })
