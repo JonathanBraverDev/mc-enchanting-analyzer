@@ -30,7 +30,8 @@ export class ChartController {
         if (sweep.length > 0 && this.manager && this.metricEl) {
             const metric = this.metricEl.value;
             const datasets = this.manager.generateDatasets(sweep, metric, registry);
-            const labels = Array.from({length: UI_DEFAULTS.DEFAULT_VIEW_XP_CAP}, (_, i) => i + 1);
+            const xpCap = registry.mechanics.xp_cap || UI_DEFAULTS.DEFAULT_VIEW_XP_CAP;
+            const labels = Array.from({length: xpCap}, (_, i) => i + 1);
             this.manager.update(labels, datasets);
         }
     }
