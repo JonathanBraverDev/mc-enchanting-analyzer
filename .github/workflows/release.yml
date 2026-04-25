@@ -103,10 +103,6 @@ jobs:
         
         # Push to main
         git push origin main
-        
-        # Retarget the tag to this new commit and push
-        git tag -f ${{ github.ref_name }} HEAD
-        git push -f origin ${{ github.ref_name }}
 
     - name: Build and Test Release
       run: |
