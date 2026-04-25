@@ -1,5 +1,5 @@
 import { Page, Locator, expect } from '@playwright/test';
-import { UI_TEXTS } from '#constants/engine.js';
+import { UI_TEXTS } from '#core/config.js';
 import { UI_TIMEOUT } from '#tests/infra/test-utils.js';
 
 export class AnalyzerPage {

@@ -6,12 +6,11 @@ on:
       - 'v*.*.*'
 
 jobs:
-  release:
+  validate:
+    name: Validate Release
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    outputs:
+      changelog: ${{ steps.changelog.outputs.body }}
     steps:
     - uses: actions/checkout@v4
       with:
@@ -46,15 +45,12 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: 22.x
-        cache: 'npm'
 
     - name: Version Check
       run: |
-        # Get latest tag on main (fallback to v0.0.0 if none exist)
         LATEST_MAIN=$(git describe --tags --abbrev=0 origin/main 2>/dev/null || echo "v0.0.0")
         echo "Latest tag on main: $LATEST_MAIN"
         
-        # Compare using semver
         if ! npx semver -r ">$LATEST_MAIN" "${{ github.ref_name }}"; then
           echo "ERROR: Tag ${{ github.ref_name }} is not greater than the latest main tag ($LATEST_MAIN)."
           exit 1
@@ -65,7 +61,6 @@ jobs:
       run: |
         TAG="${{ github.ref_name }}"
         
-        # Extract the section for this tag
         CHANGELOG=$(awk -v tag="$TAG" '
           $0 ~ "^## " tag { found=1; next }
           /^## v/ { if (found) exit }
@@ -77,44 +72,79 @@ jobs:
           exit 1
         fi
         
-        # Prepare commit message file
-        echo "Release $TAG" > commit_msg.txt
-        echo "" >> commit_msg.txt
-        echo "$CHANGELOG" >> commit_msg.txt
-        
-        # Save output for GitHub Release body
         EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
         echo "body<<$EOF" >> $GITHUB_OUTPUT
         echo "$CHANGELOG" >> $GITHUB_OUTPUT
         echo "$EOF" >> $GITHUB_OUTPUT
 
+
+  test:
+    name: Run Tests
+    needs: validate
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+    - uses: actions/checkout@v4
+    - name: Use Node.js 22.x
+      uses: actions/setup-node@v4
+      with:
+        node-version: 22.x
+        cache: 'npm'
+    - run: npm ci
+    - name: Install Playwright Chromium
+      run: npx playwright install chromium --with-deps
+    - run: npm run build
+    - run: npm test
+
+
+  sync_and_release:
+    name: Sync & Publish
+    needs: [validate, test]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Use Node.js 22.x
+      uses: actions/setup-node@v4
+      with:
+        node-version: 22.x
+        cache: 'npm'
+
+    - name: Build Standalone Artifact
+      run: |
+        npm ci
+        npm run build
+        npm run build:standalone
+
     - name: Squash Sync to Main
       run: |
+        # Fetch latest branches
+        git fetch origin main dev
+        
         git config user.name "github-actions[bot]"
         git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
         
+        # Prepare commit message
+        echo "Release ${{ github.ref_name }}" > commit_msg.txt
+        echo "" >> commit_msg.txt
+        echo "${{ needs.validate.outputs.changelog }}" >> commit_msg.txt
+        
+        # Checkout main and squash
         git checkout main
-        
-        # Squashes the dev tree into the index safely without rewriting history
         git read-tree -um HEAD ${{ github.sha }}
-        
-        # Commit using the formatted changelog
         git commit -F commit_msg.txt
         
         # Push to main
         git push origin main
-
-    - name: Build and Test Release
-      run: |
-        npm ci
-        npx playwright install chromium --with-deps
-        npm run build
-        npm test
-        npm run build:standalone
 
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v2
       with:
         files: dist/analyzer-standalone.html
         name: "Release ${{ github.ref_name }}"
-        body: ${{ steps.changelog.outputs.body }}
+        body: ${{ needs.validate.outputs.changelog }}
