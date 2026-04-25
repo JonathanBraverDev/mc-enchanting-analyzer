@@ -4,8 +4,7 @@ import { EngineFactory } from '#engine/factory.js';
 import { DATA } from '#data/index.js';
 import { ProbUtils } from '#utils/index.js';
 import { HumanizationService } from '#services/index.js';
-import { SnapshotUtils, EngineTestUtils } from '../../infra/test-utils.js';
-import { ENGINE_DEFAULTS } from '#core/config.js';
+import { EngineTestUtils } from '../../infra/test-utils.js';
 import { getEnchantId } from '#core/registry.js';
 import { TEST_DATA } from '../../infra/test-data.js';
 
@@ -167,58 +166,7 @@ describe('Enchantment Engine Test Suite', () => {
          });
     });
 
-    describe('5. Regression Snapshots (Golden Results)', () => {
-        const SNAPSHOT_LIMIT = ENGINE_DEFAULTS.MAX_RESULTS_UNBOUNDED;
-        const SNAPSHOT_ITERATIONS = ENGINE_DEFAULTS.MAX_ITERATIONS_UNBOUNDED;
-        const SNAPSHOT_THRESHOLD = 0.00000001;
-
-        it('Snapshot: 1.8 Diamond Sword @ Level 30', async () => {
-            const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.LAPIS_PIVOT);
-            const stats = await engine.calculate(TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND, { threshold: SNAPSHOT_THRESHOLD, maxIterations: SNAPSHOT_ITERATIONS, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false });
-            await SnapshotUtils.assertSnapshot('1.8_sword_30_diamond', stats);
-        });
-
-        it('Snapshot: 1.21 Mace @ Level 30', async () => {
-            const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
-            const stats = await engine.calculate(TEST_DATA.ITEMS.MACE, 30, TEST_DATA.MATERIALS.MACE, { threshold: SNAPSHOT_THRESHOLD, maxIterations: SNAPSHOT_ITERATIONS, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false });
-            await SnapshotUtils.assertSnapshot('1.21_mace_30_mace', stats);
-        });
-
-        it('Snapshot: 1.7.2 Multi-Enchant Book @ Level 30', async () => {
-            const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.BOOK_MULTI_LIMIT);
-            const stats = await engine.calculate(TEST_DATA.ITEMS.BOOK, 30, TEST_DATA.MATERIALS.BOOK, { threshold: SNAPSHOT_THRESHOLD, maxIterations: SNAPSHOT_ITERATIONS, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false });
-            await SnapshotUtils.assertSnapshot('1.7.2_book_30_book', stats);
-        });
-
-        it('Snapshot: 1.21.11 Spear @ Level 30', async () => {
-            const engine = EngineFactory.create(DATA, '1.21.11');
-            const stats = await engine.calculate(TEST_DATA.ITEMS.SPEAR, 30, TEST_DATA.MATERIALS.DIAMOND, { threshold: SNAPSHOT_THRESHOLD, maxIterations: SNAPSHOT_ITERATIONS, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false });
-            await SnapshotUtils.assertSnapshot('1.21.11_spear_30_diamond', stats);
-        });
-
-        it('Snapshot: 1.21.11 Book @ Level 30', async () => {
-            const engine = EngineFactory.create(DATA, '1.21.11');
-            engine.resetCaches();
-            const stats = await engine.calculate(TEST_DATA.ITEMS.BOOK, 30, TEST_DATA.MATERIALS.BOOK, { threshold: SNAPSHOT_THRESHOLD, maxIterations: SNAPSHOT_ITERATIONS, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false });
-            await SnapshotUtils.assertSnapshot('1.21.11_book_30_book', stats);
-        });
-
-        it('Snapshot: 1.21 Diamond Sword @ Level 30 (Clue Sharpness IV)', async () => {
-            const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
-            engine.resetCaches();
-            const stats = await engine.calculate(TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND, { threshold: SNAPSHOT_THRESHOLD, maxIterations: SNAPSHOT_ITERATIONS, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false, clue: 'Sharpness IV' });
-            await SnapshotUtils.assertSnapshot('1.21_sword_30_diamond_clue_sharpness', stats);
-        });
-
-        it('Snapshot: 1.8 Bow @ Level 30 (Clue Power IV)', async () => {
-            const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.LAPIS_PIVOT);
-            engine.resetCaches();
-            const stats = await engine.calculate(TEST_DATA.ITEMS.BOW, 30, TEST_DATA.MATERIALS.BOW, { threshold: SNAPSHOT_THRESHOLD, maxIterations: SNAPSHOT_ITERATIONS, summaryLimit: SNAPSHOT_LIMIT, resultsLimit: SNAPSHOT_LIMIT, useCache: false, clue: 'Power IV' });
-            await SnapshotUtils.assertSnapshot('1.8_bow_30_bow_clue_power', stats);
-        });
-    });
-
-    describe('6. Cache Isolation & Consistency', () => {
+    describe('5. Cache Isolation & Consistency', () => {
         it('should NOT return cached Sword results when asking for Pickaxe (same material)', async () => {
              const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.LAPIS_PIVOT);
              

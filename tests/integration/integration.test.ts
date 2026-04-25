@@ -200,7 +200,7 @@ describe('Integration: RefinementService with mocked WorkerClient', () => {
         // The behavioral contract: after run2 starts and run1 is cancelled,
         // chart data should eventually appear attributed to run2's onChart callback.
         // This does NOT test internal implementation (isSweepRunning, abort signals, etc).
-        let resolveChartRequest: (v: any) => void = () => { console.log('resolveChartRequest called but no pending request'); };
+        let resolveChartRequest: (v: any) => void = () => {};
         let capturedProgress: ((v: any) => void) | undefined;
         let chartReqCount = 0;
 
@@ -211,7 +211,6 @@ describe('Integration: RefinementService with mocked WorkerClient', () => {
             }
             if (_type === 'calculate' && payload.source === 'chart') {
                 chartReqCount++;
-                console.log(`Mock intercepted chart request: level=${payload.xp}, count=${chartReqCount}`);
                 // Return a controllable promise; the test resolves them manually
                 return new Promise(resolve => { resolveChartRequest = resolve; });
             }
@@ -236,13 +235,11 @@ describe('Integration: RefinementService with mocked WorkerClient', () => {
         await flush();
 
         // --- Cancel run1 by starting run2 ---
-        console.log('Starting run2');
         service.run({ ...BASE_PAYLOAD, xpLevel: 15 }, {} as any, {
             onStatus: () => {},
             onStats: () => {},
             onChart: (sweep) => {
                 const populated = sweep.filter(Boolean);
-                console.log(`run2 onChart triggered with ${populated.length} elements`);
                 if (populated.length > 0) run2ChartLevels.push(populated.length);
             },
         });
@@ -251,9 +248,7 @@ describe('Integration: RefinementService with mocked WorkerClient', () => {
 
         // Drive chart requests: keep resolving until run2 gets chart data
         let maxAttempts = 60;
-        console.log('Driving chart requests...');
         while (run2ChartLevels.length === 0 && maxAttempts-- > 0) {
-            console.log(`Attempt ${60 - maxAttempts}, resolving chart request`);
             resolveChartRequest({ stats: makeStats(0.01) });
             await flush();
         }
