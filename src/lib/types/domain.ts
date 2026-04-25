@@ -41,6 +41,7 @@ export interface VersionMechanics {
   random_bonus_range?: number;
   xp_cost_type?: 'full' | 'flat';
   lapis_required?: boolean;
+  xp_cap?: number;
 }
 
 /**
