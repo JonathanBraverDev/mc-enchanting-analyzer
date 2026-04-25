@@ -51,8 +51,16 @@ The engine implements **Banker's Rounding** (Round-to-Nearest-Even) for scaling 
 ### 3. Atomic Accounting (Remainder Capture)
 Whenever `prob` is divided among $N$ branches (e.g., distributing mass across enchantment weights), integer division inevitably produces a remainder.
 - **Traditional**: $5 / 2 = 2$ (remainder 1 lost).
-- **Honest**: $5 / 2 = 2$. The remainder `1` is explicitly added to the `Rounding` bucket of the current `MassAccountant`.
-- **Result**: Even if the search is shallow, the "lost" mass is visible to the user as a diagnostic metric.
+- **Honest**: $5 / 2 = 2$. The remainder `1` is explicitly added to the `Rounding` bucket of the current `ProbabilityMassBookkeeper`.
+- **Atomic**: All additions to the results map and buckets happen within the same transition block.
+
+### Tiers of Aggregation
+
+1.  **Search Level**: `SearchService` populates a `SearchFrontier` with results and its own `ProbabilityMassBookkeeper`.
+2.  **Engine Level**: `ProgressiveStatsAggregator` combines multiple frontiers.
+    - Every `addItemMass` call ensures the specific enchantment stats are updated in sync with the global `ProbabilityMassBookkeeper`.
+    - After searching all modified levels $L$, the engine has a set of frontiers $\{F_L\}$.
+    - It uses `ProbabilityMassBookkeeper.addScaled(frontier, P(L))` to weight each frontier's contribution.
 
 ---
 
