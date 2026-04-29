@@ -12,6 +12,7 @@ export interface SearchFrontier {
     results: Map<PackedCombo, bigint>;
     uncertainty: bigint;
     cumulativeAccountedMass: bigint;
+    prunedMass: bigint;
     threshold: bigint;
 }
 
@@ -146,6 +147,7 @@ export class EnchantEngine {
         let results: Map<PackedCombo, bigint>;
         let uncertainty: bigint;
         let cumulativeAccountedMass: bigint;
+        let prunedMass: bigint;
         let queue: BinaryHeap<PackedNode>;
 
         const romanMap = this.registry.data.constants.ROMAN_MAP;
@@ -160,16 +162,19 @@ export class EnchantEngine {
             results = new Map(existingFrontier.results);
             uncertainty = existingFrontier.uncertainty;
             cumulativeAccountedMass = existingFrontier.cumulativeAccountedMass;
+            prunedMass = existingFrontier.prunedMass || 0n;
             queue = existingFrontier.queue.clone();
         } else if (cached && cached.threshold > threshold) {
             results = new Map(cached.results);
             uncertainty = cached.uncertainty;
             cumulativeAccountedMass = cached.cumulativeAccountedMass;
+            prunedMass = cached.prunedMass || 0n;
             queue = cached.queue.clone();
         } else {
             results = new Map();
             uncertainty = 0n;
             cumulativeAccountedMass = 0n;
+            prunedMass = 0n;
             
             const guaranteedFirstRank = guaranteedFirst ? RomanUtils.getRomanValue(guaranteedFirst.split(' ').pop()!, romanMap) : null;
             const guaranteedFirstFull = guaranteedFirstId !== null && guaranteedFirstRank !== null ? (guaranteedFirstId << 8 | guaranteedFirstRank) : null;
@@ -190,7 +195,7 @@ export class EnchantEngine {
 
         const initialPool = this.registry.getEligiblePool(cat, modLevel, mat);
         if (initialPool.length === 0) {
-            return { queue: new BinaryHeap(), results: new Map(), uncertainty: 0n, cumulativeAccountedMass: PRECISION, threshold };
+            return { queue: new BinaryHeap(), results: new Map(), uncertainty: 0n, cumulativeAccountedMass: PRECISION, prunedMass: 0n, threshold };
         }
 
         const poolWeights = initialPool.map(e => this.registry.weightMap[e >> 8]);
@@ -234,7 +239,10 @@ export class EnchantEngine {
 
             const probMovingForward = ProbUtils.scale(current.prob, probContinue);
             if (probMovingForward < threshold / ENGINE_DEFAULTS.PRUNE_THRESHOLD_DENOMINATOR || currentCount >= ENGINE_DEFAULTS.MAX_ENCHANTS_PER_ITEM) {
+                results.set(current.packedChosen, (results.get(current.packedChosen) || 0n) + probMovingForward);
+                cumulativeAccountedMass += probMovingForward;
                 uncertainty += probMovingForward;
+                prunedMass += probMovingForward;
                 continue;
             }
 
@@ -281,7 +289,7 @@ export class EnchantEngine {
         }
 
         const totalUncertainty = uncertainty + frontierUncertainty;
-        const out = { queue, results, uncertainty, cumulativeAccountedMass, threshold };
+        const out = { queue, results, uncertainty, cumulativeAccountedMass, prunedMass, threshold };
         
         activeCache.set(cacheKey, out);
         return { ...out, results: outResults, uncertainty: totalUncertainty }; 
@@ -340,6 +348,7 @@ export class EnchantEngine {
 
         let processedMProb = 0n;
         let totalUncertainty = 0n;
+        let totalPrunedMass = 0n;
         
         const levels = Object.keys(modDist).map(Number).sort((a, b) => b - a);
         let iterCount = 0;
@@ -355,6 +364,7 @@ export class EnchantEngine {
                 finalCombos.set(key, (finalCombos.get(key) || 0n) + totalProb);
             }
             totalUncertainty += ProbUtils.scale(result.uncertainty, mProb);
+            totalPrunedMass += ProbUtils.scale(result.prunedMass, mProb);
 
             processedMProb += mProb;
             if (++iterCount % 3 === 0) {
@@ -366,6 +376,7 @@ export class EnchantEngine {
         }
 
         const finalStats = ResultProcessor.summarize(finalCombos, totalUncertainty);
+        finalStats.pruned = ProbUtils.toNumber(totalPrunedMass);
         this.statsCache.set(exactKey, finalStats);
         
         const best = this.bestStatsCache.get(baseKey);

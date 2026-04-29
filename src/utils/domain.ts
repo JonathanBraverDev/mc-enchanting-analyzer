@@ -83,7 +83,7 @@ export class ComboUtils {
         for (const c of chosen) {
             const id = c >> 8;
             const rank = c & 0xFF;
-            const val = (id << 4) | (rank & 0x0F);
+            const val = ((id & 0x7F) << 3) | (rank & 0x07);
             if (guaranteedFirstId !== null && id === guaranteedFirstId && firstPicked === null) {
                 firstPicked = val;
             } else {
@@ -96,7 +96,7 @@ export class ComboUtils {
         
         let packed = 0n;
         for (let i = 0; i < others.length; i++) {
-            packed |= BigInt(others[i]) << BigInt(i * 12);
+            packed |= BigInt(others[i]) << BigInt(i * 10);
         }
         packed |= BigInt(others.length) << 60n;
         
@@ -113,9 +113,9 @@ export class ComboUtils {
         
         const out: PackedEnchant[] = [];
         for (let i = 0; i < count; i++) {
-            const val = Number((core >> BigInt(i * 12)) & 0xFFFn);
-            const id = val >> 4;
-            const rank = val & 0x0F;
+            const val = Number((core >> BigInt(i * 10)) & 0x3FFn);
+            const id = val >> 3;
+            const rank = val & 0x07;
             out.push((id << 8) | rank);
         }
         return out;
