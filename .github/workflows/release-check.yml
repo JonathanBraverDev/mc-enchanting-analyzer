@@ -55,20 +55,23 @@ jobs:
       - name: Validate SemVer Jump
         run: |
           git fetch origin main --tags || true
-          # Only look for numeric tags starting with v (e.g. v4.2.1)
           LATEST_TAG=$(git tag -l "v[0-9]*" --sort=v:refname | tail -n 1)
           PROPOSED_TAG="${{ steps.check_title.outputs.tag }}"
-          echo "Latest numeric tag found: $LATEST_TAG"
-          echo "Proposed tag: $PROPOSED_TAG"
           
+          # Strip 'v' for numeric comparison if needed, but semver tool handles v-input
+          # We just need to make sure the comparison accounts for the 'v' prefix
           if [ -n "$LATEST_TAG" ] && [ "$LATEST_TAG" != "$PROPOSED_TAG" ]; then
-            NEXT_PATCH=$(npx semver -i patch $LATEST_TAG)
-            NEXT_MINOR=$(npx semver -i minor $LATEST_TAG)
-            NEXT_MAJOR=$(npx semver -i major $LATEST_TAG)
-            if [ "$PROPOSED_TAG" != "$NEXT_PATCH" ] && \
-               [ "$PROPOSED_TAG" != "$NEXT_MINOR" ] && \
-               [ "$PROPOSED_TAG" != "$NEXT_MAJOR" ]; then
-              echo "::error::Invalid version jump. From $LATEST_TAG, the next version should be $NEXT_PATCH, $NEXT_MINOR, or $NEXT_MAJOR."
+            # Get next versions (semver returns them without 'v')
+            P=$(npx semver -i patch $LATEST_TAG)
+            M=$(npx semver -i minor $LATEST_TAG)
+            J=$(npx semver -i major $LATEST_TAG)
+            
+            # Compare against both v-prefixed and non-prefixed versions
+            if [ "$PROPOSED_TAG" != "v$P" ] && [ "$PROPOSED_TAG" != "$P" ] && \
+               [ "$PROPOSED_TAG" != "v$M" ] && [ "$PROPOSED_TAG" != "$M" ] && \
+               [ "$PROPOSED_TAG" != "v$J" ] && [ "$PROPOSED_TAG" != "$J" ]; then
+              echo "::error::Invalid version jump. From $LATEST_TAG, the next version should be v$P, v$M, or v$J."
               exit 1
             fi
           fi
+          echo "SemVer jump validation successful."
