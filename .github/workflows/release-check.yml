@@ -19,6 +19,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Install SemVer Tool
+        run: npm install semver --no-save
+
       - name: Debug Information
         run: |
           echo "PR Title: '${{ github.event.pull_request.title }}'"
@@ -58,15 +61,12 @@ jobs:
           LATEST_TAG=$(git tag -l "v[0-9]*" --sort=v:refname | tail -n 1)
           PROPOSED_TAG="${{ steps.check_title.outputs.tag }}"
           
-          # Strip 'v' for numeric comparison if needed, but semver tool handles v-input
-          # We just need to make sure the comparison accounts for the 'v' prefix
           if [ -n "$LATEST_TAG" ] && [ "$LATEST_TAG" != "$PROPOSED_TAG" ]; then
-            # Get next versions (semver returns them without 'v')
+            # Use local semver for speed and silence
             P=$(npx semver -i patch $LATEST_TAG)
             M=$(npx semver -i minor $LATEST_TAG)
             J=$(npx semver -i major $LATEST_TAG)
             
-            # Compare against both v-prefixed and non-prefixed versions
             if [ "$PROPOSED_TAG" != "v$P" ] && [ "$PROPOSED_TAG" != "$P" ] && \
                [ "$PROPOSED_TAG" != "v$M" ] && [ "$PROPOSED_TAG" != "$M" ] && \
                [ "$PROPOSED_TAG" != "v$J" ] && [ "$PROPOSED_TAG" != "$J" ]; then
