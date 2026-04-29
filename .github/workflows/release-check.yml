@@ -1,0 +1,60 @@
+name: Release Pre-Merge Check
+
+on:
+  pull_request:
+    branches:
+      - main
+    types: [opened, edited, synchronize]
+
+jobs:
+  validate-release:
+    name: Validate Release Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check PR Title
+        id: check_title
+        run: |
+          TITLE="${{ github.event.pull_request.title }}"
+          if [[ ! "$TITLE" =~ ^Release:\ v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            echo "ERROR: PR title must follow the pattern 'Release: vX.Y.Z'"
+            exit 1
+          fi
+          TAG=$(echo "$TITLE" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Check PR Description
+        run: |
+          BODY="${{ github.event.pull_request.body }}"
+          if [ -z "$BODY" ] || [ ${#BODY} -lt 10 ]; then
+            echo "ERROR: PR description is too short. Please provide release notes."
+            exit 1
+          fi
+
+      - name: Verify Changelog
+        run: |
+          PROPOSED_TAG="${{ steps.check_title.outputs.tag }}"
+          if ! grep -q "## \[$PROPOSED_TAG\]" CHANGELOG.md; then
+            echo "ERROR: CHANGELOG.md does not contain an entry for $PROPOSED_TAG"
+            exit 1
+          fi
+
+      - name: Validate SemVer Jump
+        run: |
+          git fetch origin main --tags
+          LATEST_TAG=$(git tag -l "v*" --sort=v:refname | tail -n 1)
+          PROPOSED_TAG="${{ steps.check_title.outputs.tag }}"
+          if [ -n "$LATEST_TAG" ]; then
+            NEXT_PATCH=$(npx semver -i patch $LATEST_TAG)
+            NEXT_MINOR=$(npx semver -i minor $LATEST_TAG)
+            NEXT_MAJOR=$(npx semver -i major $LATEST_TAG)
+            if [ "$PROPOSED_TAG" != "$NEXT_PATCH" ] && \
+               [ "$PROPOSED_TAG" != "$NEXT_MINOR" ] && \
+               [ "$PROPOSED_TAG" != "$NEXT_MAJOR" ]; then
+              echo "ERROR: Invalid version jump from $LATEST_TAG to $PROPOSED_TAG."
+              exit 1
+            fi
+          fi

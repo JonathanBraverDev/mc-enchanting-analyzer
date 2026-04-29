@@ -7,11 +7,11 @@ on:
       - main
 
 jobs:
-  validate:
+  release:
     if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.title, 'Release: v')
     runs-on: ubuntu-latest
-    outputs:
-      tag: ${{ steps.get_version.outputs.tag }}
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -24,58 +24,28 @@ jobs:
           TAG=$(echo "$TITLE" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)
           echo "tag=$TAG" >> $GITHUB_OUTPUT
 
-      - name: Verify Changelog Update
-        run: |
-          PROPOSED_TAG="${{ steps.get_version.outputs.tag }}"
-          if ! grep -q "## \[$PROPOSED_TAG\]" CHANGELOG.md; then
-            echo "ERROR: CHANGELOG.md does not contain an entry for $PROPOSED_TAG"
-            exit 1
-          fi
-
-      - name: Validate SemVer Jump
-        run: |
-          git fetch origin main --tags
-          LATEST_TAG=$(git tag -l "v*" --sort=v:refname | tail -n 1)
-          PROPOSED_TAG="${{ steps.get_version.outputs.tag }}"
-          if [ -n "$LATEST_TAG" ]; then
-            NEXT_PATCH=$(npx semver -i patch $LATEST_TAG)
-            NEXT_MINOR=$(npx semver -i minor $LATEST_TAG)
-            NEXT_MAJOR=$(npx semver -i major $LATEST_TAG)
-            if [ "$PROPOSED_TAG" != "$NEXT_PATCH" ] && \
-               [ "$PROPOSED_TAG" != "$NEXT_MINOR" ] && \
-               [ "$PROPOSED_TAG" != "$NEXT_MAJOR" ]; then
-              echo "ERROR: Invalid version jump from $LATEST_TAG to $PROPOSED_TAG."
-              exit 1
-            fi
-          fi
-
-  release:
-    needs: validate
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
       - name: Use Node.js 22.x
         uses: actions/setup-node@v4
         with:
           node-version: 22.x
           cache: 'npm'
+
       - run: npm ci
       - run: npm run build:standalone
+
       - name: Create Release and Tag
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ needs.validate.outputs.tag }}
+          tag_name: ${{ steps.get_version.outputs.tag }}
           files: dist/analyzer-standalone.html
           generate_release_notes: true
-          name: "Release ${{ needs.validate.outputs.tag }}"
+          name: "Release ${{ steps.get_version.outputs.tag }}"
           body: ${{ github.event.pull_request.body }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   sync-dev:
-    needs: [validate, release]
+    needs: release
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -93,12 +63,10 @@ jobs:
           git fetch origin main dev
           git checkout dev
           
-          echo "Attempting to rebase dev onto main..."
           if git rebase origin/main; then
-            echo "Rebase successful. Force-pushing dev..."
             git push origin dev --force
           else
-            echo "CONFLICT DETECTED: Rebase failed. Please resolve manually."
+            echo "CONFLICT: Rebase failed. Please resolve manually."
             exit 1
           fi
 
@@ -106,6 +74,6 @@ jobs:
         if: success()
         run: |
           BRANCH_NAME="${{ github.event.pull_request.head.ref }}"
-          if [[ "$BRANCH_NAME" == release/* ]]; then
+          if [[ "$BRANCH_NAME" == release/* ]] || [[ "$BRANCH_NAME" == 4.3.0 ]]; then
             git push origin --delete "$BRANCH_NAME"
           fi
