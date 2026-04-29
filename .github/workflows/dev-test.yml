@@ -3,8 +3,6 @@ name: Dev Testing Flow
 on:
   push:
     branches: [ "dev", "main" ]
-  pull_request:
-    branches: [ "main" ]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
