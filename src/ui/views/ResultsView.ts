@@ -10,11 +10,13 @@ export class ResultsView {
     private comboEl: HTMLElement | null;
     private rankEl: HTMLElement | null;
     private statusEl: HTMLElement | null;
+    private chartStatusEl: HTMLElement | null;
 
     constructor() {
         this.comboEl = document.getElementById("combo-list");
         this.rankEl = document.getElementById("rank-section");
         this.statusEl = document.getElementById("refinement-status");
+        this.chartStatusEl = document.getElementById("chart-status");
     }
 
     public showPlaceholder(text: string): void {
@@ -32,7 +34,22 @@ export class ResultsView {
         this.statusEl.style.opacity = level === 'done' ? '0.6' : '1';
     }
 
+    public setChartStatus(text: string, progress?: number): void {
+        if (!this.chartStatusEl) return;
+        if (!text) {
+            this.chartStatusEl.style.opacity = '0';
+            return;
+        }
+        
+        const progressText = progress !== undefined ? ` (${Math.round(progress * 100)}%)` : '';
+        this.chartStatusEl.textContent = text + (progress !== undefined ? progressText : UI_TEXTS.STATUS_POSTFIX);
+        this.chartStatusEl.style.opacity = '1';
+    }
+
     public update(insights: EnchantInsights, registry: Registry): void {
+        const hasResults = Object.keys(insights.combos).length > 0;
+        if (!hasResults) return; // Don't wipe the UI if we got an empty/preliminary update
+        
         this.renderCombos(insights, registry);
         this.renderRanks(insights, registry);
     }
@@ -69,7 +86,7 @@ export class ResultsView {
             info.style.cssText = "border-top: 1px solid rgba(255,255,255,0.05); margin-top: 10px; padding-top: 10px; opacity: 0.8;";
             
             const confidence = 1 - insights.uncertainty;
-            const color = insights.uncertainty > 0.1 ? '#ffca28' : '#66bb6a';
+            const color = (insights.uncertainty > 0.1) ? '#ffca28' : '#66bb6a';
             
             info.innerHTML = `
                 <div style="display: flex; justify-content: space-between; font-size: 0.85rem;">
@@ -81,8 +98,8 @@ export class ResultsView {
             fragment.appendChild(info);
         }
 
-        this.comboEl.innerHTML = "";
-        this.comboEl.appendChild(fragment);
+        // Atomic swap
+        this.comboEl.replaceChildren(fragment);
     }
 
     private renderRanks(insights: EnchantInsights, registry: Registry): void {
@@ -113,7 +130,7 @@ export class ResultsView {
             fragment.appendChild(item);
         });
 
-        this.rankEl.innerHTML = "";
-        this.rankEl.appendChild(fragment);
+        // Atomic swap
+        this.rankEl.replaceChildren(fragment);
     }
 }
