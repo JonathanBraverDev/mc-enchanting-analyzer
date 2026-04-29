@@ -1,0 +1,17 @@
+# This file contains a list of commits that should be ignored when running git blame.
+# It is used to exclude large-scale refactorings or reformatting that would
+# otherwise clutter the blame history.
+#
+# To use this file, run:
+# git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# chore: repository restructuring (automated migration)
+80a158987ce0598579dd0514650a0d3447af8e29
+
+# refactor: reorganize test suite into tiered hierarchy
+54b858706de42eed12a283a8f35548ee9d476764
+
+# refactor: restructure engine directory (pure movement)
+578fe6d01dddbbc21532572d06ce4667a96d14f3
+# refactor(imports): migrate cross-module imports to aliases
+f909e4817fc73db0cc13a8e5c6fba0bd09045ee4

@@ -1,6 +1,6 @@
-import { UIUtils, RomanUtils } from '../../utils/index.js';
-import { UI_DEFAULTS, UI_TEXTS, SEARCH_LEVEL_COLORS, SearchLevel } from '../../core/config.js';
-import { RegistryState, EnchantInsights } from '../../types/index.js';
+import { UIUtils, RomanUtils } from '#utils/index.js';
+import { UI_DEFAULTS, UI_TEXTS, SEARCH_LEVEL_COLORS, SearchLevel } from '#core/config.js';
+import { RegistryState, EnchantInsights } from '#types/index.js';
 
 /**
  * View component for rendering enchantment combinations and ranks.
@@ -105,15 +105,32 @@ export class ResultsView {
                 `Pruned (Sieved): ${UIUtils.formatPercent(acc.sieved)}`,
                 `Dropped (Overflow): ${UIUtils.formatPercent(acc.overflow)}`,
                 `Rounding: ${UIUtils.formatPercent(acc.rounding)}`
-            ].join('\n');
-            info.title = tooltip;
+            ];
             
+            if (acc.clueKnownSpace !== undefined) {
+                tooltip.push(`--- Posterior (Clue-Conditioned) ---`);
+                tooltip.push(`Compatible Mass: ${UIUtils.formatPercent(acc.clueKnownSpace)} of explored space`);
+            }
+            
+            info.title = tooltip.join('\n');
+            
+            const showClueDiagnostic = acc.clueKnownSpace !== undefined;
+            const diagnosticHtml = showClueDiagnostic ? `
+                <div style="margin-top: 8px; border-top: 1px dotted rgba(255,255,255,0.1); padding-top: 6px; font-size: 0.75rem; opacity: 0.9;">
+                    <div style="display: flex; justify-content: space-between;">
+                        <span>Known compatible mass:</span>
+                        <span>${UIUtils.formatPercent(acc.clueKnownSpace ?? 0)}</span>
+                    </div>
+                </div>
+            ` : '';
+
             info.innerHTML = `
                 <div style="display: flex; justify-content: space-between; font-size: 0.85rem;">
                     <span>Calculation Confidence ⓘ</span>
                     <span style="color: ${color}">${UIUtils.formatPercent(insights.accuracy)}</span>
                 </div>
                 ${acc.pending > 0.1 ? `<div style="font-size: 0.7rem; color: #ffca28; margin-top: 3px;">⚠️ High branching complexity - results approximated.</div>` : ''}
+                ${diagnosticHtml}
             `;
             fragment.appendChild(info);
         }

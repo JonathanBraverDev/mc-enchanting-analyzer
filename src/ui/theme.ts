@@ -1,7 +1,7 @@
-import { DATA } from '../data/index.js';
-import { getFullEnchantName } from '../core/registry.js';
-import { RegistryState } from '../types/index.js';
-import { RomanUtils } from '../utils/index.js';
+import { DATA } from '#data/index.js';
+import { getFullEnchantName } from '#core/registry.js';
+import { RegistryState } from '#types/index.js';
+import { RomanUtils } from '#utils/index.js';
 
 /**
  * Manages UI colors and enchantment-specific styles.
@@ -27,7 +27,8 @@ export const ThemeManager = {
         if (color.startsWith('hsl')) {
             const parts = color.match(/\d+/g);
             if (parts && parts.length >= 3) {
-                return `hsl(${parts[0]}, ${parts[1]}%, ${parseInt(parts[2]) + boost}%)`;
+                const [h = '', s = '', l = ''] = parts;
+                return `hsl(${h}, ${s}%, ${parseInt(l) + boost}%)`;
             }
         }
         return color;

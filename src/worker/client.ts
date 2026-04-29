@@ -1,8 +1,8 @@
-import { SerializationService } from '../services/index.js';
+import { SerializationService } from '#services/index.js';
 import type { WorkerResponse } from './protocol.js';
-import type { CalculationStats } from '../types/index.js';
+import { CalculationStats, ProgressUpdate } from '#types/index.js';
 
-type WorkerResult = { stats: CalculationStats };
+type WorkerResult = { stats?: CalculationStats; update?: ProgressUpdate };
 type RequestEntry = { resolve: (data: WorkerResult) => void; reject: (err: unknown) => void };
 type ProgressEntry = (data: WorkerResult) => void;
 type PendingEntry = RequestEntry | ProgressEntry;
@@ -67,11 +67,16 @@ export const WorkerClient = {
                         this.pendingRequests.delete(`${reqKey}_progress`);
                     }
                 } else if (msgType === 'progress') {
-                    const { stats } = payload || {};
-                    const finalStats: CalculationStats = (stats && stats.comboKeys) ? SerializationService.deserialize(stats) : stats as unknown as CalculationStats;
-
+                    const { stats, update } = payload || {};
                     const progCb = this.pendingRequests.get(`${reqKey}_progress`);
-                    if (progCb && typeof progCb === 'function') progCb({ stats: finalStats });
+                    if (progCb && typeof progCb === 'function') {
+                        if (update) {
+                            progCb({ update });
+                        } else if (stats) {
+                            const finalStats: CalculationStats = (stats && stats.comboKeys) ? SerializationService.deserialize(stats) : stats as unknown as CalculationStats;
+                            progCb({ stats: finalStats });
+                        }
+                    }
                 } else if (msgType === 'error') {
                     if (req && typeof req !== 'function') {
                         req.reject(payload);

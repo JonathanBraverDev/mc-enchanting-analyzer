@@ -1,7 +1,7 @@
-import { DATA } from '../../data/index.js';
-import { DOMUtils, StringUtils } from '../../utils/index.js';
-import { EnchantEngine } from '../../engine/index.js';
-import { getEligibleMaterials, getEnchantability, getFullEnchantName } from '../../core/registry.js';
+import { DATA } from '#data/index.js';
+import { DOMUtils, StringUtils } from '#utils/index.js';
+import { EnchantEngine } from '#engine/index.js';
+import { getEligibleMaterials, getEnchantability, getFullEnchantName } from '#core/registry.js';
 
 /**
  * View component for managing input parameters and their synchronization.
@@ -54,7 +54,7 @@ export class ParamsView {
             version: (this.elements["v-select"] as HTMLSelectElement)?.value || "",
             category: (this.elements["cat-select"] as HTMLSelectElement)?.value || "",
             material: (this.elements["mat-select"] as HTMLSelectElement)?.value || "",
-            guaranteedFirst: (this.elements["guaranteed-first-select"] as HTMLSelectElement)?.value || "",
+            clue: (this.elements["clue-select"] as HTMLSelectElement)?.value || "",
             xpLevel: parseInt((this.elements["lvl-range"] as HTMLInputElement)?.value || "30"),
             chartMetric: (this.elements["chart-metric"] as HTMLSelectElement)?.value || "any",
             sortMode: (this.elements["combo-sort"] as HTMLSelectElement)?.value || "prob"
@@ -80,13 +80,13 @@ export class ParamsView {
         });
     }
 
-    public updateGuaranteedFirst(engine: EnchantEngine): void {
+    public updateClueTarget(engine: EnchantEngine): void {
         const { category, material, xpLevel } = this.getValues();
-        const gSelect = this.elements["guaranteed-first-select"] as HTMLSelectElement;
+        const gSelect = this.elements["clue-select"] as HTMLSelectElement;
         if (!gSelect) return;
 
         const saved = gSelect.value;
-        gSelect.innerHTML = '<option value="">None (Random First)</option>';
+        gSelect.innerHTML = '<option value="">None (Unconditioned)</option>';
         if (!material) return;
         
         const ench = getEnchantability(engine.registry, material, category);

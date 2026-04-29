@@ -1,10 +1,9 @@
 # Architecture Map — Minecraft Enchantment Analyzer (v3)
-
-## Entry Points
+## Entry Points
 
 | Entry point | Purpose |
 |---|---|
-| `src/index.ts` | Public library API — re-exports engine, registry, data, types, utils |
+| `src/lib/index.ts` | Public library API — re-exports engine, registry, data, types, utils |
 | `src/ui/index.ts` | Browser UI bundle entry — wires DOM, workers, chart, refinement |
 | `src/worker/worker.ts` | Web Worker entry — runs engine off the main thread |
 
@@ -13,72 +12,35 @@
 ## Module Dependency Graph
 
 ```
-src/data/            ← pure JSON-shaped data (no imports)
-  index.ts
-  enchantments.ts
-  versions.ts
-  materials.ts
-  cosmetics.ts
+src/lib/
+  data/            ← pure JSON-shaped data (no imports)
+  types/           ← type definitions only (no runtime deps)
+  utils/           ← stateless math, BinaryHeap, LRUCache, etc.
+  core/            ← RegistryFactory, config, materials/pools
+  engine/          ← EnchantEngine, StatAggregator, SearchService, etc.
+  services/        ← CacheManager, SummaryService, HumanizationService, etc.
+  index.ts         ← Public library API (re-exports)
 
-src/types/           ← type definitions only (no runtime deps)
-  domain.ts
-  engine.ts
-  serialization.ts
-  ui.ts
-  mass.ts            ← MassBookkeeping & MassAccounting types
-  index.ts           ← re-exports all types
+src/ui/            ← UI layer only
+  components/      ← Future DOM modules (ResultsView, ChartController, etc.)
+  styles/
+    style.css
+  index.ts         ← UI bundle entry
+  analyzer.html     ← Entry template
 
-src/utils/           ← stateless math/format helpers
-  math/ProbUtils.ts
-  math/BitwiseUtils.ts
-  collections/BinaryHeap.ts
-  collections/LRUCache.ts
-  format/RomanUtils.ts
-  format/FormatUtils.ts
-  domain/VersionUtils.ts
-  domain/ComboUtils.ts
-  async/AsyncUtils.ts
-  dom/DOMUtils.ts
-  index.ts           ← re-exports all utils
+src/worker/
+  worker.ts        ← Web Worker entry
 
-src/core/            ← registry construction & shared config
-  config.ts          ← ENGINE_DEFAULTS, UI_DEFAULTS, SEARCH_MODES
-  factory.ts         ← RegistryFactory  (imports: types, utils, data)
-  registry.ts        ← registry lookups (imports: types, utils, config)
-  RegistryMaterials.ts (imports: types)
-  RegistryPools.ts   (imports: types, utils, config)
+tests/             ← Root-level test suite
+  ... (moved from src/tests)
 
-src/engine/          ← calculation pipeline
-  distribution.ts    (imports: utils, config, types)
-  frontier.ts        (imports: utils, config, registry, types)
-  search.ts          (imports: utils, registry, config, frontier, types)
-  MassAccountant.ts  (imports: types, utils)
-  aggregator.ts      (imports: utils, services, registry, config, types, distribution, search, frontier, MassAccountant)
-  index.ts           (imports: types, utils, registry, factory, config, distribution, search, aggregator)
-
-src/services/        ← post-processing, serialization
-  SummaryService.ts  (imports: utils, config, types)
-  HumanizationService.ts (imports: utils, registry, types)
-  SerializationService.ts (imports: types)
-  index.ts           ← re-exports all services
-
-src/worker/          ← Web Worker plumbing
-  protocol.ts        ← WorkerRequest / WorkerResponse type definitions
-  worker.ts          (imports: engine, data, services, protocol)
-  client.ts          (imports: services, protocol, types)
-
-src/ui/              ← browser UI (imports everything above)
-  index.ts           ← AppController: wires DOM, workers, chart, refinement
-  views/ParamsView.ts
-  views/ResultsView.ts
-  chart.ts
-  chart-manager.ts
-  refinement.ts
-  theme.ts
+scripts/           ← Build, profiling, snapshot tools
+  ... (moved from root and src/tests/profiler.ts)
 ```
 
-Dependency direction: `data` ← `types` ← `utils` ← `core` ← `engine` ← `services` ← `worker` ← `ui`
+Dependency direction: `lib/data` ← `lib/types` ← `lib/utils` ← `lib/core` ← `lib/engine` ← `lib/services` ← `worker` ← `ui`
 (Each layer imports only from layers to its left, with one noted exception: `engine/aggregator.ts` imports `SummaryService` from `services` for inline progress callbacks.)
+rvice` from `services` for inline progress callbacks.)
 
 ---
 
@@ -96,26 +58,31 @@ Worker (src/worker/worker.ts)
   engine.getFullStats(cat, xp, mat, config)
     │
     ▼
-EnchantEngine.getFullStats  (src/engine/index.ts)
+EnchantEngine.getFullStats (src/engine/index.ts)
   ├─ validates inputs (xp range, known category/material, guaranteed-first validity)
-  ├─ checks statsCache
+  ├─ checks CacheManager (stats cache, threshold-aware hit detection)
   └─ StatAggregator.getFullStats(registry, cat, xp, mat, guaranteedFirst, config)
         │
-        ├─ DistributionService.getModifiedLevelDist(xp, enchantability)
+        ├─ DistributionService.getModifiedLevelDist(version, xp, enchantability)
         │    → bigint probability map  { modifiedLevel → P(level) }
         │
         └─ for each modifiedLevel (highest→lowest):
              SearchService.calculateCombinations(registry, cat, ml, mat, ...)
+               ├─ CacheManager (combo/book cache hit/resumption detection)
                ├─ FrontierFactory.create()   → initialises BinaryHeap + mass maps
+               ├─ SearchProcessor: high-speed search primitives
                ├─ best-first search loop:
                │    getEligiblePool()        → PackedEnchant[] for (cat, level, mat)
                │    processInitialNode()     → expand root into first enchants
-                  ├─ processSearchNode()      → branch, conflict-prune, merge duplicates
-                ├─ redistributeBookProb()   → split prob for multi-enchant books
-                └─ returns SearchFrontier { results, anyMass, rankMass, countMass, mass (MassBookkeeping) }
+               │    processSearchNode()      → branch, conflict-prune, merge duplicates
+               ├─ SearchProcessor.redistributeBookProb() → split prob for multi-enchant books
+               └─ returns SearchFrontier { results, anyMass, rankMass, countMass, accounting (ProbabilityMassTracker) }
 
         ↓ accumulate frontier results weighted by modLevel probabilities
-        SummaryService.summarize()   → CalculationStats { ..., accuracy, accounting (MassAccounting) }
+        SummaryService.summarize()   → CalculationStats { ..., accuracy, accounting (MassAccounting), threshold }
+    │
+    ▼
+CacheManager.setStats(version, key, CalculationStats)
     │
     ▼
 SerializationService.serialize()   → CompactStats (TypedArrays for transferable transfer)
@@ -135,7 +102,7 @@ UI (HumanizationService.humanize + ResultsView.render + ChartController.update)
 
 ## Key Function Signatures
 
-### `src/engine/index.ts` — `EnchantEngine`
+### `src/lib/engine/index.ts` — `EnchantEngine`
 | Signature | What it does |
 |---|---|
 | `constructor(data, version)` | Builds registry from DATA + version string; throws for invalid inputs |
@@ -147,33 +114,33 @@ UI (HumanizationService.humanize + ResultsView.render + ChartController.update)
 | `static clearAllEngines()` | Clears all caches AND removes all engine refs from the global tracking set |
 | `destroy()` | Clears caches and removes this engine from the global tracking set |
 
-### `src/engine/aggregator.ts` — `StatAggregator`
+### `src/lib/engine/aggregator.ts` — `StatAggregator`
 | Signature | What it does |
 |---|---|
 | `static getFullStats(registry, cat, xp, mat, guaranteedFirst?, config?) → Promise<CalculationStats>` | Loops over all modified levels, runs search per level, accumulates weighted mass maps |
 
-### `src/engine/distribution.ts` — `DistributionService`
+### `src/lib/engine/distribution.ts` — `DistributionService`
 | Signature | What it does |
 |---|---|
 | `static getModifiedLevelDist(xp, enchantability, registry, cache?) → {[level]: bigint}` | Computes triangular distribution of modified levels using BigInt fixed-point arithmetic |
 
-### `src/engine/search.ts` — `SearchService`
+### `src/lib/engine/search.ts` — `SearchService`
 | Signature | What it does |
 |---|---|
 | `static calculateCombinations(registry, cat, modLevel, mat, guaranteedFirst?, threshold?, limit, existingFrontier?, resultsLimit?, poolCache?, instrumentation?, floor?) → SearchFrontier` | Best-first iterative search; resumes from existing frontier if provided; uses MassAccountant for bookkeeping |
 
-### `src/engine/frontier.ts` — `FrontierFactory`
+### `src/lib/engine/frontier.ts` — `FrontierFactory`
 | Signature | What it does |
 |---|---|
 | `static create(registry, cat, modLevel, guaranteedFirst?, existing?, threshold?) → SearchFrontier` | Creates a fresh frontier (with guaranteed-first seed) or deep-clones an existing one |
 | `static getGuaranteedFirstId(registry, guaranteedFirst) → number \| null` | Resolves a "Name Rank" string to enchantment ID, returns null if unknown |
 
-### `src/core/factory.ts` — `RegistryFactory`
+### `src/lib/core/factory.ts` — `RegistryFactory`
 | Signature | What it does |
 |---|---|
 | `static build(data, version) → RegistryState` | Builds full registry by resolving version inheritance chain, applying overrides, building ID maps |
 
-### `src/core/registry.ts` — lookup functions
+### `src/lib/core/registry.ts` — lookup functions
 | Signature | What it does |
 |---|---|
 | `getCategoryId(state, cat) → number` | Returns numeric category ID, or UNKNOWN_CATEGORY_ID (63) if not found |
@@ -184,21 +151,22 @@ UI (HumanizationService.humanize + ResultsView.render + ChartController.update)
 | `isEnchantmentAchievable(state, fullName, cat, mat, levels, cache?) → boolean` | Checks if a named enchantment appears in any pool for the given levels |
 | `getEnchantability(state, mat, cat) → number` | Returns base enchantability value for a material+category combination |
 
-### `src/services/SummaryService.ts`
+### `src/lib/services/SummaryService.ts`
 | Signature | What it does |
 |---|---|
 | `static summarize(combos, accountant, anyMass?, rankMass?, countMass?, comboLimit?) → CalculationStats` | Converts raw BigInt mass maps and MassAccountant into a number-based CalculationStats object |
 
-### `src/services/HumanizationService.ts`
+### `src/lib/services/HumanizationService.ts`
 | Signature | What it does |
 |---|---|
 | `static humanize(stats, resolver, sortMode?, romanMap?) → EnchantInsights` | Translates numeric IDs and hex combo keys into human-readable names |
 
-### `src/services/SerializationService.ts`
+### `src/lib/services/SerializationService.ts`
 | Signature | What it does |
 |---|---|
 | `static serialize(stats) → { compact: CompactStats, transferables: Transferable[] }` | Packs CalculationStats into typed arrays for zero-copy postMessage transfer |
 | `static deserialize(compact) → CalculationStats` | Reconstructs CalculationStats from typed array representation |
+
 
 ### `src/worker/client.ts` — `WorkerClient`
 | Signature | What it does |
@@ -208,7 +176,7 @@ UI (HumanizationService.humanize + ResultsView.render + ChartController.update)
 
 ---
 
-## Key Constants (`src/core/config.ts`)
+## Key Constants (`src/lib/core/config.ts`)
 
 | Constant | Value | Meaning |
 |---|---|---|
@@ -224,21 +192,58 @@ UI (HumanizationService.humanize + ResultsView.render + ChartController.update)
 
 ---
 
-## Caching Layers (inside `EnchantEngine`)
+## Caching Strategy (CacheManager)
 
-All caches and `_registry` are **private** fields on `EnchantEngine`.
+The engine uses a centralized, singleton `CacheManager` to manage memory and lifecycle. All cache keys are **version-prefixed** to prevent cross-version pollution.
 
+```mermaid
+graph TD
+    EE[EnchantEngine] --> CM[CacheManager]
+    SA[StatAggregator] --> CM
+    DS[DistributionService] --> CM
+    PS[PoolService] --> CM
+    
+    subgraph "CacheManager (Global Singleton)"
+        D[(Dist Cache)]
+        P[(Pool Cache)]
+        C[(Combo Cache)]
+        B[(Book Cache)]
+        S[(Stats Cache)]
+    end
+    
+    CM -.-> D
+    CM -.-> P
+    CM -.-> C
+    CM -.-> B
+    CM -.-> S
 ```
-distCache      Map<string, {[level]: bigint}>      "xp@enchantability@div@rngRange" → modified level distribution
-poolCache      LRUCache<string, PackedEnchant[]>   "cat|level" → eligible enchant list  (mat is NOT in the key)
-comboCache     LRUCache<number, SearchFrontier>    getPackedKey (no limit) → search frontier (non-book)
-bookComboCache LRUCache<number, SearchFrontier>    getPackedKey (no limit) → search frontier (book)
-statsCache     LRUCache<number, CalculationStats>  getStatsKey  (no limit, no threshold) → final stats
+
+### Probability Accounting (ProbabilityMassTracker)
+
+The `ProbabilityMassTracker` unifies mass tracking and residue harvesting into a single class, ensuring 100% mass conservation across the complex branching search.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Initial: 100% Pending
+    Initial --> Search: calculateCombinations
+    Search --> Resolved: Terminal Leaf (Success)
+    Search --> Pending: Still in Heap
+    Search --> Sieved: Below Resolution Threshold
+    Search --> Capped: Hit Resource Limits
+    Search --> Overflow: >6 Enchants (Game Limit)
+    
+    Resolved --> Aggregation: Weighted by ModLevel P(ml)
+    Pending --> Aggregation
+    Sieved --> Aggregation
+    Capped --> Aggregation
+    Overflow --> Aggregation
+    
+    Aggregation --> FinalStats: SummaryService.summarize()
 ```
 
-**statsCache semantics**
-- Key: `getStatsKey(catId, matId, xp, guaranteedId)` — no threshold, no limit, no resultsLimit in key
-- Read: Accuracy is defined strictly as `Resolved / (Resolved + Pending + Capped + Sieved + Overflow)`. In practice, the denominator is always 1.0 (PRECISION), so `Accuracy = Resolved`.
+### statsCache semantics
+- Key: `version:getStatsKey(catId, matId, xp, guaranteedId)`
+- **Threshold Awareness**: When retrieving from cache, the engine checks if `cached.threshold <= requested.threshold`. If the cached result was generated with *more* precision (lower threshold), it is returned. If not, it is ignored or used as a baseline for further refinement.
 
 ## Search Termination & Invariants
 

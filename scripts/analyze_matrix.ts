@@ -8,11 +8,21 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-const OUT_DIR = path.join(path.dirname(new URL(import.meta.url).pathname), 'matrix-output');
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const OUT_DIR = path.join(__dirname, 'matrix-output');
 
 const args = process.argv.slice(2);
-const filterCat = args[args.indexOf('--cat') + 1] ?? null;
-const filterXp  = args[args.indexOf('--xp')  + 1] ? parseInt(args[args.indexOf('--xp') + 1]) : null;
+const findArg = (key: string) => {
+    const idx = args.indexOf(key);
+    const next = idx !== -1 ? args[idx + 1] : undefined;
+    return (next && !next.startsWith('--')) ? next : null;
+};
+
+const filterCat = findArg('--cat');
+const filterXp  = findArg('--xp') ? parseInt(findArg('--xp')!) : null;
 
 interface FileData {
     cat: string; mat: string; xp: number;
@@ -58,7 +68,8 @@ function summarize(data: FileData[]) {
         console.log(`CAT: ${cat}`);
         console.log(`${'='.repeat(60)}`);
 
-        for (const xp of [10, 20, 30]) {
+        const xpLevels = [...new Set(items.map(d => d.xp))].sort((a, b) => a - b);
+        for (const xp of xpLevels) {
             const group = byXp.get(xp);
             if (!group) continue;
 
@@ -80,11 +91,14 @@ function summarize(data: FileData[]) {
 
             console.log(`    Mass%     threshold(avg)   iters(avg)`);
             for (let i = 0; i < cpCount; i++) {
-                const cps = group.map(d => d.instrumentation.checkpoints[i]).filter(Boolean);
+                type CheckpointEntry = NonNullable<FileData['instrumentation']['checkpoints'][number]>;
+                const cps = group.map(d => d.instrumentation.checkpoints[i]).filter((c): c is CheckpointEntry => c !== undefined);
                 if (cps.length === 0) continue;
                 const avgThreshold = cps.reduce((s, c) => s + c.threshold, 0) / cps.length;
                 const avgIters     = cps.reduce((s, c) => s + c.iterations, 0) / cps.length;
-                const mass         = cps[0].mass; // same target across all
+                const firstCp = cps[0];
+                if (!firstCp) continue;
+                const mass = firstCp.mass; // same target across all
                 console.log(`    ${(mass * 100).toFixed(1).padStart(5)}%   ${formatThreshold(avgThreshold).padEnd(16)}  ${Math.round(avgIters)}`);
             }
         }

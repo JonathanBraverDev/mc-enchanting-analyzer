@@ -1,11 +1,11 @@
-import { EnchantEngine } from '../src/engine/index.js';
-import { DATA } from '../src/data/index.js';
+import { EngineFactory } from '#engine/index.js';
+import { DATA } from '../src/lib/data/index.js';
 import * as fs from 'node:fs';
 import * as assert from 'node:assert';
-import { CalculationStats } from '../src/types/index.js';
+import { CalculationStats } from '#types/index.js';
 
 async function debug() {
-    const engine = new EnchantEngine(DATA, '1.7.2');
+    const engine = EngineFactory.create(DATA, '1.7.2');
     const cat = 'book'; 
     const level = 30;
     const mat = 'book';
@@ -20,21 +20,24 @@ async function debug() {
         distCache: { hits: 0, misses: 0 }
     };
 
-    const stats = await engine.getFullStats(cat, level, mat, {
+    await engine.calculate(cat, level, mat, {
         threshold: 0.000000001,
         maxIterations: 1000000,
         instrumentation,
-        onProgress: (s) => {
+        onProgress: (s: any) => {
             if (s.instrumentation) {
                 const { totalIterations, resultsSize, memoryMB, globalResultsSize, globalCacheNodes } = s.instrumentation;
-                process.stdout.write(`\r Iter: ${totalIterations.toLocaleString()} | Res: ${resultsSize} | globalRes: ${globalResultsSize} | Cache: ${globalCacheNodes} | Mem: ${memoryMB}MB`);
+                const mem = memoryMB ? `${memoryMB}MB` : 'N/A';
+                const gRes = globalResultsSize ?? 'N/A';
+                const gCache = globalCacheNodes ?? 'N/A';
+                process.stdout.write(`\r Iter: ${totalIterations.toLocaleString()} | Res: ${resultsSize} | globalRes: ${gRes} | Cache: ${gCache} | Mem: ${mem}`);
             }
         }
     });
 
     console.log('\nSearch Complete.');
 
-    const snapshotPath = '../src/tests/snapshots/1.7.2_book_30_book.json';
+    const snapshotPath = '../tests/snapshots/1.7.2_book_30_book.json';
     if (fs.existsSync(snapshotPath)) {
         console.log('\nSimulating Snapshot Comparison (Deep Equality Check)...');
         const existing: CalculationStats = JSON.parse(fs.readFileSync(snapshotPath, 'utf8'));
@@ -43,7 +46,9 @@ async function debug() {
             console.log('Simulating a MISMATCH in assert.deepStrictEqual (67k+ entries)...');
             const statsMismatch: CalculationStats = JSON.parse(JSON.stringify(existing));
             const firstKey = Object.keys(statsMismatch.combos)[0];
-            statsMismatch.combos[firstKey] = (statsMismatch.combos[firstKey] || 0) + 0.000000000001;
+            if (firstKey !== undefined) {
+                statsMismatch.combos[firstKey] = (statsMismatch.combos[firstKey] || 0) + 0.000000000001;
+            }
 
             console.log('Comparing... (This triggers AssertionError generation)');
             assert.deepStrictEqual(statsMismatch, existing);

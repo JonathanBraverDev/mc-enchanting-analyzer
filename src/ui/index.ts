@@ -1,14 +1,15 @@
-import { DATA } from '../data/index.js';
-import { EnchantEngine } from '../engine/index.js';
-import { UI_TEXTS } from '../core/config.js';
-import { WorkerClient } from '../worker/client.js';
-import { ParamsView } from './views/ParamsView.js';
-import { ResultsView } from './views/ResultsView.js';
-import { ChartController } from './chart.js';
-import { RefinementService } from './refinement.js';
-import { HumanizationService } from '../services/index.js';
-import { getEnchantability } from '../core/registry.js';
-import { EnchantInsights, CalculationStats, ResultSortMode } from '../types/index.js';
+import { DATA } from '#data/index.js';
+import { EnchantEngine } from '#engine/index.js';
+import { EngineFactory } from '#engine/factory.js';
+import { UI_TEXTS } from '#core/config.js';
+import { WorkerClient } from '#worker/client.js';
+import { ParamsView } from '#ui/views/ParamsView.js';
+import { ResultsView } from '#ui/views/ResultsView.js';
+import { ChartController } from '#ui/chart.js';
+import { RefinementService } from '#ui/refinement.js';
+import { HumanizationService } from '#services/index.js';
+import { getEnchantability } from '#core/registry.js';
+import { EnchantInsights, CalculationStats, ResultSortMode } from '#types/index.js';
 
 /**
  * Main Web Application Controller.
@@ -27,7 +28,7 @@ class AppController {
 
     constructor() {
         this.params = new ParamsView(
-            ["v-select", "cat-select", "mat-select", "guaranteed-first-select", "lvl-range", "chart-metric", "combo-sort"],
+            ["v-select", "cat-select", "mat-select", "clue-select", "lvl-range", "chart-metric", "combo-sort"],
             (type) => this.onParamsChange(type)
         );
         this.results = new ResultsView();
@@ -56,9 +57,9 @@ class AppController {
         const { version } = this.params.getValues();
         if (!this.engine || this.engine.registry.version !== version) {
             if (this.engine) this.engine.destroy();
-            this.engine = new EnchantEngine(DATA, version);
+            this.engine = EngineFactory.create(DATA, version);
         }
-        return this.engine;
+        return this.engine!;
     }
 
     private onParamsChange(type: string): void {
@@ -71,7 +72,7 @@ class AppController {
                 this.isWorkerReady = true;
                 const engine = this.getEngine();
                 this.params.updateMaterials(engine);
-                this.params.updateGuaranteedFirst(engine);
+                this.params.updateClueTarget(engine);
                 this.enqueueRun();
             }).catch(err => this.showError(UI_TEXTS.STATUS_ERROR_LOADING, err));
             return;
@@ -82,12 +83,14 @@ class AppController {
         if (type === 'cat') {
             this.results.showPlaceholder(UI_TEXTS.STATUS_SWITCHING_CATEGORY);
             this.params.updateMaterials(engine);
-            this.params.updateGuaranteedFirst(engine);
+            this.params.updateClueTarget(engine);
         } else if (type === 'mat') {
-            this.params.updateGuaranteedFirst(engine);
+            this.params.updateClueTarget(engine);
         } else if (type === 'chart-metric') {
             this.chart.refresh(this.refinement.currentSweep, engine.registry);
             return;
+        } else if (type === 'clue') {
+            this.results.showPlaceholder(UI_TEXTS.STATUS_REFINING);
         } else if (type === 'combo-sort') {
             this.updateInsightsFromRaw(this.lastRawStats, true);
             return;
@@ -97,6 +100,7 @@ class AppController {
     }
 
     private enqueueRun(): void {
+        this.bestInsights = null; // Clear latch to prevent stable-result blocking
         if (this.runDebounceTimeout) window.clearTimeout(this.runDebounceTimeout);
         this.runDebounceTimeout = window.setTimeout(() => this.run(), 50);
     }
@@ -117,7 +121,7 @@ class AppController {
 
         try {
             const engine = this.getEngine();
-            this.params.updateGuaranteedFirst(engine);
+            this.params.updateClueTarget(engine);
             
             const vals = this.params.getValues();
             this.params.setEnchantability(getEnchantability(engine.registry, vals.material, vals.category));
