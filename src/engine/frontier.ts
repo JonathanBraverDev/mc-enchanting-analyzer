@@ -15,6 +15,7 @@ export interface SearchFrontier {
     uncertainty: bigint;
     cumulativeAccountedMass: bigint;
     prunedMass: bigint;
+    roundingError: bigint;
     threshold: bigint;
 }
 
@@ -40,6 +41,7 @@ export class FrontierFactory {
                 uncertainty: existing.uncertainty,
                 cumulativeAccountedMass: existing.cumulativeAccountedMass,
                 prunedMass: existing.prunedMass || 0n,
+                roundingError: existing.roundingError || 0n,
                 threshold: existing.threshold
             };
         }
@@ -73,7 +75,7 @@ export class FrontierFactory {
 
         return { 
             queue, results, anyMass, rankMass, countMass,
-            uncertainty: 0n, cumulativeAccountedMass: 0n, prunedMass: 0n, threshold 
+            uncertainty: 0n, cumulativeAccountedMass: 0n, prunedMass: 0n, roundingError: 0n, threshold 
         };
     }
 

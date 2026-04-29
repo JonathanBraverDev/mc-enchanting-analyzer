@@ -146,6 +146,13 @@ describe('Enchantment Engine Test Suite', () => {
              const totalCounted = Object.values(stats.count).reduce((a: any, b: any) => a + b, 0) as number;
              assert.ok(Math.abs(totalCounted + stats.uncertainty - 1.0) < 0.0001, 'Total probability including uncertainty must be 1.0');
          });
+
+         it('Guaranteed book enchant should be exactly 100%', async () => {
+             const engine = new EnchantEngine(DATA, '1.20.1');
+             const stats = await engine.getFullStats('book', 30, 'book', 'Silk Touch I', 0.0001);
+             const silkTouchId = engine.registry.getEnchantId('Silk Touch');
+             assert.strictEqual(stats.any[silkTouchId], 1.0, 'Guaranteed book enchant should be 100%');
+         });
     });
 
     describe('5. Regression Snapshots (Golden Results)', () => {

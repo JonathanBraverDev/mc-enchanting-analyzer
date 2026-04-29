@@ -1,11 +1,11 @@
-import { PRECISION, ProbUtils, AsyncUtils, ComboUtils } from '../utils/index.js';
+import { PRECISION, ProbUtils, AsyncUtils, ComboUtils, RomanUtils } from '../utils/index.js';
 import { SummaryService } from '../services/index.js';
 import { Registry } from '../core/registry.js';
 import { ENGINE_DEFAULTS } from '../core/config.js';
 import { CalculationStats, PackedCombo } from '../types/index.js';
 import { DistributionService } from './distribution.js';
 import { SearchService } from './search.js';
-import { SearchFrontier } from './frontier.js';
+import { SearchFrontier, FrontierFactory } from './frontier.js';
 
 /**
  * Service for aggregating enchantment statistics across multiple modified levels.
@@ -50,6 +50,7 @@ export class StatAggregator {
         let processedMProb = 0n;
         let totalUncertainty = 0n;
         let totalPrunedMass = 0n;
+        let totalRoundingError = 0n;
         
         let iterCount = 0;
 
@@ -88,34 +89,39 @@ export class StatAggregator {
 
             totalUncertainty += ProbUtils.scale(result.uncertainty, mProb);
             totalPrunedMass += ProbUtils.scale(result.prunedMass, mProb);
+            totalRoundingError += ProbUtils.scale(result.roundingError, mProb);
 
             processedMProb += mProb;
             if (++iterCount % 3 === 0) {
                 if (onProgress) {
-                    onProgress(SummaryService.summarize(finalCombos, totalUncertainty + (PRECISION - processedMProb), totalAnyMass, totalRankMass, totalCountMass, 0));
+                    onProgress(SummaryService.summarize(finalCombos, totalUncertainty + (PRECISION - processedMProb), totalRoundingError, totalAnyMass, totalRankMass, totalCountMass, 0));
                 }
                 await AsyncUtils.yield();
             }
         }
 
-        if (cat === "book") {
-            // Re-derive mass maps for books because SearchService might have redistributed mass
-            totalAnyMass.clear();
-            totalRankMass.clear();
-            totalCountMass.clear();
-            for (const [packed, prob] of finalCombos) {
-                const enchants = ComboUtils.unpack(packed);
-                const count = enchants.length;
-                totalCountMass.set(count, (totalCountMass.get(count) || 0n) + prob);
-                for (const e of enchants) {
-                    const id = e >> 8;
-                    totalAnyMass.set(id, (totalAnyMass.get(id) || 0n) + prob);
-                    totalRankMass.set(e, (totalRankMass.get(e) || 0n) + prob);
+        const distRoundingError = PRECISION - processedMProb;
+        totalRoundingError += distRoundingError;
+
+        if (guaranteedFirst) {
+            const gId = FrontierFactory.getGuaranteedFirstId(registry, guaranteedFirst);
+            if (gId !== null) {
+                totalAnyMass.set(gId, (totalAnyMass.get(gId) || 0n) + distRoundingError);
+                
+                const romanMap = registry.data.constants.ROMAN_MAP;
+                const rankStr = guaranteedFirst.split(' ').pop();
+                const rank = rankStr ? RomanUtils.getRomanValue(rankStr, romanMap) : null;
+                if (rank !== null) {
+                    const fullId = (gId << 8) | rank;
+                    totalRankMass.set(fullId, (totalRankMass.get(fullId) || 0n) + distRoundingError);
                 }
+                
+                // Also attribute to count 1+ (usually guaranteed starts at 1)
+                totalCountMass.set(1, (totalCountMass.get(1) || 0n) + distRoundingError);
             }
         }
 
-        const finalStats = SummaryService.summarize(finalCombos, totalUncertainty, totalAnyMass, totalRankMass, totalCountMass, summaryLimit);
+        const finalStats = SummaryService.summarize(finalCombos, totalUncertainty, totalRoundingError, totalAnyMass, totalRankMass, totalCountMass, summaryLimit);
         finalStats.pruned = ProbUtils.toNumber(totalPrunedMass);
 
         return finalStats;
