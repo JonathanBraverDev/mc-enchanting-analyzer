@@ -2,64 +2,65 @@ name: Release Automation
 
 on:
   push:
-    tags:
-      - 'v*.*.*'
+    branches:
+      - dev
 
 jobs:
   validate:
     name: Validate Release
+    if: startsWith(github.event.head_commit.message, 'Release: v')
     runs-on: ubuntu-latest
     outputs:
+      tag: ${{ steps.version.outputs.tag }}
       changelog: ${{ steps.changelog.outputs.body }}
     steps:
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0
 
-    - name: Validate Release Conditions
+    - name: Validate Release Version
+      id: version
       run: |
-        git fetch origin main dev --tags
+        git fetch origin main --tags
         
-        TAG_NAME="${{ github.ref_name }}"
-        echo "Validating Tag: $TAG_NAME"
+        # 1. Extract version from commit message
+        MESSAGE="${{ github.event.head_commit.message }}"
+        PROPOSED_TAG=$(echo "$MESSAGE" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)
         
-        # 1. Format Check (Strict vX.Y.Z)
-        if [[ ! "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-          echo "ERROR: Release automation requires strict semantic tags (e.g. v1.0.0). Found: $TAG_NAME"
+        if [ -z "$PROPOSED_TAG" ]; then
+          echo "ERROR: Could not extract version from message: $MESSAGE"
+          echo "Expected format: Release: vX.Y.Z"
           exit 1
         fi
         
-        # 2. Origin Check (Must exist on dev)
-        if ! git branch -r --contains ${{ github.sha }} | grep -q "origin/dev"; then
-          echo "ERROR: The tagged commit is not on origin/dev. Releases must originate from the dev branch."
+        echo "Proposed Tag: $PROPOSED_TAG"
+        
+        # 2. Get latest tag from main
+        LATEST_TAG=$(git describe --tags --abbrev=0 origin/main 2>/dev/null || echo "v0.0.0")
+        echo "Latest tag on main: $LATEST_TAG"
+        
+        # 3. Strict SemVer Continuity Check
+        # Check if proposed is exactly the next patch, minor, or major
+        NEXT_PATCH=$(npx semver -i patch $LATEST_TAG)
+        NEXT_MINOR=$(npx semver -i minor $LATEST_TAG)
+        NEXT_MAJOR=$(npx semver -i major $LATEST_TAG)
+        
+        if [ "$PROPOSED_TAG" != "v$NEXT_PATCH" ] && [ "$PROPOSED_TAG" != "v$NEXT_MINOR" ] && [ "$PROPOSED_TAG" != "v$NEXT_MAJOR" ]; then
+          echo "ERROR: Version jump detected or downgrade attempted."
+          echo "Proposed: $PROPOSED_TAG"
+          echo "Allowed next versions after $LATEST_TAG are:"
+          echo "  - Patch: v$NEXT_PATCH"
+          echo "  - Minor: v$NEXT_MINOR"
+          echo "  - Major: v$NEXT_MAJOR"
           exit 1
         fi
         
-        # 3. Main Check (Must NOT already be on main)
-        if git branch -r --contains ${{ github.sha }} | grep -q "origin/main"; then
-          echo "ERROR: Tag $TAG_NAME is already on origin/main. Nothing to do."
-          exit 1
-        fi
-
-    - name: Use Node.js 22.x
-      uses: actions/setup-node@v4
-      with:
-        node-version: 22.x
-
-    - name: Version Check
-      run: |
-        LATEST_MAIN=$(git describe --tags --abbrev=0 origin/main 2>/dev/null || echo "v0.0.0")
-        echo "Latest tag on main: $LATEST_MAIN"
-        
-        if ! npx semver -r ">$LATEST_MAIN" "${{ github.ref_name }}"; then
-          echo "ERROR: Tag ${{ github.ref_name }} is not greater than the latest main tag ($LATEST_MAIN)."
-          exit 1
-        fi
+        echo "tag=$PROPOSED_TAG" >> $GITHUB_OUTPUT
 
     - name: Extract Changelog
       id: changelog
       run: |
-        TAG="${{ github.ref_name }}"
+        TAG="${{ steps.version.outputs.tag }}"
         
         CHANGELOG=$(awk -v tag="$TAG" '
           $0 ~ "^## " tag { found=1; next }
@@ -124,6 +125,7 @@ jobs:
     - name: Squash Sync to Main
       env:
         CHANGELOG_BODY: ${{ needs.validate.outputs.changelog }}
+        RELEASE_TAG: ${{ needs.validate.outputs.tag }}
       run: |
         # Fetch latest branches
         git fetch origin main dev
@@ -132,7 +134,7 @@ jobs:
         git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
         
         # Prepare commit message
-        echo "Release ${{ github.ref_name }}" > commit_msg.txt
+        echo "Release $RELEASE_TAG" > commit_msg.txt
         echo "" >> commit_msg.txt
         echo "$CHANGELOG_BODY" >> commit_msg.txt
         
@@ -144,13 +146,14 @@ jobs:
         # Push to main
         git push origin main
         
-        # Retarget the tag to this new commit and push
-        git tag -f ${{ github.ref_name }} HEAD
-        git push -f origin ${{ github.ref_name }}
+        # Create and push the tag on main
+        git tag $RELEASE_TAG HEAD
+        git push origin $RELEASE_TAG
 
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v2
       with:
+        tag_name: ${{ needs.validate.outputs.tag }}
         files: dist/analyzer-standalone.html
-        name: "Release ${{ github.ref_name }}"
+        name: "Release ${{ needs.validate.outputs.tag }}"
         body: ${{ needs.validate.outputs.changelog }}
