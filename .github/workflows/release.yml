@@ -1,159 +1,83 @@
 name: Release Automation
 
 on:
-  push:
+  pull_request:
+    types: [closed]
     branches:
-      - dev
+      - main
 
 jobs:
   validate:
-    name: Validate Release
-    if: startsWith(github.event.head_commit.message, 'Release: v')
+    if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.title, 'Release: v')
     runs-on: ubuntu-latest
     outputs:
-      tag: ${{ steps.version.outputs.tag }}
-      changelog: ${{ steps.changelog.outputs.body }}
+      tag: ${{ steps.get_version.outputs.tag }}
     steps:
-    - uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Extract Version
+        id: get_version
+        run: |
+          TITLE="${{ github.event.pull_request.title }}"
+          TAG=$(echo "$TITLE" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)
+          if [ -z "$TAG" ]; then
+            echo "ERROR: Could not extract version from PR title: $TITLE"
+            exit 1
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
 
-    - name: Validate Release Version
-      id: version
-      run: |
-        git fetch origin main --tags
-        
-        # 1. Extract version from commit message
-        MESSAGE="${{ github.event.head_commit.message }}"
-        PROPOSED_TAG=$(echo "$MESSAGE" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)
-        
-        if [ -z "$PROPOSED_TAG" ]; then
-          echo "ERROR: Could not extract version from message: $MESSAGE"
-          echo "Expected format: Release: vX.Y.Z"
-          exit 1
-        fi
-        
-        echo "Proposed Tag: $PROPOSED_TAG"
-        
-        # 2. Get latest tag from main
-        LATEST_TAG=$(git describe --tags --abbrev=0 origin/main 2>/dev/null || echo "v0.0.0")
-        echo "Latest tag on main: $LATEST_TAG"
-        
-        # 3. Strict SemVer Continuity Check
-        # Check if proposed is exactly the next patch, minor, or major
-        NEXT_PATCH=$(npx semver -i patch $LATEST_TAG)
-        NEXT_MINOR=$(npx semver -i minor $LATEST_TAG)
-        NEXT_MAJOR=$(npx semver -i major $LATEST_TAG)
-        
-        if [ "$PROPOSED_TAG" != "v$NEXT_PATCH" ] && [ "$PROPOSED_TAG" != "v$NEXT_MINOR" ] && [ "$PROPOSED_TAG" != "v$NEXT_MAJOR" ]; then
-          echo "ERROR: Version jump detected or downgrade attempted."
-          echo "Proposed: $PROPOSED_TAG"
-          echo "Allowed next versions after $LATEST_TAG are:"
-          echo "  - Patch: v$NEXT_PATCH"
-          echo "  - Minor: v$NEXT_MINOR"
-          echo "  - Major: v$NEXT_MAJOR"
-          exit 1
-        fi
-        
-        echo "tag=$PROPOSED_TAG" >> $GITHUB_OUTPUT
+      - name: Validate SemVer Jump
+        run: |
+          git fetch origin main --tags
+          LATEST_TAG=$(git tag -l "v*" --sort=v:refname | tail -n 1)
+          PROPOSED_TAG="${{ steps.get_version.outputs.tag }}"
+          
+          echo "Latest tag on main: $LATEST_TAG"
+          echo "Proposed release tag: $PROPOSED_TAG"
 
-    - name: Extract Changelog
-      id: changelog
-      run: |
-        TAG="${{ steps.version.outputs.tag }}"
-        
-        CHANGELOG=$(awk -v tag="$TAG" '
-          $0 ~ "^## " tag { found=1; next }
-          /^## v/ { if (found) exit }
-          found { print }
-        ' CHANGELOG.md | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
-        
-        if [ -z "$CHANGELOG" ]; then
-          echo "ERROR: Could not extract changelog for $TAG. Is it missing or empty in CHANGELOG.md?"
-          exit 1
-        fi
-        
-        EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
-        echo "body<<$EOF" >> $GITHUB_OUTPUT
-        echo "$CHANGELOG" >> $GITHUB_OUTPUT
-        echo "$EOF" >> $GITHUB_OUTPUT
+          if [ -n "$LATEST_TAG" ]; then
+            # Verify it's a valid jump (Patch, Minor, or Major)
+            NEXT_PATCH=$(npx semver -i patch $LATEST_TAG)
+            NEXT_MINOR=$(npx semver -i minor $LATEST_TAG)
+            NEXT_MAJOR=$(npx semver -i major $LATEST_TAG)
 
+            if [ "$PROPOSED_TAG" != "$NEXT_PATCH" ] && \
+               [ "$PROPOSED_TAG" != "$NEXT_MINOR" ] && \
+               [ "$PROPOSED_TAG" != "$NEXT_MAJOR" ]; then
+              echo "ERROR: Invalid version jump. $PROPOSED_TAG is not a patch, minor, or major increment of $LATEST_TAG."
+              exit 1
+            fi
+          fi
 
-  test:
-    name: Run Tests
+  # Note: The 'test' job is handled by dev-test.yml which runs on the PR before merge.
+  # We rely on Branch Protection to ensure tests pass before this workflow triggers.
+
+  release:
     needs: validate
-    runs-on: ubuntu-latest
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-    steps:
-    - uses: actions/checkout@v4
-    - name: Use Node.js 22.x
-      uses: actions/setup-node@v4
-      with:
-        node-version: 22.x
-        cache: 'npm'
-    - run: npm ci
-    - name: Install Playwright Chromium
-      run: npx playwright install chromium --with-deps
-    - run: npm run build
-    - run: npm test
-
-
-  sync_and_release:
-    name: Sync & Publish
-    needs: [validate, test]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-    - uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Use Node.js 22.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: 'npm'
 
-    - name: Use Node.js 22.x
-      uses: actions/setup-node@v4
-      with:
-        node-version: 22.x
-        cache: 'npm'
+      - run: npm ci
+      - run: npm run build:standalone
 
-    - name: Build Standalone Artifact
-      run: |
-        npm ci
-        npm run build
-        npm run build:standalone
-
-    - name: Squash Sync to Main
-      env:
-        CHANGELOG_BODY: ${{ needs.validate.outputs.changelog }}
-        RELEASE_TAG: ${{ needs.validate.outputs.tag }}
-      run: |
-        # Fetch latest branches
-        git fetch origin main dev
-        
-        git config user.name "github-actions[bot]"
-        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-        
-        # Prepare commit message
-        echo "Release $RELEASE_TAG" > commit_msg.txt
-        echo "" >> commit_msg.txt
-        echo "$CHANGELOG_BODY" >> commit_msg.txt
-        
-        # Checkout main and squash
-        git checkout main
-        git read-tree -um HEAD ${{ github.sha }}
-        git commit -F commit_msg.txt
-        
-        # Push to main
-        git push origin main
-        
-        # Create and push the tag on main
-        git tag $RELEASE_TAG HEAD
-        git push origin $RELEASE_TAG
-
-    - name: Create GitHub Release
-      uses: softprops/action-gh-release@v2
-      with:
-        tag_name: ${{ needs.validate.outputs.tag }}
-        files: dist/analyzer-standalone.html
-        name: "Release ${{ needs.validate.outputs.tag }}"
-        body: ${{ needs.validate.outputs.changelog }}
+      - name: Create Release and Tag
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.validate.outputs.tag }}
+          files: dist/analyzer-standalone.html
+          generate_release_notes: true
+          name: "Release ${{ needs.validate.outputs.tag }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

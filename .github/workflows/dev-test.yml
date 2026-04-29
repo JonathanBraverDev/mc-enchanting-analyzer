@@ -4,10 +4,25 @@ on:
   push:
     branches: [ "dev" ]
   pull_request:
-    branches: [ "dev" ]
+    branches: [ "dev", "main" ]
 
 jobs:
+  lint:
+    name: Code Quality (Lint)
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Use Node.js 22.x
+      uses: actions/setup-node@v4
+      with:
+        node-version: 22.x
+        cache: 'npm'
+    - run: npm ci
+    - name: Run Type Check (Lint)
+      run: npm run lint
+
   test:
+    name: Unit & UI Tests
     runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -22,4 +37,5 @@ jobs:
     - name: Install Playwright Chromium
       run: npx playwright install chromium --with-deps
     - run: npm run build
-    - run: npm test
+    - name: Run All Tests
+      run: npm run test:engine && npm run test:ui
