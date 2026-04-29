@@ -9,3 +9,6 @@ src/wasm/rust_engine_bg.wasm
 # Test Artifacts
 **/tests/snapshots/*.actual.json
 test-results/
+
+# Matrix Generation Artifacts
+scripts/matrix-output/

@@ -1,8 +1,9 @@
-﻿ ## v3.0.1
- 
- ### Improved
- - **User Interface**: Significantly improved responsiveness and eliminated flickering when switching between item categories or materials.
- - **Book Enchanting**: Optimized the internal selection engine to ensure fluid performance, even when calculating hundreds of thousands of book combinations.
- - **System Stability**: Resolved several background synchronization issues that could cause searches to stall or behave inconsistently under heavy load.
- - **Reliability**: Enhanced the worker communication layer to handle interruptions and error boundaries more gracefully.
+﻿## v3.1.0
 
+### Improved
+- **Computation Speed**: Re-engineered the core search algorithms to be significantly faster, especially when dealing with complex items like multi-enchantment books.
+- **Enhanced Accuracy**: Upgraded the internal math engine to use higher precision, ensuring calculated probabilities are even more reliable for rare enchantment combinations.
+- **Book Logic**: Refined the rules for how multiple enchantments are distributed on books to better match the official mechanics of newer Minecraft versions.
+- **Background Stability**: Added internal performance monitoring to ensure the app stays responsive even during the most demanding calculations.
+
+ 

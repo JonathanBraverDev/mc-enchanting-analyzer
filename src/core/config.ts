@@ -24,7 +24,8 @@ export const UI_TEXTS = {
     STATUS_ERROR_LOADING: "Initialization failed",
     STATUS_ERROR_CALC: "Calculation failed",
     STATUS_CHART_PREPARING: "Scanning probabilities",
-    STATUS_CHART_SWEEPING: "Mapping levels"
+    STATUS_CHART_SWEEPING: "Mapping levels",
+    STATUS_CHART_COMPLETE: "Complete"
 };
 
 export const UI_DEFAULTS = {
@@ -86,11 +87,10 @@ export function getParamsForMode(level: Exclude<SearchLevel, 'done'>, isBook: bo
 }
 
 export const ENGINE_DEFAULTS = {
-    MAX_ENCHANTS_PER_ITEM: 6,
+    MAX_ENCHANTS_PER_ITEM: 6, // 6-enchant technical limit (byte-packing encoding in double-precision float)
+    SYSTEM_THRESHOLD_FLOOR: 0.0000000001, // 1e-10 Global resolution floor for pruning (Data persistence)
     MAX_MODIFIED_LEVEL_FOR_CONTINUING: 50,
     RNG_STEPS_FOR_DISTRIBUTION: 100,
-    PRUNE_THRESHOLD_DENOMINATOR: 100n,
-    MASS_ACCOUNTED_THRESHOLD_DENOMINATOR: 10000n,
     MAX_COUNT_STATS: 8,
     FALLBACK_LIMIT_BOOK: 25000,
     FALLBACK_LIMIT_HIGH_RES: 25000,
@@ -104,6 +104,8 @@ export const ENGINE_DEFAULTS = {
     MAX_RESULTS_SUMMARY_OPTIMIZED_THRESHOLD: 250,
     MAX_RESULTS_SNAPSHOT: 5000,
     MAX_RESULTS_HI_RES: 65535,
+    MAX_RESULTS_UNBOUNDED: 1000000,
+    MAX_ITERATIONS_UNBOUNDED: 1000000,
     UNKNOWN_CATEGORY_ID: 63,
     UNKNOWN_MATERIAL_ID: 63,
     UNKNOWN_ENCHANT_ID: 255,

@@ -1,3 +1,5 @@
+import type { MassAccounting } from './mass.js';
+
 /**
  * Compact representation of calculation statistics for efficient transfer.
  */
@@ -9,6 +11,7 @@ export interface CompactStats {
     anyKeys: Uint32Array;
     anyProbs: Float64Array;
     counts: Float64Array;
-    uncertainty: number;
-    pruned?: number;
+    
+    accuracy: number;
+    accounting: MassAccounting;
 }

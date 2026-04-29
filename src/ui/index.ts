@@ -72,7 +72,7 @@ class AppController {
                 const engine = this.getEngine();
                 this.params.updateMaterials(engine);
                 this.params.updateGuaranteedFirst(engine);
-                this.run();
+                this.enqueueRun();
             }).catch(err => this.showError(UI_TEXTS.STATUS_ERROR_LOADING, err));
             return;
         }
@@ -83,29 +83,22 @@ class AppController {
             this.results.showPlaceholder(UI_TEXTS.STATUS_SWITCHING_CATEGORY);
             this.params.updateMaterials(engine);
             this.params.updateGuaranteedFirst(engine);
-        }
-
-        if (type === 'mat') {
+        } else if (type === 'mat') {
             this.params.updateGuaranteedFirst(engine);
-        }
-
-        if (type === 'chart-metric') {
+        } else if (type === 'chart-metric') {
             this.chart.refresh(this.refinement.currentSweep, engine.registry);
             return;
-        }
-
-        if (type === 'combo-sort') {
+        } else if (type === 'combo-sort') {
             this.updateInsightsFromRaw(this.lastRawStats, true);
             return;
         }
 
-        if (type === 'cat' || type === 'level-input') {
-            if (this.runDebounceTimeout) clearTimeout(this.runDebounceTimeout);
-            this.runDebounceTimeout = window.setTimeout(() => this.run(), 50);
-            return;
-        }
+        this.enqueueRun();
+    }
 
-        this.run();
+    private enqueueRun(): void {
+        if (this.runDebounceTimeout) window.clearTimeout(this.runDebounceTimeout);
+        this.runDebounceTimeout = window.setTimeout(() => this.run(), 50);
     }
 
     private lastRawStats: CalculationStats | null = null;
@@ -157,8 +150,8 @@ class AppController {
         const { sortMode } = this.params.getValues();
         const insights = HumanizationService.humanize(raw, engine.registry, sortMode as ResultSortMode, DATA.constants.ROMAN_MAP);
         
-        const uncertainty = insights.uncertainty ?? 1;
-        if (isFinal || (this.bestInsights && uncertainty < (this.bestInsights.uncertainty ?? 1)) || !this.bestInsights) {
+        const pending = insights.accounting.pending;
+        if (isFinal || (this.bestInsights && pending < this.bestInsights.accounting.pending) || !this.bestInsights) {
             this.bestInsights = insights;
             this.results.update(insights, engine.registry);
         }
@@ -173,7 +166,6 @@ class AppController {
 declare global {
     interface Window {
         App: AppController;
-        UIController: AppController;
     }
 }
 
@@ -181,5 +173,4 @@ window.addEventListener("load", () => {
     const app = new AppController();
     app.init();
     window.App = app;
-    window.UIController = app; // Backward compatibility for tests
 });

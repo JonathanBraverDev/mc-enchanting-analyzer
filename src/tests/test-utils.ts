@@ -1,10 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import assert from 'node:assert';
-import { UI_TEXTS } from '../core/config.js';
 import { HumanizationService } from '../services/index.js';
 import { EnchantEngine } from '../engine/index.js';
-
 
 /**
  * Utility for snapshot-based regression testing of engine results.
@@ -24,13 +21,108 @@ export const SnapshotUtils = {
         const cleanStats = this.sanitize(stats);
         const existing = JSON.parse(fs.readFileSync(snapshotPath, 'utf8'));
         
-        try {
-            assert.deepStrictEqual(cleanStats, existing);
-        } catch (e: any) {
+        const summary = this.computeStatisticalSummary(cleanStats, existing);
+        if (summary.hasMismatches) {
             const diffPath = path.join(snapshotDir, `${name}.actual.json`);
             fs.writeFileSync(diffPath, JSON.stringify(cleanStats, null, 2));
-            throw new Error(`Snapshot mismatch for "${name}". Actual result saved to ${diffPath}`);
+            
+            const errorMessage = `Snapshot mismatch for "${name}".\n${summary.report}\nActual result saved to ${diffPath}`;
+            
+            const error = new Error(errorMessage);
+            // Suppress the redundant stack trace
+            error.stack = errorMessage;
+            throw error;
         }
+    },
+
+    /**
+     * Performs a memory-efficient statistical analysis of snapshot differences.
+     */
+    computeStatisticalSummary(actual: any, expected: any): { hasMismatches: boolean; report: string } {
+        let hasMismatches = false;
+        const sections: string[] = [];
+
+        // Check top-level metadata (e.g., accuracy)
+        if (actual.accuracy !== expected.accuracy) {
+            hasMismatches = true;
+            sections.push(`[metadata]: Accuracy mismatch. Expected ${expected.accuracy}, got ${actual.accuracy}`);
+        }
+
+        // Check probability categories
+        const categories = ['ranks', 'any', 'count', 'combos'];
+        for (const cat of categories) {
+            const report = this.compareProbabilityMap(actual[cat] || {}, expected[cat] || {}, cat);
+            if (report.hasMismatches) {
+                hasMismatches = true;
+                sections.push(report.text);
+            }
+        }
+
+        return {
+            hasMismatches,
+            report: sections.join('\n\n')
+        };
+    },
+
+    /**
+     * Compares two flat probability maps and returns a statistical summary.
+     */
+    compareProbabilityMap(actual: Record<string, number>, expected: Record<string, number>, name: string) {
+        let hasMismatches = false;
+        let maxDelta = 0;
+        let maxDeltaKey = '';
+        let sse = 0; // Sum of Squared Errors
+        const outliers: { key: string; delta: number; expected: number; actual: number }[] = [];
+        
+        const aKeys = Object.keys(actual);
+        const eKeys = Object.keys(expected);
+        const missing = eKeys.filter(k => !(k in actual));
+        const extra = aKeys.filter(k => !(k in expected));
+
+        if (missing.length > 0 || extra.length > 0) {
+            hasMismatches = true;
+        }
+
+        for (const key of eKeys) {
+            if (!(key in actual)) continue;
+            
+            const aVal = actual[key];
+            const eVal = expected[key];
+            const delta = Math.abs(aVal - eVal);
+
+            if (delta > 0) {
+                hasMismatches = true;
+                sse += delta * delta;
+                if (delta > maxDelta) {
+                    maxDelta = delta;
+                    maxDeltaKey = key;
+                }
+                
+                // Track top outliers
+                if (outliers.length < 5 || delta > outliers[outliers.length - 1].delta) {
+                    outliers.push({ key, delta, expected: eVal, actual: aVal });
+                    outliers.sort((a, b) => b.delta - a.delta);
+                    if (outliers.length > 5) outliers.pop();
+                }
+            }
+        }
+
+        if (!hasMismatches) return { hasMismatches: false, text: '' };
+
+        const lines: string[] = [`Category [${name}]: ${eKeys.length} keys`];
+        if (missing.length > 0) lines.push(`  - Missing: ${missing.length} keys (e.g., ${missing.slice(0, 3).join(', ')})`);
+        if (extra.length > 0) lines.push(`  - Extra: ${extra.length} keys (e.g., ${extra.slice(0, 3).join(', ')})`);
+        
+        if (maxDelta > 0) {
+            lines.push(`  - Max Delta: ${maxDelta.toExponential(2)} (at "${maxDeltaKey}")`);
+            lines.push(`  - RMSE: ${Math.sqrt(sse / eKeys.length).toExponential(2)}`);
+            lines.push(`  - Top Outliers:`);
+            for (const o of outliers) {
+                lines.push(`    * ${o.key}: exp ${o.expected}, got ${o.actual} (Δ ${o.delta.toExponential(2)})`);
+            }
+        }
+
+        return { hasMismatches: true, text: lines.join('\n') };
     },
 
     /**
@@ -55,62 +147,25 @@ export const SnapshotUtils = {
      */
     sanitize(stats: any): any {
         const round = (val: number) => Math.round(val * 1e12) / 1e12;
-        const out: any = {
-            ranks: {},
-            any: {},
-            count: {},
-            combos: {},
-            uncertainty: round(stats.uncertainty),
-            roundingError: stats.roundingError || 0,
-            pruned: round(stats.pruned || 0)
+        const roundMap = (obj: any) => {
+            const res: any = {};
+            for (const k in obj) res[k] = round(obj[k]);
+            return res;
         };
 
-        if (stats.combos) {
-            for (const k in stats.combos) out.combos[k] = round(stats.combos[k]);
-        }
-        if (stats.ranks) {
-            for (const k in stats.ranks) out.ranks[k] = round(stats.ranks[k]);
-        }
-        if (stats.any) {
-            for (const k in stats.any) out.any[k] = round(stats.any[k]);
-        }
-        if (stats.count) {
-            for (const k in stats.count) out.count[k] = round(stats.count[k]);
-        }
-        return out;
+        return {
+            ranks: roundMap(stats.ranks),
+            any: roundMap(stats.any),
+            count: roundMap(stats.count),
+            combos: roundMap(stats.combos),
+            accuracy: round(stats.accuracy),
+            accounting: stats.accounting
+        };
     }
 };
 
 /** Assertion timeout scaled for CI runners. */
 export const UI_TIMEOUT = process.env.CI ? 45000 : 15000;
-
-/**
- * Utilities for Playwright-based UI tests.
- */
-export const UITestUtils = {
-    /**
-     * Generates a regex that matches any of the provided status levels or "Complete".
-     */
-    getRefinementRegex(levels: string[]): RegExp {
-        const parts = levels.map(level => (UI_TEXTS as any)[`STATUS_${level.toUpperCase()}`] || level);
-        if (!parts.includes(UI_TEXTS.STATUS_COMPLETE)) parts.push(UI_TEXTS.STATUS_COMPLETE);
-        return new RegExp(parts.join('|'));
-    },
-
-    /**
-     * Waits for the first enchantment combination to appear in the UI.
-     */
-    async waitForResults(page: any, timeout = process.env.CI ? 45000 : 15000): Promise<void> {
-        await page.locator('#combo-list .combo-item').first().waitFor({ state: 'visible', timeout });
-    },
-
-    /**
-     * Accesses the internal UIController state from the browser context.
-     */
-    async getInternalState(page: any): Promise<any> {
-        return await page.evaluate(() => (window as any).UIController);
-    }
-};
 
 /**
  * Utilities for Node-based engine tests.

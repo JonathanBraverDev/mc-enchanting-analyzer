@@ -36,13 +36,17 @@ export class ResultsView {
     public setChartStatus(text: string, progress?: number): void {
         if (!this.chartStatusEl) return;
         if (!text) {
+            this.chartStatusEl.textContent = '';
             this.chartStatusEl.style.opacity = '0';
             return;
         }
         
+        const isComplete = text === UI_TEXTS.STATUS_CHART_COMPLETE;
         const progressText = progress !== undefined ? ` (${Math.round(progress * 100)}%)` : '';
-        this.chartStatusEl.textContent = text + (progress !== undefined ? progressText : UI_TEXTS.STATUS_POSTFIX);
-        this.chartStatusEl.style.opacity = '1';
+        const postfix = (progress !== undefined || isComplete) ? '' : UI_TEXTS.STATUS_POSTFIX;
+        
+        this.chartStatusEl.textContent = text + progressText + postfix;
+        this.chartStatusEl.style.opacity = isComplete ? '0.6' : '1';
     }
 
     public update(insights: EnchantInsights, registry: RegistryState): void {
@@ -88,20 +92,28 @@ export class ResultsView {
             fragment.appendChild(item);
         });
 
-        if (insights.uncertainty > 0.005) {
+        if (insights.accuracy < 0.999 || insights.accounting.pending > 0.001) {
             const info = document.createElement("div");
             info.className = "combo-item";
             info.style.cssText = "border-top: 1px solid rgba(255,255,255,0.05); margin-top: 10px; padding-top: 10px; opacity: 0.8;";
             
-            const confidence = 1 - insights.uncertainty;
-            const color = (insights.uncertainty > 0.1) ? '#ffca28' : '#66bb6a';
+            const acc = insights.accounting;
+            const color = (acc.pending > 0.1) ? '#ffca28' : '#66bb6a';
+            const tooltip = [
+                `Resolved: ${UIUtils.formatPercent(acc.resolved)}`,
+                `Pending: ${UIUtils.formatPercent(acc.pending)}`,
+                `Pruned (Sieved): ${UIUtils.formatPercent(acc.sieved)}`,
+                `Dropped (Overflow): ${UIUtils.formatPercent(acc.overflow)}`,
+                `Rounding: ${UIUtils.formatPercent(acc.rounding)}`
+            ].join('\n');
+            info.title = tooltip;
             
             info.innerHTML = `
                 <div style="display: flex; justify-content: space-between; font-size: 0.85rem;">
-                    <span>Calculation Confidence</span>
-                    <span style="color: ${color}">${UIUtils.formatPercent(confidence)}</span>
+                    <span>Calculation Confidence ⓘ</span>
+                    <span style="color: ${color}">${UIUtils.formatPercent(insights.accuracy)}</span>
                 </div>
-                ${insights.uncertainty > 0.1 ? `<div style="font-size: 0.7rem; color: #ffca28; margin-top: 3px;">⚠️ High branching complexity - results approximated.</div>` : ''}
+                ${acc.pending > 0.1 ? `<div style="font-size: 0.7rem; color: #ffca28; margin-top: 3px;">⚠️ High branching complexity - results approximated.</div>` : ''}
             `;
             fragment.appendChild(info);
         }

@@ -2,6 +2,8 @@ import { Enchantment, EnchantmentData } from './domain.js';
 import { BinaryHeap } from '../utils/collections/BinaryHeap.js';
 import { LRUCache } from '../utils/collections/LRUCache.js';
 
+import { MassAccounting, MassBookkeeping } from './mass.js';
+
 /**
  * Raw calculation statistics from the search engine.
  */
@@ -10,9 +12,77 @@ export interface CalculationStats {
   any: { [id: number]: number };          // base id
   count: { [count: number]: number };
   combos: { [packed: string]: number };    // Hex string of bit-packed BigInt
-  uncertainty: number;
-  pruned?: number;
-  roundingError?: number;
+  
+  /** Simplified Accuracy: Resolved mass. */
+  accuracy: number;
+  /** Complete diagnostic breakdown of all mass states. */
+  accounting: MassAccounting;
+  
+  instrumentation?: EngineInstrumentation;
+}
+
+export interface CacheStats {
+  hits: number;
+  misses: number;
+}
+
+export interface MassCheckpoint {
+  modLevel: number;
+  threshold: number;
+  mass: number;
+  iterations: number;
+  totalIterations: number;
+}
+
+export interface CheckpointSummary {
+  /** The mass target (e.g. 0.5, 0.9, 0.999) */
+  target: number;
+  /** Minimum threshold needed to reach this target — worst case across all modified levels */
+  worstCaseThreshold: number;
+  /** Maximum iterations needed to reach this target — worst case across all modified levels */
+  worstCaseIterations: number;
+  /** The modified level that was the bottleneck */
+  bottleneckLevel: number;
+}
+
+export type EngineExitReason = 'threshold' | 'iterations' | 'mass' | 'aborted' | 'empty' | 'exhausted';
+
+export interface EngineInstrumentation {
+  poolCache: CacheStats;
+  distCache: CacheStats;
+  frontierCache: CacheStats;
+  totalIterations: number;
+  totalPrunedNodes: number;
+  roundingErrorEvents: number;
+  levelsProcessed: number;
+  levelsFullyResolved: number;
+  /** True when every modified level exited with an empty queue — no threshold tuning can improve results */
+  fullyResolved: boolean;
+
+  /** Total entries in the combinations results map */
+  resultsSize?: number;
+  /** Current number of nodes in the priority queue */
+  queueSize?: number;
+  /** Size of the heap's internal deduplication map */
+  indexMapSize?: number;
+  /** Current heap usage in MB */
+  memoryMB?: number;
+
+  /** Total unique results aggregated across all modified levels so far in this specific calculation */
+  globalResultsSize?: number;
+  /** Total nodes currently stored in ALL frontiers across the entire engine's LRU caches */
+  globalCacheNodes?: number;
+  /** Total results currently stored in ALL frontiers across the entire engine's LRU caches */
+  globalCacheResults?: number;
+
+  /** Raw per-level checkpoints — one entry per modified level x checkpoint target crossed */
+  checkpoints: MassCheckpoint[];
+  /** Aggregated summary: worst-case threshold and iteration count per mass target across all levels */
+  checkpointSummary: CheckpointSummary[];
+  exitReason?: EngineExitReason;
+
+  /** Optional: If true, perform expensive global heap scans for cache nodes/results */
+  trackGlobalMetrics?: boolean;
 }
 
 export interface ResolvedRegistry {
@@ -45,11 +115,12 @@ export interface SearchFrontier {
     anyMass: Map<number, bigint>;
     rankMass: Map<number, bigint>;
     countMass: Map<number, bigint>;
-    uncertainty: bigint;
-    cumulativeAccountedMass: bigint;
-    prunedMass: bigint;
-    roundingError: bigint;
+    mass: MassBookkeeping;
     threshold: bigint;
+    iterations: number;
+    nodesProcessed: number;
+    checkpoints: MassCheckpoint[];  // per-call output; not carried over on resume
+    exitReason?: EngineExitReason;  // per-call output; not carried over on resume
 }
 
 /**
@@ -91,6 +162,7 @@ export interface SearchConfig {
     summaryLimit?: number;
     resultsLimit?: number;
     useCache?: boolean;
+    instrumentation?: EngineInstrumentation;
 }
 
 /**
@@ -102,4 +174,6 @@ export interface InternalSearchConfig extends SearchConfig {
     setExtendedCache?: (ml: number, frontier: SearchFrontier) => void;
     distCache?: Map<string, { [level: number]: bigint }>;
     poolCache?: LRUCache<string, PackedEnchant[]>;
+    instrumentation?: EngineInstrumentation;
+    getCacheMetrics?: () => { cacheNodes: number; cacheResults: number };
 }

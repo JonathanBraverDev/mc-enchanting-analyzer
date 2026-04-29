@@ -1,6 +1,6 @@
 {
   "name": "mc-enchanting-analyzer",
-  "version": "3.0.1",
+  "version": "3.1.0",
   "devDependencies": {
     "@playwright/test": "^1.58.2",
     "@types/chart.js": "^2.9.41",
@@ -32,7 +32,7 @@
     "test:integration": "tsx --test src/tests/integration.test.ts src/tests/integration-chart.test.ts src/tests/frontier-resumability.test.ts src/tests/prob-conservation.test.ts src/tests/tiered-aggregation.test.ts src/tests/worker-protocol.test.ts",
     "test:acceptance": "tsx --test src/tests/engine.test.ts src/tests/registry.test.ts src/tests/data-integrity.test.ts src/tests/enchantment_physical.test.ts src/tests/book_mechanics.test.ts src/tests/mechanics_rules.test.ts",
     "test:snapshots": "tsx --test --test-name-pattern='Regression Snapshots' src/tests/engine.test.ts",
-    "test:ui": "playwright test src/tests/ui-basic.test.ts src/tests/ui-performance.test.ts",
+    "test:ui": "playwright test src/tests/ui-basic.test.ts src/tests/ui-performance.test.ts src/tests/ui-chart.test.ts src/tests/ui-regression.test.ts",
     "update-snapshots": "tsx scripts/update-snapshots.ts",
     "release": "npm run test:all && npm run build:standalone"
   }
