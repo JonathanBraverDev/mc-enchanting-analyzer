@@ -1,17 +1,26 @@
 import { ThemeManager } from './theme.js';
-import { Registry } from '../core/registry.js';
-import { CalculationStats, ChartDataset } from '../types/index.js';
+import { getEnchantName, getFullEnchantName } from '../core/registry.js';
+import { CalculationStats, ChartDataset, RegistryState } from '../types/index.js';
 import { RomanUtils } from '../utils/index.js';
 import { ENGINE_DEFAULTS } from '../core/config.js';
 
-declare const Chart: any;
+interface ChartInstance {
+    data: { labels: unknown[]; datasets: unknown[] };
+    destroy(): void;
+    update(mode: string): void;
+}
+interface ChartConstructor {
+    new(ctx: CanvasRenderingContext2D | null, config: Record<string, unknown>): ChartInstance;
+}
+declare const Chart: ChartConstructor;
 
 
 /**
  * Encapsulates Chart.js lifecycle and data mapping.
  */
 export class ChartManager {
-    public chart: any = null;
+    private chart: ChartInstance | null = null;
+    get chartInstance(): ChartInstance | null { return this.chart; }
     private canvas: HTMLCanvasElement | null = null;
 
     constructor(canvasId: string) {
@@ -47,7 +56,7 @@ export class ChartManager {
     }
 
 
-    public generateDatasets(sweep: { l: number, s: CalculationStats }[], metric: string, registry: Registry): ChartDataset[] {
+    public generateDatasets(sweep: { l: number, s: CalculationStats }[], metric: string, registry: RegistryState): ChartDataset[] {
         const datasets: ChartDataset[] = [];
         const romanMap = registry.data.constants.ROMAN_MAP;
 
@@ -55,8 +64,8 @@ export class ChartManager {
             const allEnchants = new Set<number>();
             sweep.forEach(x => { if(x && x.s) Object.keys(x.s.any).forEach(idStr => allEnchants.add(parseInt(idStr))); });
 
-            Array.from(allEnchants).sort((a,b) => registry.getEnchantName(a).localeCompare(registry.getEnchantName(b))).forEach(id => {
-                const name = registry.getEnchantName(id);
+            Array.from(allEnchants).sort((a,b) => getEnchantName(registry, a).localeCompare(getEnchantName(registry, b))).forEach(id => {
+                const name = getEnchantName(registry, id);
                 const color = ThemeManager.getEnchantColor(name, registry);
                 datasets.push({
                     label: name,
@@ -71,12 +80,12 @@ export class ChartManager {
             sweep.forEach(e => { if(e && e.s) Object.entries(e.s.ranks).forEach(([idAndRankStr, p]) => { if (p > 0.01) allRanks.add(parseInt(idAndRankStr)); }); });
             
             Array.from(allRanks).sort((a, b) => {
-                const na = registry.getFullEnchantName(a), nb = registry.getFullEnchantName(b);
+                const na = getFullEnchantName(registry, a), nb = getFullEnchantName(registry, b);
                 const ba = RomanUtils.getBaseName(na, romanMap), bb = RomanUtils.getBaseName(nb, romanMap);
                 if (ba !== bb) return ba.localeCompare(bb);
                 return (a & 0xFF) - (b & 0xFF);
             }).slice(0, 32).forEach(idAndRank => {
-                const fullName = registry.getFullEnchantName(idAndRank);
+                const fullName = getFullEnchantName(registry, idAndRank);
                 const color = ThemeManager.getEnchantColor(idAndRank, registry);
                 datasets.push({
                     label: fullName,
@@ -109,7 +118,7 @@ export class ChartManager {
     }
 
 
-    private getChartOptions(): any {
+    private getChartOptions(): Record<string, unknown> {
         return {
             responsive: true, maintainAspectRatio: false,
             animation: false, // Performance: Disable animations to enable Path2D caching

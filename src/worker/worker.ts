@@ -1,11 +1,19 @@
 import { EnchantEngine } from '../engine/index.js';
 import { DATA } from '../data/index.js';
-import { HumanizationService, SerializationService } from '../services/index.js';
+import { SerializationService } from '../services/index.js';
+import type { WorkerRequest } from './protocol.js';
+
+// TypeScript lib "DOM" types `self` as Window, but at runtime in a worker it's DedicatedWorkerGlobalScope.
+// This minimal interface lets us call postMessage with Transferable[] without widening to `any`.
+interface WorkerPostable {
+    postMessage(message: unknown, transfer: Transferable[]): void;
+}
+const workerScope = self as unknown as WorkerPostable;
 
 let engine: EnchantEngine | null = null;
 const abortControllers = new Map<string, AbortController>();
 
-self.onmessage = async (e: MessageEvent) => {
+self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
     const { type, payload, id } = e.data;
 
     try {
@@ -39,28 +47,27 @@ self.onmessage = async (e: MessageEvent) => {
                         payload.cat,
                         payload.xp,
                         payload.mat,
-                        payload.guaranteedFirst,
-                        payload.threshold,
-                        signal,
-                        (partialStats) => {
-                            const human = HumanizationService.humanize(partialStats, engine!.registry);
-                            const { compact, transferables } = SerializationService.serialize(partialStats);
-                            (self as any).postMessage({ type: 'progress', id, payload: { stats: compact, human } }, transferables);
-                        },
-                        payload.useBestCache || false,
-                        payload.maxIterations
+                        {
+                            guaranteedFirst: payload.guaranteedFirst,
+                            threshold: payload.threshold,
+                            signal,
+                            onProgress: (partialStats) => {
+                                const { compact, transferables } = SerializationService.serialize(partialStats);
+                                workerScope.postMessage({ type: 'progress', id, payload: { stats: compact } }, transferables);
+                            },
+                            maxIterations: payload.maxIterations
+                        }
                     );
-                    
-                    const human = HumanizationService.humanize(stats, engine.registry);
+
                     const { compact, transferables } = SerializationService.serialize(stats);
-                    
-                    (self as any).postMessage({ 
-                        type: 'result', 
-                        id, 
-                        payload: { stats: compact, human } 
+
+                    workerScope.postMessage({
+                        type: 'result',
+                        id,
+                        payload: { stats: compact }
                     }, transferables);
-                } catch (err: any) {
-                    if (err.message === "Aborted") {
+                } catch (err: unknown) {
+                    if (err instanceof Error && err.message === "Aborted") {
                         self.postMessage({ type: 'error', id, payload: 'Aborted' });
                         return;
                     }
@@ -72,23 +79,57 @@ self.onmessage = async (e: MessageEvent) => {
                 }
                 break;
             }
-            
-            case 'getModifiedLevelDist': {
-                const dist = engine.getModifiedLevelDist(payload.xp, payload.enchantability);
-                self.postMessage({ type: 'result', id, payload: dist });
-                break;
-            }
 
-            case 'getEligibleListNumeric': {
-                const list = engine.getEligibleListNumeric(payload.cat, payload.level, payload.mat, payload.bitset || 0n);
-                self.postMessage({ type: 'result', id, payload: list });
+            case 'getFullStatsProgressive': {
+                const source = payload.source;
+
+                const existing = abortControllers.get(source);
+                if (existing) {
+                    existing.abort();
+                }
+
+                const ctrl = new AbortController();
+                abortControllers.set(source, ctrl);
+                const signal = ctrl.signal;
+
+                try {
+                    const stats = await engine.getFullStatsProgressive(
+                        payload.cat,
+                        payload.xp,
+                        payload.mat,
+                        payload.guaranteedFirst,
+                        payload.tiers,
+                        (tierStats) => {
+                            const { compact, transferables } = SerializationService.serialize(tierStats);
+                            workerScope.postMessage({ type: 'progress', id, payload: { stats: compact } }, transferables);
+                        },
+                        {
+                            signal,
+                            summaryLimit: payload.summaryLimit,
+                            resultsLimit: payload.resultsLimit,
+                        }
+                    );
+
+                    const { compact, transferables } = SerializationService.serialize(stats);
+                    workerScope.postMessage({ type: 'result', id, payload: { stats: compact } }, transferables);
+                } catch (err: unknown) {
+                    if (err instanceof Error && err.message === "Aborted") {
+                        self.postMessage({ type: 'error', id, payload: 'Aborted' });
+                        return;
+                    }
+                    throw err;
+                } finally {
+                    if (abortControllers.get(source) === ctrl) {
+                        abortControllers.delete(source);
+                    }
+                }
                 break;
             }
 
             default:
                 throw new Error(`Unknown message type: ${type}`);
         }
-    } catch (err: any) {
-        self.postMessage({ type: 'error', id, payload: err.message });
+    } catch (err: unknown) {
+        self.postMessage({ type: 'error', id, payload: err instanceof Error ? err.message : String(err) });
     }
 };

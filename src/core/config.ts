@@ -97,13 +97,23 @@ export const ENGINE_DEFAULTS = {
     FALLBACK_LIMIT_LOW_RES: 10000,
     MAX_QUEUE_SIZE: 60000,
     MAX_RESULTS_SIZE: 5000,
-    CACHE_SIZE_COMBO_OTHER: 64,
-    CACHE_SIZE_COMBO_BOOK: 8,
+    CACHE_SIZE_COMBO_OTHER: 128,
+    CACHE_SIZE_COMBO_BOOK: 64,
     CACHE_SIZE_STATS: 8,
     MAX_RESULTS_SUMMARY: 100,
     MAX_RESULTS_SNAPSHOT: 5000,
     MAX_RESULTS_HI_RES: 65535,
     UNKNOWN_CATEGORY_ID: 63,
     UNKNOWN_MATERIAL_ID: 63,
-    UNKNOWN_ENCHANT_ID: 255
+    UNKNOWN_ENCHANT_ID: 255,
+    MAX_XP_LEVEL: 50
 };
+
+/**
+ * Shared threshold-to-limit lookup used by both EnchantEngine and StatAggregator.
+ */
+export function getSearchLimit(cat: string, threshold: number, maxIterations?: number): number {
+    if (maxIterations !== undefined) return maxIterations;
+    if (cat === "book") return ENGINE_DEFAULTS.FALLBACK_LIMIT_BOOK;
+    return threshold < 0.0001 ? ENGINE_DEFAULTS.FALLBACK_LIMIT_HIGH_RES : ENGINE_DEFAULTS.FALLBACK_LIMIT_LOW_RES;
+}

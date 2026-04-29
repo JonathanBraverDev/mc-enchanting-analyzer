@@ -7,7 +7,8 @@ import { ResultsView } from './views/ResultsView.js';
 import { ChartController } from './chart.js';
 import { RefinementService } from './refinement.js';
 import { HumanizationService } from '../services/index.js';
-import { EnchantInsights } from '../types/index.js';
+import { getEnchantability } from '../core/registry.js';
+import { EnchantInsights, CalculationStats, ResultSortMode } from '../types/index.js';
 
 /**
  * Main Web Application Controller.
@@ -54,6 +55,7 @@ class AppController {
     private getEngine(): EnchantEngine {
         const { version } = this.params.getValues();
         if (!this.engine || this.engine.registry.version !== version) {
+            if (this.engine) this.engine.destroy();
             this.engine = new EnchantEngine(DATA, version);
         }
         return this.engine;
@@ -106,7 +108,7 @@ class AppController {
         this.run();
     }
 
-    private lastRawStats: any = null;
+    private lastRawStats: CalculationStats | null = null;
 
     public get currentSweep() {
         return this.refinement.currentSweep;
@@ -125,7 +127,7 @@ class AppController {
             this.params.updateGuaranteedFirst(engine);
             
             const vals = this.params.getValues();
-            this.params.setEnchantability(engine.registry.getEnchantability(vals.material, vals.category));
+            this.params.setEnchantability(getEnchantability(engine.registry, vals.material, vals.category));
 
             await this.refinement.run(
                 { ...vals, category: vals.category },
@@ -133,7 +135,7 @@ class AppController {
                 {
                     onStatus: (status, level) => this.results.setRefinementStatus(status, level),
                     onChartStatus: (status, progress) => this.results.setChartStatus(status, progress),
-                    onInsights: (raw, isFinal) => this.updateInsightsFromRaw(raw, isFinal),
+                    onStats: (raw, isFinal) => this.updateInsightsFromRaw(raw, isFinal),
                     onChart: (sweep) => this.chart.refresh(sweep, engine.registry)
                 }
             );
@@ -143,29 +145,36 @@ class AppController {
         }
     }
 
-    private updateInsightsFromRaw(raw: any, isFinal: boolean = false): void {
+    private updateInsightsFromRaw(raw: CalculationStats | null, isFinal: boolean = false): void {
         if (!raw) return;
         this.lastRawStats = raw;
 
         const { sortMode } = this.params.getValues();
-        const insights = HumanizationService.humanize(raw, this.getEngine().registry, sortMode as any, DATA.constants.ROMAN_MAP);
+        const insights = HumanizationService.humanize(raw, this.getEngine().registry, sortMode as ResultSortMode, DATA.constants.ROMAN_MAP);
         
         const uncertainty = insights.uncertainty ?? 1;
-        if (isFinal || (this.bestInsights && uncertainty < (this.bestInsights.uncertainty || 1)) || !this.bestInsights) {
+        if (isFinal || (this.bestInsights && uncertainty < (this.bestInsights.uncertainty ?? 1)) || !this.bestInsights) {
             this.bestInsights = insights;
             this.results.update(insights, this.getEngine().registry);
         }
     }
 
-    private showError(title: string, err: any): void {
+    private showError(title: string, err: unknown): void {
         console.error(title, err);
         this.results.showPlaceholder(`${title}: ${err instanceof Error ? err.message : String(err)}`);
     }
 }
 
-window.onload = () => {
+declare global {
+    interface Window {
+        App: AppController;
+        UIController: AppController;
+    }
+}
+
+window.addEventListener("load", () => {
     const app = new AppController();
     app.init();
-    (window as any).App = app;
-    (window as any).UIController = app; // Backward compatibility for tests
-};
+    window.App = app;
+    window.UIController = app; // Backward compatibility for tests
+});

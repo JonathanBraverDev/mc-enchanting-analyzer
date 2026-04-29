@@ -1,5 +1,5 @@
 import { ChartManager } from './chart-manager.js';
-import { Registry } from '../core/registry.js';
+import { RegistryState, SweepData } from '../types/index.js';
 import { UI_DEFAULTS } from '../core/config.js';
 
 export class ChartController {
@@ -11,7 +11,7 @@ export class ChartController {
         this.metricEl = document.getElementById(metricId) as HTMLSelectElement;
     }
 
-    public refresh(sweep: any[], registry: Registry): void {
+    public refresh(sweep: SweepData[], registry: RegistryState): void {
         if (sweep.length > 0 && this.manager && this.metricEl) {
             const metric = this.metricEl.value;
             const datasets = this.manager.generateDatasets(sweep, metric, registry);

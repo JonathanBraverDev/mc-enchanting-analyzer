@@ -10,7 +10,7 @@ A high-performance, real-time simulation tool for Minecraft's enchanting mechani
 - **📈 Live Charting**: Watch the probability charts update live as the engine explores millions of possible outcomes.
 - **💎 Version Perfect**: Supports all major mechanics changes from **Beta 1.9 up to 1.21**, including historical quirks like the 1.14 Protection conflict window.
 - **📏 Deep Analysis**: Correctly models up to **6 concurrent enchantments** on a single item, providing better coverage for top-tier gear.
-- **📚 Complex Support**: Accurate handling of "Multi-Enchanment" books and secondary enchantment decays that other tools often overlook.
+- **📚 Complex Support**: Accurate handling of "Multi-Enchantment" books and secondary enchantment decays that other tools often overlook.
 
 ## 🚀 Getting Started
 
@@ -32,7 +32,7 @@ To build your own standalone version, use: `npm run build:standalone`. The resul
 
 ## 🧠 The Engine
 
-This tool uses a progressive refinement search. It prioritizes the most likely outcomes first, allowing the UI to remain responsive even when calculating enchantments for complex items.
+This tool uses a progressive, tiered refinement search. It prioritizes the most likely outcomes first, allowing the UI to remain responsive even when calculating enchantments for complex items.
 
 ---
-Created by **Jonathan Braver** | **Version 2.2.0**
+Created by **Jonathan Braver**

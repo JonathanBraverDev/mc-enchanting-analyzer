@@ -1,6 +1,7 @@
 import { DATA } from '../../data/index.js';
 import { DOMUtils, StringUtils } from '../../utils/index.js';
 import { EnchantEngine } from '../../engine/index.js';
+import { getEligibleMaterials, getEnchantability, getFullEnchantName } from '../../core/registry.js';
 
 /**
  * View component for managing input parameters and their synchronization.
@@ -67,7 +68,7 @@ export class ParamsView {
 
         const currentMat = matSelect.value;
         matSelect.innerHTML = "";
-        const eligibleKeys = engine.registry.getEligibleMaterials(category);
+        const eligibleKeys = getEligibleMaterials(engine.registry, category);
 
         let bestMat = currentMat;
         if (!eligibleKeys.includes(currentMat)) {
@@ -88,14 +89,14 @@ export class ParamsView {
         gSelect.innerHTML = '<option value="">None (Random First)</option>';
         if (!material) return;
         
-        const ench = engine.registry.getEnchantability(material, category);
+        const ench = getEnchantability(engine.registry, material, category);
         const dist = engine.getModifiedLevelDist(xpLevel, ench);
         
         const allPossible = new Set<string>();
         Object.keys(dist).forEach(ml => {
-            const numeric = engine.getEligibleListNumeric(category, parseInt(ml), material, 0n);
+            const numeric = engine.getEligibleListNumeric(category, parseInt(ml), 0n);
             numeric.forEach(n => {
-                allPossible.add(engine.registry.getFullEnchantName(n));
+                allPossible.add(getFullEnchantName(engine.registry, n));
             });
         });
 

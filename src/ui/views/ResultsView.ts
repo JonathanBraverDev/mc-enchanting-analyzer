@@ -1,7 +1,6 @@
 import { UIUtils, RomanUtils } from '../../utils/index.js';
 import { UI_DEFAULTS, UI_TEXTS, SEARCH_LEVEL_COLORS, SearchLevel } from '../../core/config.js';
-import { Registry } from '../../core/registry.js';
-import { EnchantInsights } from '../../types/index.js';
+import { RegistryState, EnchantInsights } from '../../types/index.js';
 
 /**
  * View component for rendering enchantment combinations and ranks.
@@ -46,7 +45,7 @@ export class ResultsView {
         this.chartStatusEl.style.opacity = '1';
     }
 
-    public update(insights: EnchantInsights, registry: Registry): void {
+    public update(insights: EnchantInsights, registry: RegistryState): void {
         const hasResults = Object.keys(insights.combos).length > 0;
         if (!hasResults) return; // Don't wipe the UI if we got an empty/preliminary update
         
@@ -54,7 +53,7 @@ export class ResultsView {
         this.renderRanks(insights, registry);
     }
 
-    private renderCombos(insights: EnchantInsights, registry: Registry): void {
+    private renderCombos(insights: EnchantInsights, registry: RegistryState): void {
         if (!this.comboEl) return;
 
         const fragment = document.createDocumentFragment();
@@ -102,7 +101,7 @@ export class ResultsView {
         this.comboEl.replaceChildren(fragment);
     }
 
-    private renderRanks(insights: EnchantInsights, registry: Registry): void {
+    private renderRanks(insights: EnchantInsights, registry: RegistryState): void {
         if (!this.rankEl) return;
 
         const fragment = document.createDocumentFragment();
@@ -115,7 +114,7 @@ export class ResultsView {
             const item = document.createElement("div");
             item.className = "rank-item";
             
-            const tooltipEntries = [`Weight: ${props?.weight || '?'}`];
+            const tooltipEntries = [`Weight: ${props?.weight ?? '?'}`];
             if (props?.valid_from) tooltipEntries.push(`From: ${props.valid_from}`);
             if (props?.valid_to) tooltipEntries.push(`Until: ${props.valid_to}`);
             item.title = tooltipEntries.join('\n');
