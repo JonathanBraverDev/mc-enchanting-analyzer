@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.1.1] - 2026-03-21
+
+### Fixed
+- **Visual Chart Glitch**: Resolved an issue where chart lines would momentarily dip to zero during high-accuracy progressive refinement.
+
 ## [1.1.0] - 2026-03-21
 
 ### Added
