@@ -1,0 +1,361 @@
+import { DATA } from './data.js';
+import { EnchantEngine } from './engine.js';
+import { CalculationStats } from './types.js';
+import { ChartManager } from './chart-manager.js';
+import { ResultProcessor } from './utils.js';
+import { getParamsForMode, SEARCH_LEVEL_COLORS, SearchLevel } from './config.js';
+import { WorkerClient } from './worker-client.js';
+
+/**
+ * Main UI Controller for the Enchantment Analyzer.
+ */
+const UIController = {
+    elements: {} as { [id: string]: HTMLElement },
+    chartManager: null as ChartManager | null,
+    engine: null as EnchantEngine | null, // Sync engine for local queries (eligible list, enchantability, etc.)
+    chartUpdateId: 0,
+    runTimeout: 0,
+    activeRefinementId: 0,
+    savedGuaranteedFirst: "",
+    currentSweep: [] as { l: number, s: CalculationStats }[],
+    isWorkerReady: false,
+    lastRunParams: { version: "", cat: "", mat: "", guaranteedFirst: "" },
+
+    async init(): Promise<void> {
+        const ids = ["v-select", "cat-select", "mat-select", "guaranteed-first-select", "lvl-range", "lvl-val", "chart-metric", "refinement-status"];
+        ids.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) this.elements[id] = el;
+        });
+
+        this.chartManager = new ChartManager("mainChart");
+        this.populateVersions();
+        this.setupEventListeners();
+        
+        const v = (this.elements["v-select"] as HTMLSelectElement).value;
+        await WorkerClient.init(v);
+        this.isWorkerReady = true;
+
+        this.updateMaterials();
+        this.run();
+    },
+
+    populateVersions(): void {
+        const vSelect = this.elements["v-select"] as HTMLSelectElement;
+        Object.keys(DATA.versions).reverse().forEach(v => {
+            const o = document.createElement("option");
+            o.value = v; o.textContent = v;
+            vSelect.appendChild(o);
+        });
+    },
+
+    setupEventListeners(): void {
+        const v = this.elements["v-select"] as HTMLSelectElement;
+        const cat = this.elements["cat-select"] as HTMLSelectElement;
+        const mat = this.elements["mat-select"] as HTMLSelectElement;
+        const guaranteedFirst = this.elements["guaranteed-first-select"] as HTMLSelectElement;
+        const lvl = this.elements["lvl-range"] as HTMLInputElement;
+        const metric = this.elements["chart-metric"] as HTMLSelectElement;
+
+        v.onchange = async () => { 
+            this.isWorkerReady = false;
+            await WorkerClient.init(v.value);
+            this.isWorkerReady = true;
+            this.updateMaterials(); 
+            this.updateGuaranteedFirst(); 
+            this.run(); 
+        };
+        cat.onchange = () => { this.updateMaterials(); this.updateGuaranteedFirst(); this.run(); };
+        mat.onchange = () => { this.updateGuaranteedFirst(); this.run(); };
+        
+        guaranteedFirst.onchange = () => {
+            this.savedGuaranteedFirst = guaranteedFirst.value;
+            this.run();
+        };
+        
+        lvl.oninput = () => {
+            this.elements["lvl-val"].textContent = lvl.value;
+            if (this.runTimeout) clearTimeout(this.runTimeout);
+            this.runTimeout = window.setTimeout(() => this.run(), 50);
+        };
+        metric.onchange = () => {
+            if (this.currentSweep.length > 0 && this.chartManager) {
+                const engine = this.getEngine();
+                const datasets = this.chartManager.generateDatasets(this.currentSweep, metric.value, engine.registry);
+                const labels = Array.from({length: 30}, (_, i) => i + 1);
+                this.chartManager.update(labels, datasets);
+            }
+        };
+    },
+
+    getEngine(): EnchantEngine {
+        const v = (this.elements["v-select"] as HTMLSelectElement).value;
+        if (!this.engine || this.engine.registry.version !== v) {
+            this.engine = new EnchantEngine(DATA, v);
+        }
+        return this.engine;
+    },
+
+    updateMaterials(): void {
+        const engine = this.getEngine();
+        const cat = (this.elements["cat-select"] as HTMLSelectElement).value;
+        const matSelect = this.elements["mat-select"] as HTMLSelectElement;
+        const currentMat = matSelect.value;
+        
+        matSelect.innerHTML = "";
+        const eligibleKeys = engine.registry.getEligibleMaterials(cat);
+
+        // Determine best selection
+        let bestMat = currentMat;
+        if (!eligibleKeys.includes(currentMat)) {
+            bestMat = eligibleKeys.includes("diamond") ? "diamond" : (eligibleKeys[0] || "");
+        }
+
+        eligibleKeys.forEach(m => {
+            const o = document.createElement("option");
+            o.value = m;
+            o.textContent = m.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+            if (m === bestMat) o.selected = true;
+            matSelect.appendChild(o);
+        });
+
+        this.updateGuaranteedFirst();
+    },
+
+    updateGuaranteedFirst(): void {
+        const engine = this.getEngine();
+        const cat = (this.elements["cat-select"] as HTMLSelectElement).value;
+        const mat = (this.elements["mat-select"] as HTMLSelectElement).value;
+        const lvl = parseInt((this.elements["lvl-range"] as HTMLInputElement).value);
+        const guaranteedFirstSelect = this.elements["guaranteed-first-select"] as HTMLSelectElement;
+        
+        guaranteedFirstSelect.innerHTML = '<option value="">None (Random First)</option>';
+        if (!mat) return;
+        
+        const ench = engine.registry.getEnchantability(mat, cat);
+        const dist = engine.getModifiedLevelDist(lvl, ench);
+        
+        const allPossible = new Set<string>();
+        Object.keys(dist).forEach(ml => {
+            const numeric = engine.getEligibleListNumeric(cat, parseInt(ml), mat, 0n);
+            numeric.forEach(n => {
+                allPossible.add(engine.registry.getFullEnchantName(n));
+            });
+        });
+
+        Array.from(allPossible).sort().forEach(s => {
+            const o = document.createElement("option");
+            o.value = s; o.textContent = s;
+            if (s === this.savedGuaranteedFirst) o.selected = true;
+            guaranteedFirstSelect.appendChild(o);
+        });
+    },
+
+    isStillActive(id: number): boolean {
+        return id === this.activeRefinementId;
+    },
+
+    async runPass(
+        level: Exclude<SearchLevel, 'done'>,
+        basePayload: { cat: string; xp: number; mat: string; guaranteedFirst: string },
+        currentId: number
+    ): Promise<{ stats: any; done: boolean }> {
+        const isBook = basePayload.cat === "book";
+        const params = getParamsForMode(level, isBook);
+        this.setRefinementStatus(params.status, level);
+
+        const stats = await WorkerClient.request(
+            'getFullStats',
+            { ...basePayload, threshold: params.threshold, source: 'main', useBestCache: true, maxIterations: params.limit },
+            (partial) => { if (this.isStillActive(currentId)) this.updateInsights(partial.human); }
+        );
+
+        if (!this.isStillActive(currentId)) return { stats, done: true };
+        this.updateInsights(stats.human);
+
+        if (stats.stats && stats.stats.uncertainty === 0) {
+            this.setRefinementStatus("Complete", "done");
+            return { stats, done: true };
+        }
+
+        return { stats, done: false };
+    },
+
+    async run(): Promise<void> {
+        if (!this.isWorkerReady) return;
+
+        const engine = this.getEngine();
+        const cat = (this.elements["cat-select"] as HTMLSelectElement).value;
+        const mat = (this.elements["mat-select"] as HTMLSelectElement).value;
+        const xp = parseInt((this.elements["lvl-range"] as HTMLInputElement).value);
+        
+        this.updateGuaranteedFirst();
+        const guaranteedFirst = (this.elements["guaranteed-first-select"] as HTMLSelectElement).value;
+
+        const enchValEl = document.getElementById("ench-val");
+        if (enchValEl) enchValEl.textContent = engine.registry.getEnchantability(mat, cat).toString();
+
+        const currentId = ++this.chartUpdateId;
+        this.activeRefinementId = currentId;
+
+        const version = (this.elements["v-select"] as HTMLSelectElement).value;
+        const paramsChanged = this.lastRunParams.version !== version ||
+                              this.lastRunParams.cat !== cat || 
+                              this.lastRunParams.mat !== mat || 
+                              this.lastRunParams.guaranteedFirst !== guaranteedFirst;
+
+        if (paramsChanged) {
+            this.currentSweep = [];
+            this.lastRunParams = { version, cat, mat, guaranteedFirst };
+        }
+
+        const basePayload = { cat, xp, mat, guaranteedFirst };
+        const isBook = cat === "book";
+
+        // Pass 1: Coarse (instant, no progress callback)
+        const coarse = getParamsForMode('coarse', isBook);
+        this.setRefinementStatus(coarse.status, 'coarse');
+
+        let stats = await WorkerClient.request('getFullStats', {
+            ...basePayload, threshold: coarse.threshold, source: 'main', useBestCache: true, maxIterations: coarse.limit
+        });
+        if (!this.isStillActive(currentId)) return;
+        this.updateInsights(stats.human);
+
+        if (paramsChanged) {
+            await this.updateChart(cat, mat, coarse.threshold);
+        }
+        if (!this.isStillActive(currentId)) return;
+
+        if (stats.stats && stats.stats.uncertainty === 0) {
+            this.setRefinementStatus("Complete", "done");
+            return;
+        }
+
+        // Passes 2-4: Standard → Deep → Ultra
+        for (const level of ['standard', 'deep', 'ultra'] as Exclude<SearchLevel, 'done'>[]) {
+            const result = await this.runPass(level, basePayload, currentId);
+            if (!this.isStillActive(currentId)) return;
+            if (result.done) {
+                if (paramsChanged && level === 'standard') {
+                    this.updateChart(cat, mat, getParamsForMode('standard', isBook).threshold);
+                }
+                return;
+            }
+        }
+
+        if (paramsChanged) {
+            this.updateChart(cat, mat, getParamsForMode('ultra', isBook).threshold);
+        }
+        this.setRefinementStatus("Complete", "done");
+    },
+
+    setRefinementStatus(text: string, level: SearchLevel): void {
+        const el = this.elements["refinement-status"];
+        if (!el) return;
+
+        const c = SEARCH_LEVEL_COLORS[level];
+        el.textContent = text;
+        el.style.backgroundColor = c.bg;
+        el.style.color = c.text;
+        el.style.opacity = level === 'done' ? '0.6' : '1';
+    },
+
+    updateInsights(human: any): void {
+        if (!human || !human.combos) return;
+        const comboEl = document.getElementById("combo-list");
+        if (!comboEl) return;
+
+        try {
+            const topCombos = Object.entries(human.combos).sort((a: any, b: any) => (b[1] as number) - (a[1] as number)).slice(0, 10);
+            
+            const comboListHtml = topCombos.map(([combo, prob]) => `
+                <div class="combo-item">
+                    <div style="display: flex; justify-content: space-between;">
+                        <span class="combo-names">${(combo as string).replace(/\+/g, ' + ')}</span>
+                        <span class="combo-prob">${((prob as number) * 100).toFixed(1)}%</span>
+                    </div>
+                </div>
+            `).join("");
+
+            const uncertaintyHtml = human.uncertainty && human.uncertainty > 0.005 ? `
+                <div class="combo-item" style="border-top: 1px solid rgba(255,255,255,0.05); margin-top: 10px; padding-top: 10px; opacity: 0.8;">
+                    <div style="display: flex; justify-content: space-between; font-size: 0.85rem;">
+                        <span>Calculation Confidence</span>
+                        <span style="color: ${human.uncertainty > 0.1 ? '#ffca28' : '#66bb6a'}">${((1 - human.uncertainty) * 100).toFixed(1)}%</span>
+                    </div>
+                    ${human.uncertainty > 0.1 ? `<div style="font-size: 0.7rem; color: #ffca28; margin-top: 3px;">⚠️ High branching complexity - some combinations were collapsed into their parents for speed.</div>` : ''}
+                </div>
+            ` : '';
+
+            comboEl.innerHTML = comboListHtml + uncertaintyHtml;
+
+            const rankSection = document.getElementById("rank-section");
+            if (!rankSection) return;
+
+            rankSection.innerHTML = Object.entries(human.any).sort((a: any, b: any) => (b[1] as number) - (a[1] as number)).map(([name, prob]) => {
+                const props = (this.getEngine().registry.resolvedRegistry as any)[name];
+                const levelsCount = props ? Object.keys(props.levels).length : 2;
+                const label = levelsCount > 1 ? `Any ${name}` : name;
+                
+                return `
+                    <div class="rank-item">
+                        <div style="display: flex; justify-content: space-between; font-size: 0.8rem;">
+                            <span>${label}</span>
+                            <span style="font-weight:700;">${((prob as number)*100).toFixed(1)}%</span>
+                        </div>
+                        <div class="progress-bg"><div class="progress-fill" style="width: ${(prob as number)*100}%"></div></div>
+                    </div>
+                `;
+            }).join("");
+        } catch (e) {
+            console.warn("UI Insights Error:", e);
+        }
+    },
+
+    async updateChart(cat: string, mat: string, threshold?: number): Promise<void> {
+        const currentId = this.activeRefinementId;
+        const engine = this.getEngine();
+        if (!engine) return;
+
+        const metric = (this.elements["chart-metric"] as HTMLSelectElement).value;
+        const guaranteedFirst = (this.elements["guaranteed-first-select"] as HTMLSelectElement).value;
+        const labels = Array.from({length: 30}, (_, i) => i + 1);
+        
+        const isBook = cat === "book";
+        const activeThreshold = threshold ?? getParamsForMode('ultra', isBook).threshold;
+        
+        try {
+            for (let i = 0; i < labels.length; i++) {
+                const l = labels[i];
+                if (!this.isStillActive(currentId)) return;
+                
+                const stats = await WorkerClient.request(
+                    'getFullStats', 
+                    { cat, xp: l, mat, guaranteedFirst, threshold: activeThreshold, source: 'chart' },
+                    (result) => {
+                        if (!this.isStillActive(currentId)) return;
+                        this.currentSweep[i] = { l, s: result.stats };
+                        if (this.chartManager) {
+                            const datasets = this.chartManager.generateDatasets(this.currentSweep, metric, engine.registry);
+                            this.chartManager.update(labels, datasets);
+                        }
+                    }
+                );
+                if (!this.isStillActive(currentId)) return;
+
+                this.currentSweep[i] = { l, s: stats.stats };
+
+                if (this.chartManager) {
+                    const datasets = this.chartManager.generateDatasets(this.currentSweep, metric, engine.registry);
+                    this.chartManager.update(labels, datasets);
+                }
+            }
+        } catch (e) {
+            console.warn("UI Chart Error:", e);
+        }
+    }
+
+};
+
+window.onload = () => UIController.init();

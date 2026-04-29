@@ -1,0 +1,33 @@
+
+import { EnchantEngine } from '../src/engine.js';
+import { DATA } from '../src/data.js';
+import { SnapshotUtils } from '../src/test-utils.js';
+
+async function updateSnapshots() {
+    console.log('Updating Regression Snapshots...');
+
+    // 1.8 Diamond Sword @ Level 30
+    console.log('Generating 1.8_sword_30_diamond...');
+    const e18 = new EnchantEngine(DATA, '1.8');
+    const s18 = await e18.getFullStats('sword', 30, 'diamond', null, 0.0001);
+    await SnapshotUtils.saveSnapshot('1.8_sword_30_diamond', s18);
+
+    // 1.21 Mace @ Level 30
+    console.log('Generating 1.21_mace_30_mace...');
+    const v121 = new EnchantEngine(DATA, '1.21');
+    const s121 = await v121.getFullStats('mace', 30, 'mace', null, 0.0001);
+    await SnapshotUtils.saveSnapshot('1.21_mace_30_mace', s121);
+
+    // 1.7.2 Multi-Enchant Book @ Level 30
+    console.log('Generating 1.7.2_book_30_book...');
+    const v172 = new EnchantEngine(DATA, '1.7.2');
+    const s172 = await v172.getFullStats('book', 30, 'book', null, 0.0001);
+    await SnapshotUtils.saveSnapshot('1.7.2_book_30_book', s172);
+
+    console.log('Snapshots updated successfully.');
+}
+
+updateSnapshots().catch(err => {
+    console.error('Failed to update snapshots:', err);
+    process.exit(1);
+});
