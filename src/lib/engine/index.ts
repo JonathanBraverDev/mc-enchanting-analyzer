@@ -1,15 +1,14 @@
 import { CalculationStats, SearchState, RegistryState, SearchConfig, InternalSearchConfig, EngineInstrumentation, } from '#types/index.js';
 import { ProbUtils, EnchantUtils } from '#utils/index.js';
-import { getMaterialId, getEnchantId, isCategoryAvailable } from '#core/registry.js';
+import { getMaterialId, getEnchantId, isCategoryAvailable, getEligibleListNumeric as getRegistryEligibleListNumeric } from '#core/registry.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import { getSearchLimit } from '#core/config.js';
 import { CacheManager } from './cache/CacheManager.js';
 import { KeyService } from '#services/KeyService.js';
-import { PoolService } from '#services/PoolService.js';
 import { SummaryService } from '#services/SummaryService.js';
-import { DistributionService } from './distribution/DistributionService.js';
+import { ModifiedLevelDistributionService } from './distribution/ModifiedLevelDistributionService.js';
 import { SearchService } from './search/SearchService.js';
-import { StatAggregator } from './aggregation/StatAggregator.js';
+import { ProgressiveStatsAggregator } from './aggregation/ProgressiveStatsAggregator.js';
 export { EngineFactory } from './factory.js';
 
 /**
@@ -25,10 +24,9 @@ export class EnchantEngine {
         registry: RegistryState,
         private readonly cache: CacheManager,
         private readonly keyService: KeyService,
-        private readonly poolService: PoolService,
-        private readonly distributionService: DistributionService,
+        private readonly distributionService: ModifiedLevelDistributionService,
         private readonly searchService: SearchService,
-        private readonly statAggregator: StatAggregator
+        private readonly statAggregator: ProgressiveStatsAggregator
     ) {
         this._registry = registry;
     }
@@ -63,7 +61,7 @@ export class EnchantEngine {
      * Returns a list of eligible enchantments filtered by conflict bitset.
      */
     public getEligibleListNumeric(cat: string, level: number, bitset: bigint = 0n): number[] {
-        return this.poolService.getEligibleListNumeric(this.registry, cat, level, bitset);
+        return getRegistryEligibleListNumeric(this._registry, cat, level, bitset, this.cache, this._registry.version);
     }
 
     /**
@@ -298,7 +296,8 @@ export class EnchantEngine {
         return finalStats;
     }    /**
      * Aggregates statistics conditioned on a specific observed clue.
-     * This is the modern replacement for the legacy guaranteedFirst parameter.
+     * This performs the normal search flow first, then applies clue conditioning
+     * to the aggregated results.
      * 
      * @param cat Item category.
      * @param xp Base XP level.

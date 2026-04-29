@@ -2,10 +2,9 @@ import { EnchantmentData, RegistryState } from '#types/index.js';
 import { EnchantEngine } from './index.js';
 import { CacheManager } from './cache/CacheManager.js';
 import { KeyService } from '#services/KeyService.js';
-import { PoolService } from '#services/PoolService.js';
-import { DistributionService } from './distribution/DistributionService.js';
+import { ModifiedLevelDistributionService } from './distribution/ModifiedLevelDistributionService.js';
 import { SearchService } from './search/SearchService.js';
-import { StatAggregator } from './aggregation/StatAggregator.js';
+import { ProgressiveStatsAggregator } from './aggregation/ProgressiveStatsAggregator.js';
 import { CACHE_CONFIG } from '#constants/engine.js';
 import { RegistryFactory } from '#core/factory.js';
 
@@ -13,10 +12,9 @@ export interface EngineDependencies {
     registry: RegistryState;
     cache: CacheManager;
     keyService: KeyService;
-    poolService: PoolService;
-    distributionService: DistributionService;
+    distributionService: ModifiedLevelDistributionService;
     searchService: SearchService;
-    statAggregator: StatAggregator;
+    statAggregator: ProgressiveStatsAggregator;
 }
 
 /**
@@ -45,16 +43,14 @@ export class EngineFactory {
         });
 
         const keyService = overrides.keyService || new KeyService();
-        const poolService = overrides.poolService || new PoolService(cache);
-        const distributionService = overrides.distributionService || new DistributionService(1024);
+        const distributionService = overrides.distributionService || new ModifiedLevelDistributionService(1024);
         const searchService = overrides.searchService || new SearchService(cache);
-        const statAggregator = overrides.statAggregator || new StatAggregator(cache, distributionService, searchService);
+        const statAggregator = overrides.statAggregator || new ProgressiveStatsAggregator(cache, distributionService, searchService);
 
         const engine = new EnchantEngine(
             registry,
             cache,
             keyService,
-            poolService,
             distributionService,
             searchService,
             statAggregator

@@ -15,3 +15,9 @@
 578fe6d01dddbbc21532572d06ce4667a96d14f3
 # refactor(imports): migrate cross-module imports to aliases
 f909e4817fc73db0cc13a8e5c6fba0bd09045ee4
+
+# refactor: rename engine and ui symbols for clarity
+110e7cd57d1b50893b1454df3e8e1270d1dfbe66
+
+# refactor: align chart file names with class names
+cb1212207de38da9460c69a7f73c5f70a8cdd6f7

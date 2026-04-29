@@ -18,8 +18,8 @@ try {
     let js = fs.readFileSync(jsPath, 'utf8');
 
     // Remove existing link and script tags
-    html = html.replace(/<link rel="stylesheet" href="styles\/style\.css">/, `<style>\n${css}\n</style>`);
-    html = html.replace(/<script src="\.\.\/\.\.\/dist\/bundle\.js"><\/script>/, `<script>\n${js}\n</script>`);
+    html = html.replace(/<link rel="stylesheet" href="styles\/style\.css">/, () => `<style>\n${css}\n</style>`);
+    html = html.replace(/<script src="\.\.\/\.\.\/dist\/bundle\.js"><\/script>/, () => `<script>\n${js}\n</script>`);
 
     // Ensure output directory exists
     if (!fs.existsSync(path.dirname(outputPath))) {

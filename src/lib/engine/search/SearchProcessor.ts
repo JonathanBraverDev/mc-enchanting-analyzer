@@ -1,15 +1,15 @@
 import { ForwardingContext, PackedCombo, PackedEnchant, ExpansionBlueprint } from '#types/index.js';
 import { ComboUtils, ProbUtils } from '#utils/index.js';
 import { ENGINE_LIMITS, BIGINT_CONSTANTS } from '#constants/engine.js';
-import { DistributionPool } from '#engine/distribution/DistributionPool.js';
-import { SearchManager } from '#engine/search/SearchManager.js';
+import { DistributionBufferPool } from '#engine/distribution/DistributionBufferPool.js';
+import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
 
 /**
  * Low-level primitives for the enchantment search engine.
  */
 export class SearchProcessor {
     /**
-     * No-op timing shim retained for API compatibility with SearchManager.
+     * No-op timing shim retained for API compatibility with SearchStateTracker.
      * Fine-grained per-subsystem timing has been removed; only aggregate totalMs
      * and searchMs are tracked. Callers that still reference this method compile
      * without changes while the overhead is eliminated.
@@ -102,6 +102,10 @@ export class SearchProcessor {
         const finalCount = currentCount - 1;
         ProbUtils.addItemMass(countMass, finalCount, prob);
 
+        // anyMass and rankMass were pre-credited with `prob` for each enchant when this combo
+        // was first pushed (in processInitialNode / processExpansionStep). After redistribution
+        // into (N-1)-enchant outcomes, each enchant only survives in (N-1)/N of them, so we
+        // subtract lossPerEnchant ≈ prob/N per enchant to keep anyMass and rankMass accurate.
         const survivorMass = ProbUtils.roundScale(prob, BigInt(nOutcomes - 1), BigInt(nOutcomes));
         const lossPerEnchant = prob - survivorMass;
 
@@ -124,11 +128,11 @@ export class SearchProcessor {
         currentProb: bigint,
         currentLevel: number,
         ctx: ForwardingContext,
-        tracker: SearchManager
+        tracker: SearchStateTracker
     ): void {
         const { registry, queue, pool, poolWeights, initialTotalWeight } = ctx;
 
-        const buffer = DistributionPool.getBuffer(0);
+        const buffer = DistributionBufferPool.getBuffer(0);
         const splitRemainder = ProbUtils.distributeDetailed(currentProb, poolWeights, initialTotalWeight, buffer);
         tracker.record('sieved', splitRemainder);
 
@@ -158,7 +162,7 @@ export class SearchProcessor {
         currentCombo: PackedCombo,
         currentCount: number,
         ctx: ForwardingContext,
-        tracker: SearchManager
+        tracker: SearchStateTracker
     ): void {
         const { registry, cat, pool } = ctx;
         const { indexToEnchant } = registry;
@@ -170,6 +174,9 @@ export class SearchProcessor {
             ? ComboUtils.unpack(currentCombo, indexToEnchant)
             : [] as PackedEnchant[];
 
+        // currentLevel only drives the probability of earning another enchant slot from this node.
+        // Eligibility still comes from ctx.pool, which SearchService fixed from the initial full
+        // modified level before the search started.
         const probContinue = (isBook && !registry.multiEnchantBooks && currentCount >= 1)
             ? 0n
             : (ProbUtils.PROB_CONTINUE_TABLE[currentLevel] || 0n);
@@ -193,6 +200,11 @@ export class SearchProcessor {
                 totalWeight += weight;
             }
 
+            // Minecraft halves the effective level between additional enchant rolls, but it does not
+            // rebuild the eligible pool from that halved level. The pool stays frozen from the initial
+            // full modified level; this nextLevel only feeds the continuation roll for the next slot.
+            // currentCount >= 1 is always true here (count-0 nodes take the processInitialNode path),
+            // so the real invariant is the halving sequence: 2nd enchant sees level/2, 3rd sees level/4, etc.
             const nextLevel = currentCount >= 1 ? Math.floor(currentLevel / 2) : currentLevel;
             const blueprint: ExpansionBlueprint = {
                 probContinue,

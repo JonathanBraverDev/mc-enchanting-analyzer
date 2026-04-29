@@ -99,15 +99,15 @@ test.describe('UI Regression & Edge Cases', () => {
         await expect(analyzer.comboItems.first()).toBeVisible();
     });
 
-    test('should handle "Random First" vs "Guaranteed First" correctly in UI', async () => {
+    test('should update the UI when switching from no clue to an explicit clue', async () => {
         await analyzer.selectCategory('pickaxe');
         
-        // Random First (None)
+        // No clue selected
         await analyzer.selectClue('');
         await analyzer.waitForRefinementComplete();
-        await expect(analyzer.rankSection).not.toContainText('100.0%'); // Usually not 100% for specific one if random
+        await expect(analyzer.rankSection).not.toContainText('100.0%'); // Usually not 100% for a specific enchant without clue conditioning
 
-        // Guaranteed Efficiency IV
+        // Clue: Efficiency IV
         await analyzer.selectClue('Efficiency IV');
         await analyzer.waitForRefinementComplete();
         // Check for base name (Any Efficiency) and 100.0% separately to avoid roman numeral rank mismatch in rank section

@@ -81,6 +81,10 @@ export class ClueAnalysisService {
             const clueIndex = enchants.indexOf(targetClueId as any);
             if (clueIndex === -1) continue;
 
+            // This mirrors the exact remainder distribution in calculateClueMass (quotient + 1 for
+            // the first `pCombo % n` indices). Keeping these in sync is critical: if the distribution
+            // logic in calculateClueMass changes, this Bayesian numerator must change identically,
+            // or conditioned probabilities will silently over/under-count.
             const share = (pCombo / n) + (BigInt(clueIndex) < (pCombo % n) ? 1n : 0n);
             if (share > 0n) {
                 const pConditioned = (share * PRECISION) / pClue;

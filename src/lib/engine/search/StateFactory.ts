@@ -2,7 +2,7 @@ import { SearchHeap } from '#utils/collections/SearchHeap.js';
 import { PRECISION } from '#utils/index.js';
 import { PACKING_CONSTANTS } from '#constants/engine.js';
 import { PackedCombo, SearchState } from '#types/index.js';
-import { SearchManager } from './SearchManager.js';
+import { SearchStateTracker } from './SearchStateTracker.js';
 
 export class StateFactory {
     /**
@@ -22,6 +22,8 @@ export class StateFactory {
                 countMass: new BigUint64Array(existing.countMass),
                 tracker: existing.tracker.clone(),
                 threshold,
+                // iterations resets each run so SearchController can enforce per-run limits;
+                // nodesProcessed is cumulative across all tiers and used for diagnostics only.
                 iterations: 0,
                 nodesProcessed: existing.nodesProcessed,
                 checkpoints: []
@@ -42,7 +44,7 @@ export class StateFactory {
 
         return {
             queue, results, anyMass, rankMass, countMass,
-            tracker: new SearchManager({ 
+            tracker: new SearchStateTracker({ 
                 resolved: 0n, 
                 pending: PRECISION, 
                 sieved: 0n, 
