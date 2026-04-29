@@ -2,123 +2,198 @@ import { POOL_CONSTANTS, BIGINT_CONSTANTS } from '#constants/engine.js';
 
 /**
  * A specialized, TypedArray-backed priority queue for PackedNode data.
- * Designed for maximum performance in the search hot path by eliminating object allocations
- * and generic function overhead.
- *
- * Meta encoding: meta = (enchantBitset << ENCHANT_SHIFT) | modLevel
- * Both bitset and level are recovered from the stored meta on pop, eliminating
- * the need for separate bitsetBuffer and levelBuffer arrays.
+ * Optimized with:
+ * 1. Interleaved memory layout (Stride-4) for cache locality and bitwise index math.
+ * 2. Specialized Linear Probing Hash Table with tombstones for zero-allocation deduplication.
+ * 3. D-Ary heap structure with hole percolation.
  */
 export class SearchHeap {
-    private probBuffer: BigUint64Array;
-    private comboBuffer: Float64Array;
-    private metaBuffer: BigUint64Array;
+    // Interleaved buffer: [meta (8B), prob (8B), combo (8B), hashIdx (8B)]
+    private nodeBuffer = new BigUint64Array(0);
+    private nodeBuffer32 = new Uint32Array(0); // 32-bit component view
+    private comboView = new Float64Array(0);
+    private static readonly STRIDE = 4; // layout: [meta (8B), prob (8B), combo (8B), hashIdx (8B)]
 
-    private heap: Uint32Array; // Stores dataId (index into buffers)
-    private indexMap: Map<bigint, number>; // meta -> index in 'heap' array
+    private heap = new Uint32Array(0); // Stores dataId (index into buffers)
+
+    // Hash Table for meta -> heapIdx
+    private hashKeys = new BigUint64Array(0);
+    private hashValues = new Int32Array(0); // Stores heapIdx, -1 for empty, -2 for tombstone
+    private hashMask = 0;
 
     private _size: number = 0;
     private _nextId: number = 0;
-    private capacity: number;
+    private capacity = 0;
 
-    private freeIds: Uint32Array;
+    private freeIds = new Uint32Array(0);
     private freeCount: number = 0;
 
     constructor(initialCapacity: number = POOL_CONSTANTS.INITIAL_HEAP_CAPACITY) {
-        this.capacity = initialCapacity;
-        this.probBuffer = new BigUint64Array(initialCapacity);
-        this.comboBuffer = new Float64Array(initialCapacity);
-        this.metaBuffer = new BigUint64Array(initialCapacity);
+        // Hash table capacity is power-of-2, at least 2x capacity for 0.5 load factor
+        let hashCap = 1;
+        while (hashCap < initialCapacity * 2) hashCap <<= 1;
 
-        this.heap = new Uint32Array(initialCapacity);
-        this.indexMap = new Map();
-
-        this.freeIds = new Uint32Array(initialCapacity);
+        this.reinitializeStorage(initialCapacity, hashCap);
     }
 
-    /**
-     * Pops the next available dataId from the free list.
-     * Invariant: freeCount > 0 at all call sites.
-     */
+    private reinitializeStorage(capacity: number, hashCap: number): void {
+        this.capacity = capacity;
+
+        const buffer = new ArrayBuffer(capacity * SearchHeap.STRIDE * 8);
+        this.nodeBuffer = new BigUint64Array(buffer);
+        this.nodeBuffer32 = new Uint32Array(buffer);
+        this.comboView = new Float64Array(buffer);
+
+        this.heap = new Uint32Array(capacity);
+        this.freeIds = new Uint32Array(capacity);
+
+        this.hashMask = hashCap - 1;
+        this.hashKeys = new BigUint64Array(hashCap);
+        this.hashValues = new Int32Array(hashCap).fill(-1);
+
+        this._size = 0;
+        this._nextId = 0;
+        this.freeCount = 0;
+    }
+
+    private getHash(meta: bigint): number {
+        // Fast hashing using 32-bit components instead of BigInt ops
+        const lo = Number(meta & 0xFFFFFFFFn);
+        const hi = Number(meta >> 32n);
+        let h = (lo ^ hi) >>> 0;
+        h ^= h >>> 16;
+        h = Math.imul(h, 0x85ebca6b);
+        h ^= h >>> 13;
+        h = Math.imul(h, 0xc2b2ae35);
+        h ^= h >>> 16;
+        return h & this.hashMask;
+    }
+
+    private findHashSlot(meta: bigint): { existingHeapIdx: number; hashIdx: number } {
+        const startIdx = this.getHash(meta);
+        let idx = startIdx;
+        let firstTombstone = -1;
+
+        do {
+            const slot = this.hashValues[idx]!;
+
+            if (slot === -1) {
+                return {
+                    existingHeapIdx: -1,
+                    hashIdx: firstTombstone !== -1 ? firstTombstone : idx
+                };
+            }
+
+            if (slot === -2) {
+                if (firstTombstone === -1) firstTombstone = idx;
+            } else if (this.hashKeys[idx] === meta) {
+                return { existingHeapIdx: slot, hashIdx: idx };
+            }
+
+            idx = (idx + 1) & this.hashMask;
+        } while (idx !== startIdx);
+
+        return {
+            existingHeapIdx: -1,
+            hashIdx: firstTombstone
+        };
+    }
+
+    private hashSet(meta: bigint, heapIdx: number): number {
+        const { hashIdx } = this.findHashSlot(meta);
+        if (hashIdx === -1) {
+            throw new Error('SearchHeap hash table has no reusable slot during rehash.');
+        }
+        this.hashKeys[hashIdx] = meta;
+        this.hashValues[hashIdx] = heapIdx;
+        return hashIdx;
+    }
+
+    private hashDelete(meta: bigint): void {
+        let idx = this.getHash(meta);
+        while (this.hashValues[idx]! !== -1) {
+            if (this.hashKeys[idx] === meta) {
+                this.hashValues[idx] = -2; // Tombstone
+                this.hashKeys[idx] = 0n;
+                return;
+            }
+            idx = (idx + 1) & this.hashMask;
+        }
+    }
+
     private nextFreeId(): number {
         return this.freeIds[--this.freeCount]!;
     }
 
     public pushOrMerge(meta: bigint, prob: bigint, combo: number): void {
-        const existingIdx = this.indexMap.get(meta);
-        if (existingIdx !== undefined) {
-            const dataId = this.heap[existingIdx]!;
-            this.probBuffer[dataId] = (this.probBuffer[dataId] ?? 0n) + prob;
-            this.bubbleUp(existingIdx);
+        const { existingHeapIdx, hashIdx } = this.findHashSlot(meta);
+
+        if (existingHeapIdx !== -1) {
+            const dataId = this.heap[existingHeapIdx]!;
+            this.nodeBuffer[(dataId << 2) + 1]! += prob;
+            this.bubbleUp(existingHeapIdx);
+            return;
+        }
+
+        if (hashIdx === -1) {
+            this.grow();
+            this.pushOrMerge(meta, prob, combo);
             return;
         }
 
         if (this._nextId >= this.capacity && this.freeCount === 0) {
             this.grow();
+            this.pushOrMerge(meta, prob, combo);
+            return;
         }
 
         const dataId = this.freeCount > 0 ? this.nextFreeId() : this._nextId++;
-        this.probBuffer[dataId] = prob;
-        this.comboBuffer[dataId] = combo;
-        this.metaBuffer[dataId] = meta;
-
+        const base = dataId << 2; // Stride 4
+        this.nodeBuffer[base] = meta;
+        this.nodeBuffer[base + 1] = prob;
+        this.comboView[base + 2] = combo;
+        this.nodeBuffer32[(dataId << 3) + 6] = hashIdx; // Store hash index
         const heapIdx = this._size++;
         this.heap[heapIdx] = dataId;
-        this.indexMap.set(meta, heapIdx);
+        this.hashKeys[hashIdx] = meta;
+        this.hashValues[hashIdx] = heapIdx;
         this.bubbleUp(heapIdx);
     }
 
-    public pop(): { meta: bigint, prob: bigint, level: number, combo: number } | undefined {
-        if (this._size === 0) return undefined;
-
-        const dataId = this.heap[0]!;
-        const meta = this.metaBuffer[dataId]!;
-        const prob = this.probBuffer[dataId]!;
-        const combo = this.comboBuffer[dataId]!;
-        const level = Number(meta & BIGINT_CONSTANTS.RANK_MASK);
-
-        this.indexMap.delete(meta);
-        this.freeIds[this.freeCount++] = dataId;
-
-        const lastDataId = this.heap[--this._size]!;
-        if (this._size > 0) {
-            this.heap[0] = lastDataId;
-            this.indexMap.set(this.metaBuffer[lastDataId]!, 0);
-            this.sinkDown(0);
-        }
-
-        return { meta, prob, level, combo };
-    }
-
-    /**
-     * Specialized pop for minimal-allocation search loops.
-     */
     public popFast(out: { meta: bigint, prob: bigint, level: number, combo: number }): boolean {
         if (this._size === 0) return false;
 
         const dataId = this.heap[0]!;
-        const meta = this.metaBuffer[dataId]!;
+        const base = dataId << 2;
+        const meta = this.nodeBuffer[base]!;
 
         out.meta = meta;
-        out.prob = this.probBuffer[dataId]!;
+        out.prob = this.nodeBuffer[base + 1]!;
         out.level = Number(meta & BIGINT_CONSTANTS.RANK_MASK);
-        out.combo = this.comboBuffer[dataId]!;
+        out.combo = this.comboView[base + 2]!;
 
-        this.indexMap.delete(meta);
+        this.hashDelete(meta);
         this.freeIds[this.freeCount++] = dataId;
 
         const lastDataId = this.heap[--this._size]!;
         if (this._size > 0) {
             this.heap[0] = lastDataId;
-            this.indexMap.set(this.metaBuffer[lastDataId]!, 0);
+            const lastHashIdx = this.nodeBuffer32[(lastDataId << 3) + 6]!;
+            this.hashValues[lastHashIdx] = 0;
             this.sinkDown(0);
         }
 
         return true;
     }
 
+    public pop(): { meta: bigint, prob: bigint, level: number, combo: number } | undefined {
+        const res = { meta: 0n, prob: 0n, level: 0, combo: 0 };
+        if (this.popFast(res)) return res;
+        return undefined;
+    }
+
     public peekProb(): bigint {
-        return this._size > 0 ? (this.probBuffer[this.heap[0]!] ?? 0n) : 0n;
+        return this._size > 0 ? (this.nodeBuffer[(this.heap[0]! << 2) + 1] ?? 0n) : 0n;
     }
 
     public size(): number {
@@ -126,52 +201,51 @@ export class SearchHeap {
     }
 
     public get indexMapSize(): number {
-        return this.indexMap.size;
+        let count = 0;
+        for (let i = 0; i < this.hashValues.length; i++) {
+            if (this.hashValues[i]! >= 0) count++;
+        }
+        return count;
     }
 
     private bubbleUp(idx: number): void {
         const dataId = this.heap[idx]!;
-        const prob = this.probBuffer[dataId]!;
+        const prob = this.nodeBuffer[(dataId << 2) + 1]!;
 
         while (idx > 0) {
-            const parentIdx = (idx - 1) >>> 1;
+            const parentIdx = (idx - 1) >>> 2;
             const parentDataId = this.heap[parentIdx]!;
-            if (prob <= this.probBuffer[parentDataId]!) break;
+            if (prob <= this.nodeBuffer[(parentDataId << 2) + 1]!) break;
 
             this.heap[idx] = parentDataId;
-            this.indexMap.set(this.metaBuffer[parentDataId]!, idx);
-
+            // O(1) hash table update (no hashing)
+            const parentHashIdx = this.nodeBuffer32[(parentDataId << 3) + 6]!;
+            this.hashValues[parentHashIdx] = idx;
             idx = parentIdx;
         }
 
         this.heap[idx] = dataId;
-        this.indexMap.set(this.metaBuffer[dataId]!, idx);
+        const currentHashIdx = this.nodeBuffer32[(dataId << 3) + 6]!;
+        this.hashValues[currentHashIdx] = idx;
     }
 
     private sinkDown(idx: number): void {
         const dataId = this.heap[idx]!;
-        const prob = this.probBuffer[dataId]!;
+        const prob = this.nodeBuffer[(dataId << 2) + 1]!;
 
         while (true) {
-            const leftChildIdx = (idx << 1) + 1;
-            const rightChildIdx = (idx << 1) + 2;
             let swapIdx = -1;
             let maxProb = prob;
 
-            if (leftChildIdx < this._size) {
-                const childDataId = this.heap[leftChildIdx]!;
-                const childProb = this.probBuffer[childDataId]!;
+            const firstChildIdx = (idx << 2) + 1;
+            const lastChildIdx = firstChildIdx + 4;
+
+            for (let i = firstChildIdx; i < lastChildIdx && i < this._size; i++) {
+                const childDataId = this.heap[i]!;
+                const childProb = this.nodeBuffer[(childDataId << 2) + 1]!;
                 if (childProb > maxProb) {
                     maxProb = childProb;
-                    swapIdx = leftChildIdx;
-                }
-            }
-
-            if (rightChildIdx < this._size) {
-                const childDataId = this.heap[rightChildIdx]!;
-                const childProb = this.probBuffer[childDataId]!;
-                if (childProb > maxProb) {
-                    swapIdx = rightChildIdx;
+                    swapIdx = i;
                 }
             }
 
@@ -179,29 +253,28 @@ export class SearchHeap {
 
             const swapDataId = this.heap[swapIdx]!;
             this.heap[idx] = swapDataId;
-            this.indexMap.set(this.metaBuffer[swapDataId]!, idx);
-
+            const swapHashIdx = this.nodeBuffer32[(swapDataId << 3) + 6]!;
+            this.hashValues[swapHashIdx] = idx;
             idx = swapIdx;
         }
 
         this.heap[idx] = dataId;
-        this.indexMap.set(this.metaBuffer[dataId]!, idx);
+        const currentHashIdx = this.nodeBuffer32[(dataId << 3) + 6]!;
+        this.hashValues[currentHashIdx] = idx;
     }
 
     private grow(): void {
-        const newCapacity = this.capacity * 2;
+        const oldCapacity = this.capacity;
+        const newCapacity = oldCapacity * 2;
+        this.capacity = newCapacity;
 
-        const newProb = new BigUint64Array(newCapacity);
-        newProb.set(this.probBuffer);
-        this.probBuffer = newProb;
+        const oldBuffer = this.nodeBuffer.buffer;
+        const newBuffer = new ArrayBuffer(newCapacity * SearchHeap.STRIDE * 8);
+        new BigUint64Array(newBuffer).set(new BigUint64Array(oldBuffer));
 
-        const newCombo = new Float64Array(newCapacity);
-        newCombo.set(this.comboBuffer);
-        this.comboBuffer = newCombo;
-
-        const newMeta = new BigUint64Array(newCapacity);
-        newMeta.set(this.metaBuffer);
-        this.metaBuffer = newMeta;
+        this.nodeBuffer = new BigUint64Array(newBuffer);
+        this.nodeBuffer32 = new Uint32Array(newBuffer);
+        this.comboView = new Float64Array(newBuffer);
 
         const newHeap = new Uint32Array(newCapacity);
         newHeap.set(this.heap);
@@ -211,7 +284,23 @@ export class SearchHeap {
         newFree.set(this.freeIds);
         this.freeIds = newFree;
 
-        this.capacity = newCapacity;
+        // Rehash
+        const newHashCap = this.hashKeys.length * 2;
+        this.hashMask = newHashCap - 1;
+        const oldValues = this.hashValues;
+
+        this.hashKeys = new BigUint64Array(newHashCap);
+        this.hashValues = new Int32Array(newHashCap).fill(-1);
+
+        for (let i = 0; i < oldValues.length; i++) {
+            if (oldValues[i]! >= 0) {
+                const heapIdx = oldValues[i]!;
+                const dataId = this.heap[heapIdx]!;
+                const meta = this.nodeBuffer[dataId << 2]!;
+                const newHashIdx = this.hashSet(meta, heapIdx);
+                this.nodeBuffer32[(dataId << 3) + 6] = newHashIdx;
+            }
+        }
     }
 
     /**
@@ -219,15 +308,24 @@ export class SearchHeap {
      */
     public clone(): SearchHeap {
         const other = new SearchHeap(this.capacity);
-        other.probBuffer.set(this.probBuffer);
-        other.metaBuffer.set(this.metaBuffer);
-        other.comboBuffer.set(this.comboBuffer);
+        this.copyTo(other);
+        return other;
+    }
+
+    public copyTo(other: SearchHeap): void {
+        if (other.capacity !== this.capacity || other.hashKeys.length !== this.hashKeys.length) {
+            other.reinitializeStorage(this.capacity, this.hashKeys.length);
+        }
+
+        other.nodeBuffer.set(this.nodeBuffer);
         other.heap.set(this.heap);
         other.freeIds.set(this.freeIds);
         other.freeCount = this.freeCount;
         other._size = this._size;
         other._nextId = this._nextId;
-        other.indexMap = new Map(this.indexMap);
-        return other;
+        other.capacity = this.capacity;
+        other.hashMask = this.hashMask;
+        other.hashKeys.set(this.hashKeys);
+        other.hashValues.set(this.hashValues);
     }
 }

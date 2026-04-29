@@ -145,7 +145,7 @@ export class SearchManager {
             }
 
             // Standard expansion path
-            const resolvedSub = this.processExpansionStep(probStop, probForward, remStop, scaleLoss, currentBitset, blueprint, ctx, depth, stack, searchProcessor);
+            const resolvedSub = this.processExpansionStep(probStop, probForward, remStop, scaleLoss, currentBitset, blueprint, ctx, depth, stack);
             totalResolvedFromTrees += resolvedSub;
         }
 
@@ -204,8 +204,7 @@ export class SearchManager {
         blueprint: ExpansionBlueprint,
         ctx: ForwardingContext,
         depth: number,
-        stack: Array<{ mass: bigint, meta: bigint, combo: PackedCombo, depth: number }>,
-        searchProcessor: any
+        stack: Array<{ mass: bigint, meta: bigint, combo: PackedCombo, depth: number }>
     ): bigint {
         const { registry, instrumentation, queue } = ctx;
 

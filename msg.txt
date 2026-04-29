@@ -1,12 +1,11 @@
-﻿## v4.1.0
+﻿## v4.2.0
 
 ### Improved
-- **Reliable Timing**: Implemented a more accurate system for tracking calculation time that provides precise metrics without slowing down the engine during deep searches.
-- **Engine Standardization**: Cleaned up internal "magic numbers" and centralized all engine rules and limits to ensure consistent behavior across all supported Minecraft versions.
-- **Concurrent Search Safety**: Implemented better internal data handling to ensure that overlapping searches can execute without interfering with each other.
+- **Heap Performance**: Reworked the frontier queue around an optimized 4-ary `SearchHeap` with lower-overhead metadata tracking and faster lookup behavior, substantially improving heavy searches while keeping result output stable.
+- **Probability Accounting Efficiency**: Replaced `MassAccountant`'s internal record storage with a TypedArray-backed layout to reduce overhead without changing reported search totals.
+- **Developer Tooling**: Aligned the benchmark, CPU profiling, profile-comparison, and lint script surface with the intended 4.2 developer workflow.
 
-### Fixed
-- **Accuracy Regressions**: Resolved several small bit-level discrepancies introduced during the recent modernization.
-- **Stability**: Fixed potential runtime crashes related to numerical conversions in the search expansion path.
-
+### Added
+- **SearchHeap Regression Coverage**: Added a dedicated regression suite for heap behavior so the queue rewrite stays protected by targeted tests.
+- **Performance Comparison Helper**: Added a profile-comparison script for comparing CPU captures from different optimization passes.
 
