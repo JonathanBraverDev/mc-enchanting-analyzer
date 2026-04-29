@@ -97,7 +97,14 @@
             </div>
 
             <div class="card">
-                <h2 style="font-size: 1.1rem; margin-bottom: 20px;">Top Combinations</h2>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h2 style="font-size: 1.1rem; margin: 0;">Top Combinations</h2>
+                    <select id="combo-sort" style="width: auto; padding-right: 35px; font-size: 0.75rem;">
+                        <option value="prob">Highest Probability</option>
+                        <option value="count">Most Enchantments</option>
+                        <option value="rank">Highest Total Rank</option>
+                    </select>
+                </div>
                 <div id="combo-list" class="combo-list">
                     <!-- combos injected here -->
                 </div>

@@ -1,8 +1,9 @@
-﻿## v1.3.0
+﻿## v2.0.0
 
-### Improved Accuracy & Stability
-- **Locked results**: Guaranteed enchantments now show a solid 100% on all charts, even during long calculations.
-- **Performance boosts**: Added advanced memory management to keep the app fast during deep book searches.
-- **Reliable builds**: Improved internal build scripts and testing for a smoother developer experience.
-- **UI Stabilization**: Resolved an issue where results would flicker or disappear during long calculations.
+### The "Divide & Conquer" Update
+- **Complete Restructure**: The entire project has been internally reorganized to make future work easier.
+- **Improved Book Accuracy**: Improved the engine to provide more precise results for books rolling multiple enchants.
+- **Expanded Test Suite**: Added comprehensive unit and performance tests to ensure long-term stability.
+- **Prettified README**: Finally fixed the README screenshot link to point at the correct location and took a better one.
+- **Changed CHANGELOG**: All entries now use the `vX.X.X (YYYY-MM-DD)` format.
 
