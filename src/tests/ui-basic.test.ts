@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { UI_TEXTS, UI_DEFAULTS } from '../core/config.js';
-import { UITestUtils } from './test-utils.js';
+import { UITestUtils, UI_TIMEOUT } from './test-utils.js';
 
 test.describe('Basic UI Functionality', () => {
     // Run these sequentially for a stable baseline
@@ -19,16 +19,15 @@ test.describe('Basic UI Functionality', () => {
     test('should update calculations when item category changes', async ({ page }) => {
         const catSelect = page.locator('#cat-select');
         const comboList = page.locator('#combo-list');
+        const status = page.locator('#refinement-status');
 
+        // Default is pickaxe — wait for full completion so worker is idle
+        await expect(status).toHaveText(UI_TEXTS.STATUS_COMPLETE, { timeout: UI_TIMEOUT });
+
+        // Switch to sword and verify sword-specific enchantments
         await catSelect.selectOption('sword');
-        await UITestUtils.waitForResults(page);
-        
-        await catSelect.selectOption('pickaxe');
-        await expect(comboList).toContainText('Efficiency', { timeout: 15000 });
-        await expect(comboList).not.toContainText('Sharpness', { timeout: 15000 });
-        
-        const text = await comboList.innerText();
-        expect(text).toContain('Efficiency');
+        await expect(comboList).toContainText('Sharpness', { timeout: UI_TIMEOUT });
+        await expect(comboList).not.toContainText('Efficiency', { timeout: UI_TIMEOUT });
     });
 
     test('should update calculations when level slider changes', async ({ page }) => {

@@ -1,4 +1,4 @@
-import { BinaryHeap, PRECISION, ProbUtils, ComboUtils, LRUCache } from '../utils/index.js';
+import { BinaryHeap, PRECISION, ProbUtils, ComboUtils, LRUCache, AsyncUtils } from '../utils/index.js';
 import { getEligiblePool } from '../core/registry.js';
 import { ENGINE_DEFAULTS } from '../core/config.js';
 import { PackedNode, PackedCombo, PackedEnchant, SearchFrontier, RegistryState } from '../types/index.js';
@@ -17,7 +17,7 @@ export class SearchService {
     /**
      * Iteratively calculates enchantment combinations using a Best-First approach.
      */
-    public static calculateCombinations(
+    public static async calculateCombinations(
         registry: RegistryState,
         cat: string,
         modLevel: number,
@@ -27,8 +27,9 @@ export class SearchService {
         limit: number,
         existingFrontier?: SearchFrontier,
         resultsLimit: number = ENGINE_DEFAULTS.MAX_RESULTS_SIZE,
-        poolCache?: LRUCache<string, PackedEnchant[]>
-    ): SearchFrontier {
+        poolCache?: LRUCache<string, PackedEnchant[]>,
+        signal?: AbortSignal
+    ): Promise<SearchFrontier> {
         const frontier = FrontierFactory.create(registry, cat, modLevel, guaranteedFirst, existingFrontier, threshold);
         let { results, cumulativeAccountedMass, prunedMass, roundingError, queue } = frontier;
 
@@ -66,6 +67,11 @@ export class SearchService {
             // cause tier-1 to process items right at the prune boundary, immediately prune
             // their forward branches, and leave tier-2 with nothing useful to refine.
             if (next.prob < threshold / 10n) break;
+
+            if (iterations % 1000 === 0) {
+                await AsyncUtils.yield();
+                if (signal?.aborted) break;
+            }
 
             iterations++;
             const current = queue.pop()!;

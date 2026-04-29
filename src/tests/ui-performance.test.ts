@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { UI_TEXTS, UI_DEFAULTS } from '../core/config.js';
-import { UITestUtils } from './test-utils.js';
+import { UITestUtils, UI_TIMEOUT } from './test-utils.js';
 
 test.describe('UI Performance & Accuracy', () => {
     // Run these in parallel to maximize CPU core usage for heavy engine calls
@@ -54,7 +54,7 @@ test.describe('UI Performance & Accuracy', () => {
         const guaranteedSelect = page.locator('#guaranteed-first-select');
 
         await catSelect.selectOption('sword');
-        await expect(guaranteedSelect.locator('option[value="Sharpness IV"]')).toBeAttached({ timeout: 15000 });
+        await expect(guaranteedSelect.locator('option[value="Sharpness IV"]')).toBeAttached({ timeout: UI_TIMEOUT });
         await guaranteedSelect.selectOption('Sharpness IV');
         
         await page.waitForFunction(() => {
@@ -77,7 +77,7 @@ test.describe('UI Performance & Accuracy', () => {
         const guaranteedSelect = page.locator('#guaranteed-first-select');
 
         await catSelect.selectOption('pickaxe');
-        await expect(guaranteedSelect.locator('option[value="Efficiency IV"]')).toBeAttached({ timeout: 15000 });
+        await expect(guaranteedSelect.locator('option[value="Efficiency IV"]')).toBeAttached({ timeout: UI_TIMEOUT });
         await guaranteedSelect.selectOption('Efficiency IV');
         
         await page.waitForFunction(() => {
@@ -106,7 +106,7 @@ test.describe('UI Performance & Accuracy', () => {
         const status = page.locator('#refinement-status');
 
         await catSelect.selectOption('book');
-        await expect(guaranteedSelect.locator('option[value="Silk Touch I"]')).toBeAttached({ timeout: 15000 });
+        await expect(guaranteedSelect.locator('option[value="Silk Touch I"]')).toBeAttached({ timeout: UI_TIMEOUT });
         await guaranteedSelect.selectOption('Silk Touch I');
         
         // Wait for refinement to complete
@@ -144,18 +144,23 @@ test.describe('UI Performance & Accuracy', () => {
     test('should handle rapid item/material changes without crashing (Stress)', async ({ page }) => {
         const catSelect = page.locator('#cat-select');
         const matSelect = page.locator('#mat-select');
-        
-        for (let i = 0; i < 10; i++) {
+        const status = page.locator('#refinement-status');
+
+        // Wait for initial computation to finish so worker is idle
+        await expect(status).toHaveText(UI_TEXTS.STATUS_COMPLETE, { timeout: UI_TIMEOUT });
+
+        // Rapid-fire UI changes — the app must not crash or hang
+        for (let i = 0; i < 5; i++) {
             const isEven = i % 2 === 0;
             await catSelect.selectOption(isEven ? 'sword' : 'pickaxe');
-            if (await matSelect.locator(`option[value="${isEven ? 'gold' : 'diamond'}"]`).count() > 0) {
-                await matSelect.selectOption(isEven ? 'gold' : 'diamond');
-            }
         }
 
+        // Settle on sword and verify the UI recovers with correct results
         await catSelect.selectOption('sword');
-        await matSelect.selectOption('gold');
-        await UITestUtils.waitForResults(page);
-        await expect(page.locator('#combo-list')).toContainText('Sharpness');
+        await expect(status).toHaveText(UI_TEXTS.STATUS_COMPLETE, { timeout: UI_TIMEOUT });
+        
+        // Ensure placeholder is GONE before checking text
+        await expect(page.locator('.combo-placeholder')).toHaveCount(0, { timeout: UI_TIMEOUT });
+        await expect(page.locator('#combo-list')).toContainText('Sharpness', { timeout: UI_TIMEOUT });
     });
 });

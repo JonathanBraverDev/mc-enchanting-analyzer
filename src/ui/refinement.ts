@@ -69,25 +69,32 @@ export class RefinementService {
         let tierIndex = 0;
         let converged = false;
 
-        await WorkerClient.request(
+        const finalVal = await WorkerClient.request(
             'getFullStatsProgressive',
             { ...basePayload, source: 'main', tiers },
             (partial) => {
                 if (currentId !== this.activeId || converged) return;
-                converged = (partial.stats?.uncertainty ?? 1) < 1e-9;
+                const hasResults = (partial.stats?.combos && Object.keys(partial.stats.combos).length > 0);
+                const isZero = (partial.stats?.uncertainty ?? 1) === 0;
+                converged = (partial.stats?.uncertainty ?? 1) < 1e-9 && (hasResults || tierIndex > 0 || isZero);
                 const isFinal = tierIndex === tiers.length - 1 || converged;
                 callbacks.onStats(partial.stats, isFinal);
+                
                 const level = levels[tierIndex];
+                if (level) {
+                   callbacks.onStatus(getParamsForMode(level, isBook).status, level);
+                }
+                
                 this.refreshChart(basePayload, getParamsForMode(level, isBook).threshold, registry, currentId, callbacks);
                 tierIndex++;
-                if (!converged && tierIndex < levels.length) {
-                    callbacks.onStatus(getParamsForMode(levels[tierIndex], isBook).status, levels[tierIndex]);
-                }
             },
             'main'
         );
 
         if (currentId !== this.activeId) return;
+
+        // Final catch-up update to ensure the UI settles on the most precise result
+        callbacks.onStats(finalVal.stats, true);
 
         callbacks.onStatus(UI_TEXTS.STATUS_COMPLETE, "done");
     }

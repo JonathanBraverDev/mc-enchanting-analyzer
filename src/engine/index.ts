@@ -98,7 +98,7 @@ export class EnchantEngine {
     /**
      * Iteratively calculates enchantment combinations using a Best-First approach.
      */
-    public calculateCombinations(
+    public async calculateCombinations(
         cat: string,
         modLevel: number,
         mat: string,
@@ -106,7 +106,7 @@ export class EnchantEngine {
         threshold: bigint = ProbUtils.toBigInt(0.0001),
         maxIterations?: number,
         resultsLimit: number = ENGINE_DEFAULTS.MAX_RESULTS_SIZE
-    ): SearchFrontier {
+    ): Promise<SearchFrontier> {
         const limit = getSearchLimit(cat, ProbUtils.toNumber(threshold), maxIterations);
         const cacheKey = this.getPackedKey(cat, modLevel, mat, guaranteedFirst);
         const activeCache = cat === "book" ? this.bookComboCache : this.comboCache;
@@ -114,7 +114,7 @@ export class EnchantEngine {
         const cached = activeCache.get(cacheKey);
         if (cached && cached.threshold <= threshold) return cached;
 
-        const result = SearchService.calculateCombinations(
+        const result = await SearchService.calculateCombinations(
             this.registry, cat, modLevel, mat, guaranteedFirst, threshold, limit, cached, resultsLimit, this.poolCache
         );
 
