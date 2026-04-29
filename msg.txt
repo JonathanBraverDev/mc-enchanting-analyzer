@@ -1,5 +1,5 @@
-﻿## v1.1.1
+﻿## v1.1.2
 
-### Fixed
-- **Visual Chart Glitch**: Resolved an issue where chart lines would momentarily dip to zero during high-accuracy progressive refinement.
+### Changed
+- **Build Hygiene**: Added a `clean` script to safely remove the `dist` directory and updated the test workflow to ensure a clean state before building and testing.
 
