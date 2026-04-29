@@ -2,6 +2,19 @@
 
 Thank you for your interest in contributing! This document provides guidelines for development, testing, and performance profiling.
 
+## Workflow & Branching Strategy
+
+We follow a specialized workflow to ensure a clean production history while maintaining granular development context.
+
+1.  **Development (`dev`)**: All active development happens here or on feature branches merged into `dev`.
+    *   Every PR to `dev` must pass the full test suite and security scan.
+2.  **Releases (`release/vX.Y.Z`)**: When preparing for a release, create a branch from `dev`.
+    *   Update the `CHANGELOG.md` on this branch.
+    *   PR the release branch into `main`.
+3.  **Production (`main`)**: This branch contains ONLY milestone commits.
+    *   Releases are merged into `main` using **Squash and Merge**.
+    *   Upon merge, `main` is automatically rebased back into `dev` to keep them synchronized.
+
 ## Development Principles
 
 1.  **Strict Mass Conservation**: Every probability mass must be accounted for. Use `ProbabilityMassBookkeeper` for all search logic.
