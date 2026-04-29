@@ -1,5 +1,8 @@
-﻿## v2.1.0
+﻿## v2.2.0
+
+### Added
+- **Book Mechanics Test Suite**: A dedicated regression suite for Minecraft book enchantment rules across versions.
 
 ### Fixed
-- **UI chart freeze**: Resolved an issue from v2.0.0 where the chart would only update at the end of the highest precision calculation, making it painfully slow to see results for books.
+- **Multi-Enchant Book Rework**: Re-architected the book generation logic to handle true random removal. This matches the behavior of official Minecraft mechanics and significantly improves accuracy for high-level book results.
 

@@ -60,19 +60,27 @@ export class ComboUtils {
     }
 
     /**
-     * For books: returns all possible combinations after removing one "additional" enchantment.
-     * The first enchantment (initial) is preserved.
+     * For books: returns all possible combinations after removing one "selected at random" enchantment.
+     * Based on Minecraft Wiki: "If multiple enchantments were generated, then one selected at random is removed."
      */
     static removeAdditional(packed: PackedCombo, guaranteedFirstId: number | null = null): PackedCombo[] {
         const enchants = this.unpack(packed);
         if (enchants.length <= 1) return [packed];
         
-        const results: PackedCombo[] = [];
-        // Remove exactly one enchantment from the pool of "additional" ones (index 1 to N-1)
-        for (let i = 1; i < enchants.length; i++) {
+        const possibleResults: PackedCombo[] = [];
+        // Generate all possible N combinations of size N-1 by removing one at random
+        for (let i = 0; i < enchants.length; i++) {
             const filtered = [...enchants.slice(0, i), ...enchants.slice(i + 1)];
-            results.push(this.pack(filtered, guaranteedFirstId));
+            possibleResults.push(this.pack(filtered, guaranteedFirstId));
         }
-        return results;
+        
+        if (guaranteedFirstId !== null) {
+            // Player Perspective: If a player SEES an enchantment in the tooltip, 
+            // then by definition that enchantment was NOT the one removed.
+            // We filter the results to only those that still contain the tooltip enchantment.
+            return possibleResults.filter(r => this.unpack(r).some(e => (e >> 8) === guaranteedFirstId));
+        }
+        
+        return possibleResults;
     }
 }

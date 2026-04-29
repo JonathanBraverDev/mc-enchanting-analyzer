@@ -134,17 +134,30 @@ export class SearchService {
         let remStop = 0n;
         if (cat === "book" && currentCount > 1) {
             const redistributed = ComboUtils.removeAdditional(current.packedChosen, guaranteedFirstId);
-            remStop = probStop % BigInt(redistributed.length);
-            const pChunk = probStop / BigInt(redistributed.length);
+            const nOutcomes = BigInt(redistributed.length);
+            remStop = probStop % nOutcomes;
+            const pChunk = probStop / nOutcomes;
+            
             for (const r of redistributed) {
                 results.set(r, (results.get(r) || 0n) + pChunk);
             }
-            const enchants = ComboUtils.unpack(current.packedChosen);
-            for (let i = 1; i < enchants.length; i++) {
-                const id = enchants[i] >> 8;
-                anyMass.set(id, (anyMass.get(id) || 0n) - (pChunk + remStop));
-                rankMass.set(enchants[i], (rankMass.get(enchants[i]) || 0n) - (pChunk + remStop));
+
+            // Correctly attribute mass based on survival across all outcomes
+            const originalEnchants = ComboUtils.unpack(current.packedChosen);
+            
+            for (const e of originalEnchants) {
+                const id = e >> 8;
+                // Count how many of the redistributed results still contain this enchantment
+                const nOccurrences = redistributed.filter(r => ComboUtils.unpack(r).some(re => re === e)).length;
+                const survivorMass = (BigInt(nOccurrences) * probStop) / nOutcomes;
+                const loss = probStop - survivorMass;
+                
+                if (loss > 0n) {
+                    anyMass.set(id, (anyMass.get(id) || 0n) - loss);
+                    rankMass.set(e, (rankMass.get(e) || 0n) - loss);
+                }
             }
+            
             countMass.set(currentCount - 1, (countMass.get(currentCount - 1) || 0n) + (probStop - remStop));
         } else {
             results.set(current.packedChosen, (results.get(current.packedChosen) || 0n) + probStop);
