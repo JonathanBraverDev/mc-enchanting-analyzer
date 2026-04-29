@@ -2,8 +2,7 @@ import { test, describe, it } from 'node:test';
 import assert from 'node:assert';
 import { EnchantEngine } from './engine.js';
 import { DATA } from './data.js';
-import { ResultProcessor } from './utils.js';
-import { PRECISION, ProbUtils, ComboUtils } from './utils.js';
+import { ResultProcessor, ProbUtils } from './utils/index.js';
 import { SnapshotUtils } from './test-utils.js';
 
 // Polyfill for requestAnimationFrame in Node (Sync version for tests)
