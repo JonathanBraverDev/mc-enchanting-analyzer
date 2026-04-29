@@ -6,6 +6,7 @@ import { RegistryState } from '../types/index.js';
  * Service for calculating the probability distribution of Modified Levels.
  */
 export class DistributionService {
+    private static _splitsBuffer = new BigUint64Array(1024);
     /**
      * Calculates the probability distribution of Modified Levels.
      */
@@ -28,11 +29,11 @@ export class DistributionService {
         
         const baseWeights = this.getTriangularWeights(N);
         const totalBaseWeight = BigInt(N * N);
-        const { parts: baseParts, remainder: baseRemainder } = ProbUtils.distributeDetailed(PRECISION, baseWeights, totalBaseWeight);
+        const baseRemainder = ProbUtils.distributeDetailed(PRECISION, baseWeights, totalBaseWeight, DistributionService._splitsBuffer);
         
         const baseDistMap = new Map<number, bigint>();
         for (let i = 0; i < baseValues.length; i++) {
-            baseDistMap.set(baseValues[i], baseParts[i]);
+            baseDistMap.set(baseValues[i], DistributionService._splitsBuffer[i]);
         }
         // Attribute sub-atomic remainder of distribution to the most probable (peak) level
         const peakLevel = xp + N;
@@ -48,12 +49,12 @@ export class DistributionService {
         const unitStep = halfRange / (steps - 1);
 
         for (const [base, bProb] of baseDistMap.entries()) {
-            const { parts: modParts, remainder: modRemainder } = ProbUtils.distributeDetailed(bProb, triWeights, totalTriWeight);
+            const modRemainder = ProbUtils.distributeDetailed(bProb, triWeights, totalTriWeight, DistributionService._splitsBuffer);
             
-            for (let k = 0; k < modParts.length; k++) {
+            for (let k = 0; k < triWeights.length; k++) {
                 const bonus = (k * unitStep) - halfRange;
                 const modVal = Math.max(1, ProbUtils.mcRound(base * (1 + bonus)));
-                finalDist[modVal] = (finalDist[modVal] || 0n) + modParts[k];
+                finalDist[modVal] = (finalDist[modVal] || 0n) + DistributionService._splitsBuffer[k];
             }
             // Attribute remainder of this sub-distribution to the central (unmodified) peak
             const centralModVal = Math.max(1, ProbUtils.mcRound(base));

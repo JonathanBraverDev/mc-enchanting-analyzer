@@ -1,7 +1,9 @@
+import { SearchHeap } from '../utils/collections/SearchHeap.js';
 import { BinaryHeap, PRECISION, ComboUtils, EnchantUtils } from '../utils/index.js';
 import { ENGINE_DEFAULTS } from '../core/config.js';
 import { getEnchantId } from '../core/registry.js';
 import { PackedNode, PackedCombo, SearchFrontier, RegistryState } from '../types/index.js';
+import { ResidualMassHarvester } from './ResidualMassHarvester.js';
 
 export class FrontierFactory {
     /**
@@ -23,10 +25,10 @@ export class FrontierFactory {
         }
 
         const results = new Map<PackedCombo, bigint>();
-        const queue = new BinaryHeap<PackedNode>((item) => item.meta);
-        const anyMass = new Map<number, bigint>();
-        const rankMass = new Map<number, bigint>();
-        const countMass = new Map<number, bigint>();
+        const queue = new SearchHeap();
+        const anyMass = new BigUint64Array(256);
+        const rankMass = new BigUint64Array(16384);
+        const countMass = new BigUint64Array(16);
 
         const romanMap = registry.data.constants.ROMAN_MAP;
         const parsed = EnchantUtils.parse(guaranteedFirst, romanMap);
@@ -40,15 +42,11 @@ export class FrontierFactory {
         const initialBitset = hasGuaranteed ? (1n << BigInt(guaranteedId)) : 0n;
 
         if (full !== null && hasGuaranteed) {
-            anyMass.set(guaranteedId, PRECISION);
-            rankMass.set(full, PRECISION);
+            anyMass[guaranteedId] = PRECISION;
+            rankMass[full] = PRECISION;
         }
 
-        queue.push({
-            packedChosen: initialPacked,
-            meta: (initialBitset << 8n) | BigInt(modLevel),
-            prob: PRECISION
-        });
+        queue.pushOrMerge((initialBitset << 8n) | BigInt(modLevel), PRECISION, modLevel, initialPacked);
 
         return {
             queue, results, anyMass, rankMass, countMass,
@@ -58,11 +56,14 @@ export class FrontierFactory {
                 sieved: 0n, 
                 overflow: 0n,
                 capped: 0n,
-                rounding: 0n 
+                rounding: 0n,
+                recoveredRounding: 0n,
+                recoveredSieved: 0n
             },
             threshold,
             iterations: 0,
             nodesProcessed: 0,
+            harvester: new ResidualMassHarvester(),
             checkpoints: []
         };
     }

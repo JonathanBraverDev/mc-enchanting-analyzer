@@ -49,11 +49,23 @@
   },
   "accuracy": 1,
   "accounting": {
-    "resolved": 0.9999999999999939,
+    "resolved": 1,
     "pending": 0,
-    "sieved": 6.938893903907228e-18,
+    "sieved": 0,
     "overflow": 0,
     "capped": 0,
-    "rounding": 6.050715484207103e-15
+    "rounding": 6.938893903907228e-18,
+    "recoveredRounding": 1.3010426069826053e-17,
+    "recoveredSieved": 0,
+    "units": {
+      "resolved": "1152921504606846968",
+      "pending": "0",
+      "sieved": "0",
+      "overflow": "0",
+      "capped": "0",
+      "rounding": "8",
+      "recoveredRounding": "15",
+      "recoveredSieved": "0"
+    }
   }
 }

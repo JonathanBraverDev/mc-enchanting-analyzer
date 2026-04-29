@@ -127,7 +127,10 @@ describe('SummaryService', () => {
 describe('SerializationService', () => {
     const makeStats = (overrides: Partial<CalculationStats> = {}): CalculationStats => {
         const accuracy = overrides.accuracy ?? 1.0;
-        const accounting = overrides.accounting ?? { resolved: accuracy, pending: 0, sieved: 0, overflow: 0, capped: 0, rounding: 0 };
+        const accounting = overrides.accounting ?? { 
+            resolved: accuracy, pending: 0, sieved: 0, overflow: 0, 
+            capped: 0, rounding: 0, recoveredRounding: 0, recoveredSieved: 0 
+        };
         return {
             ranks: {}, any: {}, count: {}, combos: {}, 
             accuracy, accounting,
@@ -136,7 +139,7 @@ describe('SerializationService', () => {
     };
 
     it('roundtrip preserves accuracy and accounting fields', () => {
-        const acc: MassAccounting = { resolved: 0.5, pending: 0.1, sieved: 0.2, overflow: 0.1, capped: 0, rounding: 0.1 };
+        const acc: MassAccounting = { resolved: 0.5, pending: 0.1, sieved: 0.2, overflow: 0.1, capped: 0, rounding: 0.1, recoveredRounding: 0, recoveredSieved: 0 };
         const stats = makeStats({ accuracy: 0.5, accounting: acc });
         const { compact } = SerializationService.serialize(stats);
         const recovered = SerializationService.deserialize(compact);
@@ -215,7 +218,7 @@ describe('HumanizationService', () => {
 
     it('resolves enchantment names in the any map', () => {
         const effId = reg.idMap.get('Efficiency')!;
-        const acc: MassAccounting = { resolved: 0.85, pending: 0.15, sieved: 0, overflow: 0, capped: 0, rounding: 0 };
+        const acc: MassAccounting = { resolved: 0.85, pending: 0.15, sieved: 0, overflow: 0, capped: 0, rounding: 0, recoveredRounding: 0, recoveredSieved: 0 };
         const rawStats: CalculationStats = {
             ranks: {}, any: { [effId]: 0.85 }, count: {}, combos: {}, 
             accuracy: 0.85, accounting: acc
@@ -228,7 +231,7 @@ describe('HumanizationService', () => {
     it('resolves full enchantment names (with rank) in the ranks map', () => {
         const effId   = reg.idMap.get('Efficiency')!;
         const idRank4 = (effId << 8) | 4; // Efficiency IV
-        const acc: MassAccounting = { resolved: 0.6, pending: 0.4, sieved: 0, overflow: 0, capped: 0, rounding: 0 };
+        const acc: MassAccounting = { resolved: 0.6, pending: 0.4, sieved: 0, overflow: 0, capped: 0, rounding: 0, recoveredRounding: 0, recoveredSieved: 0 };
         const rawStats: CalculationStats = {
             ranks: { [idRank4]: 0.6 }, any: {}, count: {}, combos: {},
             accuracy: 0.6, accounting: acc
@@ -239,7 +242,7 @@ describe('HumanizationService', () => {
     });
 
     it('passes through count, accuracy, and accounting data unchanged', () => {
-        const acc: MassAccounting = { resolved: 0.9, pending: 0.05, sieved: 0.05, overflow: 0, capped: 0, rounding: 0 };
+        const acc: MassAccounting = { resolved: 0.9, pending: 0.05, sieved: 0.05, overflow: 0, capped: 0, rounding: 0, recoveredRounding: 0, recoveredSieved: 0 };
         const rawStats: CalculationStats = {
             ranks: {}, any: {}, count: { 1: 0.6, 2: 0.3 }, combos: {},
             accuracy: 0.9, accounting: acc

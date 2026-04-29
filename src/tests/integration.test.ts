@@ -26,7 +26,9 @@ function makeStats(accuracy: number, pending: number = 1 - accuracy): any {
         sieved: 0, 
         overflow: 0, 
         capped: 0,
-        rounding: 0 
+        rounding: 0,
+        recoveredRounding: 0,
+        recoveredSieved: 0
     };
     return { 
         accuracy, 

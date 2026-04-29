@@ -1,9 +1,8 @@
-﻿## v3.1.0
+﻿## v3.2.0
 
 ### Improved
-- **Computation Speed**: Re-engineered the core search algorithms to be significantly faster, especially when dealing with complex items like multi-enchantment books.
-- **Enhanced Accuracy**: Upgraded the internal math engine to use higher precision, ensuring calculated probabilities are even more reliable for rare enchantment combinations.
-- **Book Logic**: Refined the rules for how multiple enchantments are distributed on books to better match the official mechanics of newer Minecraft versions.
-- **Background Stability**: Added internal performance monitoring to ensure the app stays responsive even during the most demanding calculations.
+- **Accuracy for Rare Results**: Implemented a "Mass Forwarding" system to prevent tiny probabilities from being accidentally discarded during deep calculations. This ensures that rare enchantment combinations and high-enchantment items are represented with near-perfect accuracy, even when they occupy a tiny fraction of the total results.
+- **Reliable Deep Searches**: Optimized the engine to handle the accumulation of tiny values across complex searches (up to 6 concurrent enchantments), eliminating "rounding errors" that could previously occur at extreme search depths.
+- **Honest Confidence Metrics**: Refined the way the app reports search progress, providing a more transparent view of exactly how much of the total probability space has been successfully analyzed.
 
- 
+

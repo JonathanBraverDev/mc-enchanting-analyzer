@@ -1,5 +1,5 @@
 import { Enchantment, EnchantmentData } from './domain.js';
-import { BinaryHeap } from '../utils/collections/BinaryHeap.js';
+import { SearchHeap } from '../utils/collections/SearchHeap.js';
 import { LRUCache } from '../utils/collections/LRUCache.js';
 
 import { MassAccounting, MassBookkeeping } from './mass.js';
@@ -19,6 +19,7 @@ export interface CalculationStats {
   accounting: MassAccounting;
   
   instrumentation?: EngineInstrumentation;
+  timing?: SearchTiming;
 }
 
 export interface CacheStats {
@@ -43,6 +44,15 @@ export interface CheckpointSummary {
   worstCaseIterations: number;
   /** The modified level that was the bottleneck */
   bottleneckLevel: number;
+}
+
+export interface SearchTiming {
+  totalMs: number;
+  searchMs: number;
+  filteringMs: number;
+  distributionMs: number;
+  settlingMs: number;
+  heapMs: number;
 }
 
 export type EngineExitReason = 'threshold' | 'iterations' | 'mass' | 'aborted' | 'empty' | 'exhausted';
@@ -107,18 +117,78 @@ export interface PackedNode {
 }
 
 /**
+ * Blueprint caching for already-expanded nodes.
+ */
+export interface ExpansionBlueprint {
+    probContinue: bigint;
+    totalWeight: number;
+    eligibleCount: number;
+    eligibleEnchants: Int32Array;
+    eligibleWeights: Int32Array;
+    nextLevel: number;
+    currentCount: number;
+    currentCombo: number;
+    currentEnchants: PackedEnchant[];
+    /** Rounding residue accumulated from previous arrivals at this node. */
+    residue: bigint;
+}
+
+/**
+ * Shared context for mass distribution and forwarding operations.
+ * Bundles search state to reduce parameter ceremony.
+ */
+export interface ForwardingContext {
+    registry: RegistryState;
+    harvester: IResidualMassHarvester;
+    results: Map<PackedCombo, bigint>;
+    queue: SearchHeap;
+    anyMass: BigUint64Array;
+    rankMass: BigUint64Array;
+    countMass: BigUint64Array;
+    resultsLimit: number;
+    accountant: any; // Typed as any to avoid circular dependency with MassAccountant
+    instrumentation?: EngineInstrumentation;
+    timing?: SearchTiming;
+    
+    // Search-global parameters
+    cat: string;
+    guaranteedFirstId: number | null;
+    pool: PackedEnchant[];
+    poolWeights: number[];
+    initialTotalWeight: number;
+}
+
+/**
+ * Interface for the Residual Mass Harvester which handles high-speed forwarding
+ * of probability mass for already-expanded nodes.
+ */
+export interface IResidualMassHarvester {
+    registerExpansion(key: bigint, blueprint: ExpansionBlueprint): void;
+    has(key: bigint): boolean;
+    getCacheSize(): number;
+    forwardMass(
+        incomingMass: bigint,
+        meta: bigint,
+        combo: number,
+        ctx: ForwardingContext
+    ): bigint;
+    clone(): IResidualMassHarvester;
+}
+
+/**
  * State of a search for enchantment combinations.
  */
 export interface SearchFrontier {
-    queue: BinaryHeap<PackedNode>;
+    queue: SearchHeap;
     results: Map<PackedCombo, bigint>;
-    anyMass: Map<number, bigint>;
-    rankMass: Map<number, bigint>;
-    countMass: Map<number, bigint>;
+    anyMass: BigUint64Array;
+    rankMass: BigUint64Array;
+    countMass: BigUint64Array;
     mass: MassBookkeeping;
     threshold: bigint;
     iterations: number;
     nodesProcessed: number;
+    harvester: IResidualMassHarvester;
     checkpoints: MassCheckpoint[];  // per-call output; not carried over on resume
     exitReason?: EngineExitReason;  // per-call output; not carried over on resume
 }
@@ -163,6 +233,7 @@ export interface SearchConfig {
     resultsLimit?: number;
     useCache?: boolean;
     instrumentation?: EngineInstrumentation;
+    timing?: SearchTiming;
 }
 
 /**
@@ -175,5 +246,6 @@ export interface InternalSearchConfig extends SearchConfig {
     distCache?: Map<string, { [level: number]: bigint }>;
     poolCache?: LRUCache<string, PackedEnchant[]>;
     instrumentation?: EngineInstrumentation;
+    timing?: SearchTiming;
     getCacheMetrics?: () => { cacheNodes: number; cacheResults: number };
 }
