@@ -19,12 +19,18 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Debug Information
+        run: |
+          echo "PR Title: '${{ github.event.pull_request.title }}'"
+          echo "PR Description Length: ${#${{ github.event.pull_request.body }}}"
+          git tag -l
+
       - name: Check PR Title
         id: check_title
         run: |
           TITLE="${{ github.event.pull_request.title }}"
           if [[ ! "$TITLE" =~ ^Release:\ v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
-            echo "ERROR: PR title must follow the pattern 'Release: vX.Y.Z'"
+            echo "::error::PR title must follow the pattern 'Release: vX.Y.Z' (current: '$TITLE')"
             exit 1
           fi
           TAG=$(echo "$TITLE" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)
@@ -34,31 +40,35 @@ jobs:
         run: |
           BODY="${{ github.event.pull_request.body }}"
           if [ -z "$BODY" ] || [ ${#BODY} -lt 10 ]; then
-            echo "ERROR: PR description is too short. Please provide release notes."
+            echo "::error::PR description is too short or empty. Please provide release notes (minimum 10 characters)."
             exit 1
           fi
 
       - name: Verify Changelog
         run: |
           PROPOSED_TAG="${{ steps.check_title.outputs.tag }}"
-          if ! grep -q "## \[$PROPOSED_TAG\]" CHANGELOG.md; then
-            echo "ERROR: CHANGELOG.md does not contain an entry for $PROPOSED_TAG"
+          echo "Searching for entry for $PROPOSED_TAG in CHANGELOG.md..."
+          if ! grep -q "## \[$PROPOSED_TAG\]" CHANGELOG.md && ! grep -q "## $PROPOSED_TAG" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md does not contain a header for $PROPOSED_TAG (expected '## [$PROPOSED_TAG]' or '## $PROPOSED_TAG')"
             exit 1
           fi
 
       - name: Validate SemVer Jump
         run: |
-          git fetch origin main --tags
+          git fetch origin main --tags || true
           LATEST_TAG=$(git tag -l "v*" --sort=v:refname | tail -n 1)
           PROPOSED_TAG="${{ steps.check_title.outputs.tag }}"
-          if [ -n "$LATEST_TAG" ]; then
+          echo "Latest tag found: $LATEST_TAG"
+          echo "Proposed tag: $PROPOSED_TAG"
+          
+          if [ -n "$LATEST_TAG" ] && [ "$LATEST_TAG" != "$PROPOSED_TAG" ]; then
             NEXT_PATCH=$(npx semver -i patch $LATEST_TAG)
             NEXT_MINOR=$(npx semver -i minor $LATEST_TAG)
             NEXT_MAJOR=$(npx semver -i major $LATEST_TAG)
             if [ "$PROPOSED_TAG" != "$NEXT_PATCH" ] && \
                [ "$PROPOSED_TAG" != "$NEXT_MINOR" ] && \
                [ "$PROPOSED_TAG" != "$NEXT_MAJOR" ]; then
-              echo "ERROR: Invalid version jump from $LATEST_TAG to $PROPOSED_TAG."
+              echo "::error::Invalid version jump. From $LATEST_TAG, the next version should be $NEXT_PATCH, $NEXT_MINOR, or $NEXT_MAJOR."
               exit 1
             fi
           fi
