@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.3.0 (2026-03-22)
+
+### Improved Accuracy & Stability
+- **Locked results**: Guaranteed enchantments now show a solid 100% on all charts, even during long calculations.
+- **Performance boosts**: Added advanced memory management to keep the app fast during deep book searches.
+- **Reliable builds**: Improved internal build scripts and testing for a smoother developer experience.
+- **UI Stabilization**: Resolved an issue where results would flicker or disappear during long calculations.
+
 ## [1.2.0] - 2026-03-22
 
 ### Added

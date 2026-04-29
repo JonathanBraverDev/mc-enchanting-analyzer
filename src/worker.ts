@@ -10,6 +10,7 @@ self.onmessage = async (e: MessageEvent) => {
 
     try {
         if (type === 'init') {
+            if (engine) engine.destroy();
             engine = new EnchantEngine(DATA, payload.version);
             self.postMessage({ type: 'ready', id });
             return;

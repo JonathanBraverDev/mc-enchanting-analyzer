@@ -1,6 +1,8 @@
-﻿## v1.2.0
+﻿## v1.3.0
 
-### Added
-- **Greater Accuracy**: New probability tracking for partial search results.
-- **Deeper Analysis**: Support for up to 6 concurrent enchantments on a single item.
+### Improved Accuracy & Stability
+- **Locked results**: Guaranteed enchantments now show a solid 100% on all charts, even during long calculations.
+- **Performance boosts**: Added advanced memory management to keep the app fast during deep book searches.
+- **Reliable builds**: Improved internal build scripts and testing for a smoother developer experience.
+- **UI Stabilization**: Resolved an issue where results would flicker or disappear during long calculations.
 
