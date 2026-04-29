@@ -1,9 +1,7 @@
-﻿## v2.0.0
+﻿## v2.0.1
 
-### The "Divide & Conquer" Update
-- **Complete Restructure**: The entire project has been internally reorganized to make future work easier.
-- **Improved Book Accuracy**: Improved the engine to provide more precise results for books rolling multiple enchants.
-- **Expanded Test Suite**: Added comprehensive unit and performance tests to ensure long-term stability.
-- **Prettified README**: Finally fixed the README screenshot link to point at the correct location and took a better one.
-- **Changed CHANGELOG**: All entries now use the `vX.X.X (YYYY-MM-DD)` format.
+### Fixed
+- **Improved Confidence Tracking**: Fixed a bug causing Calculation Confidence to be calculated incorrectly.
+- **Chart Cleanup**: Removed the "Total Accounted" line that used to report the faulty data from the enchantment count view.
+
 
