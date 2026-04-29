@@ -22,8 +22,7 @@ jobs:
       - name: Debug Information
         run: |
           echo "PR Title: '${{ github.event.pull_request.title }}'"
-          echo "PR Description Length: ${#${{ github.event.pull_request.body }}}"
-          git tag -l
+          git tag -l "v[0-9]*"
 
       - name: Check PR Title
         id: check_title
@@ -56,9 +55,10 @@ jobs:
       - name: Validate SemVer Jump
         run: |
           git fetch origin main --tags || true
-          LATEST_TAG=$(git tag -l "v*" --sort=v:refname | tail -n 1)
+          # Only look for numeric tags starting with v (e.g. v4.2.1)
+          LATEST_TAG=$(git tag -l "v[0-9]*" --sort=v:refname | tail -n 1)
           PROPOSED_TAG="${{ steps.check_title.outputs.tag }}"
-          echo "Latest tag found: $LATEST_TAG"
+          echo "Latest numeric tag found: $LATEST_TAG"
           echo "Proposed tag: $PROPOSED_TAG"
           
           if [ -n "$LATEST_TAG" ] && [ "$LATEST_TAG" != "$PROPOSED_TAG" ]; then
