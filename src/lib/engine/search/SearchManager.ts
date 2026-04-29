@@ -3,6 +3,7 @@ import { ExpansionBlueprint, ForwardingContext, PackedCombo } from '#types/index
 import { ProbUtils, ComboUtils, PRECISION } from '#utils/index.js';
 
 import { DistributionPool } from '#engine/distribution/DistributionPool.js';
+import { ENGINE_LIMITS, SEARCH_CONSTANTS, BIGINT_CONSTANTS } from '#constants/engine.js';
 import { MassAccountant } from './MassAccountant.js';
 
 /**
@@ -10,7 +11,7 @@ import { MassAccountant } from './MassAccountant.js';
  * Facilitates high-speed forwarding through cached search subtrees.
  */
 export class SearchManager {
-    private static readonly MAX_RECURSION_DEPTH = 10;
+    private static readonly MAX_RECURSION_DEPTH = SEARCH_CONSTANTS.MAX_RECURSION_DEPTH;
     
     private readonly accountant: MassAccountant;
     private readonly expansionCache: Map<bigint, ExpansionBlueprint>;
@@ -113,7 +114,7 @@ export class SearchManager {
             if (!blueprint) continue;
 
             const { registry, timing, cat } = ctx;
-            const currentBitset = meta >> 8n;
+            const currentBitset = meta >> BIGINT_CONSTANTS.ENCHANT_SHIFT;
             const probContinue = blueprint.probContinue;
             
             // Split mass into stop vs forward
@@ -135,7 +136,7 @@ export class SearchManager {
             const term = searchProcessor.isTerminalCondition(
                 blueprint.currentCount, cat === "book", probForward, ctx.results.size, ctx.resultsLimit, 
                 ctx.results.has(blueprint.currentCombo), registry.multiEnchantBooks, 
-                ProbUtils.toBigInt(0.0000000001) // SYSTEM_THRESHOLD_FLOOR
+                ProbUtils.toBigInt(ENGINE_LIMITS.SYSTEM_THRESHOLD_FLOOR) // SYSTEM_THRESHOLD_FLOOR
             );
 
             if (term.isTerminal || blueprint.totalWeight === 0) {
@@ -206,25 +207,23 @@ export class SearchManager {
         stack: Array<{ mass: bigint, meta: bigint, combo: PackedCombo, depth: number }>,
         searchProcessor: any
     ): bigint {
-        const { registry, timing, instrumentation, queue } = ctx;
+        const { registry, instrumentation, queue } = ctx;
 
         const eligibleCount = blueprint.eligibleCount;
         const splits = DistributionPool.getBuffer(depth);
 
-        searchProcessor.withTiming(timing, 'distributionMs', () => {
-            const individualRemainder = probForward % BigInt(blueprint.totalWeight);
-            this.accountant.record('rounding', individualRemainder);
+        const individualRemainder = probForward % BigInt(blueprint.totalWeight);
+        this.accountant.record('rounding', individualRemainder);
 
-            const { recovered } = ProbUtils.distributeWithResidue(
-                probForward, blueprint.eligibleWeights, blueprint.totalWeight, splits, blueprint, eligibleCount
-            );
-            
-            if (recovered > 0n) {
-                this.accountant.subtract('rounding', recovered);
-                this.accountant.record('recoveredRounding', recovered);
-                if (instrumentation) instrumentation.roundingErrorEvents++;
-            }
-        });
+        const { recovered } = ProbUtils.distributeWithResidue(
+            probForward, blueprint.eligibleWeights, blueprint.totalWeight, splits, blueprint, eligibleCount
+        );
+
+        if (recovered > 0n) {
+            this.accountant.subtract('rounding', recovered);
+            this.accountant.record('recoveredRounding', recovered);
+            if (instrumentation) instrumentation.roundingErrorEvents++;
+        }
 
         for (const [i, e] of blueprint.eligibleEnchants.entries()) {
             if (i >= eligibleCount) break;
@@ -233,7 +232,7 @@ export class SearchManager {
 
             const nextPacked = ComboUtils.packAppend(blueprint.currentCombo, e, registry.enchantToIndex) as PackedCombo;
             const nextId = ComboUtils.getEnchantId(e);
-            const nextMeta = ((currentBitset | (1n << BigInt(nextId))) << 8n) | BigInt(blueprint.nextLevel);
+            const nextMeta = ((currentBitset | BIGINT_CONSTANTS.ID_BIT_LOOKUP[nextId]!) << BIGINT_CONSTANTS.ENCHANT_SHIFT) | BIGINT_CONSTANTS.LEVEL_LOOKUP[blueprint.nextLevel]!;
 
             ProbUtils.addItemMass(ctx.anyMass, nextId, pNext);
             ProbUtils.addItemMass(ctx.rankMass, e, pNext);
@@ -242,7 +241,7 @@ export class SearchManager {
                 stack.push({ mass: pNext, meta: nextMeta, combo: nextPacked, depth: depth + 1 });
             } else {
                 this.accountant.record('pending', pNext);
-                queue.pushOrMerge(nextMeta, pNext, blueprint.nextLevel, nextPacked);
+                queue.pushOrMerge(nextMeta, pNext, nextPacked);
             }
         }
 

@@ -65,10 +65,6 @@ export interface CheckpointSummary {
 export interface SearchTiming {
   totalMs: number;
   searchMs: number;
-  filteringMs: number;
-  distributionMs: number;
-  settlingMs: number;
-  heapMs: number;
 }
 
 export type EngineExitReason = 'threshold' | 'iterations' | 'mass' | 'aborted' | 'empty' | 'exhausted';

@@ -1,8 +1,10 @@
+import { MATH_CONSTANTS, SEARCH_CONSTANTS, ENGINE_LIMITS } from '#constants/engine.js';
+
 /**
  * High-precision constant for BigInt fixed-point arithmetic (2^60).
  * Kept together with ProbUtils as they are tightly coupled.
  */
-export const PRECISION = 1n << 60n;
+export const PRECISION = 1n << MATH_CONSTANTS.PRECISION_SHIFT;
 
 /**
  * Probability conversion helpers for BigInt fixed-point arithmetic.
@@ -15,7 +17,10 @@ export const ProbUtils = {
         if (typeof p === 'bigint') return p;
         if (p <= 0) return 0n;
         if (p >= 1) return PRECISION;
-        return BigInt(Math.floor(p * 9007199254740992)) << 7n; // 9007199254740992 is 2**53
+
+        // Use FLOAT_MANTISSA_BITS to capture full double precision before shifting to target PRECISION
+        const mantissaScale = 2 ** MATH_CONSTANTS.FLOAT_MANTISSA_BITS;
+        return BigInt(Math.floor(p * mantissaScale)) << MATH_CONSTANTS.MANTISSA_TO_FIXED_SHIFT;
     },
 
     /**
@@ -30,7 +35,27 @@ export const ProbUtils = {
      * Scales a probability by a fixed-point factor using Banker's Rounding.
      * Statistically neutral across thousands of operations.
      */
-    scale: (prob: bigint, factor: bigint): bigint => ProbUtils.roundDiv(prob * factor, PRECISION),
+    scale: (prob: bigint, factor: bigint): bigint => {
+        if (factor === 0n) return 0n;
+        if (factor === PRECISION) return prob;
+        return ProbUtils.roundDiv60(prob * factor);
+    },
+
+    /**
+     * Performs integer division with Banker's Rounding (Round-to-Nearest-Even).
+     * Specialized fast-path for PRECISION (2^60) using bitwise logic.
+     */
+    roundDiv60: (a: bigint): bigint => {
+        const q = a >> MATH_CONSTANTS.PRECISION_SHIFT;
+        const r = a & (PRECISION - 1n);
+        const half = PRECISION >> 1n;
+
+        if (r < half) return q;
+        if (r > half) return q + 1n;
+
+        // Exact tie: round to nearest EVEN.
+        return (q & 1n) === 0n ? q : q + 1n;
+    },
 
     /**
      * Performs integer division with Banker's Rounding (Round-to-Nearest-Even).
@@ -40,14 +65,14 @@ export const ProbUtils = {
      */
     roundDiv: (a: bigint, b: bigint): bigint => {
         if (b === 0n) throw new Error("Division by zero in roundDiv");
-        
+
         const q = a / b;
         const r = a % b;
         const doubleR = r * 2n;
 
         if (doubleR < b) return q;
         if (doubleR > b) return q + 1n;
-        
+
         // Exact tie (doubleR == b). Round to the nearest EVEN neighbor.
         return (q % 2n === 0n) ? q : q + 1n;
     },
@@ -62,9 +87,9 @@ export const ProbUtils = {
      * @returns The total lost mass (remainder)
      */
     distributeDetailed: (
-        prob: bigint, 
-        weights: ArrayLike<number | bigint>, 
-        totalWeight: number | bigint, 
+        prob: bigint,
+        weights: ArrayLike<number | bigint>,
+        totalWeight: number | bigint,
         outParts: bigint[] | BigUint64Array,
         count?: number
     ): bigint => {
@@ -84,7 +109,7 @@ export const ProbUtils = {
             outParts[i] = quotient;
             rem -= quotient;
         }
-        
+
         return rem;
     },
 
@@ -111,7 +136,7 @@ export const ProbUtils = {
 
         const oldResidue = context.residue;
         const totalToDistribute = prob + oldResidue;
-        
+
         let rem = totalToDistribute;
         for (let i = 0; i < len; i++) {
             const w = weights[i] as number | bigint;
@@ -120,20 +145,22 @@ export const ProbUtils = {
             outParts[i] = quotient;
             rem -= quotient;
         }
-        
+
         context.residue = rem;
 
-        // The 'recovered' mass is the difference between what WOULD have been 
+        // The 'recovered' mass is the difference between what WOULD have been
         // the standalone remainder vs the new residue delta.
         const individualRemainder = prob % total;
         const recovered = individualRemainder - (rem - oldResidue);
 
         return { recovered: recovered > 0n ? recovered : 0n };
     },
+
     /**
      * Scales 'val' by 'multiplier' and divides by 'divisor' using Banker's Rounding.
      */
     roundScale: (val: bigint, multiplier: bigint, divisor: bigint): bigint => {
+        if (divisor === PRECISION) return ProbUtils.roundDiv60(val * multiplier);
         return ProbUtils.roundDiv(val * multiplier, divisor);
     },
 
@@ -160,8 +187,8 @@ export const ProbUtils = {
      * Merges 'source' map/array into 'target', optionally scaling values by 'factor' with Banker's Rounding.
      */
     addMapMass: (
-        target: Map<number, bigint> | BigUint64Array, 
-        source: Map<number, bigint> | BigUint64Array, 
+        target: Map<number, bigint> | BigUint64Array,
+        source: Map<number, bigint> | BigUint64Array,
         factor?: bigint
     ): void => {
         const hasFactor = factor !== undefined && factor !== PRECISION;
@@ -170,7 +197,7 @@ export const ProbUtils = {
             const targetIsArray = target instanceof BigUint64Array;
             for (const [i, mass] of source.entries()) {
                 if (mass === 0n) continue;
-                
+
                 const added = hasFactor ? ProbUtils.scale(mass, factor!) : mass;
                 if (targetIsArray) {
                     const arr = target as BigUint64Array;
@@ -193,5 +220,24 @@ export const ProbUtils = {
                 }
             }
         }
-    }
+    },
+
+    /**
+     * Pre-computed BigInt versions of checkpoint targets to avoid repeated conversion.
+     */
+    CHECKPOINT_TARGETS: SEARCH_CONSTANTS.CHECKPOINT_TARGET_FLOATS.map(t => {
+        if (t <= 0) return 0n;
+        if (t >= 1) return PRECISION;
+        const mantissaScale = 2 ** MATH_CONSTANTS.FLOAT_MANTISSA_BITS;
+        return BigInt(Math.floor(t * mantissaScale)) << MATH_CONSTANTS.MANTISSA_TO_FIXED_SHIFT;
+    }),
+
+    /**
+     * Probability table for continuing to add more enchantments at a given modified level.
+     */
+    PROB_CONTINUE_TABLE: Array.from({ length: SEARCH_CONSTANTS.CONTINUE_TABLE_SIZE }, (_, ml) => {
+        const val = Math.min((ml + 1) / ENGINE_LIMITS.MAX_MODIFIED_LEVEL, 1.0);
+        const mantissaScale = 2 ** MATH_CONSTANTS.FLOAT_MANTISSA_BITS;
+        return BigInt(Math.floor(val * mantissaScale)) << MATH_CONSTANTS.MANTISSA_TO_FIXED_SHIFT;
+    })
 };

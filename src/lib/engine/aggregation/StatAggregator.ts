@@ -1,6 +1,6 @@
 import { PRECISION, ProbUtils, AsyncUtils } from '#utils/index.js';
 import { getEnchantability } from '#core/registry.js';
-import { ENGINE_LIMITS } from '#constants/engine.js';
+import { ENGINE_LIMITS, PACKING_CONSTANTS, SEARCH_CONSTANTS, UI_CONSTANTS } from '#constants/engine.js';
 import { getSearchLimit } from '#core/config.js';
 import { PackedCombo, SearchState, RegistryState, InternalSearchConfig, EngineInstrumentation, MassCheckpoint, CheckpointSummary, AggregationResult } from '#types/index.js';
 import { DistributionService } from '#engine/distribution/DistributionService.js';
@@ -58,9 +58,9 @@ export class StatAggregator {
         let lastResult: AggregationResult = {
             combos: new Map(),
             tracker: initialTracker,
-            anyMass: new BigUint64Array(256),
-            rankMass: new BigUint64Array(16384),
-            countMass: new BigUint64Array(16),
+            anyMass: new BigUint64Array(PACKING_CONSTANTS.BYTE_BASIS),
+            rankMass: new BigUint64Array(PACKING_CONSTANTS.MAX_RANKED_INDEX),
+            countMass: new BigUint64Array(PACKING_CONSTANTS.MAX_COUNT_INDEX),
             threshold: 0
         };
 
@@ -72,9 +72,9 @@ export class StatAggregator {
             const activeThreshold = ProbUtils.toBigInt(tier.threshold);
 
             const finalCombos = new Map<PackedCombo, bigint>();
-            const totalAnyMass = new BigUint64Array(256);
-            const totalRankMass = new BigUint64Array(16384);
-            const totalCountMass = new BigUint64Array(16);
+            const totalAnyMass = new BigUint64Array(PACKING_CONSTANTS.BYTE_BASIS);
+            const totalRankMass = new BigUint64Array(PACKING_CONSTANTS.MAX_RANKED_INDEX);
+            const totalCountMass = new BigUint64Array(PACKING_CONSTANTS.MAX_COUNT_INDEX);
             let tierTracker = new SearchManager();
 
             let processedMProb = 0n;
@@ -165,7 +165,7 @@ export class StatAggregator {
         config: InternalSearchConfig = {}
     ): Promise<AggregationResult> {
         const {
-            threshold = 0.0001,
+            threshold = ENGINE_LIMITS.DEFAULT_THRESHOLD,
             signal,
             maxIterations,
             resultsLimit = ENGINE_LIMITS.MAX_RESULTS_SIZE,
@@ -182,9 +182,9 @@ export class StatAggregator {
         const levels = Object.keys(modDist).map(Number).sort((a, b) => b - a);
 
         const finalCombos = new Map<PackedCombo, bigint>();
-        const totalAnyMass = new BigUint64Array(256);
-        const totalRankMass = new BigUint64Array(16384);
-        const totalCountMass = new BigUint64Array(16);
+        const totalAnyMass = new BigUint64Array(PACKING_CONSTANTS.BYTE_BASIS);
+        const totalRankMass = new BigUint64Array(PACKING_CONSTANTS.MAX_RANKED_INDEX);
+        const totalCountMass = new BigUint64Array(PACKING_CONSTANTS.MAX_COUNT_INDEX);
         let globalTracker = new SearchManager();
 
         let processedMProb = 0n;
@@ -241,7 +241,7 @@ export class StatAggregator {
             globalTracker.addScaled(result.tracker, mProb);
 
             processedMProb += mProb;
-            if (++iterCount % 3 === 0) {
+            if (++iterCount % UI_CONSTANTS.PROGRESS_UPDATE_FREQUENCY === 0) {
                 if (config.onProgress) {
                     const accuracy = globalTracker.toPublic().resolved;
                     config.onProgress({
@@ -295,13 +295,13 @@ export class StatAggregator {
 
     /** Build a checkpointSummary from the raw flat checkpoints array. */
     private buildCheckpointSummary(checkpoints: MassCheckpoint[]): CheckpointSummary[] {
-        const TARGETS = [0.1, 0.25, 0.5, 0.75, 0.8, 0.85, 0.9, 0.95, 0.99, 0.999];
+        const targets = SEARCH_CONSTANTS.CHECKPOINT_TARGET_FLOATS;
         const byTarget = new Map<number, { threshold: number; iterations: number; level: number }[]>();
-        for (const target of TARGETS) byTarget.set(target, []);
+        for (const target of targets) byTarget.set(target, []);
 
         for (const cp of checkpoints) {
             let matched: number | null = null;
-            for (const t of TARGETS) {
+            for (const t of targets) {
                 if (cp.mass >= t - 0.001) matched = t;
             }
             if (matched !== null) {
@@ -313,7 +313,7 @@ export class StatAggregator {
         }
 
         const summary: CheckpointSummary[] = [];
-        for (const target of TARGETS) {
+        for (const target of targets) {
             const entries = byTarget.get(target)!;
             if (entries.length === 0) continue;
             const first = entries[0];
