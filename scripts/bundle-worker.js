@@ -7,28 +7,34 @@ const __dirname = path.dirname(__filename);
 const root = path.resolve(__dirname, '..');
 
 const uiPath = path.join(root, 'dist', 'ui.js');
-const workerPath = path.join(root, 'dist', 'worker.js');
+const topWorkerPath = path.join(root, 'dist', 'top-worker.js');
+const chartWorkerPath = path.join(root, 'dist', 'chart-worker.js');
 const outputPath = path.join(root, 'dist', 'bundle.js');
 
-console.log('Bundling worker into main JS...');
+console.log('Bundling dual workers into main JS...');
 
 try {
     if (!fs.existsSync(uiPath)) throw new Error(`UI file not found: ${uiPath}`);
-    if (!fs.existsSync(workerPath)) throw new Error(`Worker file not found: ${workerPath}`);
+    if (!fs.existsSync(topWorkerPath)) throw new Error(`Top worker file not found: ${topWorkerPath}`);
+    if (!fs.existsSync(chartWorkerPath)) throw new Error(`Chart worker file not found: ${chartWorkerPath}`);
 
     let uiJs = fs.readFileSync(uiPath, 'utf8');
-    const workerJs = fs.readFileSync(workerPath, 'utf8');
+    const topWorkerJs = fs.readFileSync(topWorkerPath, 'utf8');
+    const chartWorkerJs = fs.readFileSync(chartWorkerPath, 'utf8');
 
-    // Prepare worker as a Blob URL to allow local execution (file://) and single-file distribution
-    // We escape backslashes, backticks, and dollar signs for the template literal
-    const workerBlobJs = `
-        const workerBlob = new Blob([\`${workerJs.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`], { type: 'application/javascript' });
-        const workerUrl = URL.createObjectURL(workerBlob);
+    const escape = (js) => js.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
+
+    const workerBlobsJs = `
+        const topWorkerBlob = new Blob([\`${escape(topWorkerJs)}\`], { type: 'application/javascript' });
+        const topWorkerUrl = URL.createObjectURL(topWorkerBlob);
+        const chartWorkerBlob = new Blob([\`${escape(chartWorkerJs)}\`], { type: 'application/javascript' });
+        const chartWorkerUrl = URL.createObjectURL(chartWorkerBlob);
     `;
 
-    // Inject the worker blob definition and replace the hardcoded path with the blob URL
-    // Supports both 'dist/worker.js' and "dist/worker.js"
-    const bundledJs = workerBlobJs + uiJs.replace(/new Worker\(['"]dist\/worker\.js['"]\)/g, 'new Worker(workerUrl)');
+    // Inject the worker blob definitions and replace the hardcoded paths with the blob URLs
+    const bundledJs = workerBlobsJs + uiJs
+        .replace(/new Worker\(['"]dist\/top-worker\.js['"]\)/g, 'new Worker(topWorkerUrl)')
+        .replace(/new Worker\(['"]dist\/chart-worker\.js['"]\)/g, 'new Worker(chartWorkerUrl)');
 
     fs.writeFileSync(outputPath, bundledJs);
     console.log(`Success! Unified bundle created at: ${outputPath}`);

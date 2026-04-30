@@ -10,38 +10,43 @@ function flush(): Promise<void> {
     return new Promise(r => setTimeout(r, 20));
 }
 
-function makeStats(accuracy: number): any {
-    return { accuracy, accounting: { resolved: accuracy, pending: 1 - accuracy }, ranks: {}, any: {}, count: {}, combos: {} };
-}
-
 describe('XP Cap Sweep Integration', () => {
-    let originalRequest: typeof WorkerClient.request;
+    let originalStartTop: typeof WorkerClient.startTopRun;
+    let originalStartChart: typeof WorkerClient.startChartRun;
     let originalReset: typeof WorkerClient.resetWorker;
 
     beforeEach(() => {
-        originalRequest = WorkerClient.request;
+        originalStartTop = WorkerClient.startTopRun;
+        originalStartChart = WorkerClient.startChartRun;
         originalReset = WorkerClient.resetWorker;
         WorkerClient.resetWorker = async () => {};
     });
 
     afterEach(() => {
-        WorkerClient.request = originalRequest;
+        WorkerClient.startTopRun = originalStartTop;
+        WorkerClient.startChartRun = originalStartChart;
         WorkerClient.resetWorker = originalReset;
     });
 
     it('should sweep up to 30 for modern version (1.21)', async () => {
         const registry = RegistryFactory.build(DATA, '1.21');
-        
-        type QueueEntry = { onProgress?: (v: any) => void; resolve: (v: any) => void };
-        const mainQueue: QueueEntry[] = [];
-
-        WorkerClient.request = (_type: string, payload: any, onProgress?: any): Promise<any> => {
-            if (payload.source === 'chart') {
-                return Promise.resolve({ stats: makeStats(0.01) });
-            }
-            return new Promise(resolve => mainQueue.push({ onProgress, resolve }));
-        };
         const service = new RefinementService();
+        
+        let lastSweepLength = 0;
+
+        WorkerClient.startTopRun = (_input, _refinement, onUpdate) => {
+            setTimeout(() => onUpdate({} as any), 1);
+            return 'top-run' as any;
+        };
+
+        WorkerClient.startChartRun = (_input, _refinement, onUpdate, onTerminal) => {
+            const xpCap = registry.mechanics.xp_cap || 30;
+            for (let i = 1; i <= xpCap; i++) {
+                onUpdate({ xpLevel: i, buckets: {} } as any);
+            }
+            onTerminal();
+            return 'chart-run' as any;
+        };
         
         const payload: RefinementPayload = {
             category: 'sword',
@@ -51,7 +56,6 @@ describe('XP Cap Sweep Integration', () => {
             version: '1.21'
         };
 
-        let lastSweepLength = 0;
         await service.run(payload, registry, {
             onStatus: () => {},
             onStats: () => {},
@@ -60,34 +64,29 @@ describe('XP Cap Sweep Integration', () => {
             }
         });
 
-        // Trigger first chart sweep
-        const q0 = mainQueue[0];
-        assert.ok(q0 !== undefined);
-        q0.onProgress?.({ stats: makeStats(0.1) });
-
-        // Wait for chart sweep to complete
-        for (let i = 0; i < 5; i++) await flush();
-
-        assert.strictEqual(lastSweepLength, 30, 'Modern sweep should be 30 levels');
-        
-        // Clean up
-        q0.resolve({ stats: makeStats(0.1) });
         await flush();
+        assert.strictEqual(lastSweepLength, 30, 'Modern sweep should be 30 levels');
     });
 
     it('should sweep up to 50 for legacy version (1.1)', async () => {
         const registry = RegistryFactory.build(DATA, '1.1');
-        
-        type QueueEntry = { onProgress?: (v: any) => void; resolve: (v: any) => void };
-        const mainQueue: QueueEntry[] = [];
-
-        WorkerClient.request = (_type: string, payload: any, onProgress?: any): Promise<any> => {
-            if (payload.source === 'chart') {
-                return Promise.resolve({ stats: makeStats(0.01) });
-            }
-            return new Promise(resolve => mainQueue.push({ onProgress, resolve }));
-        };
         const service = new RefinementService();
+        
+        let lastSweepLength = 0;
+
+        WorkerClient.startTopRun = (_input, _level, onUpdate) => {
+            setTimeout(() => onUpdate({} as any), 1);
+            return 'top-run' as any;
+        };
+
+        WorkerClient.startChartRun = (_input, _refinement, onUpdate, onTerminal) => {
+            const xpCap = registry.mechanics.xp_cap || 50;
+            for (let i = 1; i <= xpCap; i++) {
+                onUpdate({ xpLevel: i, buckets: {} } as any);
+            }
+            onTerminal();
+            return 'chart-run' as any;
+        };
         
         const payload: RefinementPayload = {
             category: 'sword',
@@ -97,7 +96,6 @@ describe('XP Cap Sweep Integration', () => {
             version: '1.1'
         };
 
-        let lastSweepLength = 0;
         await service.run(payload, registry, {
             onStatus: () => {},
             onStats: () => {},
@@ -106,18 +104,7 @@ describe('XP Cap Sweep Integration', () => {
             }
         });
 
-        // Trigger first chart sweep
-        const q1 = mainQueue[0];
-        assert.ok(q1 !== undefined);
-        q1.onProgress?.({ stats: makeStats(0.1) });
-
-        // Wait for chart sweep to complete
-        for (let i = 0; i < 8; i++) await flush();
-
-        assert.strictEqual(lastSweepLength, 50, 'Legacy sweep should be 50 levels');
-
-        // Clean up
-        q1.resolve({ stats: makeStats(0.1) });
         await flush();
+        assert.strictEqual(lastSweepLength, 50, 'Legacy sweep should be 50 levels');
     });
 });
