@@ -1,6 +1,6 @@
 import { UIUtils, RomanUtils } from '#utils/index.js';
 import { UI_DEFAULTS, UI_TEXTS, SEARCH_LEVEL_COLORS, SearchLevel } from '#core/config.js';
-import { RegistryState, EnchantInsights } from '#types/index.js';
+import { RegistryState, EnchantInsights, TopRunView } from '#types/index.js';
 
 /**
  * View component for rendering enchantment combinations and ranks.
@@ -55,6 +55,18 @@ export class ResultsView {
         if (hasResults) {
             this.renderCombos(insights, registry);
             this.renderRanks(insights, registry);
+        } else {
+            this.showNoResults();
+        }
+    }
+
+    /**
+     * V5 update path using the pre-projected TopRunView.
+     */
+    public updateV5(view: TopRunView, registry: RegistryState): void {
+        if (view.combos.length > 0) {
+            this.renderCombosV5(view, registry);
+            this.renderEnchantsV5(view, registry);
         } else {
             this.showNoResults();
         }
@@ -163,6 +175,112 @@ export class ResultsView {
                     <span style="font-weight:700;">${UIUtils.formatPercent(prob)}</span>
                 </div>
                 <div class="progress-bg"><div class="progress-fill" style="width: ${prob * 100}%"></div></div>
+            `;
+            fragment.appendChild(item);
+        });
+
+        // Atomic swap
+        this.rankEl.replaceChildren(fragment);
+    }
+
+    private renderCombosV5(view: TopRunView, _registry: RegistryState): void {
+        if (!this.comboEl) return;
+
+        const fragment = document.createDocumentFragment();
+
+        view.combos.slice(0, UI_DEFAULTS.MAX_TOP_COMBOS_DISPLAY).forEach((combo) => {
+            const item = document.createElement("div");
+            item.className = "combo-item";
+            
+            if (combo.tooltip) item.title = combo.tooltip;
+
+            item.innerHTML = `
+                <div style="display: flex; justify-content: space-between;">
+                    <span class="combo-names">${combo.enchants.join(' + ')}</span>
+                    <span class="combo-prob">${UIUtils.formatPercent(combo.share)}</span>
+                </div>
+            `;
+            fragment.appendChild(item);
+        });
+
+        const acc = view.accounting;
+        const norm = view.normalization;
+        const accuracy = acc.resolved; // Resolved mass is our accuracy metric
+
+        if (accuracy < 0.999 || acc.pending > 0.001) {
+            const info = document.createElement("div");
+            info.className = "combo-item";
+            info.style.cssText = "border-top: 1px solid rgba(255,255,255,0.05); margin-top: 10px; padding-top: 10px; opacity: 0.8;";
+            
+            const color = (acc.pending > 0.1) ? '#ffca28' : '#66bb6a';
+            const tooltip = [
+                `Resolved: ${UIUtils.formatPercent(acc.resolved)}`,
+                `Pending: ${UIUtils.formatPercent(acc.pending)}`,
+                `Pruned (Sieved): ${UIUtils.formatPercent(acc.sieved)}`,
+                `Dropped (Overflow): ${UIUtils.formatPercent(acc.overflow)}`,
+                `Rounding: ${UIUtils.formatPercent(acc.rounding)}`
+            ];
+            
+            if (norm.domain === 'clue-known-space') {
+                tooltip.push(`--- Posterior (Clue-Conditioned) ---`);
+                tooltip.push(`Compatible Mass: ${UIUtils.formatPercent(norm.clueKnownSpace ?? 0)} of explored space`);
+            }
+            
+            info.title = tooltip.join('\n');
+            
+            const showClueDiagnostic = norm.domain === 'clue-known-space';
+            const diagnosticHtml = showClueDiagnostic ? `
+                <div style="margin-top: 8px; border-top: 1px dotted rgba(255,255,255,0.1); padding-top: 6px; font-size: 0.75rem; opacity: 0.9;">
+                    <div style="display: flex; justify-content: space-between;">
+                        <span>Known compatible mass:</span>
+                        <span>${UIUtils.formatPercent(norm.clueKnownSpace ?? 0)}</span>
+                    </div>
+                </div>
+            ` : '';
+
+            info.innerHTML = `
+                <div style="display: flex; justify-content: space-between; font-size: 0.85rem;">
+                    <span>Calculation Confidence ⓘ</span>
+                    <span style="color: ${color}">${UIUtils.formatPercent(accuracy)}</span>
+                </div>
+                ${acc.pending > 0.1 ? `<div style="font-size: 0.7rem; color: #ffca28; margin-top: 3px;">⚠️ High branching complexity - results approximated.</div>` : ''}
+                ${diagnosticHtml}
+            `;
+            fragment.appendChild(info);
+        }
+
+        // Atomic swap
+        this.comboEl.replaceChildren(fragment);
+    }
+
+    private renderEnchantsV5(view: TopRunView, registry: RegistryState): void {
+        if (!this.rankEl) return;
+
+        const fragment = document.createDocumentFragment();
+        
+        view.enchants.forEach((enchant) => {
+            const props = registry.resolvedRegistry[enchant.label];
+            const levelsCount = props ? Object.keys(props.levels).length : 2;
+            const label = levelsCount > 1 ? `Any ${enchant.label}` : enchant.label;
+            
+            const item = document.createElement("div");
+            item.className = "rank-item";
+            
+            if (enchant.tooltip) {
+                item.title = enchant.tooltip;
+            } else {
+                const tooltipEntries = [`Weight: ${props?.weight ?? '?'}`];
+                if (props?.valid_from) tooltipEntries.push(`From: ${props.valid_from}`);
+                if (props?.valid_to) tooltipEntries.push(`Until: ${props.valid_to}`);
+                item.title = tooltipEntries.join('\n');
+            }
+
+            item.innerHTML = `
+                <div style="display: flex; justify-content: space-between; font-size: 0.8rem;">
+                    <span>${label}</span>
+                    <span style="font-weight:700;">${UIUtils.formatPercent(enchant.share)}</span>
+                </div>
+                <div class="progress-bg"><div class="progress-fill" style="width: ${enchant.share * 100}%"></div></div>
             `;
             fragment.appendChild(item);
         });

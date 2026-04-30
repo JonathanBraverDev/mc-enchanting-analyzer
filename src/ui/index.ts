@@ -4,10 +4,8 @@ import { ParamsView } from '#ui/views/ParamsView.js';
 import { ResultsView } from '#ui/views/ResultsView.js';
 import { ChartController } from '#ui/results-chart-controller.js';
 import { RefinementService } from '#ui/refinement.js';
-import { HumanizationService } from '#services/index.js';
 import { UiMetadataService } from '#services/UiMetadataService.js';
-import { EnchantInsights, CalculationStats, ResultSortMode } from '#types/index.js';
-import { DATA } from '#data/index.js';
+import { TopRunView } from '#types/index.js';
 
 /**
  * Main Web Application Controller.
@@ -21,7 +19,7 @@ class AppController {
     
     private isWorkerReady: boolean = false;
     private runDebounceTimeout: number = 0;
-    private bestInsights: EnchantInsights | null = null;
+    private lastView: TopRunView | null = null;
 
     constructor() {
         this.params = new ParamsView(
@@ -80,7 +78,9 @@ class AppController {
         } else if (type === 'clue') {
             this.results.showPlaceholder(UI_TEXTS.STATUS_REFINING);
         } else if (type === 'combo-sort') {
-            this.updateInsightsFromRaw(this.lastRawStats, true);
+            if (this.lastView) {
+                this.updateInsightsFromView(this.lastView);
+            }
             return;
         }
 
@@ -88,12 +88,9 @@ class AppController {
     }
 
     private enqueueRun(): void {
-        this.bestInsights = null; // Clear latch to prevent stable-result blocking
         if (this.runDebounceTimeout) window.clearTimeout(this.runDebounceTimeout);
         this.runDebounceTimeout = window.setTimeout(() => this.run(), 50);
     }
-
-    private lastRawStats: CalculationStats | null = null;
 
     public get currentSweep() {
         return this.refinement.currentSweep;
@@ -105,7 +102,6 @@ class AppController {
 
     private async run(): Promise<void> {
         if (!this.isWorkerReady) return;
-        this.bestInsights = null;
 
         try {
             this.params.updateClueTarget();
@@ -122,7 +118,7 @@ class AppController {
                 {
                     onStatus: (status, level) => this.results.setRefinementStatus(status, level),
                     onChartStatus: (status, progress) => this.results.setChartStatus(status, progress),
-                    onStats: (raw, isFinal) => this.updateInsightsFromRaw(raw, isFinal),
+                    onStats: (view) => this.updateInsightsFromView(view),
                     onChart: (sweep) => this.chart.refresh(sweep, registry)
                 }
             );
@@ -132,24 +128,12 @@ class AppController {
         }
     }
 
-    private updateInsightsFromRaw(raw: CalculationStats | null, isFinal: boolean = false): void {
-        const { version, sortMode } = this.params.getValues();
+    private updateInsightsFromView(view: TopRunView): void {
+        this.lastView = view;
+        const { version } = this.params.getValues();
         const registry = UiMetadataService.getRegistry(version);
         
-        if (!raw) {
-            if (isFinal) this.results.showNoResults();
-            return;
-        }
-        
-        this.lastRawStats = raw;
-
-        const insights = HumanizationService.humanize(raw, registry, sortMode as ResultSortMode, DATA.constants.ROMAN_MAP);
-        
-        const pending = insights.accounting.pending;
-        if (isFinal || (this.bestInsights && pending < this.bestInsights.accounting.pending) || !this.bestInsights) {
-            this.bestInsights = insights;
-            this.results.update(insights, registry);
-        }
+        this.results.updateV5(view, registry);
     }
 
     private showError(title: string, err: unknown): void {

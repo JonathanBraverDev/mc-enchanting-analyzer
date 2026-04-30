@@ -1,6 +1,6 @@
 import { ThemeManager } from '#ui/theme.js';
 import { getEnchantName, getFullEnchantName } from '#core/registry.js';
-import { CalculationStats, ChartDataset, RegistryState } from '#types/index.js';
+import { ChartCellView, ChartDataset, RegistryState } from '#types/index.js';
 import { RomanUtils } from '#utils/index.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 
@@ -56,20 +56,24 @@ export class ChartManager {
     }
 
 
-    public generateDatasets(sweep: { l: number, s: CalculationStats }[], metric: string, registry: RegistryState): ChartDataset[] {
+    public generateDatasets(sweep: ChartCellView[], metric: string, registry: RegistryState): ChartDataset[] {
         const datasets: ChartDataset[] = [];
         const romanMap = registry.data.constants.ROMAN_MAP;
 
         if (metric === "any") {
             const allEnchants = new Set<number>();
-            sweep.forEach(x => { if(x && x.s) Object.keys(x.s.any).forEach(idStr => allEnchants.add(parseInt(idStr))); });
+            sweep.forEach(x => { 
+                if(x && x.buckets && x.buckets.anyByEnchantId) {
+                    Object.keys(x.buckets.anyByEnchantId).forEach(idStr => allEnchants.add(parseInt(idStr)));
+                }
+            });
 
             Array.from(allEnchants).sort((a,b) => getEnchantName(registry, a).localeCompare(getEnchantName(registry, b))).forEach(id => {
                 const name = getEnchantName(registry, id);
                 const color = ThemeManager.getEnchantColor(name, registry);
                 datasets.push({
                     label: name,
-                    data: sweep.map(x => (x && x.s && x.s.any[id] || 0) * 100),
+                    data: sweep.map(x => (x && x.buckets && x.buckets.anyByEnchantId[id] || 0) * 100),
                     borderColor: color,
                     backgroundColor: color.replace(')', ', 0.1)'),
                     borderWidth: 2, tension: 0.1, pointRadius: 0
@@ -77,7 +81,13 @@ export class ChartManager {
             });
         } else if (metric === "ranks") {
             const allRanks = new Set<number>();
-            sweep.forEach(e => { if(e && e.s) Object.entries(e.s.ranks).forEach(([idAndRankStr, p]) => { if (p > 0.01) allRanks.add(parseInt(idAndRankStr)); }); });
+            sweep.forEach(e => { 
+                if(e && e.buckets && e.buckets.rankByIdAndRank) {
+                    Object.entries(e.buckets.rankByIdAndRank).forEach(([idAndRankStr, p]) => { 
+                        if (p > 0.01) allRanks.add(parseInt(idAndRankStr)); 
+                    }); 
+                }
+            });
             
             Array.from(allRanks).sort((a, b) => {
                 const na = getFullEnchantName(registry, a), nb = getFullEnchantName(registry, b);
@@ -89,7 +99,7 @@ export class ChartManager {
                 const color = ThemeManager.getEnchantColor(idAndRank, registry);
                 datasets.push({
                     label: fullName,
-                    data: sweep.map(x => (x && x.s && x.s.ranks[idAndRank] || 0) * 100),
+                    data: sweep.map(x => (x && x.buckets && x.buckets.rankByIdAndRank[idAndRank] || 0) * 100),
                     borderColor: color,
                     backgroundColor: color.replace(')', ', 0.1)'),
                     borderWidth: 2, tension: 0.1, pointRadius: 0
@@ -98,7 +108,7 @@ export class ChartManager {
         } else {
             const max = ENGINE_LIMITS.MAX_ENCHANTS_PER_ITEM || 6;
             for (let c = 1; c <= max; c++) {
-                const maxInSweep = Math.max(...sweep.map(x => x && x.s ? (x.s.count[c] || 0) : 0));
+                const maxInSweep = Math.max(...sweep.map(x => x && x.buckets ? (x.buckets.countBySize[c] || 0) : 0));
                 if (maxInSweep < 0.005) continue;
 
                 const hue = (c - 1) * (140 / (max - 1 || 1));
@@ -106,13 +116,12 @@ export class ChartManager {
                 
                 datasets.push({
                     label: `${c} Enchant${c > 1 ? 's' : ''}`,
-                    data: sweep.map(x => (x && x.s && x.s.count[c] || 0) * 100),
+                    data: sweep.map(x => (x && x.buckets && x.buckets.countBySize[c] || 0) * 100),
                     borderColor: color,
                     backgroundColor: color.replace(')', ', 0.1)'),
                     borderWidth: 2, tension: 0.1, pointRadius: 0
                 });
             }
-
         }
         return datasets;
     }
