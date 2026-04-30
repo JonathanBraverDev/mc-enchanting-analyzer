@@ -32,6 +32,7 @@ export class RefinementService {
     private sweep: ChartCellView[] = [];
     private isRefining: boolean = false;
     private isSweepRunning: boolean = false;
+    private activeRunGeneration: number = 0;
 
     public get currentSweep(): ChartCellView[] {
         return this.sweep;
@@ -46,8 +47,11 @@ export class RefinementService {
         registry: RegistryState,
         callbacks: RefinementCallbacks
     ): Promise<void> {
+        const generation = ++this.activeRunGeneration;
+        
         this.isRefining = true;
         this.isSweepRunning = true;
+        
         try {
             const xpCap = registry?.mechanics?.xp_cap ?? UI_DEFAULTS.DEFAULT_VIEW_XP_CAP;
             this.sweep = new Array(xpCap).fill(null);
@@ -70,44 +74,68 @@ export class RefinementService {
             const levels: RefinementLevelName[] = ['coarse', 'standard', 'deep', 'ultra'];
             const isBook = payload.category === 'book';
 
-            // Step through refinement levels
-            for (let i = 0; i < levels.length; i++) {
-                const level = levels[i]!;
-                const params = getParamsForMode(level, isBook);
-                
-                callbacks.onStatus(params.status, level);
-
-                // Start Top Run
-                const topPromise = new Promise<TopRunView>((resolve) => {
-                    WorkerClient.startTopRun(topInput, [level], (view) => {
-                        resolve(view);
-                    });
-                });
-
-                // Start Chart Run
-                WorkerClient.startChartRun(
-                    chartInput, 
-                    [level], 
-                    (cellView) => {
-                        this.sweep[cellView.xpLevel - 1] = cellView;
-                        callbacks.onChart(this.sweep);
-                        callbacks.onChartStatus?.(`${params.status} probabilities`, cellView.xpLevel / xpCap);
-                    },
-                    () => {
-                        if (level === 'ultra') {
-                            callbacks.onChartStatus?.(UI_TEXTS.STATUS_CHART_COMPLETE);
-                            this.isSweepRunning = false;
-                        }
+            // Start Top Run (Single call for all levels)
+            WorkerClient.startTopRun(
+                topInput, 
+                levels, 
+                (view) => {
+                    if (this.activeRunGeneration !== generation) return;
+                    
+                    const params = getParamsForMode(view.refinementLevel, isBook);
+                    callbacks.onStatus(params.status, view.refinementLevel);
+                    callbacks.onStats(view, view.refinementLevel === 'ultra');
+                },
+                (status, error) => {
+                    if (this.activeRunGeneration !== generation) return;
+                    
+                    this.isRefining = false;
+                    if (status === 'done') {
+                        callbacks.onStatus(UI_TEXTS.STATUS_COMPLETE, "done");
+                    } else if (status === 'error') {
+                        console.error("Top run error:", error);
                     }
-                );
+                }
+            );
 
-                const topView = await topPromise;
-                callbacks.onStats(topView, level === 'ultra');
-            }
+            // Start Chart Run (Single call for all levels)
+            WorkerClient.startChartRun(
+                chartInput, 
+                levels, 
+                (cellView) => {
+                    if (this.activeRunGeneration !== generation) return;
+                    
+                    this.sweep[cellView.xpLevel - 1] = cellView;
+                    callbacks.onChart(this.sweep);
+                    
+                    const params = getParamsForMode(cellView.refinementLevel, isBook);
+                    callbacks.onChartStatus?.(`${params.status} probabilities`, cellView.xpLevel / xpCap);
+                },
+                (status) => {
+                    if (this.activeRunGeneration !== generation) return;
+                    
+                    this.isSweepRunning = false;
+                    if (status === 'done') {
+                        callbacks.onChartStatus?.(UI_TEXTS.STATUS_CHART_COMPLETE);
+                    }
+                }
+            );
 
-            callbacks.onStatus(UI_TEXTS.STATUS_COMPLETE, "done");
+            // In v5, we don't await the workers directly here; they drive the UI via callbacks.
+            // But we keep the promise active until terminal state if we want run() to represent the lifecycle.
+            await new Promise<void>((resolve) => {
+                const interval = setInterval(() => {
+                    if (!this.isCalculating() || this.activeRunGeneration !== generation) {
+                        clearInterval(interval);
+                        resolve();
+                    }
+                }, 100);
+            });
+
         } finally {
-            this.isRefining = false;
+            if (this.activeRunGeneration === generation) {
+                this.isRefining = false;
+                this.isSweepRunning = false;
+            }
         }
     }
 }

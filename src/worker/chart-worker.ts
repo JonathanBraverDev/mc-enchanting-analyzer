@@ -1,9 +1,19 @@
 import { EnchantEngine } from '#engine/index.js';
 import { EngineFactory } from '#engine/factory.js';
 import { DATA } from '#data/index.js';
-import { WorkerRequest, RunId, ChartUpdateResponse, RunAcceptedResponse, RunTerminalResponse, WorkerReadyResponse } from '#types/index.js';
+import { 
+  WorkerRequest, 
+  RunId, 
+  ChartUpdateResponse, 
+  RunAcceptedResponse, 
+  RunTerminalResponse, 
+  WorkerReadyResponse,
+  WorkerErrorResponse,
+  PassId
+} from '#types/index.js';
 import { SearchStateSnapshotFactory } from '#engine/snapshot/SearchStateSnapshotFactory.js';
 import { getParamsForMode } from '#core/config.js';
+import { ClueValidator } from '#core/clue.js';
 
 let engine: EnchantEngine | null = null;
 let currentRunId: RunId | null = null;
@@ -34,16 +44,25 @@ workerScope.onmessage = async (e: MessageEvent<WorkerRequest>) => {
     if (msg.type === 'chartRunStart') {
       const { requestId, runId, input, refinement } = msg;
       
-      // Supersession check
-      if (currentRunId === runId) return;
-      currentRunId = runId;
-
       // Abort previous run if active
-      if (currentAbortController) {
-        currentAbortController.abort();
+      if (currentRunId && currentRunId !== runId) {
+        if (currentAbortController) {
+          currentAbortController.abort();
+        }
+        const superseded: RunTerminalResponse = {
+          type: 'terminal',
+          worker: 'chart',
+          runId: currentRunId,
+          status: 'superseded'
+        };
+        workerScope.postMessage(superseded);
       }
+
+      currentRunId = runId;
       currentAbortController = new AbortController();
       const signal = currentAbortController.signal;
+
+      const xpCap = engine.registry.mechanics.xp_cap || 30;
 
       // Notify UI that run is accepted
       const accepted: RunAcceptedResponse = {
@@ -53,21 +72,35 @@ workerScope.onmessage = async (e: MessageEvent<WorkerRequest>) => {
         runId,
         input,
         state: 'calculating',
-        message: 'worker-handoff'
+        message: 'worker-handoff',
+        chart: {
+          input,
+          maxXpLevel: xpCap,
+          refinement: refinement.map((level, i) => ({
+            refinementLevel: level,
+            label: level.toUpperCase(),
+            order: i
+          }))
+        }
       };
       workerScope.postMessage(accepted);
 
       const isBook = input.category === 'book';
 
       try {
+        // Upfront clue validation (Correction 5)
+        if (input.clue) {
+          ClueValidator.validate(engine.registry, input.category, input.clue);
+        }
+
         for (const level of refinement) {
           if (signal.aborted) break;
 
           const params = getParamsForMode(level, isBook);
-          const xpCap = engine.registry.mechanics.xp_cap || 30;
+          const passId = `pass_${level}` as PassId;
 
           for (let xp = 1; xp <= xpCap; xp++) {
-            if (signal.aborted) break;
+            if (signal.aborted || currentRunId !== runId) break;
 
             const result = await engine.calculateTop(input.category, xp, input.material, {
               clue: input.clue,
@@ -76,9 +109,9 @@ workerScope.onmessage = async (e: MessageEvent<WorkerRequest>) => {
               signal
             });
 
-            // Double check supersession after async call
-            if (currentRunId !== runId) return;
+            if (signal.aborted || currentRunId !== runId) break;
 
+            // NOTE: Projection logic will be updated in Phase 3 for authoritative masses
             const cell = SearchStateSnapshotFactory.create(
               engine.registry,
               result.tracker,
@@ -88,17 +121,18 @@ workerScope.onmessage = async (e: MessageEvent<WorkerRequest>) => {
                 input: { ...input, xpLevel: xp },
                 refinementLevel: level,
                 clue: input.clue
-              }
+              },
+              result // authoritative masses
             );
 
             const response: ChartUpdateResponse = {
               type: 'chartUpdate',
               worker: 'chart',
               runId,
-              passId: level as any,
+              passId,
               refinementLevel: level,
               progress: {
-                passId: level as any,
+                passId,
                 refinementLevel: level,
                 completedXpLevels: xp,
                 totalXpLevels: xpCap
@@ -111,7 +145,7 @@ workerScope.onmessage = async (e: MessageEvent<WorkerRequest>) => {
         }
 
         // Terminal message
-        if (currentRunId === runId) {
+        if (currentRunId === runId && !signal.aborted) {
           const terminal: RunTerminalResponse = {
             type: 'terminal',
             worker: 'chart',
@@ -126,11 +160,23 @@ workerScope.onmessage = async (e: MessageEvent<WorkerRequest>) => {
       }
     }
   } catch (err: any) {
-    workerScope.postMessage({ 
+    const errorMsg: WorkerErrorResponse = { 
       type: 'error', 
       worker: 'chart', 
       runId: currentRunId as any, 
       error: err.message 
-    });
+    };
+    workerScope.postMessage(errorMsg);
+    
+    if (currentRunId) {
+      const terminal: RunTerminalResponse = {
+        type: 'terminal',
+        worker: 'chart',
+        runId: currentRunId,
+        status: 'error',
+        error: err.message
+      };
+      workerScope.postMessage(terminal);
+    }
   }
 };

@@ -10,6 +10,7 @@ import { SummaryService } from '#services/SummaryService.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { SearchService } from '#engine/search/SearchService.js';
 import { ProgressiveStatsAggregator } from '#engine/aggregation/ProgressiveStatsAggregator.js';
+import { ClueValidator } from '#core/clue.js';
 export { EngineFactory } from './factory.js';
 
 /**
@@ -390,32 +391,7 @@ export class EnchantEngine {
     }
 
     private getPackedClue(cat: string, clue: string): number {
-        const romanMap = this.registry.data.constants.ROMAN_MAP;
-        const parsed = EnchantUtils.parse(clue, romanMap);
-        if (!parsed) throw new Error(`Invalid clue format: "${clue}"`);
-        
-        const clueId = getEnchantId(this.registry, parsed.name);
-        if (clueId === ENGINE_LIMITS.UNKNOWN_ENCHANT_ID) {
-            throw new Error(`Invalid clue format: Unknown enchantment "${parsed.name}"`);
-        }
-
-        const enchantData = this.registry.resolvedRegistry[parsed.name];
-        if (!enchantData) {
-            throw new Error(`Invalid clue format: Unknown enchantment "${parsed.name}"`);
-        }
-
-        // Check if applicable to category
-        const pool = this.registry.mergedItems[cat] || [];
-        if (!pool.includes(parsed.name)) {
-            throw new Error(`Invalid clue format: Enchantment "${parsed.name}" is not applicable to category "${cat}"`);
-        }
-
-        const maxRank = Object.keys(enchantData.levels).length;
-        if (parsed.rank > maxRank) {
-            throw new Error(`Invalid clue format: Rank ${parsed.rank} exceeds max for ${parsed.name}`);
-        }
-
-        return (clueId << 8) | (parsed.rank ?? 1);
+        return ClueValidator.validate(this.registry, cat, clue);
     }
 
 

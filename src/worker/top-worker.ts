@@ -1,9 +1,18 @@
 import { EnchantEngine } from '#engine/index.js';
 import { EngineFactory } from '#engine/factory.js';
 import { DATA } from '#data/index.js';
-import { WorkerRequest, RunId, TopUpdateResponse, RunAcceptedResponse, RunTerminalResponse, WorkerReadyResponse } from '#types/index.js';
+import { 
+  WorkerRequest, 
+  RunId, 
+  TopUpdateResponse, 
+  RunAcceptedResponse, 
+  RunTerminalResponse, 
+  WorkerReadyResponse, 
+  WorkerErrorResponse 
+} from '#types/index.js';
 import { SearchStateSnapshotFactory } from '#engine/snapshot/SearchStateSnapshotFactory.js';
 import { getParamsForMode } from '#core/config.js';
+import { ClueValidator } from '#core/clue.js';
 
 let engine: EnchantEngine | null = null;
 let currentRunId: RunId | null = null;
@@ -34,14 +43,21 @@ workerScope.onmessage = async (e: MessageEvent<WorkerRequest>) => {
     if (msg.type === 'topRunStart') {
       const { requestId, runId, input, refinement } = msg;
       
-      // Supersession check
-      if (currentRunId === runId) return;
-      currentRunId = runId;
-
       // Abort previous run if active
-      if (currentAbortController) {
-        currentAbortController.abort();
+      if (currentRunId && currentRunId !== runId) {
+        if (currentAbortController) {
+          currentAbortController.abort();
+        }
+        const superseded: RunTerminalResponse = {
+          type: 'terminal',
+          worker: 'top',
+          runId: currentRunId,
+          status: 'superseded'
+        };
+        workerScope.postMessage(superseded);
       }
+
+      currentRunId = runId;
       currentAbortController = new AbortController();
       const signal = currentAbortController.signal;
 
@@ -60,6 +76,11 @@ workerScope.onmessage = async (e: MessageEvent<WorkerRequest>) => {
       const isBook = input.category === 'book';
 
       try {
+        // Upfront clue validation (Correction 5)
+        if (input.clue) {
+          ClueValidator.validate(engine.registry, input.category, input.clue);
+        }
+
         for (const level of refinement) {
           if (signal.aborted) break;
 
@@ -71,10 +92,10 @@ workerScope.onmessage = async (e: MessageEvent<WorkerRequest>) => {
             signal
           });
 
-          // Double check supersession after async call
-          if (currentRunId !== runId) return;
+          if (signal.aborted || currentRunId !== runId) break;
 
           // Project into TopRunView
+          // NOTE: Projection logic will be updated in Phase 3 for authoritative masses
           const view = SearchStateSnapshotFactory.create(
             engine.registry,
             result.tracker,
@@ -84,7 +105,8 @@ workerScope.onmessage = async (e: MessageEvent<WorkerRequest>) => {
               input,
               refinementLevel: level,
               clue: input.clue
-            }
+            },
+            result // authoritative masses
           );
 
           const response: TopUpdateResponse = {
@@ -99,7 +121,7 @@ workerScope.onmessage = async (e: MessageEvent<WorkerRequest>) => {
         }
 
         // Terminal message
-        if (currentRunId === runId) {
+        if (currentRunId === runId && !signal.aborted) {
           const terminal: RunTerminalResponse = {
             type: 'terminal',
             worker: 'top',
@@ -114,11 +136,23 @@ workerScope.onmessage = async (e: MessageEvent<WorkerRequest>) => {
       }
     }
   } catch (err: any) {
-    workerScope.postMessage({ 
+    const errorMsg: WorkerErrorResponse = { 
       type: 'error', 
       worker: 'top', 
       runId: currentRunId as any, 
       error: err.message 
-    });
+    };
+    workerScope.postMessage(errorMsg);
+    
+    if (currentRunId) {
+      const terminal: RunTerminalResponse = {
+        type: 'terminal',
+        worker: 'top',
+        runId: currentRunId,
+        status: 'error',
+        error: err.message
+      };
+      workerScope.postMessage(terminal);
+    }
   }
 };

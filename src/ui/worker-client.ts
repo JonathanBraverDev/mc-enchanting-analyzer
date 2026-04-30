@@ -7,12 +7,13 @@ import {
   RefinementLevelName,
   TopRunView,
   ChartCellView,
-  RequestId
+  RequestId,
+  RunStatus
 } from '#types/index.js';
 
-type TopUpdateCallback = (view: TopRunView) => void;
-type ChartUpdateCallback = (view: ChartCellView) => void;
-type TerminalCallback = () => void;
+export type TopUpdateCallback = (view: TopRunView) => void;
+export type ChartUpdateCallback = (view: ChartCellView) => void;
+export type TerminalCallback = (status: RunStatus, error?: string) => void;
 
 /**
  * Client wrapper around the Enchant Engine Web Workers.
@@ -49,11 +50,8 @@ export const WorkerClient = {
         return new Promise((resolve, reject) => {
             if (this.workers[kind]) this.workers[kind]!.terminate();
             
-            if (kind === 'top') {
-                this.workers.top = new Worker('dist/top-worker.js');
-            } else {
-                this.workers.chart = new Worker('dist/chart-worker.js');
-            }
+            this.workers[kind] = new Worker(kind === 'top' ? '/dist/top-worker.js' : '/dist/chart-worker.js');
+            
             const timeout = setTimeout(() => reject(new Error(`Worker ${kind} initialization timed out`)), 10000);
 
             this.workers[kind]!.onmessage = (e: MessageEvent<WorkerResponse>) => {
@@ -66,42 +64,69 @@ export const WorkerClient = {
                     return;
                 }
 
-                if (type === 'runAccepted') {
-                    // Could track acceptance if needed
-                    return;
-                }
-
-                if (type === 'topUpdate' && kind === 'top') {
-                    const cb = this.callbacks.top.get(data.runId);
-                    if (cb && data.runId === this.activeRunIds.top) {
-                        cb(data.view);
-                    }
-                } else if (type === 'chartUpdate' && kind === 'chart') {
-                    const cb = this.callbacks.chart.get(data.runId);
-                    if (cb && data.runId === this.activeRunIds.chart) {
-                        cb(data.cell);
-                    }
-                } else if (type === 'terminal' && kind === 'chart') {
-                    const cb = this.callbacks.terminal.get(data.runId);
-                    if (cb && data.runId === this.activeRunIds.chart) {
-                        cb();
-                        this.callbacks.chart.delete(data.runId);
-                        this.callbacks.terminal.delete(data.runId);
+                // Generic handler for run-based messages
+                if ('runId' in data) {
+                    const runId = data.runId;
+                    
+                    // Ignore messages from superseded runs (but still process terminal for cleanup)
+                    const isActive = runId === this.activeRunIds[kind];
+                    
+                    if (type === 'topUpdate' && kind === 'top' && isActive) {
+                        this.callbacks.top.get(runId)?.(data.view);
+                    } else if (type === 'chartUpdate' && kind === 'chart' && isActive) {
+                        this.callbacks.chart.get(runId)?.(data.cell);
+                    } else if (type === 'terminal') {
+                        const cb = this.callbacks.terminal.get(runId);
+                        if (cb) {
+                            cb(data.status, data.error);
+                        }
+                        this.cleanupRun(kind, runId);
+                    } else if (type === 'error' && data.runId) {
+                        const cb = this.callbacks.terminal.get(data.runId);
+                        if (cb) cb('error', data.error);
+                        this.cleanupRun(kind, data.runId);
                     }
                 } else if (type === 'error') {
-                    console.error(`Worker ${kind} error:`, data.error);
+                    console.error(`Worker ${kind} system error:`, data.error);
                 }
             };
 
-            const requestId = ++(this.requestId as any) as RequestId;
-            this.workers[kind]!.postMessage({ type: 'init', requestId, version });
+            const reqId = ++(this.requestId as any) as RequestId;
+            this.workers[kind]!.postMessage({ type: 'init', requestId: reqId, version });
         });
     },
 
-    startTopRun(input: TopInputSignature, refinement: RefinementLevelName[], onUpdate: TopUpdateCallback): RunId {
+    cleanupRun(kind: 'top' | 'chart', runId: RunId): void {
+        if (this.activeRunIds[kind] === runId) {
+            this.activeRunIds[kind] = null;
+        }
+        if (kind === 'top') {
+            this.callbacks.top.delete(runId);
+        } else {
+            this.callbacks.chart.delete(runId);
+        }
+        this.callbacks.terminal.delete(runId);
+    },
+
+    /**
+     * Explicitly cancel an active run from the UI side.
+     */
+    cancelRun(kind: 'top' | 'chart'): void {
+        const runId = this.activeRunIds[kind];
+        if (runId) {
+            const cb = this.callbacks.terminal.get(runId);
+            if (cb) cb('superseded');
+            this.cleanupRun(kind, runId);
+        }
+    },
+
+    startTopRun(input: TopInputSignature, refinement: RefinementLevelName[], onUpdate: TopUpdateCallback, onTerminal: TerminalCallback): RunId {
+        this.cancelRun('top');
+
         const runId = `top_${Date.now()}_${++(this.requestId as any)}` as RunId;
         this.activeRunIds.top = runId;
         this.callbacks.top.set(runId, onUpdate);
+        this.callbacks.terminal.set(runId, onTerminal);
 
         this.workers.top?.postMessage({
             type: 'topRunStart',
@@ -115,6 +140,8 @@ export const WorkerClient = {
     },
 
     startChartRun(input: ChartInputSignature, refinement: RefinementLevelName[], onUpdate: ChartUpdateCallback, onTerminal: TerminalCallback): RunId {
+        this.cancelRun('chart');
+
         const runId = `chart_${Date.now()}_${++(this.requestId as any)}` as RunId;
         this.activeRunIds.chart = runId;
         this.callbacks.chart.set(runId, onUpdate);
@@ -129,10 +156,5 @@ export const WorkerClient = {
         } as WorkerRequest);
 
         return runId;
-    },
-
-    /** Legacy support or explicit reset if needed */
-    async resetWorker(kind: 'top' | 'chart', version: string): Promise<void> {
-        await this.initWorker(kind, version);
     }
 };
