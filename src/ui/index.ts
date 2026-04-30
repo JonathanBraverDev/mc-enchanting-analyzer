@@ -133,7 +133,9 @@ class AppController {
     }
 
     private updateInsightsFromRaw(raw: CalculationStats | null, isFinal: boolean = false): void {
-        const engine = this.getEngine();
+        const { version, sortMode } = this.params.getValues();
+        const registry = UiMetadataService.getRegistry(version);
+        
         if (!raw) {
             if (isFinal) this.results.showNoResults();
             return;
@@ -141,13 +143,12 @@ class AppController {
         
         this.lastRawStats = raw;
 
-        const { sortMode } = this.params.getValues();
-        const insights = HumanizationService.humanize(raw, engine.registry, sortMode as ResultSortMode, DATA.constants.ROMAN_MAP);
+        const insights = HumanizationService.humanize(raw, registry, sortMode as ResultSortMode, DATA.constants.ROMAN_MAP);
         
         const pending = insights.accounting.pending;
         if (isFinal || (this.bestInsights && pending < this.bestInsights.accounting.pending) || !this.bestInsights) {
             this.bestInsights = insights;
-            this.results.update(insights, engine.registry);
+            this.results.update(insights, registry);
         }
     }
 

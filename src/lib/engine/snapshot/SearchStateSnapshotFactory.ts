@@ -5,7 +5,6 @@ import {
   RegistryState, 
   PackedCombo, 
   SearchStateTracker,
-  ProbabilityShare,
   NormalizationView,
   AccountingView,
   TopComboView,
@@ -62,7 +61,7 @@ export class SearchStateSnapshotFactory {
     const accounting = tracker.toPublic();
     const normalization: NormalizationView = {
       domain: isConditioned ? 'clue-known-space' : 'resolved-mass',
-      clueKnownSpace
+      ...(clueKnownSpace !== undefined ? { clueKnownSpace } : {})
     };
 
     if (snapshotType === 'top') {

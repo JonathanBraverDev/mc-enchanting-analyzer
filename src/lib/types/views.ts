@@ -1,4 +1,4 @@
-import { ProbabilityShare, TopInputSignature, RefinementLevelName, BaseInputSignature, ChartInputSignature, PassId } from './protocol.js';
+import { ProbabilityShare, TopInputSignature, RefinementLevelName, ChartInputSignature, PassId } from './protocol.js';
 
 export interface NormalizationView {
   domain: 'resolved-mass' | 'clue-known-space';

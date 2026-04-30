@@ -8,12 +8,15 @@ import {
 } from '#core/registry.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 
+import { RegistryFactory } from '#core/factory.js';
+
 /**
  * Lightweight service for the UI to retrieve metadata and constraints
  * without importing the full EnchantEngine or search services.
  */
 export class UiMetadataService {
   private static distributionService = new ModifiedLevelDistributionService();
+  private static registries = new Map<string, RegistryState>();
 
   /** Returns the list of supported Minecraft versions in reverse chronological order. */
   public static getVersions(): string[] {
@@ -22,8 +25,11 @@ export class UiMetadataService {
 
   /** Gets the registry state for a specific version. */
   public static getRegistry(version: string): RegistryState {
-    const registry = DATA.versions[version];
-    if (!registry) throw new Error(`Unknown version: ${version}`);
+    let registry = this.registries.get(version);
+    if (!registry) {
+      registry = RegistryFactory.build(DATA, version);
+      this.registries.set(version, registry);
+    }
     return registry;
   }
 
