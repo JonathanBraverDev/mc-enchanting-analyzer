@@ -1,0 +1,77 @@
+name: Release Pre-Merge Check
+
+on:
+  pull_request:
+    branches:
+      - main
+    types: [opened, edited, synchronize]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-release:
+    name: Validate Release Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install SemVer Tool
+        run: npm install semver --no-save
+
+      - name: Debug Information
+        run: |
+          echo "PR Title: '${{ github.event.pull_request.title }}'"
+          git tag -l "v[0-9]*"
+
+      - name: Check PR Title
+        id: check_title
+        run: |
+          TITLE="${{ github.event.pull_request.title }}"
+          if [[ ! "$TITLE" =~ ^Release:\ v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            echo "::error::PR title must follow the pattern 'Release: vX.Y.Z' (current: '$TITLE')"
+            exit 1
+          fi
+          TAG=$(echo "$TITLE" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Check PR Description
+        run: |
+          BODY="${{ github.event.pull_request.body }}"
+          if [ -z "$BODY" ] || [ ${#BODY} -lt 10 ]; then
+            echo "::error::PR description is too short or empty. Please provide release notes (minimum 10 characters)."
+            exit 1
+          fi
+
+      - name: Verify Changelog
+        run: |
+          PROPOSED_TAG="${{ steps.check_title.outputs.tag }}"
+          echo "Searching for entry for $PROPOSED_TAG in CHANGELOG.md..."
+          if ! grep -q "## \[$PROPOSED_TAG\]" CHANGELOG.md && ! grep -q "## $PROPOSED_TAG" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md does not contain a header for $PROPOSED_TAG (expected '## [$PROPOSED_TAG]' or '## $PROPOSED_TAG')"
+            exit 1
+          fi
+
+      - name: Validate SemVer Jump
+        run: |
+          git fetch origin main --tags || true
+          LATEST_TAG=$(git tag -l "v[0-9]*" --sort=v:refname | tail -n 1)
+          PROPOSED_TAG="${{ steps.check_title.outputs.tag }}"
+          
+          if [ -n "$LATEST_TAG" ] && [ "$LATEST_TAG" != "$PROPOSED_TAG" ]; then
+            # Use local semver for speed and silence
+            P=$(npx semver -i patch $LATEST_TAG)
+            M=$(npx semver -i minor $LATEST_TAG)
+            J=$(npx semver -i major $LATEST_TAG)
+            
+            if [ "$PROPOSED_TAG" != "v$P" ] && [ "$PROPOSED_TAG" != "$P" ] && \
+               [ "$PROPOSED_TAG" != "v$M" ] && [ "$PROPOSED_TAG" != "$M" ] && \
+               [ "$PROPOSED_TAG" != "v$J" ] && [ "$PROPOSED_TAG" != "$J" ]; then
+              echo "::error::Invalid version jump. From $LATEST_TAG, the next version should be v$P, v$M, or v$J."
+              exit 1
+            fi
+          fi
+          echo "SemVer jump validation successful."

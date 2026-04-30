@@ -1,24 +1,20 @@
-
 import { EnchantEngine, EngineFactory } from '#engine/index.js';
-import { DATA } from '../src/lib/data/index.js';
-import { SnapshotUtils } from '../tests/infra/test-utils.js';
-import { ENGINE_DEFAULTS } from '../src/lib/core/config.js';
+import { DATA } from '#data/index.js';
+import { SnapshotUtils } from '#tests/infra/test-utils.js';
+import { ENGINE_LIMITS } from '#constants/engine.js';
+import { TEST_DEFAULTS } from '#constants/testing.js';
 
 async function updateSnapshots() {
     console.log('Updating Regression Snapshots...');
-
-    const SNAPSHOT_LIMIT = ENGINE_DEFAULTS.MAX_RESULTS_UNBOUNDED;
-    const SNAPSHOT_ITERATIONS = ENGINE_DEFAULTS.MAX_ITERATIONS_UNBOUNDED;
-    const HI_RES_THRESHOLD = 0.00000001; // 1e-8: Full accurate resolution
 
     // Helper to generate snapshots with new API signature
     const getStats = async (engine: EnchantEngine, cat: string, xp: number, mat: string, clue: string | null = null) => {
         return await engine.calculate(cat, xp, mat, {
             clue,
-            threshold: HI_RES_THRESHOLD,
-            maxIterations: SNAPSHOT_ITERATIONS,
-            resultsLimit: SNAPSHOT_LIMIT,
-            summaryLimit: SNAPSHOT_LIMIT
+            threshold: TEST_DEFAULTS.SNAPSHOT_THRESHOLD,
+            maxIterations: ENGINE_LIMITS.MAX_ITERATIONS_UNBOUNDED,
+            resultsLimit: ENGINE_LIMITS.MAX_RESULTS_UNBOUNDED,
+            summaryLimit: ENGINE_LIMITS.MAX_RESULTS_UNBOUNDED
         });
     };
 

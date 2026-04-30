@@ -1,7 +1,7 @@
 import { AsyncUtils, ProbUtils } from '#utils/index.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import { SearchState, SearchContext, ForwardingContext } from '#types/index.js';
-import { SearchProcessor } from './SearchProcessor.js';
+import { SearchProcessor } from '#engine/search/SearchProcessor.js';
 import { ComboUtils } from '#utils/index.js';
 import { PackedCombo } from '#types/index.js';
 

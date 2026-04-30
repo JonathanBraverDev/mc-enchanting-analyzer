@@ -8,9 +8,9 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { MassAccounting } from '#types/mass.js';
-import { RefinementService } from '../../src/ui/refinement.js';
-import { WorkerClient } from '../../src/worker/client.js';
-import { TEST_DATA } from '../infra/test-data.js';
+import { RefinementService } from '#ui/refinement.js';
+import { WorkerClient } from '#ui/worker-client.js';
+import { TEST_DATA } from '#tests/infra/test-data.js';
 
 // ---------------------------------------------------------------------------
 // Helpers

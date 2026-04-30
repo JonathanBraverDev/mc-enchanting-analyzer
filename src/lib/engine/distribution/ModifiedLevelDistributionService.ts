@@ -1,6 +1,6 @@
 import { PRECISION, ProbUtils } from '#utils/index.js';
-import { ENGINE_DEFAULTS } from '#core/config.js';
-import { ENGINE_LIMITS, MINECRAFT_DEFAULTS } from '#constants/engine.js';
+import { ENGINE_LIMITS, MATH_CONSTANTS } from '#constants/engine.js';
+import { MINECRAFT_RULES } from '#constants/minecraft.js';
 import { RegistryState, LevelDistribution, EngineInstrumentation } from '#types/index.js';
 import { CacheManager } from '#services/CacheManager.js';
 
@@ -36,12 +36,12 @@ export class ModifiedLevelDistributionService {
         // 1.0 in BigInt fixed-point
         if (enchantability <= 0) return { [xp]: PRECISION };
 
-        const div = mech.enchantability_bonus_divisor ?? MINECRAFT_DEFAULTS.ENCHANTABILITY_DIVISOR;
-        const rngRange = mech.random_bonus_range ?? MINECRAFT_DEFAULTS.RANDOM_BONUS_RANGE;
+        const div = mech.enchantability_bonus_divisor ?? MINECRAFT_RULES.ENCHANTABILITY_DIVISOR_MODERN;
+        const rngRange = mech.random_bonus_range ?? MINECRAFT_RULES.RANDOM_BONUS_RANGE;
         const N = Math.floor(enchantability / div) + 1;
 
         // Ensure buffer is large enough for N or RNG_STEPS
-        const requiredSize = Math.max(2 * N, ENGINE_DEFAULTS.RNG_STEPS_FOR_DISTRIBUTION);
+        const requiredSize = Math.max(2 * N, MATH_CONSTANTS.RNG_STEPS_FOR_DISTRIBUTION);
         if (this.buffer.length < requiredSize) {
             throw new Error(`Distribution buffer size ${this.buffer.length} is too small for required ${requiredSize}`);
         }
@@ -90,7 +90,7 @@ export class ModifiedLevelDistributionService {
 
     private applyRandomMultiplier(baseDistMap: Map<number, bigint>, rngRange: number): LevelDistribution {
         const finalDist: LevelDistribution = {};
-        const steps = ENGINE_DEFAULTS.RNG_STEPS_FOR_DISTRIBUTION;
+        const steps = MATH_CONSTANTS.RNG_STEPS_FOR_DISTRIBUTION;
         const triWeights = this.getTriangularWeights(steps);
         const totalTriWeight = BigInt(steps * steps);
 

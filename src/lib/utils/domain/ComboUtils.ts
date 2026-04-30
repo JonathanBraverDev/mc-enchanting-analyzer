@@ -1,4 +1,4 @@
-import { PackedEnchant, PackedCombo } from '../../types/index.js';
+import { PackedEnchant, PackedCombo } from '#types/index.js';
 import { PACKING_CONSTANTS } from '#constants/engine.js';
 
 /**

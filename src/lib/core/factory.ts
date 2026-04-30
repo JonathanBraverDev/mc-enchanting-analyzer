@@ -1,5 +1,5 @@
-import { EnchantmentData, VersionManifest, Enchantment, RegistryState } from '../types/index.js';
-import { VersionUtils } from '../utils/index.js';
+import { EnchantmentData, VersionManifest, Enchantment, RegistryState } from '#types/index.js';
+import { VersionUtils } from '#utils/index.js';
 
 
 /**

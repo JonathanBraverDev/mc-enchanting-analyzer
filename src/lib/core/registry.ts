@@ -1,7 +1,6 @@
-import { EnchantmentData, RegistryState, PackedEnchant } from '../types/index.js';
-import { RomanUtils, EnchantUtils } from '../utils/index.js';
-import { PACKING_CONSTANTS } from '../constants/engine.js';
-import { ENGINE_DEFAULTS } from './config.js';
+import { EnchantmentData, RegistryState, PackedEnchant } from '#types/index.js';
+import { RomanUtils, EnchantUtils } from '#utils/index.js';
+import { PACKING_CONSTANTS, ENGINE_LIMITS } from '#constants/engine.js';
 
 /**
  * Returns the list of materials compatible with a given category.
@@ -53,7 +52,7 @@ export function getRankRoman(state: RegistryState, rank: number): string {
  * @returns The category ID, or UNKNOWN_CATEGORY_ID if not found.
  */
 export function getCategoryId(state: RegistryState, cat: string): number {
-    return state.catIdMap.get(cat) ?? ENGINE_DEFAULTS.UNKNOWN_CATEGORY_ID;
+    return state.catIdMap.get(cat) ?? ENGINE_LIMITS.UNKNOWN_CATEGORY_ID;
 }
 
 /**
@@ -63,7 +62,7 @@ export function getCategoryId(state: RegistryState, cat: string): number {
  * @returns The material ID, or UNKNOWN_MATERIAL_ID if not found.
  */
 export function getMaterialId(state: RegistryState, mat: string): number {
-    return state.matIdMap.get(mat) ?? ENGINE_DEFAULTS.UNKNOWN_MATERIAL_ID;
+    return state.matIdMap.get(mat) ?? ENGINE_LIMITS.UNKNOWN_MATERIAL_ID;
 }
 
 /**
@@ -73,7 +72,7 @@ export function getMaterialId(state: RegistryState, mat: string): number {
  * @returns The enchantment ID, or UNKNOWN_ENCHANT_ID if not found.
  */
 export function getEnchantId(state: RegistryState, name: string): number {
-    return state.idMap.get(name) ?? ENGINE_DEFAULTS.UNKNOWN_ENCHANT_ID;
+    return state.idMap.get(name) ?? ENGINE_LIMITS.UNKNOWN_ENCHANT_ID;
 }
 
 /**

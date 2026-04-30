@@ -1,0 +1,79 @@
+name: Release Automation
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+
+jobs:
+  release:
+    if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.title, 'Release: v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Extract Version
+        id: get_version
+        run: |
+          TITLE="${{ github.event.pull_request.title }}"
+          TAG=$(echo "$TITLE" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Use Node.js 22.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: 'npm'
+
+      - run: npm ci
+      - run: npm run build:standalone
+
+      - name: Create Release and Tag
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.get_version.outputs.tag }}
+          files: dist/analyzer-standalone.html
+          generate_release_notes: true
+          name: "Release ${{ steps.get_version.outputs.tag }}"
+          body: ${{ github.event.pull_request.body }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  sync-dev:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Rebase Dev onto Main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git fetch origin main dev
+          git checkout dev
+          
+          if git rebase origin/main; then
+            git push origin dev --force
+          else
+            echo "CONFLICT: Rebase failed. Please resolve manually."
+            exit 1
+          fi
+
+      - name: Cleanup Release Branch
+        if: success()
+        run: |
+          BRANCH_NAME="${{ github.event.pull_request.head.ref }}"
+          if [[ "$BRANCH_NAME" == release/* ]] || [[ "$BRANCH_NAME" == 4.3.0 ]]; then
+            git push origin --delete "$BRANCH_NAME"
+          fi

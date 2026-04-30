@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { UI_TEXTS, UI_DEFAULTS } from '#core/config.js';
-import { AnalyzerPage } from './pom/analyzer-page.js';
-import { TEST_DATA } from '../../infra/test-data.js';
+import { AnalyzerPage } from '#tests/ui/playwright/pom/analyzer-page.js';
+import { TEST_DATA } from '#tests/infra/test-data.js';
 
 test.describe('UI Performance & Stability', () => {
     // Run these in parallel to maximize CPU core usage for heavy engine calls

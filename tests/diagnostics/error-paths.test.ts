@@ -2,7 +2,7 @@ import { test, describe, it } from 'node:test';
 import assert from 'node:assert';
 import { EngineFactory } from '#engine/factory.js';
 import { DATA } from '#data/index.js';
-import { ENGINE_DEFAULTS } from '#core/config.js';
+import { MINECRAFT_RULES } from '#constants/minecraft.js';
 
 describe('Error Path Tests', () => {
     test.afterEach(() => {
@@ -194,10 +194,10 @@ describe('Error Path Tests', () => {
     });
 
     describe('6. XP level above the version cap', () => {
-        it(`XP = ${ENGINE_DEFAULTS.MAX_XP_LEVEL + 1} throws a clear error`, async () => {
+        it(`XP = ${MINECRAFT_RULES.XP_CAP_MODERN + 1} throws a clear error`, async () => {
             const engine = EngineFactory.create(DATA, '1.21');
             await assert.rejects(
-                () => engine.calculate('sword', ENGINE_DEFAULTS.MAX_XP_LEVEL + 1, 'diamond'),
+                () => engine.calculate('sword', MINECRAFT_RULES.XP_CAP_MODERN + 1, 'diamond'),
                 (err: Error) => {
                     assert.ok(err.message.toLowerCase().includes('xp'), `Expected "xp" in: ${err.message}`);
                     return true;
@@ -216,10 +216,16 @@ describe('Error Path Tests', () => {
             );
         });
 
-        it(`XP = ${ENGINE_DEFAULTS.MAX_XP_LEVEL} is valid (boundary check)`, async () => {
+        it(`XP = ${MINECRAFT_RULES.XP_CAP_MODERN} is valid (boundary check)`, async () => {
             const engine = EngineFactory.create(DATA, '1.21');
-            const stats = await engine.calculate('sword', ENGINE_DEFAULTS.MAX_XP_LEVEL, 'diamond', { threshold: 0.01 });
+            const stats = await engine.calculate('sword', MINECRAFT_RULES.XP_CAP_MODERN, 'diamond', { threshold: 0.01 });
             assert.ok(Object.keys(stats.any).length > 0, 'Should have enchantment probabilities at max XP');
+        });
+
+        it(`Legacy: XP = ${MINECRAFT_RULES.XP_CAP_LEGACY} is valid for 1.1`, async () => {
+            const engine = EngineFactory.create(DATA, '1.1');
+            const stats = await engine.calculate('sword', MINECRAFT_RULES.XP_CAP_LEGACY, 'diamond', { threshold: 0.01 });
+            assert.ok(Object.keys(stats.any).length > 0, 'Legacy should support XP up to 50');
         });
 
         it('XP = 1 is valid (minimum boundary check)', async () => {

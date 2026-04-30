@@ -4,7 +4,7 @@ import { ProbUtils, ComboUtils, PRECISION } from '#utils/index.js';
 
 import { DistributionBufferPool } from '#engine/distribution/DistributionBufferPool.js';
 import { ENGINE_LIMITS, SEARCH_CONSTANTS, BIGINT_CONSTANTS } from '#constants/engine.js';
-import { ProbabilityMassBookkeeper } from './ProbabilityMassBookkeeper.js';
+import { ProbabilityMassBookkeeper } from '#engine/search/ProbabilityMassBookkeeper.js';
 
 /**
  * Unified state tracker for probability mass and expanded node blueprints.

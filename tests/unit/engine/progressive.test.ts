@@ -4,7 +4,7 @@ import { CacheManager } from '#engine/cache/CacheManager.js';
 import { EnchantEngine } from '#engine/index.js';
 import { EngineFactory } from '#engine/factory.js';
 import { DATA } from '#data/index.js';
-import { TEST_DATA } from '../../infra/test-data.js';
+import { TEST_DATA } from '#tests/infra/test-data.js';
 
 describe('EnchantEngine: Progressive Search', () => {
 

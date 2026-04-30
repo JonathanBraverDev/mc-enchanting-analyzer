@@ -1,6 +1,7 @@
 import { EngineFactory } from '#engine/index.js';
-import { DATA } from '../src/lib/data/index.js';
-import { ENGINE_DEFAULTS } from '../src/lib/core/config.js';
+import { DATA } from '#data/index.js';
+import { TEST_DEFAULTS } from '#constants/testing.js';
+import { ENGINE_LIMITS } from '#constants/engine.js';
 
 async function profile() {
     const args = process.argv.slice(2);
@@ -13,9 +14,6 @@ async function profile() {
     
     console.log(`Profiling ${version} search performance...`);
     const engine = EngineFactory.create(DATA, version);
-    const SNAPSHOT_LIMIT = ENGINE_DEFAULTS.MAX_RESULTS_UNBOUNDED;
-    const SNAPSHOT_ITERATIONS = ENGINE_DEFAULTS.MAX_ITERATIONS_UNBOUNDED;
-    const SNAPSHOT_THRESHOLD = 0.00000001;
 
     const timing = { totalMs: 0, searchMs: 0 };
     console.time('TargetSnapshot');
@@ -24,10 +22,10 @@ async function profile() {
         30,
         'book',
         {
-            threshold: SNAPSHOT_THRESHOLD,
-            maxIterations: SNAPSHOT_ITERATIONS,
-            summaryLimit: SNAPSHOT_LIMIT,
-            resultsLimit: SNAPSHOT_LIMIT,
+            threshold: TEST_DEFAULTS.SNAPSHOT_THRESHOLD,
+            maxIterations: ENGINE_LIMITS.MAX_ITERATIONS_UNBOUNDED,
+            summaryLimit: ENGINE_LIMITS.MAX_RESULTS_UNBOUNDED,
+            resultsLimit: ENGINE_LIMITS.MAX_RESULTS_UNBOUNDED,
             useCache: false,
             timing
         }

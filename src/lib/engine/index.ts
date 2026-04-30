@@ -2,13 +2,14 @@ import { CalculationStats, SearchState, RegistryState, SearchConfig, InternalSea
 import { ProbUtils, EnchantUtils } from '#utils/index.js';
 import { getMaterialId, getEnchantId, isCategoryAvailable, getEligibleListNumeric as getRegistryEligibleListNumeric } from '#core/registry.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
-import { getSearchLimit } from '#core/config.js';
-import { CacheManager } from './cache/CacheManager.js';
+import { MINECRAFT_RULES } from '#constants/minecraft.js';
+import { getSearchLimit } from '#engine/utils.js';
+import { CacheManager } from '#engine/cache/CacheManager.js';
 import { KeyService } from '#services/KeyService.js';
 import { SummaryService } from '#services/SummaryService.js';
-import { ModifiedLevelDistributionService } from './distribution/ModifiedLevelDistributionService.js';
-import { SearchService } from './search/SearchService.js';
-import { ProgressiveStatsAggregator } from './aggregation/ProgressiveStatsAggregator.js';
+import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
+import { SearchService } from '#engine/search/SearchService.js';
+import { ProgressiveStatsAggregator } from '#engine/aggregation/ProgressiveStatsAggregator.js';
 export { EngineFactory } from './factory.js';
 
 /**
@@ -378,8 +379,9 @@ export class EnchantEngine {
         if (!Number.isFinite(xp) || !Number.isInteger(xp) || xp <= 0) {
             throw new Error(`Invalid XP level: ${xp}. XP must be a positive integer.`);
         }
-        if (xp > ENGINE_LIMITS.MAX_XP_LEVEL) {
-            throw new Error(`XP level ${xp} exceeds the maximum of ${ENGINE_LIMITS.MAX_XP_LEVEL}.`);
+        const xpCap = this.registry.mechanics.xp_cap ?? MINECRAFT_RULES.XP_CAP_LEGACY;
+        if (xp > xpCap) {
+            throw new Error(`XP level ${xp} exceeds the maximum of ${xpCap} for version ${this.registry.version}.`);
         }
         if (!isCategoryAvailable(this.registry, cat)) {
             throw new Error(`Unknown or unavailable category: "${cat}" in version ${this.registry.version}.`);

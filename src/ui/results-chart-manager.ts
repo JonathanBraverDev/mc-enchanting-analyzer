@@ -2,7 +2,7 @@ import { ThemeManager } from '#ui/theme.js';
 import { getEnchantName, getFullEnchantName } from '#core/registry.js';
 import { CalculationStats, ChartDataset, RegistryState } from '#types/index.js';
 import { RomanUtils } from '#utils/index.js';
-import { ENGINE_DEFAULTS } from '#core/config.js';
+import { ENGINE_LIMITS } from '#constants/engine.js';
 
 interface ChartInstance {
     data: { labels: unknown[]; datasets: unknown[] };
@@ -96,7 +96,7 @@ export class ChartManager {
                 });
             });
         } else {
-            const max = ENGINE_DEFAULTS.MAX_ENCHANTS_PER_ITEM || 6;
+            const max = ENGINE_LIMITS.MAX_ENCHANTS_PER_ITEM || 6;
             for (let c = 1; c <= max; c++) {
                 const maxInSweep = Math.max(...sweep.map(x => x && x.s ? (x.s.count[c] || 0) : 0));
                 if (maxInSweep < 0.005) continue;

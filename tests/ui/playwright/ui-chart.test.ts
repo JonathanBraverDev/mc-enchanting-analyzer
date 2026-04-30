@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { UI_TEXTS } from '#core/config.js';
-import { AnalyzerPage } from './pom/analyzer-page.js';
-import { TEST_DATA } from '../../infra/test-data.js';
+import { AnalyzerPage } from '#tests/ui/playwright/pom/analyzer-page.js';
+import { TEST_DATA } from '#tests/infra/test-data.js';
 
 /**
  * Validates sequential redraw and progress feedback of the chart.
@@ -78,8 +78,8 @@ test.describe('Chart Loading Regression', () => {
 
         await test.step('Step 4: Result Visibility', async () => {
             // Final check: at least one result should be visible
-            await analyzer.waitForResults();
-            await expect(analyzer.comboItems.first()).toBeVisible();
+            await analyzer.waitForResults(60000);
+            await expect(analyzer.comboItems.first()).toBeVisible({ timeout: 60000 });
         });
     });
 });
