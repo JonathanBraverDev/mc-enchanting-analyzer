@@ -209,6 +209,51 @@ export class EnchantEngine {
     }
 
     /**
+     * Internal method for v5 workers to get raw aggregation results.
+     */
+    public async calculateTop(
+        cat: string,
+        xp: number,
+        mat: string,
+        config: SearchConfig = {}
+    ): Promise<import('#types/index.js').AggregationResult> {
+        this.validateRequest(cat, xp, mat, config);
+
+        const {
+            threshold = ENGINE_LIMITS.DEFAULT_THRESHOLD,
+            signal,
+            onProgress,
+            maxIterations,
+            instrumentation,
+            timing
+        } = config;
+
+        const internalConfig: InternalSearchConfig = {
+            threshold,
+            signal,
+            onProgress,
+            maxIterations,
+            getExtendedCache: (ml) => {
+                const pk = this.keyService.getPackedKey(this.registry, cat, ml, mat);
+                return (cat === "book" ? this.cache.getBook(this.registry.version, pk) : this.cache.getCombo(this.registry.version, pk)) as SearchState;
+            },
+            setExtendedCache: (ml, state) => {
+                const pk = this.keyService.getPackedKey(this.registry, cat, ml, mat);
+                if (cat === "book") this.cache.setBook(this.registry.version, pk, state);
+                else this.cache.setCombo(this.registry.version, pk, state);
+            },
+            instrumentation,
+            timing,
+            getCacheMetrics: () => ({ 
+                cacheNodes: this.cache.getTotalCachedNodes(), 
+                cacheResults: this.cache.getTotalCachedResults() 
+            })
+        };
+
+        return this.statAggregator.calculate(this.registry, cat, xp, mat, internalConfig);
+    }
+
+    /**
      * Aggregates all statistics for a given enchantment attempt.
      * Use this for standard single-pass calculations (e.g. standard UI search).
      * 

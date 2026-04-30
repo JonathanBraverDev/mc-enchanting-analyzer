@@ -75,5 +75,6 @@ export interface ChartCellView {
   refinementLevel: RefinementLevelName;
   clueConditioned: boolean;
   normalization: NormalizationView;
+  accounting?: AccountingView;
   buckets: ChartBucketsView;
 }
