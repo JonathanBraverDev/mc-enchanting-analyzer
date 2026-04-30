@@ -8,4 +8,3 @@ export * from './views.js';
 export * from './snapshot.js';
 import { SearchState } from '#types/engine.js';
 export type SearchFrontier = SearchState;
-export { SearchStateTracker } from '../engine/search/SearchStateTracker.js';

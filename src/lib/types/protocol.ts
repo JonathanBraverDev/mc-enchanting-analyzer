@@ -102,11 +102,13 @@ export interface ChartUpdateResponse {
   cell: ChartCellView;
 }
 
+export type RunStatus = 'done' | 'error' | 'cancelled' | 'superseded';
+
 export interface RunTerminalResponse {
   type: 'terminal';
   worker: WorkerKind;
   runId: RunId;
-  status: 'done' | 'error';
+  status: RunStatus;
   error?: string;
 }
 

@@ -71,7 +71,6 @@ export interface ChartBucketsView {
 
 export interface ChartCellView {
   xpLevel: number;
-  passId: PassId;
   refinementLevel: RefinementLevelName;
   clueConditioned: boolean;
   normalization: NormalizationView;
