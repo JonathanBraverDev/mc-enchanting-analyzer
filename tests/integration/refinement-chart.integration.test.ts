@@ -11,22 +11,18 @@ function flush(): Promise<void> {
 
 const BASE_PAYLOAD = TEST_DATA.PAYLOADS.BASE_SWORD;
 
-describe('Integration: Chart sweep with mocked WorkerClient', () => {
+describe('Integration: Chart sweep with mocked WorkerClient V5', () => {
     let originalStartTop: typeof WorkerClient.startTopRun;
     let originalStartChart: typeof WorkerClient.startChartRun;
-    let originalReset: typeof WorkerClient.resetWorker;
 
     beforeEach(() => {
         originalStartTop = WorkerClient.startTopRun;
         originalStartChart = WorkerClient.startChartRun;
-        originalReset = WorkerClient.resetWorker;
-        WorkerClient.resetWorker = async () => {};
     });
 
     afterEach(() => {
         WorkerClient.startTopRun = originalStartTop;
         WorkerClient.startChartRun = originalStartChart;
-        WorkerClient.resetWorker = originalReset;
     });
 
     it('sequential chart sweep: levels populate 1→30 in order', async () => {
@@ -34,15 +30,14 @@ describe('Integration: Chart sweep with mocked WorkerClient', () => {
         let lastSweep: (any | null)[] = new Array(30).fill(null);
         const chartPopulatedLog: number[] = [];
 
-        WorkerClient.startTopRun = (_input, _refinement, onUpdate) => {
-            setTimeout(() => onUpdate({
-                accounting: { resolved: 0.1 }
-            } as any), 1);
+        WorkerClient.startTopRun = (_input, _refinement, _onUpdate, onTerminal) => {
+            setTimeout(() => onTerminal('done'), 1);
             return 'top-run' as any;
         };
 
         WorkerClient.startChartRun = (_input, refinement, onUpdate, onTerminal) => {
-            const level = refinement[0];
+            // In v5, we process all levels. For this test, we just stream 1 level's worth.
+            const level = refinement[0]!;
             for (let i = 1; i <= 30; i++) {
                 onUpdate({
                     xpLevel: i,
@@ -51,11 +46,11 @@ describe('Integration: Chart sweep with mocked WorkerClient', () => {
                     buckets: { anyByEnchantId: {}, rankByIdAndRank: {}, countBySize: {} }
                 } as any);
             }
-            onTerminal();
+            onTerminal('done');
             return 'chart-run' as any;
         };
 
-        await service.run(BASE_PAYLOAD, {} as any, {
+        await service.run(BASE_PAYLOAD, { mechanics: { xp_cap: 30 } } as any, {
             onStatus: () => {},
             onStats: () => {},
             onChart: (sweep) => {
@@ -90,49 +85,50 @@ describe('Integration: Chart sweep with mocked WorkerClient', () => {
         );
     });
 
-    it('accuracy improves between coarse and final passes', async () => {
+    it('accuracy improves between coarse and final passes (streaming v5)', async () => {
         const service = new RefinementService();
-        let lastSweep: (any | null)[] = new Array(30).fill(null);
-        let coarseSweepSnap: { accuracy: number }[] | null = null;
-        let finalSweepSnap: { accuracy: number }[] | null = null;
+        let coarseSweepSnap: any[] | null = null;
+        let finalSweepSnap: any[] | null = null;
 
-        WorkerClient.startTopRun = (_input, _refinement, onUpdate) => {
-            setTimeout(() => onUpdate({
-                accounting: { resolved: 0.1 }
-            } as any), 1);
+        WorkerClient.startTopRun = (_input, _refinement, _onUpdate, onTerminal) => {
+            setTimeout(() => onTerminal('done'), 1);
             return 'top-run' as any;
         };
 
         WorkerClient.startChartRun = (_input, refinement, onUpdate, onTerminal) => {
-            const level = refinement[0];
-            const accuracy = (level === 'coarse') ? 0.9 : 0.999;
-            for (let i = 1; i <= 30; i++) {
-                onUpdate({
-                    xpLevel: i,
-                    refinementLevel: level,
-                    normalization: { domain: 'resolved-mass' },
-                    accounting: { resolved: accuracy },
-                    buckets: { anyByEnchantId: {}, rankByIdAndRank: {}, countBySize: {} }
-                } as any);
-            }
-            onTerminal();
+            refinement.forEach((level, levelIdx) => {
+                const accuracy = (level === 'coarse') ? 0.9 : 0.999;
+                setTimeout(() => {
+                    for (let i = 1; i <= 30; i++) {
+                        onUpdate({
+                            xpLevel: i,
+                            refinementLevel: level,
+                            normalization: { domain: 'resolved-mass' },
+                            accounting: { resolved: accuracy },
+                            buckets: { anyByEnchantId: {}, rankByIdAndRank: {}, countBySize: {} }
+                        } as any);
+                    }
+                    if (levelIdx === refinement.length - 1) onTerminal('done');
+                }, levelIdx * 5);
+            });
             return 'chart-run' as any;
         };
 
-        await service.run(BASE_PAYLOAD, {} as any, {
+        await service.run(BASE_PAYLOAD, { mechanics: { xp_cap: 30 } } as any, {
             onStatus: () => {},
             onStats: () => {},
-            onChart: (sweep) => {
-                const updatedIdx = sweep.findIndex((s, i) => s !== lastSweep[i]);
-                if (updatedIdx === 29) {
-                    const snap = sweep.map(s => ({ accuracy: s?.accounting?.resolved ?? -1 }));
-                    if (coarseSweepSnap === null) {
+            onChart: (sweep: any) => {
+                if (!sweep) return;
+                const cell = sweep[29];
+                if (cell) {
+                    const snap = sweep.map((s: any) => ({ accuracy: s?.accounting?.resolved ?? -1 }));
+                    const firstAccuracy = snap[0].accuracy;
+                    if (firstAccuracy > 0 && firstAccuracy < 0.95 && coarseSweepSnap === null) {
                         coarseSweepSnap = snap;
-                    } else {
+                    } else if (firstAccuracy > 0.95 && finalSweepSnap === null) {
                         finalSweepSnap = snap;
                     }
                 }
-                lastSweep = [...sweep];
             },
         });
 
@@ -142,8 +138,8 @@ describe('Integration: Chart sweep with mocked WorkerClient', () => {
         assert.ok(finalSweepSnap !== null, 'Should have captured a final sweep snapshot');
 
         let improved = false;
-        const final = finalSweepSnap as any[];
-        const coarse = coarseSweepSnap as any[];
+        const final: any = finalSweepSnap;
+        const coarse: any = coarseSweepSnap;
         for (let i = 0; i < 30; i++) {
             if (final[i].accuracy > coarse[i].accuracy + 0.00001) {
                 improved = true;
@@ -153,5 +149,3 @@ describe('Integration: Chart sweep with mocked WorkerClient', () => {
         assert.ok(improved, 'Expected the final sweep to increase accuracy for at least one level.');
     });
 });
-
-

@@ -13,19 +13,15 @@ function flush(): Promise<void> {
 describe('XP Cap Sweep Integration', () => {
     let originalStartTop: typeof WorkerClient.startTopRun;
     let originalStartChart: typeof WorkerClient.startChartRun;
-    let originalReset: typeof WorkerClient.resetWorker;
 
     beforeEach(() => {
         originalStartTop = WorkerClient.startTopRun;
         originalStartChart = WorkerClient.startChartRun;
-        originalReset = WorkerClient.resetWorker;
-        WorkerClient.resetWorker = async () => {};
     });
 
     afterEach(() => {
         WorkerClient.startTopRun = originalStartTop;
         WorkerClient.startChartRun = originalStartChart;
-        WorkerClient.resetWorker = originalReset;
     });
 
     it('should sweep up to 30 for modern version (1.21)', async () => {
@@ -34,8 +30,8 @@ describe('XP Cap Sweep Integration', () => {
         
         let lastSweepLength = 0;
 
-        WorkerClient.startTopRun = (_input, _refinement, onUpdate) => {
-            setTimeout(() => onUpdate({} as any), 1);
+        WorkerClient.startTopRun = (_input, _refinement, _onUpdate, onTerminal) => {
+            setTimeout(() => onTerminal('done'), 1);
             return 'top-run' as any;
         };
 
@@ -44,7 +40,7 @@ describe('XP Cap Sweep Integration', () => {
             for (let i = 1; i <= xpCap; i++) {
                 onUpdate({ xpLevel: i, buckets: {} } as any);
             }
-            onTerminal();
+            onTerminal('done');
             return 'chart-run' as any;
         };
         
@@ -74,8 +70,8 @@ describe('XP Cap Sweep Integration', () => {
         
         let lastSweepLength = 0;
 
-        WorkerClient.startTopRun = (_input, _level, onUpdate) => {
-            setTimeout(() => onUpdate({} as any), 1);
+        WorkerClient.startTopRun = (_input, _refinement, _onUpdate, onTerminal) => {
+            setTimeout(() => onTerminal('done'), 1);
             return 'top-run' as any;
         };
 
@@ -84,7 +80,7 @@ describe('XP Cap Sweep Integration', () => {
             for (let i = 1; i <= xpCap; i++) {
                 onUpdate({ xpLevel: i, buckets: {} } as any);
             }
-            onTerminal();
+            onTerminal('done');
             return 'chart-run' as any;
         };
         

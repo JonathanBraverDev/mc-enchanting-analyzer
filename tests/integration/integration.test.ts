@@ -5,78 +5,130 @@ import { WorkerClient } from '#ui/worker-client.js';
 import { EngineFactory } from '#engine/factory.js';
 import { DATA } from '#data/index.js';
 import { TEST_DATA } from '#tests/infra/test-data.js';
-
-/** Flush microtasks and pending timers (AsyncUtils.yield uses setTimeout). */
-function flush(): Promise<void> {
-    return new Promise(r => setTimeout(r, 20));
-}
+import { SearchStateSnapshotFactory } from '#engine/snapshot/SearchStateSnapshotFactory.js';
+import { SummaryService } from '#services/SummaryService.js';
 
 const BASE_PAYLOAD = TEST_DATA.PAYLOADS.BASE_SWORD;
 
-describe('Integration: RefinementService with mocked WorkerClient', () => {
+describe('Integration: RefinementService V5 Contract', () => {
     let originalStartTop: typeof WorkerClient.startTopRun;
     let originalStartChart: typeof WorkerClient.startChartRun;
-    let originalReset: typeof WorkerClient.resetWorker;
 
     beforeEach(() => {
         originalStartTop = WorkerClient.startTopRun;
         originalStartChart = WorkerClient.startChartRun;
-        originalReset = WorkerClient.resetWorker;
-        WorkerClient.resetWorker = async () => {};
     });
 
     afterEach(() => {
         WorkerClient.startTopRun = originalStartTop;
         WorkerClient.startChartRun = originalStartChart;
-        WorkerClient.resetWorker = originalReset;
     });
 
-    it('progressive refinement: onStats fires after EACH tier', async () => {
-        WorkerClient.startTopRun = (_input, refinement, onUpdate) => {
-            setTimeout(() => {
-                onUpdate({
-                    input: _input,
-                    refinementLevel: refinement[0]!,
-                    clueConditioned: false,
-                    normalization: { domain: 'resolved-mass' },
-                    accounting: { resolved: 0.9, pending: 0.1, sieved: 0, overflow: 0, capped: 0, rounding: 0 },
-                    combos: [],
-                    enchants: []
-                });
-            }, 10);
+    it('Correction 1: should stream all 4 tiers in a single run', async () => {
+        let callCount = 0;
+        WorkerClient.startTopRun = (_input, _refinement, _onUpdate, onTerminal) => {
+            callCount++;
+            const refinement = ['coarse', 'standard', 'deep', 'ultra'];
+            refinement.forEach((level, i) => {
+                setTimeout(() => {
+                    _onUpdate({
+                        input: _input,
+                        refinementLevel: level,
+                        clueConditioned: false,
+                        normalization: { domain: 'resolved-mass' },
+                        accounting: { resolved: 0.9, pending: 0.1, sieved: 0, overflow: 0, capped: 0, rounding: 0 },
+                        combos: [],
+                        enchants: []
+                    } as any);
+                    if (i === refinement.length - 1) onTerminal('done');
+                }, 10);
+            });
             return 'run-id' as any;
         };
 
-        WorkerClient.startChartRun = () => 'chart-id' as any;
+        WorkerClient.startChartRun = (_input, _refinement, _onUpdate, onTerminal) => {
+            setTimeout(() => onTerminal('done'), 50);
+            return 'chart-id' as any;
+        };
 
         const service = new RefinementService();
         const results: string[] = [];
 
-        await service.run(BASE_PAYLOAD, {} as any, {
+        await service.run(BASE_PAYLOAD, { mechanics: { xp_cap: 30 } } as any, {
             onStatus: () => {},
             onStats: (view) => { results.push(view.refinementLevel); },
             onChart: () => {},
         });
 
-        await flush();
-        assert.ok(results.includes('coarse'));
-        assert.ok(results.includes('ultra'));
+        assert.strictEqual(callCount, 1, 'startTopRun should be called exactly once');
+        assert.strictEqual(results.length, 4, 'Should receive 4 refinement levels');
+        assert.deepStrictEqual(results, ['coarse', 'standard', 'deep', 'ultra']);
     });
 });
 
-describe('Integration: Clue-conditioned certainty checks (engine direct)', () => {
-    it('clue conditioning (Sword): Sharpness probability >= 99.99% at level 30', async () => {
+describe('Integration: Snapshot Integrity (Correction 4)', () => {
+    it('unconditioned snapshot masses should match engine summary exactly', async () => {
         const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
-        const stats = await engine.calculate(TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND, {
-            clue: 'Sharpness IV',
-            threshold: TEST_DATA.THRESHOLDS.PROB_MIN,
+        const res = await engine.calculateTop(TEST_DATA.ITEMS.BOOK, 30, TEST_DATA.MATERIALS.DIAMOND, {
+            threshold: 1n // Very low threshold to ensure many combinations
         });
-        const sharpnessId = engine.registry.idMap.get('Sharpness')!;
-        assert.ok(
-            (stats.any[sharpnessId] ?? 0) >= 0.9999,
-            `Expected Sharpness prob >= 0.9999, got ${stats.any[sharpnessId]}`
+
+        const summary = SummaryService.summarize(
+            res.combos,
+            res.tracker,
+            engine.registry.indexToEnchant,
+            res.anyMass,
+            res.rankMass,
+            res.countMass,
+            30 // comboLimit
         );
+
+        const snapshot = SearchStateSnapshotFactory.create(
+            engine.registry,
+            res.tracker,
+            res.combos,
+            {
+                snapshotType: 'top',
+                input: {
+                    category: TEST_DATA.ITEMS.BOOK,
+                    xpLevel: 30,
+                    material: TEST_DATA.MATERIALS.DIAMOND,
+                    clue: null,
+                    version: TEST_DATA.VERSIONS.MODERN
+                },
+                refinementLevel: 'ultra',
+                clue: null
+            },
+            res // authoritative masses
+        ) as any;
+
+        // Compare "Any" probabilities
+        for (const [idStr, share] of Object.entries(summary.any) as [string, number][]) {
+            const id = parseInt(idStr);
+            const snapEnchant = snapshot.enchants.find((e: any) => e.enchantId === id);
+            assert.ok(snapEnchant, `Enchant ID ${id} missing from snapshot`);
+            assert.ok(Math.abs(snapEnchant.share - (share as number)) < 1e-10, `Share mismatch for ID ${id}: expected ${share}, got ${snapEnchant.share}`);
+        }
     });
 });
 
+describe('Integration: Clue Validation (Correction 5)', () => {
+    it('should reject invalid clues consistently', async () => {
+        const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
+        
+        // Unknown enchantment
+        await assert.rejects(async () => {
+            await engine.calculate(TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND, { clue: 'FakeEnchant X' });
+        }, /Unknown enchantment/);
 
+        // Inapplicable category
+        await assert.rejects(async () => {
+            await engine.calculate(TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND, { clue: 'Aqua Affinity I' });
+        }, /not applicable to category/);
+
+        // Rank above max
+        await assert.rejects(async () => {
+            await engine.calculate(TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND, { clue: 'Sharpness VI' });
+        }, /exceeds max/);
+    });
+});

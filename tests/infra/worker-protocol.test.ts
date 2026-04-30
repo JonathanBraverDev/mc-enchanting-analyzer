@@ -1,50 +1,56 @@
 import { describe, it, before, after, afterEach } from 'node:test';
 import assert from 'node:assert';
-import type { WorkerResponse, WorkerRequest } from '#worker/protocol.js';
+import type { WorkerResponse, WorkerRequest, RunId } from '#types/index.js';
 import { TEST_DATA } from '#tests/infra/test-data.js';
 
 function sendMessage(data: WorkerRequest): void {
     const handler = (self as unknown as { onmessage: (e: MessageEvent) => void }).onmessage;
+    if (!handler) throw new Error("No onmessage handler registered");
     handler({ data } as MessageEvent);
 }
 
-async function waitForMessage(
+async function waitForMessages(
     captured: WorkerResponse[],
-    predicate: (msg: WorkerResponse) => boolean,
+    type: string,
+    count: number,
+    timeoutMs = 5000
+): Promise<WorkerResponse[]> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+        const matches = captured.filter(m => m.type === type);
+        if (matches.length >= count) return matches;
+        await new Promise(r => setTimeout(r, 10));
+    }
+    throw new Error(`Timeout waiting for ${count} messages of type ${type}. Captured so far types: ${JSON.stringify(captured.map(m => m.type))}`);
+}
+
+async function waitForTerminal(
+    captured: WorkerResponse[],
+    runId: RunId,
     timeoutMs = 5000
 ): Promise<WorkerResponse> {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
-        const msg = captured.find(predicate);
+        const msg = captured.find(m => m.type === 'terminal' && m.runId === runId);
         if (msg) return msg;
         await new Promise(r => setTimeout(r, 10));
     }
-    throw new Error(`Timeout waiting for message. Captured so far: ${JSON.stringify(captured.map(m => m.type))}`);
+    throw new Error(`Timeout waiting for terminal for ${runId}.`);
 }
 
-describe('Worker: top-worker handler', () => {
+describe('Worker: Protocol Hardening (v5)', () => {
     const captured: WorkerResponse[] = [];
     let originalPostMessage: typeof globalThis.postMessage | undefined;
 
-    before(async () => {
+    before(() => {
         originalPostMessage = (globalThis as any).postMessage;
         (globalThis as any).self = globalThis;
         (globalThis as any).postMessage = (msg: unknown, _transfer?: unknown) => {
             captured.push(msg as WorkerResponse);
         };
-
-        // Import the worker to register self.onmessage
-        await import('#worker/top-worker.js');
-
-        // Initialize the engine inside the worker
-        sendMessage({ type: 'init', requestId: 0, version: TEST_DATA.VERSIONS.MODERN });
-        await waitForMessage(captured, m => m.type === 'ready');
     });
 
-    afterEach(async () => {
-        captured.length = 0;
-        sendMessage({ type: 'init', requestId: 0, version: TEST_DATA.VERSIONS.MODERN });
-        await waitForMessage(captured, m => m.type === 'ready');
+    afterEach(() => {
         captured.length = 0;
     });
 
@@ -56,28 +62,99 @@ describe('Worker: top-worker handler', () => {
         }
     });
 
-    it('topRunStart returns topUpdate with valid view', async () => {
-        const requestId = 10;
-        const runId = 'test-run' as any;
-        sendMessage({
-            type: 'topRunStart',
-            requestId,
-            runId,
-            input: {
-                category: TEST_DATA.ITEMS.SWORD,
-                xpLevel: 30,
-                material: TEST_DATA.MATERIALS.DIAMOND,
-                clue: null,
-                version: TEST_DATA.VERSIONS.MODERN
-            },
-            refinement: ['coarse']
+    describe('top-worker protocol', () => {
+        before(async () => {
+            // Register top-worker handler
+            await import('#worker/top-worker.js?t=' + Date.now());
         });
 
-        await waitForMessage(captured, m => m.type === 'runAccepted' && m.runId === runId);
-        const updateMsg = await waitForMessage(captured, m => m.type === 'topUpdate' && m.runId === runId) as any;
+        it('should stream multiple refinement levels and send terminal', async () => {
+            sendMessage({ type: 'init', requestId: 1, version: TEST_DATA.VERSIONS.MODERN });
+            await waitForMessages(captured, 'ready', 1);
+            captured.length = 0;
 
-        assert.strictEqual(updateMsg.type, 'topUpdate');
-        assert.ok(updateMsg.view, 'topUpdate must carry a view');
-        assert.strictEqual(updateMsg.refinementLevel, 'coarse');
+            const runId = 'run-1' as RunId;
+            sendMessage({
+                type: 'topRunStart',
+                requestId: 2,
+                runId,
+                input: {
+                    category: TEST_DATA.ITEMS.SWORD,
+                    xpLevel: 30,
+                    material: TEST_DATA.MATERIALS.DIAMOND,
+                    clue: null,
+                    version: TEST_DATA.VERSIONS.MODERN
+                },
+                refinement: ['coarse', 'standard']
+            });
+
+            await waitForMessages(captured, 'runAccepted', 1);
+            const updates = await waitForMessages(captured, 'topUpdate', 2);
+            assert.strictEqual(updates[0]!.type, 'topUpdate');
+            assert.strictEqual((updates[0] as any).refinementLevel, 'coarse');
+            assert.strictEqual((updates[1] as any).refinementLevel, 'standard');
+
+            const terminal = await waitForTerminal(captured, runId) as any;
+            assert.strictEqual(terminal.status, 'done');
+        });
+
+        it('should report error for invalid clue', async () => {
+            const runId = 'run-err' as RunId;
+            sendMessage({
+                type: 'topRunStart',
+                requestId: 3,
+                runId,
+                input: {
+                    category: TEST_DATA.ITEMS.SWORD,
+                    xpLevel: 30,
+                    material: TEST_DATA.MATERIALS.DIAMOND,
+                    clue: 'FakeEnchant X',
+                    version: TEST_DATA.VERSIONS.MODERN
+                },
+                refinement: ['coarse']
+            });
+
+            const terminal = await waitForTerminal(captured, runId) as any;
+            assert.strictEqual(terminal.status, 'error');
+            assert.match(terminal.error, /Unknown enchantment/);
+        });
+    });
+
+    describe('chart-worker protocol', () => {
+        before(async () => {
+            // Register chart-worker handler (overwrites top-worker)
+            await import('#worker/chart-worker.js?t=' + Date.now());
+        });
+
+        it('should include chart envelope and stream all cells', async () => {
+            sendMessage({ type: 'init', requestId: 6, version: TEST_DATA.VERSIONS.MODERN });
+            await waitForMessages(captured, 'ready', 1);
+            captured.length = 0;
+
+            const runId = 'run-chart' as RunId;
+            sendMessage({
+                type: 'chartRunStart',
+                requestId: 7,
+                runId,
+                input: {
+                    category: TEST_DATA.ITEMS.SWORD,
+                    material: TEST_DATA.MATERIALS.DIAMOND,
+                    clue: null,
+                    version: TEST_DATA.VERSIONS.MODERN
+                },
+                refinement: ['coarse']
+            });
+
+            const accepted = await waitForMessages(captured, 'runAccepted', 1) as any;
+            assert.ok(accepted[0].chart, 'runAccepted must carry chart envelope');
+            assert.strictEqual(accepted[0].chart.maxXpLevel, 30);
+
+            const updates = await waitForMessages(captured, 'chartUpdate', 1) as any;
+            assert.strictEqual(updates[0].runId, runId);
+            assert.ok(updates[0].cell, 'chartUpdate must carry a cell');
+
+            const terminal = await waitForTerminal(captured, runId) as any;
+            assert.strictEqual(terminal.status, 'done');
+        });
     });
 });
