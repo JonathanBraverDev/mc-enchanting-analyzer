@@ -1,7 +1,5 @@
-import { DATA } from '#data/index.js';
 import { DOMUtils, StringUtils } from '#utils/index.js';
-import { EnchantEngine } from '#engine/index.js';
-import { getEligibleMaterials, getEnchantability, getFullEnchantName } from '#core/registry.js';
+import { UiMetadataService } from '#services/UiMetadataService.js';
 
 /**
  * View component for managing input parameters and their synchronization.
@@ -24,7 +22,7 @@ export class ParamsView {
     private populateVersions(): void {
         const vSelect = this.elements["v-select"] as HTMLSelectElement;
         if (!vSelect) return;
-        Object.keys(DATA.versions).reverse().forEach(v => {
+        UiMetadataService.getVersions().forEach(v => {
             DOMUtils.addOption(vSelect, v, v);
         });
     }
@@ -61,8 +59,9 @@ export class ParamsView {
         };
     }
 
-    public updateConstraints(engine: EnchantEngine): void {
-        const xpCap = engine.registry.mechanics.xp_cap || 30;
+    public updateConstraints(): void {
+        const { version } = this.getValues();
+        const xpCap = UiMetadataService.getXpCap(version);
         const lvlRange = this.elements["lvl-range"] as HTMLInputElement;
         if (lvlRange) {
             lvlRange.max = xpCap.toString();
@@ -74,14 +73,14 @@ export class ParamsView {
         }
     }
 
-    public updateMaterials(engine: EnchantEngine): void {
-        const { category } = this.getValues();
+    public updateMaterials(): void {
+        const { version, category, material } = this.getValues();
         const matSelect = this.elements["mat-select"] as HTMLSelectElement;
         if (!matSelect) return;
 
-        const currentMat = matSelect.value;
+        const currentMat = material;
         matSelect.innerHTML = "";
-        const eligibleKeys = getEligibleMaterials(engine.registry, category);
+        const eligibleKeys = UiMetadataService.getEligibleMaterials(version, category);
 
         let bestMat = currentMat;
         if (!eligibleKeys.includes(currentMat)) {
@@ -93,8 +92,8 @@ export class ParamsView {
         });
     }
 
-    public updateClueTarget(engine: EnchantEngine): void {
-        const { category, material, xpLevel } = this.getValues();
+    public updateClueTarget(): void {
+        const { version, category, material, xpLevel } = this.getValues();
         const gSelect = this.elements["clue-select"] as HTMLSelectElement;
         if (!gSelect) return;
 
@@ -102,18 +101,9 @@ export class ParamsView {
         gSelect.innerHTML = '<option value="">None (Unconditioned)</option>';
         if (!material) return;
         
-        const ench = getEnchantability(engine.registry, material, category);
-        const dist = engine.getModifiedLevelDist(xpLevel, ench);
-        
-        const allPossible = new Set<string>();
-        Object.keys(dist).forEach(ml => {
-            const numeric = engine.getEligibleListNumeric(category, parseInt(ml), 0n);
-            numeric.forEach(n => {
-                allPossible.add(getFullEnchantName(engine.registry, n));
-            });
-        });
+        const options = UiMetadataService.getClueOptions(version, category, material, xpLevel);
 
-        Array.from(allPossible).sort().forEach(s => {
+        options.forEach(s => {
             DOMUtils.addOption(gSelect, s, s, s === saved);
         });
     }

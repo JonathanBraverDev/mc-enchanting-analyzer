@@ -1,6 +1,3 @@
-import { DATA } from '#data/index.js';
-import { EnchantEngine } from '#engine/index.js';
-import { EngineFactory } from '#engine/factory.js';
 import { UI_TEXTS } from '#core/config.js';
 import { WorkerClient } from '#ui/worker-client.js';
 import { ParamsView } from '#ui/views/ParamsView.js';
@@ -8,8 +5,9 @@ import { ResultsView } from '#ui/views/ResultsView.js';
 import { ChartController } from '#ui/results-chart-controller.js';
 import { RefinementService } from '#ui/refinement.js';
 import { HumanizationService } from '#services/index.js';
-import { getEnchantability } from '#core/registry.js';
+import { UiMetadataService } from '#services/UiMetadataService.js';
 import { EnchantInsights, CalculationStats, ResultSortMode } from '#types/index.js';
+import { DATA } from '#data/index.js';
 
 /**
  * Main Web Application Controller.
@@ -21,7 +19,6 @@ class AppController {
     public chart: ChartController;
     public refinement: RefinementService;
     
-    public engine: EnchantEngine | null = null;
     private isWorkerReady: boolean = false;
     private runDebounceTimeout: number = 0;
     private bestInsights: EnchantInsights | null = null;
@@ -46,21 +43,12 @@ class AppController {
             await WorkerClient.init(version);
             this.isWorkerReady = true;
 
-            this.params.updateConstraints(this.getEngine());
-            this.params.updateMaterials(this.getEngine());
+            this.params.updateConstraints();
+            this.params.updateMaterials();
             this.run();
         } catch (err) {
             this.showError(UI_TEXTS.STATUS_ERROR_LOADING, err);
         }
-    }
-
-    private getEngine(): EnchantEngine {
-        const { version } = this.params.getValues();
-        if (!this.engine || this.engine.registry.version !== version) {
-            if (this.engine) this.engine.destroy();
-            this.engine = EngineFactory.create(DATA, version);
-        }
-        return this.engine!;
     }
 
     private onParamsChange(type: string): void {
@@ -71,25 +59,23 @@ class AppController {
             this.isWorkerReady = false;
             WorkerClient.init(version).then(() => {
                 this.isWorkerReady = true;
-                const engine = this.getEngine();
-                this.params.updateConstraints(engine);
-                this.params.updateMaterials(engine);
-                this.params.updateClueTarget(engine);
+                this.params.updateConstraints();
+                this.params.updateMaterials();
+                this.params.updateClueTarget();
                 this.enqueueRun();
             }).catch(err => this.showError(UI_TEXTS.STATUS_ERROR_LOADING, err));
             return;
         }
 
-        const engine = this.getEngine();
-
         if (type === 'cat') {
             this.results.showPlaceholder(UI_TEXTS.STATUS_SWITCHING_CATEGORY);
-            this.params.updateMaterials(engine);
-            this.params.updateClueTarget(engine);
+            this.params.updateMaterials();
+            this.params.updateClueTarget();
         } else if (type === 'mat') {
-            this.params.updateClueTarget(engine);
+            this.params.updateClueTarget();
         } else if (type === 'chart-metric') {
-            this.chart.refresh(this.refinement.currentSweep, engine.registry);
+            const registry = UiMetadataService.getRegistry(version);
+            this.chart.refresh(this.refinement.currentSweep, registry);
             return;
         } else if (type === 'clue') {
             this.results.showPlaceholder(UI_TEXTS.STATUS_REFINING);
@@ -122,20 +108,22 @@ class AppController {
         this.bestInsights = null;
 
         try {
-            const engine = this.getEngine();
-            this.params.updateClueTarget(engine);
+            this.params.updateClueTarget();
             
             const vals = this.params.getValues();
-            this.params.setEnchantability(getEnchantability(engine.registry, vals.material, vals.category));
+            const ench = UiMetadataService.getEnchantability(vals.version, vals.material, vals.category);
+            this.params.setEnchantability(ench);
+
+            const registry = UiMetadataService.getRegistry(vals.version);
 
             await this.refinement.run(
                 { ...vals, category: vals.category },
-                engine.registry,
+                registry,
                 {
                     onStatus: (status, level) => this.results.setRefinementStatus(status, level),
                     onChartStatus: (status, progress) => this.results.setChartStatus(status, progress),
                     onStats: (raw, isFinal) => this.updateInsightsFromRaw(raw, isFinal),
-                    onChart: (sweep) => this.chart.refresh(sweep, engine.registry)
+                    onChart: (sweep) => this.chart.refresh(sweep, registry)
                 }
             );
         } catch (err) {
