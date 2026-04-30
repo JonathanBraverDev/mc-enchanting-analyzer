@@ -1,118 +1,138 @@
-import { SerializationService } from '#services/index.js';
-import type { WorkerResponse } from '#worker/protocol.js';
-import { CalculationStats, ProgressUpdate } from '#types/index.js';
+import { 
+  WorkerRequest, 
+  WorkerResponse, 
+  RunId, 
+  TopInputSignature, 
+  ChartInputSignature, 
+  RefinementLevelName,
+  TopRunView,
+  ChartCellView,
+  RequestId
+} from '#types/index.js';
 
-type WorkerResult = { stats?: CalculationStats; update?: ProgressUpdate };
-type RequestEntry = { resolve: (data: WorkerResult) => void; reject: (err: unknown) => void };
-type ProgressEntry = (data: WorkerResult) => void;
-type PendingEntry = RequestEntry | ProgressEntry;
+type TopUpdateCallback = (view: TopRunView) => void;
+type ChartUpdateCallback = (view: ChartCellView) => void;
+type TerminalCallback = () => void;
 
 /**
  * Client wrapper around the Enchant Engine Web Workers.
- * Manages dual workers (Main and Chart) to enable parallel refinement and sweeps.
+ * Manages dual workers (Top and Chart) to enable parallel refinement and sweeps.
+ * Implements the v5 run-based protocol with automatic supersession.
  */
 export const WorkerClient = {
     workers: {
-        main: null as Worker | null,
+        top: null as Worker | null,
         chart: null as Worker | null
     },
-    pendingRequests: new Map<string, PendingEntry>(),
-    requestId: 0,
+    
+    callbacks: {
+        top: new Map<RunId, TopUpdateCallback>(),
+        chart: new Map<RunId, ChartUpdateCallback>(),
+        terminal: new Map<RunId, TerminalCallback>()
+    },
+
+    activeRunIds: {
+        top: null as RunId | null,
+        chart: null as RunId | null
+    },
+
+    requestId: 0 as RequestId,
 
     async init(version: string): Promise<void> {
         await Promise.all([
-            this.initWorker('main', version),
+            this.initWorker('top', version),
             this.initWorker('chart', version)
         ]);
     },
 
-    drainPendingForWorker(type: string): void {
-        const prefix = `${type}_`;
-        for (const [key, req] of [...this.pendingRequests.entries()]) {
-            if (key.startsWith(prefix)) {
-                if (typeof req !== 'function') {
-                    req.reject(new Error(`Worker ${type} re-initialized`));
-                }
-                this.pendingRequests.delete(key);
-            }
-        }
-    },
-
-    initWorker(type: 'main' | 'chart', version: string): Promise<void> {
+    initWorker(kind: 'top' | 'chart', version: string): Promise<void> {
         return new Promise((resolve, reject) => {
-            this.drainPendingForWorker(type);
-            if (this.workers[type]) this.workers[type]!.terminate();
+            if (this.workers[kind]) this.workers[kind]!.terminate();
             
-            this.workers[type] = new Worker('dist/worker.js');
-            const timeout = setTimeout(() => reject(new Error(`Worker ${type} initialization timed out`)), 10000);
+            if (kind === 'top') {
+                this.workers.top = new Worker('dist/top-worker.js');
+            } else {
+                this.workers.chart = new Worker('dist/chart-worker.js');
+            }
+            const timeout = setTimeout(() => reject(new Error(`Worker ${kind} initialization timed out`)), 10000);
 
-            this.workers[type]!.onmessage = (e: MessageEvent<WorkerResponse>) => {
-                const { type: msgType, id, payload } = e.data;
-                const reqKey = `${type}_${id}`;
-                const req = this.pendingRequests.get(reqKey);
-                
-                if (msgType === 'ready') {
+            this.workers[kind]!.onmessage = (e: MessageEvent<WorkerResponse>) => {
+                const data = e.data;
+                const { type } = data;
+
+                if (type === 'ready') {
                     clearTimeout(timeout);
                     resolve();
                     return;
                 }
 
-                if (msgType === 'result') {
-                    const { stats } = payload || {};
-                    const finalStats: CalculationStats = (stats && stats.comboKeys) ? SerializationService.deserialize(stats) : stats as unknown as CalculationStats;
+                if (type === 'runAccepted') {
+                    // Could track acceptance if needed
+                    return;
+                }
 
-                    if (req && typeof req !== 'function') {
-                        req.resolve({ stats: finalStats });
-                        this.pendingRequests.delete(reqKey);
-                        this.pendingRequests.delete(`${reqKey}_progress`);
+                if (type === 'topUpdate' && kind === 'top') {
+                    const cb = this.callbacks.top.get(data.runId);
+                    if (cb && data.runId === this.activeRunIds.top) {
+                        cb(data.view);
                     }
-                } else if (msgType === 'progress') {
-                    const { stats, update } = payload || {};
-                    const progCb = this.pendingRequests.get(`${reqKey}_progress`);
-                    if (progCb && typeof progCb === 'function') {
-                        if (update) {
-                            progCb({ update });
-                        } else if (stats) {
-                            const finalStats: CalculationStats = (stats && stats.comboKeys) ? SerializationService.deserialize(stats) : stats as unknown as CalculationStats;
-                            progCb({ stats: finalStats });
-                        }
+                } else if (type === 'chartUpdate' && kind === 'chart') {
+                    const cb = this.callbacks.chart.get(data.runId);
+                    if (cb && data.runId === this.activeRunIds.chart) {
+                        cb(data.cell);
                     }
-                } else if (msgType === 'error') {
-                    if (req && typeof req !== 'function') {
-                        req.reject(payload);
-                        this.pendingRequests.delete(reqKey);
-                        this.pendingRequests.delete(`${reqKey}_progress`);
+                } else if (type === 'terminal' && kind === 'chart') {
+                    const cb = this.callbacks.terminal.get(data.runId);
+                    if (cb && data.runId === this.activeRunIds.chart) {
+                        cb();
+                        this.callbacks.chart.delete(data.runId);
+                        this.callbacks.terminal.delete(data.runId);
                     }
+                } else if (type === 'error') {
+                    console.error(`Worker ${kind} error:`, data.error);
                 }
             };
 
-            const id = ++this.requestId;
-            this.workers[type]!.postMessage({ type: 'init', id, payload: { version } });
+            const requestId = ++(this.requestId as any) as RequestId;
+            this.workers[kind]!.postMessage({ type: 'init', requestId, version });
         });
     },
 
-    request(type: string, payload: Record<string, unknown>, onProgress?: ProgressEntry, workerTarget: 'main' | 'chart' = 'main'): Promise<WorkerResult> {
-        return new Promise((resolve, reject) => {
-            const worker = this.workers[workerTarget];
+    startTopRun(input: TopInputSignature, refinement: RefinementLevelName[], onUpdate: TopUpdateCallback): RunId {
+        const runId = `top_${Date.now()}_${++(this.requestId as any)}` as RunId;
+        this.activeRunIds.top = runId;
+        this.callbacks.top.set(runId, onUpdate);
 
-            if (!worker) return reject(new Error(`Worker ${workerTarget} not initialized`));
+        this.workers.top?.postMessage({
+            type: 'topRunStart',
+            requestId: ++(this.requestId as any) as RequestId,
+            runId,
+            input,
+            refinement
+        } as WorkerRequest);
 
-            const id = ++this.requestId;
-            const reqKey = `${workerTarget}_${id}`;
-
-            this.pendingRequests.set(reqKey, { resolve, reject });
-            if (onProgress) {
-                this.pendingRequests.set(`${reqKey}_progress`, onProgress);
-            }
-
-            worker.postMessage({ type, id, payload });
-        });
+        return runId;
     },
 
-    /**
-     * Terminate and immediately restart a worker to flush its message queue.
-     */
-    async resetWorker(type: 'main' | 'chart', version: string): Promise<void> {
-        await this.initWorker(type, version);
+    startChartRun(input: ChartInputSignature, refinement: RefinementLevelName[], onUpdate: ChartUpdateCallback, onTerminal: TerminalCallback): RunId {
+        const runId = `chart_${Date.now()}_${++(this.requestId as any)}` as RunId;
+        this.activeRunIds.chart = runId;
+        this.callbacks.chart.set(runId, onUpdate);
+        this.callbacks.terminal.set(runId, onTerminal);
+
+        this.workers.chart?.postMessage({
+            type: 'chartRunStart',
+            requestId: ++(this.requestId as any) as RequestId,
+            runId,
+            input,
+            refinement
+        } as WorkerRequest);
+
+        return runId;
+    },
+
+    /** Legacy support or explicit reset if needed */
+    async resetWorker(kind: 'top' | 'chart', version: string): Promise<void> {
+        await this.initWorker(kind, version);
     }
 };

@@ -1,14 +1,13 @@
-import { RegistryState, CalculationStats, SweepData } from '#types/index.js';
+import { 
+  RegistryState, 
+  TopRunView, 
+  ChartCellView, 
+  RefinementLevelName,
+  TopInputSignature,
+  ChartInputSignature
+} from '#types/index.js';
 import { UI_TEXTS, UI_DEFAULTS, SearchLevel, getParamsForMode } from '#core/config.js';
 import { WorkerClient } from '#ui/worker-client.js';
-import { AsyncUtils } from '#utils/index.js';
-
-interface BaseSearchPayload {
-    cat: string;
-    xp: number;
-    mat: string;
-    clue: string | null;
-}
 
 export interface RefinementPayload {
     category: string;
@@ -21,198 +20,94 @@ export interface RefinementPayload {
 export interface RefinementCallbacks {
     onStatus: (status: string, level: SearchLevel) => void;
     onChartStatus?: (status: string, progress?: number) => void;
-    onStats: (stats: CalculationStats, isFinal: boolean) => void;
-    onChart: (sweep: SweepData[]) => void;
+    onStats: (view: TopRunView, isFinal: boolean) => void;
+    onChart: (sweep: ChartCellView[]) => void;
 }
 
 /**
  * Service for orchestrating progressive refinement of enchantment calculations.
+ * V5 implementation uses the run-based protocol and specialized workers.
  */
 export class RefinementService {
-    private activeId: number = 0;
-    private sweep: SweepData[] = [];
-    private isSweepRunning: boolean = false;
-    private nextPendingRedraw: { threshold: number; level: Exclude<SearchLevel, 'done'> } | null = null;
-    private sweepAbortController: AbortController | null = null;
-    private activeChartLevel: Exclude<SearchLevel, 'done'> = 'coarse';
-
+    private sweep: ChartCellView[] = [];
     private isRefining: boolean = false;
+    private isSweepRunning: boolean = false;
 
-    public get currentSweep(): SweepData[] {
+    public get currentSweep(): ChartCellView[] {
         return this.sweep;
     }
 
-    /**
-     * Returns true if either the main refinement or the chart sweep is active.
-     */
     public isCalculating(): boolean {
-        return this.isSweepRunning || this.isRefining;
+        return this.isRefining || this.isSweepRunning;
     }
 
-    /**
-     * Starts a new refinement cycle. Cancels any existing cycle.
-     */
     public async run(
         payload: RefinementPayload,
         registry: RegistryState,
         callbacks: RefinementCallbacks
     ): Promise<void> {
-        const currentId = ++this.activeId;
         this.isRefining = true;
+        this.isSweepRunning = true;
         try {
             const xpCap = registry?.mechanics?.xp_cap ?? UI_DEFAULTS.DEFAULT_VIEW_XP_CAP;
             this.sweep = new Array(xpCap).fill(null);
 
-            const basePayload = {
-                cat: payload.category,
-                xp: payload.xpLevel,
-                mat: payload.material,
-                clue: payload.clue
+            const topInput: TopInputSignature = {
+                category: payload.category,
+                xpLevel: payload.xpLevel,
+                material: payload.material,
+                clue: payload.clue,
+                version: payload.version
             };
-            const isBook = payload.category === "book";
 
-            // Update shared pointers immediately and abort any running chart search
-            this.sweepAbortController?.abort();
-            this.nextPendingRedraw = null; // CRITICAL: Clear pending redraws from PREVIOUS items/categories
+            const chartInput: ChartInputSignature = {
+                category: payload.category,
+                material: payload.material,
+                clue: payload.clue,
+                version: payload.version
+            };
 
-            // Flush both worker queues to ensure immediate priority for this run and clear any staleness
-            if (typeof Worker !== 'undefined') {
-                await Promise.all([
-                    WorkerClient.resetWorker('main', payload.version),
-                    WorkerClient.resetWorker('chart', payload.version)
-                ]);
-            }
+            const levels: RefinementLevelName[] = ['coarse', 'standard', 'deep', 'ultra'];
+            const isBook = payload.category === 'book';
 
-            const levels: Exclude<SearchLevel, 'done'>[] = ['coarse', 'standard', 'deep', 'ultra'];
-            const tiers = levels.map(level => {
+            // Step through refinement levels
+            for (let i = 0; i < levels.length; i++) {
+                const level = levels[i]!;
                 const params = getParamsForMode(level, isBook);
-                return { threshold: params.threshold, limit: params.limit };
-            });
+                
+                callbacks.onStatus(params.status, level);
 
-            callbacks.onStatus(getParamsForMode('coarse', isBook).status, 'coarse');
+                // Start Top Run
+                const topPromise = new Promise<TopRunView>((resolve) => {
+                    WorkerClient.startTopRun(topInput, [level], (view) => {
+                        resolve(view);
+                    });
+                });
 
-            let tierIndex = 0;
-            let converged = false;
-
-            await WorkerClient.request(
-                'calculateProgressive',
-                { ...basePayload, source: 'main', tiers },
-                (partial) => {
-                    if (currentId !== this.activeId || converged) return;
-                    
-                    if (partial.update) {
-                        // Intermediate progress could be handled here if needed
-                        return;
-                    }
-
-                    const stats = partial.stats!;
-                    converged = (stats.accounting?.pending ?? 1) < 1e-9;
-                    const isFinal = tierIndex === tiers.length - 1 || converged;
-                    callbacks.onStats(stats, isFinal);
-                    
-                    const level = levels[tierIndex];
-                    if (level === undefined) return;
-                    this.activeChartLevel = level;
-                    this.refreshChart(basePayload, getParamsForMode(level, isBook).threshold, registry, currentId, callbacks);
-                    tierIndex++;
-                    if (!converged && tierIndex < levels.length) {
-                        const nextLevel = levels[tierIndex];
-                        if (nextLevel !== undefined) {
-                            callbacks.onStatus(getParamsForMode(nextLevel, isBook).status, nextLevel);
+                // Start Chart Run
+                WorkerClient.startChartRun(
+                    chartInput, 
+                    [level], 
+                    (cellView) => {
+                        this.sweep[cellView.xpLevel - 1] = cellView;
+                        callbacks.onChart(this.sweep);
+                        callbacks.onChartStatus?.(`${params.status} probabilities`, cellView.xpLevel / xpCap);
+                    },
+                    () => {
+                        if (level === 'ultra') {
+                            callbacks.onChartStatus?.(UI_TEXTS.STATUS_CHART_COMPLETE);
+                            this.isSweepRunning = false;
                         }
                     }
-                },
-                'main'
-            );
+                );
 
-            if (currentId !== this.activeId) return;
+                const topView = await topPromise;
+                callbacks.onStats(topView, level === 'ultra');
+            }
 
             callbacks.onStatus(UI_TEXTS.STATUS_COMPLETE, "done");
         } finally {
-            if (currentId === this.activeId) {
-                this.isRefining = false;
-            }
-        }
-    }
-
-    /**
-     * Internal coordinator for chart redraws. 
-     * COMPRESSING QUEUE: We ensure EVERY started redraw completes a full pass (1-30).
-     * If multiple redraw requests arrive during a sweep, we only keep the LATEST one.
-     */
-    private async refreshChart(
-        payload: BaseSearchPayload,
-        threshold: number,
-        _registry: RegistryState,
-        currentId: number,
-        callbacks: RefinementCallbacks
-    ): Promise<void> {
-        // Enqueue/Overwrite the latest tier request
-        this.nextPendingRedraw = { threshold, level: this.activeChartLevel };
-
-        if (this.isSweepRunning) return;
-
-        this.isSweepRunning = true;
-        try {
-            while (this.nextPendingRedraw !== null) {
-                // Pre-empt loop ONLY IF a new run (activeId change) was triggered
-                if (this.activeId !== currentId) break;
-
-                // Capture the LATEST pending request and clear the slot
-                const currentPass = this.nextPendingRedraw;
-                this.nextPendingRedraw = null;
-                
-                const currentPassThreshold = currentPass.threshold;
-                const xpCap = _registry?.mechanics?.xp_cap ?? UI_DEFAULTS.DEFAULT_VIEW_XP_CAP;
-                const labels = Array.from({ length: xpCap }, (_, i) => i + 1);
-                
-                const passName = getParamsForMode(currentPass.level, payload.cat === "book").status;
-                const statusBase = passName + " probabilities";
-                
-                // IMPORTANT: We do a FULL PASS for every STARTED redraw. 
-                // Aborting mid-sweep is forbidden as it causes UI progress "jitter" and test failures.
-                callbacks.onChartStatus?.(statusBase);
-                for (const l of labels) {
-                    if (this.activeId !== currentId) break;
-
-                    const ctrl = new AbortController();
-                    this.sweepAbortController = ctrl;
-
-                    const abortPromise = new Promise<never>((_, reject) => {
-                        ctrl.signal.addEventListener('abort', () => reject(new Error('AbortError')), { once: true });
-                    });
-
-                    try {
-                        const response = await Promise.race([
-                            WorkerClient.request(
-                                'calculate',
-                                { ...payload, xp: l, threshold: currentPassThreshold, source: 'chart' },
-                                undefined,
-                                'chart'
-                            ),
-                            abortPromise
-                        ]) as { stats: CalculationStats };
-
-                        if (this.activeId !== currentId) break;
-                        
-                        const xpCap = _registry?.mechanics?.xp_cap ?? UI_DEFAULTS.DEFAULT_VIEW_XP_CAP;
-                        this.sweep[l - 1] = { l, s: response.stats };
-                        callbacks.onChartStatus?.(statusBase, l / xpCap);
-                        callbacks.onChart(this.sweep);
-                    } catch (e: any) {
-                        if (e.message === 'AbortError') break;
-                        throw e;
-                    }
-
-                    await AsyncUtils.yield();
-                }
-                
-                // Final status for THIS pass (unless a new one was queued or it was ultra)
-                const isTerminal = currentPass.level === 'ultra' && this.nextPendingRedraw === null;
-                callbacks.onChartStatus?.(isTerminal ? UI_TEXTS.STATUS_CHART_COMPLETE : "");
-            }
-        } finally {
-            this.isSweepRunning = false;
+            this.isRefining = false;
         }
     }
 }
