@@ -5,49 +5,113 @@ on:
     branches:
       - main
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   release:
-    name: Create Tag and Release
+    name: Create Tag and GitHub Release
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      should_release: ${{ steps.version.outputs.should_release }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract Version from commit message
-        id: get_version
+      - name: Extract version from main commit
+        id: version
         run: |
-          TITLE=$(git log -1 --pretty=%s)
-          TAG=$(echo "$TITLE" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)
+          SUBJECT=$(git log -1 --pretty=%s)
+          TAG=$(printf '%s\n' "$SUBJECT" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n 1 || true)
+
           if [ -z "$TAG" ]; then
-            echo "No version found in commit message. Skipping release."
+            echo "No semantic version found in main commit subject: $SUBJECT"
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
 
-      - name: Create Tag
-        if: steps.get_version.outputs.tag != ''
-        run: |
-          TAG=${{ steps.get_version.outputs.tag }}
-          git tag $TAG
-          git push origin $TAG
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "should_release=true" >> "$GITHUB_OUTPUT"
 
-      - name: Create Release
-        if: steps.get_version.outputs.tag != ''
-        uses: softprops/action-gh-release@v2
+      - name: Use Node.js 22.x
+        if: steps.version.outputs.should_release == 'true'
+        uses: actions/setup-node@v4
         with:
-          tag_name: ${{ steps.get_version.outputs.tag }}
-          name: ${{ steps.get_version.outputs.tag }}
-          body: ${{ github.event.head_commit.message }}
-          draft: false
-          prerelease: false
+          node-version: 22.x
+          cache: 'npm'
+
+      - name: Build standalone release asset
+        if: steps.version.outputs.should_release == 'true'
+        run: |
+          npm ci
+          npm run build:standalone
+          test -s dist/analyzer-standalone.html
+
+      - name: Extract release notes
+        if: steps.version.outputs.should_release == 'true'
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+
+          awk -v tag="$TAG" '
+            $0 ~ "^## \\[?" tag "\\]?" { found=1; next }
+            /^## / { if (found) exit }
+            found { print }
+          ' CHANGELOG.md | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' > release-notes.md
+
+          if [ ! -s release-notes.md ]; then
+            git log -1 --pretty=%B > release-notes.md
+          fi
+
+      - name: Create or verify tag
+        if: steps.version.outputs.should_release == 'true'
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          SHA="${{ github.sha }}"
+          REMOTE_SHA=$(git ls-remote --tags origin "refs/tags/$TAG" | awk '{print $1}')
+
+          if [ -n "$REMOTE_SHA" ]; then
+            if [ "$REMOTE_SHA" != "$SHA" ]; then
+              echo "::error::Tag $TAG already exists at $REMOTE_SHA, expected $SHA"
+              exit 1
+            fi
+            echo "Tag $TAG already exists at this commit."
+          else
+            git tag "$TAG" "$SHA"
+            git push origin "refs/tags/$TAG"
+          fi
+
+      - name: Create or update GitHub Release
+        if: steps.version.outputs.should_release == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/analyzer-standalone.html --clobber
+            gh release edit "$TAG" \
+              --title "Release $TAG" \
+              --notes-file release-notes.md \
+              --latest \
+              --draft=false \
+              --verify-tag
+          else
+            gh release create "$TAG" dist/analyzer-standalone.html \
+              --title "Release $TAG" \
+              --notes-file release-notes.md \
+              --latest \
+              --verify-tag
+          fi
 
   sync-dev:
     name: Sync Dev Branch
     needs: release
+    if: needs.release.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -63,9 +127,8 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Merge Main into Dev
+      - name: Merge main into dev
         run: |
-          git fetch origin main
-          # Use merge instead of rebase to preserve detailed history alongside milestones
+          git fetch origin main dev
           git merge origin/main -m "sync: auto-align dev with production milestone"
           git push origin dev
