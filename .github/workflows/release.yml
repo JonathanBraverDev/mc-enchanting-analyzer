@@ -1,51 +1,13 @@
-name: Release Automation
+name: Release & Sync
 
 on:
-  pull_request:
-    types: [closed]
+  push:
     branches:
       - main
 
 jobs:
   release:
-    if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.title, 'Release: v')
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      
-      - name: Extract Version
-        id: get_version
-        run: |
-          TITLE="${{ github.event.pull_request.title }}"
-          TAG=$(echo "$TITLE" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
-
-      - name: Use Node.js 22.x
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22.x
-          cache: 'npm'
-
-      - run: npm ci
-      - run: npm run build:standalone
-
-      - name: Create Release and Tag
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.get_version.outputs.tag }}
-          files: dist/analyzer-standalone.html
-          generate_release_notes: true
-          name: "Release ${{ steps.get_version.outputs.tag }}"
-          body: ${{ github.event.pull_request.body }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  sync-dev:
-    needs: release
+    name: Create Tag and Release
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -55,25 +17,55 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Rebase Dev onto Main
+      - name: Extract Version from commit message
+        id: get_version
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          
-          git fetch origin main dev
-          git checkout dev
-          
-          if git rebase origin/main; then
-            git push origin dev --force
-          else
-            echo "CONFLICT: Rebase failed. Please resolve manually."
-            exit 1
+          TITLE=$(git log -1 --pretty=%s)
+          TAG=$(echo "$TITLE" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)
+          if [ -z "$TAG" ]; then
+            echo "No version found in commit message. Skipping release."
+            exit 0
           fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
 
-      - name: Cleanup Release Branch
-        if: success()
+      - name: Create Tag
+        if: steps.get_version.outputs.tag != ''
         run: |
-          BRANCH_NAME="${{ github.event.pull_request.head.ref }}"
-          if [[ "$BRANCH_NAME" == release/* ]] || [[ "$BRANCH_NAME" == 4.3.0 ]]; then
-            git push origin --delete "$BRANCH_NAME"
-          fi
+          TAG=${{ steps.get_version.outputs.tag }}
+          git tag $TAG
+          git push origin $TAG
+
+      - name: Create Release
+        if: steps.get_version.outputs.tag != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.get_version.outputs.tag }}
+          name: ${{ steps.get_version.outputs.tag }}
+          body: ${{ github.event.head_commit.message }}
+          draft: false
+          prerelease: false
+
+  sync-dev:
+    name: Sync Dev Branch
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: dev
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Merge Main into Dev
+        run: |
+          git fetch origin main
+          # Use merge instead of rebase to preserve detailed history alongside milestones
+          git merge origin/main -m "sync: auto-align dev with production milestone"
+          git push origin dev
