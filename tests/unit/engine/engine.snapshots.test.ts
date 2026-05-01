@@ -23,23 +23,10 @@ describe('Enchantment Engine Regression Snapshots', () => {
         await SnapshotUtils.assertSnapshot('1.21_mace_30_mace', stats);
     });
 
-    it('Snapshot: 1.7.2 Multi-Enchant Book @ Level 30', async () => {
-        const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.BOOK_MULTI_LIMIT);
-        const stats = await engine.calculate(TEST_DATA.ITEMS.BOOK, 30, TEST_DATA.MATERIALS.BOOK, { threshold: TEST_DEFAULTS.SNAPSHOT_THRESHOLD, maxIterations: TEST_DEFAULTS.SNAPSHOT_ITERATIONS, summaryLimit: TEST_DEFAULTS.SNAPSHOT_RESULTS_LIMIT, resultsLimit: TEST_DEFAULTS.SNAPSHOT_RESULTS_LIMIT, useCache: false });
-        await SnapshotUtils.assertSnapshot('1.7.2_book_30_book', stats);
-    });
-
     it('Snapshot: 1.21.11 Spear @ Level 30', async () => {
         const engine = EngineFactory.create(DATA, '1.21.11');
         const stats = await engine.calculate(TEST_DATA.ITEMS.SPEAR, 30, TEST_DATA.MATERIALS.DIAMOND, { threshold: TEST_DEFAULTS.SNAPSHOT_THRESHOLD, maxIterations: TEST_DEFAULTS.SNAPSHOT_ITERATIONS, summaryLimit: TEST_DEFAULTS.SNAPSHOT_RESULTS_LIMIT, resultsLimit: TEST_DEFAULTS.SNAPSHOT_RESULTS_LIMIT, useCache: false });
         await SnapshotUtils.assertSnapshot('1.21.11_spear_30_diamond', stats);
-    });
-
-    it('Snapshot: 1.21.11 Book @ Level 30', async () => {
-        const engine = EngineFactory.create(DATA, '1.21.11');
-        engine.resetCaches();
-        const stats = await engine.calculate(TEST_DATA.ITEMS.BOOK, 30, TEST_DATA.MATERIALS.BOOK, { threshold: TEST_DEFAULTS.SNAPSHOT_THRESHOLD, maxIterations: TEST_DEFAULTS.SNAPSHOT_ITERATIONS, summaryLimit: TEST_DEFAULTS.SNAPSHOT_RESULTS_LIMIT, resultsLimit: TEST_DEFAULTS.SNAPSHOT_RESULTS_LIMIT, useCache: false });
-        await SnapshotUtils.assertSnapshot('1.21.11_book_30_book', stats);
     });
 
     it('Snapshot: 1.21 Diamond Sword @ Level 30 (Clue Sharpness IV)', async () => {
@@ -54,5 +41,18 @@ describe('Enchantment Engine Regression Snapshots', () => {
         engine.resetCaches();
         const stats = await engine.calculate(TEST_DATA.ITEMS.BOW, 30, TEST_DATA.MATERIALS.BOW, { threshold: TEST_DEFAULTS.SNAPSHOT_THRESHOLD, maxIterations: TEST_DEFAULTS.SNAPSHOT_ITERATIONS, summaryLimit: TEST_DEFAULTS.SNAPSHOT_RESULTS_LIMIT, resultsLimit: TEST_DEFAULTS.SNAPSHOT_RESULTS_LIMIT, useCache: false, clue: 'Power IV' });
         await SnapshotUtils.assertSnapshot('1.8_bow_30_bow_clue_power', stats);
+    });
+
+    it('Snapshot: 1.7.2 Multi-Enchant Book @ Level 30', async () => {
+        const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.BOOK_MULTI_LIMIT);
+        const stats = await engine.calculate(TEST_DATA.ITEMS.BOOK, 30, TEST_DATA.MATERIALS.BOOK, { threshold: TEST_DEFAULTS.SNAPSHOT_THRESHOLD, maxIterations: TEST_DEFAULTS.SNAPSHOT_ITERATIONS, summaryLimit: TEST_DEFAULTS.SNAPSHOT_RESULTS_LIMIT, resultsLimit: TEST_DEFAULTS.SNAPSHOT_RESULTS_LIMIT, useCache: false });
+        await SnapshotUtils.assertSnapshot('1.7.2_book_30_book', stats);
+    });
+
+    it('Snapshot: 1.21.11 Book @ Level 30', async () => {
+        const engine = EngineFactory.create(DATA, '1.21.11');
+        engine.resetCaches();
+        const stats = await engine.calculate(TEST_DATA.ITEMS.BOOK, 30, TEST_DATA.MATERIALS.BOOK, { threshold: TEST_DEFAULTS.SNAPSHOT_THRESHOLD, maxIterations: TEST_DEFAULTS.SNAPSHOT_ITERATIONS, summaryLimit: TEST_DEFAULTS.SNAPSHOT_RESULTS_LIMIT, resultsLimit: TEST_DEFAULTS.SNAPSHOT_RESULTS_LIMIT, useCache: false });
+        await SnapshotUtils.assertSnapshot('1.21.11_book_30_book', stats);
     });
 });
