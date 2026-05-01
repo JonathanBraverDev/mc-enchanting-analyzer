@@ -73,7 +73,11 @@ export const WorkerClient = {
     },
 
     createWorker(kind: WorkerKind): Worker {
-        return new Worker(kind === 'top' ? 'dist/top-worker.js' : 'dist/chart-worker.js');
+        if (kind === 'top') {
+            return new Worker('dist/top-worker.js');
+        }
+
+        return new Worker('dist/chart-worker.js');
     },
 
     postInit(kind: WorkerKind, version: string): void {
