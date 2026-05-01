@@ -1,6 +1,6 @@
 import { PRECISION, ProbUtils, AsyncUtils } from '#utils/index.js';
 import { getEnchantability } from '#core/registry.js';
-import { ENGINE_LIMITS, PACKING_CONSTANTS, SEARCH_CONSTANTS, UI_CONSTANTS } from '#constants/engine.js';
+import { ENGINE_LIMITS, SEARCH_CONSTANTS, UI_CONSTANTS } from '#constants/engine.js';
 import { getSearchLimit } from '#engine/utils.js';
 import { PackedCombo, SearchState, RegistryState, InternalSearchConfig, EngineInstrumentation, MassCheckpoint, CheckpointSummary, AggregationResult } from '#types/index.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
@@ -170,6 +170,7 @@ export class ProgressiveStatsAggregator {
 
         const finalCombos = new Map<PackedCombo, bigint>();
         let globalTracker = new SearchStateTracker();
+        const frontiers: { heap: import('#utils/collections/SearchHeap.js').SearchHeap, scale: bigint }[] = [];
 
         let processedMProb = 0n;
         let iterCount = 0;
@@ -220,6 +221,7 @@ export class ProgressiveStatsAggregator {
             ProbUtils.addMapMass(finalCombos, result.results, mProb);
 
             globalTracker.addScaled(result.tracker, mProb);
+            frontiers.push({ heap: result.queue, scale: mProb });
 
             processedMProb += mProb;
             if (++iterCount % UI_CONSTANTS.PROGRESS_UPDATE_FREQUENCY === 0) {
@@ -242,6 +244,7 @@ export class ProgressiveStatsAggregator {
         return {
             combos: finalCombos,
             tracker: globalTracker,
+            frontiers,
             instrumentation: instrumentation ? this.snapshotInstrumentation(instrumentation) : undefined,
             timing: config.timing ? { ...config.timing } : undefined,
             threshold: ProbUtils.toNumber(threshold)

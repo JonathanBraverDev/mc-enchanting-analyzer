@@ -363,14 +363,17 @@ export class EnchantEngine {
             this.registry, cat, xp, mat, internalConfig
         );
 
+        const isBook = cat === "book";
         const finalStats = packedClue
-            ? SummaryService.summarizeConditioned(finalRaw.combos, finalRaw.tracker, this.registry.indexToEnchant, packedClue, summaryLimit)
+            ? SummaryService.summarizeConditioned(finalRaw.combos, finalRaw.tracker, this.registry.indexToEnchant, packedClue, summaryLimit, finalRaw.frontiers, isBook)
             : SummaryService.summarize(
                 finalRaw.combos,
                 finalRaw.tracker,
                 this.registry.indexToEnchant,
                 summaryLimit,
-                finalRaw.threshold
+                finalRaw.threshold,
+                finalRaw.frontiers,
+                isBook
             );
 
         finalStats.instrumentation = finalRaw.instrumentation;
@@ -427,7 +430,9 @@ export class EnchantEngine {
             finalRaw.tracker,
             this.registry.indexToEnchant,
             packedClue,
-            internalConfig.summaryLimit
+            internalConfig.summaryLimit,
+            finalRaw.frontiers,
+            cat === "book"
         );
     }
 
