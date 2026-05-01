@@ -33,6 +33,7 @@ export interface InitRequest {
   type: 'init';
   requestId: RequestId;
   version: string;
+  data?: any; // Standalone builds pass the shared DATA registry here
 }
 
 export interface TopRunStartRequest {

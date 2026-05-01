@@ -23,7 +23,7 @@
     "clean": "node -e \"const fs = require('fs'); fs.rmSync('dist', { recursive: true, force: true }); fs.mkdirSync('dist', { recursive: true });\"",
     "build": "npm run clean && npm run build:js && npm run build:bundle",
     "build:ts": "tsc",
-    "build:js": "esbuild src/ui/index.ts --bundle --outfile=dist/ui.js --minify --sourcemap --platform=browser && esbuild src/worker/top-worker.ts --bundle --outfile=dist/top-worker.js --minify --sourcemap --platform=browser && esbuild src/worker/chart-worker.ts --bundle --outfile=dist/chart-worker.js --minify --sourcemap --platform=browser",
+    "build:js": "node scripts/build.js",
     "build:bundle": "node scripts/bundle-worker.js",
     "build:standalone": "npm run build && node scripts/inline-assets.js",
     "test": "npm run test:all",

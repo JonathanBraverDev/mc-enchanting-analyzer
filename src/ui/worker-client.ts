@@ -53,10 +53,14 @@ export const WorkerClient = {
     },
 
     initWorker(kind: 'top' | 'chart', version: string): Promise<void> {
-        return new Promise((resolve, reject) => {
+        return new Promise(async (resolve, reject) => {
             if (this.workers[kind]) this.workers[kind]!.terminate();
             
-            this.workers[kind] = new Worker(kind === 'top' ? '/dist/top-worker.js' : '/dist/chart-worker.js');
+            if (kind === 'top') {
+                this.workers.top = new Worker('dist/top-worker.js');
+            } else {
+                this.workers.chart = new Worker('dist/chart-worker.js');
+            }
             
             const timeout = setTimeout(() => reject(new Error(`Worker ${kind} initialization timed out`)), 10000);
 
@@ -97,7 +101,17 @@ export const WorkerClient = {
             };
 
             const reqId = ++(this.requestId as any) as RequestId;
-            this.workers[kind]!.postMessage({ type: 'init', requestId: reqId, version });
+            
+            // In standalone, we must send the raw data, not the Proxy (Proxies aren't cloneable)
+            let rawData = (globalThis as any).ENCHANTING_DATA;
+            if (rawData && rawData.RAW_DATA) rawData = rawData.RAW_DATA;
+            
+            this.workers[kind]!.postMessage({ 
+                type: 'init', 
+                requestId: reqId, 
+                version, 
+                data: rawData 
+            });
         });
     },
 

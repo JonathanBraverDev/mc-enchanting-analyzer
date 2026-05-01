@@ -25,6 +25,9 @@ workerScope.onmessage = async (e: MessageEvent<WorkerRequest>) => {
 
   try {
     if (msg.type === 'init') {
+      if (msg.data) {
+        (globalThis as any).ENCHANTING_DATA = msg.data;
+      }
       engine = EngineFactory.create(DATA, msg.version);
       const ready: WorkerReadyResponse = {
         type: 'ready',
