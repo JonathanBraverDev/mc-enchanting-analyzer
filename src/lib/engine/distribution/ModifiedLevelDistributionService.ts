@@ -2,7 +2,7 @@ import { PRECISION, ProbUtils } from '#utils/index.js';
 import { ENGINE_LIMITS, MATH_CONSTANTS } from '#constants/engine.js';
 import { MINECRAFT_RULES } from '#constants/minecraft.js';
 import { RegistryState, LevelDistribution, EngineInstrumentation } from '#types/index.js';
-import { CacheManager } from '#services/CacheManager.js';
+import { CacheManager } from '#engine/cache/CacheManager.js';
 
 /**
  * Service for calculating the probability distribution of Modified Levels.

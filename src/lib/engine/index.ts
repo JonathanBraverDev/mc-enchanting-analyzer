@@ -1,6 +1,6 @@
 import { CalculationStats, SearchState, RegistryState, SearchConfig, InternalSearchConfig, EngineInstrumentation, } from '#types/index.js';
-import { ProbUtils, EnchantUtils } from '#utils/index.js';
-import { getMaterialId, getEnchantId, isCategoryAvailable, getEligibleListNumeric as getRegistryEligibleListNumeric } from '#core/registry.js';
+import { ProbUtils } from '#utils/index.js';
+import { getMaterialId, isCategoryAvailable, getEligibleListNumeric as getRegistryEligibleListNumeric } from '#core/registry.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import { MINECRAFT_RULES } from '#constants/minecraft.js';
 import { getSearchLimit } from '#engine/utils.js';
@@ -89,8 +89,7 @@ export class EnchantEngine {
         const limit = getSearchLimit(cat, ProbUtils.toNumber(threshold), maxIterations);
         const cacheKey = this.keyService.getPackedKey(this.registry, cat, modLevel, mat);
         
-        const cached = cat === "book" ? this.cache.getBook(this.registry.version, cacheKey) : this.cache.getCombo(this.registry.version, cacheKey);
-        // Cast cached to SearchState if needed, but the cache should already store SearchState 3.0 types
+        const cached = this.cache.getSearchState(cat, this.registry.version, cacheKey);
         if (cached && cached.threshold <= threshold) return cached as SearchState;
 
         const result = await this.searchService.search(
@@ -102,9 +101,7 @@ export class EnchantEngine {
             }
         );
 
-        if (cat === "book") this.cache.setBook(this.registry.version, cacheKey, result);
-        else this.cache.setCombo(this.registry.version, cacheKey, result);
-        
+        this.cache.setSearchState(cat, this.registry.version, cacheKey, result);
         return result;
     }
 
@@ -220,32 +217,13 @@ export class EnchantEngine {
     ): Promise<import('#types/index.js').AggregationResult> {
         this.validateRequest(cat, xp, mat, config);
 
-        const {
-            signal,
-            onProgress,
-            instrumentation,
-            timing
-        } = config;
-
         const internalConfig: InternalSearchConfig = {
             threshold: ProbUtils.toBigInt(tiers[tiers.length - 1]?.threshold ?? 0),
-            signal,
-            onProgress,
-            getExtendedCache: (ml) => {
-                const pk = this.keyService.getPackedKey(this.registry, cat, ml, mat);
-                return (cat === "book" ? this.cache.getBook(this.registry.version, pk) : this.cache.getCombo(this.registry.version, pk)) as SearchState;
-            },
-            setExtendedCache: (ml, state) => {
-                const pk = this.keyService.getPackedKey(this.registry, cat, ml, mat);
-                if (cat === "book") this.cache.setBook(this.registry.version, pk, state);
-                else this.cache.setCombo(this.registry.version, pk, state);
-            },
-            instrumentation,
-            timing,
-            getCacheMetrics: () => ({ 
-                cacheNodes: this.cache.getTotalCachedNodes(), 
-                cacheResults: this.cache.getTotalCachedResults() 
-            })
+            signal: config.signal,
+            onProgress: config.onProgress,
+            instrumentation: config.instrumentation,
+            timing: config.timing,
+            ...this.makeExtendedCacheConfig(cat, mat),
         };
 
         return this.statAggregator.calculateTiered(
@@ -264,35 +242,14 @@ export class EnchantEngine {
     ): Promise<import('#types/index.js').AggregationResult> {
         this.validateRequest(cat, xp, mat, config);
 
-        const {
-            threshold = ENGINE_LIMITS.DEFAULT_THRESHOLD,
-            signal,
-            onProgress,
-            maxIterations,
-            instrumentation,
-            timing
-        } = config;
-
         const internalConfig: InternalSearchConfig = {
-            threshold,
-            signal,
-            onProgress,
-            maxIterations,
-            getExtendedCache: (ml) => {
-                const pk = this.keyService.getPackedKey(this.registry, cat, ml, mat);
-                return (cat === "book" ? this.cache.getBook(this.registry.version, pk) : this.cache.getCombo(this.registry.version, pk)) as SearchState;
-            },
-            setExtendedCache: (ml, state) => {
-                const pk = this.keyService.getPackedKey(this.registry, cat, ml, mat);
-                if (cat === "book") this.cache.setBook(this.registry.version, pk, state);
-                else this.cache.setCombo(this.registry.version, pk, state);
-            },
-            instrumentation,
-            timing,
-            getCacheMetrics: () => ({ 
-                cacheNodes: this.cache.getTotalCachedNodes(), 
-                cacheResults: this.cache.getTotalCachedResults() 
-            })
+            threshold: config.threshold ?? ENGINE_LIMITS.DEFAULT_THRESHOLD,
+            signal: config.signal,
+            onProgress: config.onProgress,
+            maxIterations: config.maxIterations,
+            instrumentation: config.instrumentation,
+            timing: config.timing,
+            ...this.makeExtendedCacheConfig(cat, mat),
         };
 
         return this.statAggregator.calculate(this.registry, cat, xp, mat, internalConfig);
@@ -342,21 +299,9 @@ export class EnchantEngine {
             maxIterations,
             summaryLimit,
             resultsLimit,
-            getExtendedCache: (ml) => {
-                const pk = this.keyService.getPackedKey(this.registry, cat, ml, mat);
-                return (cat === "book" ? this.cache.getBook(this.registry.version, pk) : this.cache.getCombo(this.registry.version, pk)) as SearchState;
-            },
-            setExtendedCache: (ml, state) => {
-                const pk = this.keyService.getPackedKey(this.registry, cat, ml, mat);
-                if (cat === "book") this.cache.setBook(this.registry.version, pk, state);
-                else this.cache.setCombo(this.registry.version, pk, state);
-            },
             instrumentation,
             timing,
-            getCacheMetrics: () => ({ 
-                cacheNodes: this.cache.getTotalCachedNodes(), 
-                cacheResults: this.cache.getTotalCachedResults() 
-            })
+            ...this.makeExtendedCacheConfig(cat, mat),
         };
 
         const finalRaw = await this.statAggregator.calculate(
@@ -385,59 +330,32 @@ export class EnchantEngine {
         }
 
         return finalStats;
-    }    /**
-     * Aggregates statistics conditioned on a specific observed clue.
-     * This performs the normal search flow first, then applies clue conditioning
-     * to the aggregated results.
-     * 
-     * @param cat Item category.
-     * @param xp Base XP level.
-     * @param mat Item material.
-     * @param clue The observed enchantment clue (e.g. "Sharpness IV").
-     * @param config Optional search configuration.
-     */
-    public async calculateConditioned(
-        cat: string,
-        xp: number,
-        mat: string,
-        clue: string,
-        config: SearchConfig = {}
-    ): Promise<CalculationStats> {
-        this.validateRequest(cat, xp, mat, config);
-        
-        const romanMap = this.registry.data.constants.ROMAN_MAP;
-        const parsed = EnchantUtils.parse(clue, romanMap);
-        if (!parsed) throw new Error(`Invalid clue format: "${clue}"`);
-        
-        const clueId = getEnchantId(this.registry, parsed.name);
-        const packedClue = (clueId << 8) | (parsed.rank ?? 1);
-
-        // Perform raw calculation first (or retrieve from internal cache if possible)
-        const internalConfig: InternalSearchConfig = {
-            ...config,
-            threshold: ProbUtils.toBigInt(config.threshold ?? ENGINE_LIMITS.DEFAULT_THRESHOLD),
-            summaryLimit: config.summaryLimit ?? ENGINE_LIMITS.MAX_RESULTS_SUMMARY,
-            resultsLimit: config.resultsLimit ?? ENGINE_LIMITS.MAX_RESULTS_SIZE
-        };
-
-        const finalRaw = await this.statAggregator.calculate(
-            this.registry, cat, xp, mat, internalConfig
-        );
-
-        // Apply Bayesian conditioning
-        return SummaryService.summarizeConditioned(
-            finalRaw.combos,
-            finalRaw.tracker,
-            this.registry.indexToEnchant,
-            packedClue,
-            internalConfig.summaryLimit,
-            finalRaw.frontiers,
-            cat === "book"
-        );
     }
 
     private getPackedClue(cat: string, clue: string): number {
         return ClueValidator.validate(this.registry, cat, clue);
+    }
+
+    /**
+     * Builds the extended cache accessor pair for InternalSearchConfig.
+     * Centralises the key derivation and book/combo routing that would
+     * otherwise be duplicated in every public calculation method.
+     */
+    private makeExtendedCacheConfig(cat: string, mat: string): Pick<InternalSearchConfig, 'getExtendedCache' | 'setExtendedCache' | 'getCacheMetrics'> {
+        return {
+            getExtendedCache: (ml: number) => {
+                const pk = this.keyService.getPackedKey(this.registry, cat, ml, mat);
+                return this.cache.getSearchState(cat, this.registry.version, pk) as SearchState;
+            },
+            setExtendedCache: (ml: number, state: SearchState) => {
+                const pk = this.keyService.getPackedKey(this.registry, cat, ml, mat);
+                this.cache.setSearchState(cat, this.registry.version, pk, state);
+            },
+            getCacheMetrics: () => ({
+                cacheNodes: this.cache.getTotalCachedNodes(),
+                cacheResults: this.cache.getTotalCachedResults()
+            })
+        };
     }
 
 

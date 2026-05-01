@@ -8,15 +8,6 @@ import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
  * Low-level primitives for the enchantment search engine.
  */
 export class SearchProcessor {
-    /**
-     * No-op timing shim retained for API compatibility with SearchStateTracker.
-     * Fine-grained per-subsystem timing has been removed; only aggregate totalMs
-     * and searchMs are tracked. Callers that still reference this method compile
-     * without changes while the overhead is eliminated.
-     */
-    public static withTiming<T>(_timing: any, _bucket: string, fn: () => T): T {
-        return fn();
-    }
 
     /**
      * Reusable terminal check for mass distribution.

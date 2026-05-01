@@ -69,6 +69,18 @@ export class CacheManager {
         this.book.set(`${version}:${key}`, val);
     }
 
+    /**
+     * Unified accessor: routes to the book or combo frontier cache based on category.
+     * Centralizes the `cat === "book"` branch that would otherwise be duplicated at call sites.
+     */
+    public getSearchState(cat: string, version: string, key: number): SearchFrontier | undefined {
+        return cat === 'book' ? this.getBook(version, key) : this.getCombo(version, key);
+    }
+    public setSearchState(cat: string, version: string, key: number, val: SearchFrontier): void {
+        if (cat === 'book') this.setBook(version, key, val);
+        else this.setCombo(version, key, val);
+    }
+
     // --- Stats Cache ---
     public getStats(version: string, key: number): CalculationStats | undefined {
         const val = this.stats.get(`${version}:${key}`);

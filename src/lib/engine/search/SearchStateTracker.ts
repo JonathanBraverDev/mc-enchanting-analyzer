@@ -1,5 +1,5 @@
 import { MassBookkeeping, MassAccounting, MassEventType } from '#types/mass.js';
-import { ExpansionBlueprint, ForwardingContext, PackedCombo } from '#types/index.js';
+import { ExpansionBlueprint, ForwardingContext, PackedCombo, PackedEnchant } from '#types/index.js';
 import { ProbUtils, ComboUtils, PRECISION } from '#utils/index.js';
 
 import { DistributionBufferPool } from '#engine/distribution/DistributionBufferPool.js';
@@ -96,9 +96,8 @@ export class SearchStateTracker {
         initialCombo: PackedCombo,
         ctx: ForwardingContext,
         searchProcessor: {
-            withTiming: <T>(timing: any, bucket: any, fn: () => T) => T;
-            settleMass: (...args: any[]) => bigint;
-            isTerminalCondition: (...args: any[]) => any;
+            settleMass: (isBook: boolean, currentCount: number, packedChosen: PackedCombo, currentEnchants: PackedEnchant[], prob: bigint, results: Map<PackedCombo, bigint>) => bigint;
+            isTerminalCondition: (currentCount: number, isBook: boolean, probForward: bigint, resultsSize: number, resultsLimit: number, hasCombo: boolean, multiEnchantBooks: boolean, floor: bigint) => { isLimitReached: boolean; isTooSmall: boolean; isMapFull: boolean; isTerminal: boolean };
         }
     ): bigint {
         const stack: Array<{ mass: bigint, meta: bigint, combo: PackedCombo, depth: number }> = [
@@ -113,23 +112,18 @@ export class SearchStateTracker {
             const blueprint = this.expansionCache.get(meta);
             if (!blueprint) continue;
 
-            const { registry, timing, cat } = ctx;
+            const { registry, cat } = ctx;
             const currentBitset = meta >> BIGINT_CONSTANTS.ENCHANT_SHIFT;
             const probContinue = blueprint.probContinue;
             
             // Split mass into stop vs forward
-            const { probStop, probForward, scaleLoss } = searchProcessor.withTiming(timing, 'settlingMs', () => {
-                const pStop = ProbUtils.scale(incomingMass, (PRECISION - probContinue));
-                const pForward = ProbUtils.scale(incomingMass, probContinue);
-                const loss = incomingMass - (pStop + pForward);
-                return { probStop: pStop, probForward: pForward, scaleLoss: loss };
-            });
+            const probStop = ProbUtils.scale(incomingMass, (PRECISION - probContinue));
+            const probForward = ProbUtils.scale(incomingMass, probContinue);
+            const scaleLoss = incomingMass - (probStop + probForward);
 
-            const remStop = searchProcessor.withTiming(timing, 'settlingMs', () => 
-                searchProcessor.settleMass(
-                    cat === "book", blueprint.currentCount, blueprint.currentCombo, blueprint.currentEnchants, 
-                    probStop, ctx.results
-                )
+            const remStop = searchProcessor.settleMass(
+                cat === "book", blueprint.currentCount, blueprint.currentCombo, blueprint.currentEnchants, 
+                probStop, ctx.results
             );
 
             // Terminal Check
@@ -162,17 +156,14 @@ export class SearchStateTracker {
         term: { isLimitReached: boolean; isTooSmall: boolean; isMapFull: boolean },
         ctx: ForwardingContext,
         searchProcessor: {
-            withTiming: <T>(timing: any, bucket: string, fn: () => T) => T;
-            settleMass: (...args: any[]) => bigint;
+            settleMass: (isBook: boolean, currentCount: number, packedChosen: PackedCombo, currentEnchants: PackedEnchant[], prob: bigint, results: Map<PackedCombo, bigint>) => bigint;
         }
     ): bigint {
-        const { timing, cat, instrumentation } = ctx;
+        const { cat, instrumentation } = ctx;
         
-        const remForward = searchProcessor.withTiming(timing, 'settlingMs', () => 
-            searchProcessor.settleMass(
-                cat === "book", blueprint.currentCount, blueprint.currentCombo, blueprint.currentEnchants, 
-                probForward, ctx.results
-            )
+        const remForward = searchProcessor.settleMass(
+            cat === "book", blueprint.currentCount, blueprint.currentCombo, blueprint.currentEnchants, 
+            probForward, ctx.results
         );
 
         const localRounding = remStop + remForward + scaleLoss;
