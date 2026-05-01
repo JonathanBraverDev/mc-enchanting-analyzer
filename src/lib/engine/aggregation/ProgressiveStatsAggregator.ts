@@ -57,9 +57,6 @@ export class ProgressiveStatsAggregator {
         let lastResult: AggregationResult = {
             combos: new Map(),
             tracker: initialTracker,
-            anyMass: new BigUint64Array(PACKING_CONSTANTS.BYTE_BASIS),
-            rankMass: new BigUint64Array(PACKING_CONSTANTS.MAX_RANKED_INDEX),
-            countMass: new BigUint64Array(PACKING_CONSTANTS.MAX_COUNT_INDEX),
             threshold: 0
         };
 
@@ -71,9 +68,6 @@ export class ProgressiveStatsAggregator {
             const activeThreshold = ProbUtils.toBigInt(tier.threshold);
 
             const finalCombos = new Map<PackedCombo, bigint>();
-            const totalAnyMass = new BigUint64Array(PACKING_CONSTANTS.BYTE_BASIS);
-            const totalRankMass = new BigUint64Array(PACKING_CONSTANTS.MAX_RANKED_INDEX);
-            const totalCountMass = new BigUint64Array(PACKING_CONSTANTS.MAX_COUNT_INDEX);
             let tierTracker = new SearchStateTracker();
 
             let processedMProb = 0n;
@@ -109,9 +103,6 @@ export class ProgressiveStatsAggregator {
                 }
 
                 ProbUtils.addMapMass(finalCombos, result.results, mProb);
-                ProbUtils.addMapMass(totalAnyMass, result.anyMass, mProb);
-                ProbUtils.addMapMass(totalRankMass, result.rankMass, mProb);
-                ProbUtils.addMapMass(totalCountMass, result.countMass, mProb);
 
                 tierTracker.addScaled(result.tracker, mProb);
 
@@ -128,9 +119,6 @@ export class ProgressiveStatsAggregator {
             const tierResult: AggregationResult = {
                 combos: finalCombos,
                 tracker: tierTracker,
-                anyMass: totalAnyMass,
-                rankMass: totalRankMass,
-                countMass: totalCountMass,
                 instrumentation: instrumentation ? this.snapshotInstrumentation(instrumentation) : undefined,
                 timing: config.timing ? { ...config.timing } : undefined,
                 threshold: tier.threshold
@@ -181,9 +169,6 @@ export class ProgressiveStatsAggregator {
         const levels = Object.keys(modDist).map(Number).sort((a, b) => b - a);
 
         const finalCombos = new Map<PackedCombo, bigint>();
-        const totalAnyMass = new BigUint64Array(PACKING_CONSTANTS.BYTE_BASIS);
-        const totalRankMass = new BigUint64Array(PACKING_CONSTANTS.MAX_RANKED_INDEX);
-        const totalCountMass = new BigUint64Array(PACKING_CONSTANTS.MAX_COUNT_INDEX);
         let globalTracker = new SearchStateTracker();
 
         let processedMProb = 0n;
@@ -233,9 +218,6 @@ export class ProgressiveStatsAggregator {
             if (useCache && setExtendedCache) setExtendedCache(ml, result);
 
             ProbUtils.addMapMass(finalCombos, result.results, mProb);
-            ProbUtils.addMapMass(totalAnyMass, result.anyMass, mProb);
-            ProbUtils.addMapMass(totalRankMass, result.rankMass, mProb);
-            ProbUtils.addMapMass(totalCountMass, result.countMass, mProb);
 
             globalTracker.addScaled(result.tracker, mProb);
 
@@ -260,9 +242,6 @@ export class ProgressiveStatsAggregator {
         return {
             combos: finalCombos,
             tracker: globalTracker,
-            anyMass: totalAnyMass,
-            rankMass: totalRankMass,
-            countMass: totalCountMass,
             instrumentation: instrumentation ? this.snapshotInstrumentation(instrumentation) : undefined,
             timing: config.timing ? { ...config.timing } : undefined,
             threshold: ProbUtils.toNumber(threshold)

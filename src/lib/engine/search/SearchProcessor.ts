@@ -52,12 +52,10 @@ export class SearchProcessor {
         currentEnchants: PackedEnchant[],
         prob: bigint,
         results: Map<PackedCombo, bigint>,
-        countMass: BigUint64Array,
-        anyMass: BigUint64Array,
-        rankMass: BigUint64Array
+        countMass: BigUint64Array
     ): bigint {
         if (isBook && currentCount > 1) {
-            const { rem } = this.redistributeBookProb(packedChosen, currentEnchants, prob, currentCount, results, countMass, anyMass, rankMass);
+            const { rem } = this.redistributeBookProb(packedChosen, currentEnchants, prob, currentCount, results, countMass);
             return rem;
         } else {
             ProbUtils.addItemMass(results, packedChosen, prob);
@@ -76,9 +74,7 @@ export class SearchProcessor {
         prob: bigint,
         currentCount: number,
         results: Map<PackedCombo, bigint>,
-        countMass: BigUint64Array,
-        anyMass: BigUint64Array,
-        rankMass: BigUint64Array
+        countMass: BigUint64Array
     ): { rem: bigint } {
         const redistributed = ComboUtils.removeAdditional(packedChosen) as PackedCombo[]; 
         const nOutcomes = redistributed.length;
@@ -101,21 +97,6 @@ export class SearchProcessor {
 
         const finalCount = currentCount - 1;
         ProbUtils.addItemMass(countMass, finalCount, prob);
-
-        // anyMass and rankMass were pre-credited with `prob` for each enchant when this combo
-        // was first pushed (in processInitialNode / processExpansionStep). After redistribution
-        // into (N-1)-enchant outcomes, each enchant only survives in (N-1)/N of them, so we
-        // subtract lossPerEnchant ≈ prob/N per enchant to keep anyMass and rankMass accurate.
-        const survivorMass = ProbUtils.roundScale(prob, BigInt(nOutcomes - 1), BigInt(nOutcomes));
-        const lossPerEnchant = prob - survivorMass;
-
-        for (const e of originalEnchants) {
-            const id = ComboUtils.getEnchantId(e);
-            if (lossPerEnchant > 0n) {
-                ProbUtils.addItemMass(anyMass, id, -lossPerEnchant);
-                ProbUtils.addItemMass(rankMass, e, -lossPerEnchant);
-            }
-        }
 
         return { rem: 0n };
     }
@@ -143,9 +124,6 @@ export class SearchProcessor {
             const nextId = ComboUtils.getEnchantId(e);
             const nextMeta = (BIGINT_CONSTANTS.ID_BIT_LOOKUP[nextId]! << BIGINT_CONSTANTS.ENCHANT_SHIFT) | BIGINT_CONSTANTS.LEVEL_LOOKUP[currentLevel]!;
             const nextPacked = ComboUtils.pack([e], registry.enchantToIndex) as PackedCombo;
-
-            ProbUtils.addItemMass(ctx.anyMass, nextId, pNext);
-            ProbUtils.addItemMass(ctx.rankMass, e, pNext);
 
             tracker.record('pending', pNext);
             queue.pushOrMerge(nextMeta, pNext, nextPacked);

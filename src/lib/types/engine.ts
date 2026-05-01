@@ -153,9 +153,6 @@ export interface ForwardingContext {
     registry: RegistryState;
     results: Map<PackedCombo, bigint>;
     queue: SearchHeap;
-    anyMass: BigUint64Array;
-    rankMass: BigUint64Array;
-    countMass: BigUint64Array;
     resultsLimit: number;
     instrumentation?: EngineInstrumentation | undefined;
     timing?: SearchTiming | undefined;
@@ -174,9 +171,6 @@ export interface ForwardingContext {
 export interface SearchState {
     queue: SearchHeap;
     results: Map<PackedCombo, bigint>;
-    anyMass: BigUint64Array;
-    rankMass: BigUint64Array;
-    countMass: BigUint64Array;
     tracker: import('../engine/search/SearchStateTracker.js').SearchStateTracker;
     threshold: bigint;
     iterations: number;
@@ -262,9 +256,6 @@ export interface ProgressReporter {
 export interface AggregationResult {
     combos: Map<PackedCombo, bigint>;
     tracker: import('../engine/search/SearchStateTracker.js').SearchStateTracker;
-    anyMass: BigUint64Array;
-    rankMass: BigUint64Array;
-    countMass: BigUint64Array;
     instrumentation?: EngineInstrumentation | undefined;
     timing?: SearchTiming | undefined;
     threshold: number;

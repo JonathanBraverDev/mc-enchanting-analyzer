@@ -128,7 +128,7 @@ export class SearchStateTracker {
             const remStop = searchProcessor.withTiming(timing, 'settlingMs', () => 
                 searchProcessor.settleMass(
                     cat === "book", blueprint.currentCount, blueprint.currentCombo, blueprint.currentEnchants, 
-                    probStop, ctx.results, ctx.countMass, ctx.anyMass, ctx.rankMass
+                    probStop, ctx.results, ctx.countMass
                 )
             );
 
@@ -171,7 +171,7 @@ export class SearchStateTracker {
         const remForward = searchProcessor.withTiming(timing, 'settlingMs', () => 
             searchProcessor.settleMass(
                 cat === "book", blueprint.currentCount, blueprint.currentCombo, blueprint.currentEnchants, 
-                probForward, ctx.results, ctx.countMass, ctx.anyMass, ctx.rankMass
+                probForward, ctx.results, ctx.countMass
             )
         );
 
@@ -232,9 +232,6 @@ export class SearchStateTracker {
             const nextPacked = ComboUtils.packAppend(blueprint.currentCombo, e, registry.enchantToIndex) as PackedCombo;
             const nextId = ComboUtils.getEnchantId(e);
             const nextMeta = ((currentBitset | BIGINT_CONSTANTS.ID_BIT_LOOKUP[nextId]!) << BIGINT_CONSTANTS.ENCHANT_SHIFT) | BIGINT_CONSTANTS.LEVEL_LOOKUP[blueprint.nextLevel]!;
-
-            ProbUtils.addItemMass(ctx.anyMass, nextId, pNext);
-            ProbUtils.addItemMass(ctx.rankMass, e, pNext);
 
             // If the child is cached but we've reached max stack depth, fall back to the main queue
             // rather than recursing further. Mass is not lost — it enters 'pending' and the main
