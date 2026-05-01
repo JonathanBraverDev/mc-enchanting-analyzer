@@ -130,6 +130,14 @@ export class ProbabilityMassAccountant {
     }
 
     /**
+     * Returns the mass that has been removed from the frontier by normal exploration.
+     */
+    public getExploredMass(): bigint {
+        const d = this.data;
+        return d[0]! + d[2]! + d[3]!;
+    }
+
+    /**
      * Returns the mass from frontiers that were discovered but not yet expanded.
      */
     public getUnexploredMass(): bigint {

@@ -10,8 +10,8 @@ src/wasm/rust_engine_bg.wasm
 **/tests/snapshots/*.actual.json
 test-results/
 
-# Matrix Generation Artifacts
-scripts/matrix-output/
+# V5 Reporting Artifacts
+scripts/v5-report-output/
 
 # Scratch / temporary analysis files
 scratch/

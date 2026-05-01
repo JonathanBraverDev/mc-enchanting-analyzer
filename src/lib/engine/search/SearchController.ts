@@ -28,7 +28,11 @@ export class SearchController {
         const { threshold, limit, signal, instrumentation, timing } = config;
 
         let iterations = 0;
-        let checkpointIdx = 0;
+        let exploredSampleIdx = 0;
+        const exploredTargets = instrumentation?.exploredMassTargets?.map(target => ({
+            target,
+            units: ProbUtils.toBigInt(target)
+        })) ?? [];
         const current = { meta: 0n, prob: 0n, level: 0, combo: 0 as any as PackedCombo };
 
         let aggregateStart = performance.now();
@@ -79,21 +83,23 @@ export class SearchController {
                 SearchProcessor.processSearchNode(current.prob, current.meta, current.combo, currentCount, ctx, tracker);
             }
 
-            // Checkpoints
-            const bk = tracker.mass.getBookkeeping();
-            while (checkpointIdx < ProbUtils.CHECKPOINT_TARGETS.length) {
-                const targetMass = ProbUtils.CHECKPOINT_TARGETS[checkpointIdx];
-                if (targetMass === undefined) break;
-                const currentSettledMass = bk.resolved + bk.sieved + bk.overflow;
-                if (currentSettledMass < targetMass) break;
-                state.checkpoints.push({
-                    modLevel,
-                    threshold: ProbUtils.toNumber(current.prob),
-                    mass: ProbUtils.toNumber(currentSettledMass),
-                    iterations,
-                    totalIterations: iterations
-                });
-                checkpointIdx++;
+            if (instrumentation && exploredTargets.length > 0) {
+                const exploredMass = tracker.mass.getExploredMass();
+                while (exploredSampleIdx < exploredTargets.length) {
+                    const target = exploredTargets[exploredSampleIdx];
+                    if (target === undefined || exploredMass < target.units) break;
+
+                    instrumentation.exploredMassSamples = instrumentation.exploredMassSamples ?? [];
+                    instrumentation.exploredMassSamples.push({
+                        modLevel,
+                        targetMass: target.target,
+                        exploredMass: ProbUtils.toNumber(exploredMass),
+                        frontierProbability: ProbUtils.toNumber(current.prob),
+                        iterations,
+                        totalIterations: (instrumentation.totalIterations || 0) + iterations
+                    });
+                    exploredSampleIdx++;
+                }
             }
         }
 

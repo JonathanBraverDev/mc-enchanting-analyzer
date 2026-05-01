@@ -23,8 +23,7 @@ async function run() {
         poolCache: { hits: 0, misses: 0 },
         distCache: { hits: 0, misses: 0 },
         frontierCache: { hits: 0, misses: 0 },
-        totalIterations: 0, totalPrunedNodes: 0, roundingErrorEvents: 0, checkpointSummary: [], levelsProcessed: 0, levelsFullyResolved: 0, fullyResolved: false,
-        checkpoints: []
+        totalIterations: 0, totalPrunedNodes: 0, roundingErrorEvents: 0, levelsProcessed: 0, levelsFullyResolved: 0, fullyResolved: false
     };
 
     console.log(`--- Running Enchantment Simulation ---`);
@@ -47,14 +46,6 @@ async function run() {
     console.log(`\nSearch Performance:`);
     console.log(`  Total Iterations: ${instrumentation.totalIterations}`);
     console.log(`  Execution Time:   ${(end - start).toFixed(2)}ms`);
-
-    console.log(`\nMass Checkpoints (Threshold vs Accuracy):`);
-    console.table(instrumentation.checkpoints.map(cp => ({
-        'Mass %': (cp.mass * 100).toFixed(2) + '%',
-        'Threshold (next.prob)': cp.threshold.toExponential(4),
-        'It (Local)': cp.iterations,
-        'It (Global)': cp.totalIterations
-    })));
 
     console.log(`\nFinal Stats Summary:`);
     console.log(`  Exit Reason:    ${instrumentation.exitReason}`);

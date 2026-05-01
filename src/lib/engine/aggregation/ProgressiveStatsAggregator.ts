@@ -1,8 +1,8 @@
 import { PRECISION, ProbUtils, AsyncUtils } from '#utils/index.js';
 import { getEnchantability } from '#core/registry.js';
-import { ENGINE_LIMITS, SEARCH_CONSTANTS, UI_CONSTANTS } from '#constants/engine.js';
+import { ENGINE_LIMITS, UI_CONSTANTS } from '#constants/engine.js';
 import { getSearchLimit } from '#engine/utils.js';
-import { PackedCombo, SearchState, RegistryState, InternalSearchConfig, EngineInstrumentation, MassCheckpoint, CheckpointSummary, AggregationResult } from '#types/index.js';
+import { PackedCombo, SearchState, RegistryState, InternalSearchConfig, EngineInstrumentation, AggregationResult } from '#types/index.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { SearchService } from '#engine/search/SearchService.js';
 import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
@@ -175,7 +175,6 @@ export class ProgressiveStatsAggregator {
         const limit = getSearchLimit(cat, threshold, maxIterations);
 
         if (instrumentation) {
-            instrumentation.checkpoints = instrumentation.checkpoints || [];
             instrumentation.totalIterations = 0;
             instrumentation.levelsFullyResolved = 0;
             instrumentation.frontierCache = instrumentation.frontierCache || { hits: 0, misses: 0 };
@@ -250,15 +249,6 @@ export class ProgressiveStatsAggregator {
     }
 
     private updateInstrumentation(instr: EngineInstrumentation, state: SearchState): void {
-        instr.checkpoints = instr.checkpoints || [];
-        if (state.checkpoints) {
-            for (const cp of state.checkpoints) {
-                instr.checkpoints.push({
-                    ...cp,
-                    totalIterations: (instr.totalIterations || 0) + cp.iterations
-                });
-            }
-        }
         instr.totalIterations = (instr.totalIterations || 0) + state.iterations;
         instr.exitReason = state.exitReason;
         instr.levelsProcessed = (instr.levelsProcessed || 0) + 1;
@@ -272,46 +262,7 @@ export class ProgressiveStatsAggregator {
         instr.frontierCache = metrics.frontierCache;
     }
 
-    /** Build a checkpointSummary from the raw flat checkpoints array. */
-    private buildCheckpointSummary(checkpoints: MassCheckpoint[]): CheckpointSummary[] {
-        const targets = SEARCH_CONSTANTS.CHECKPOINT_TARGET_FLOATS;
-        const byTarget = new Map<number, { threshold: number; iterations: number; level: number }[]>();
-        for (const target of targets) byTarget.set(target, []);
-
-        for (const cp of checkpoints) {
-            let matched: number | null = null;
-            for (const t of targets) {
-                if (cp.mass >= t - 0.001) matched = t;
-            }
-            if (matched !== null) {
-                const existing = byTarget.get(matched)!;
-                if (!existing.some(e => e.level === cp.modLevel)) {
-                    existing.push({ threshold: cp.threshold, iterations: cp.iterations, level: cp.modLevel });
-                }
-            }
-        }
-
-        const summary: CheckpointSummary[] = [];
-        for (const target of targets) {
-            const entries = byTarget.get(target)!;
-            if (entries.length === 0) continue;
-            const first = entries[0];
-            if (first === undefined) continue;
-            const bottleneck = entries.reduce((worst, e) => e.threshold < worst.threshold ? e : worst, first);
-            summary.push({
-                target,
-                worstCaseThreshold: bottleneck.threshold,
-                worstCaseIterations: Math.max(...entries.map(e => e.iterations)),
-                bottleneckLevel: bottleneck.level
-            });
-        }
-        return summary;
-    }
-
     private snapshotInstrumentation(instr: EngineInstrumentation): EngineInstrumentation {
-        const checkpoints = [...instr.checkpoints];
-        const checkpointSummary = this.buildCheckpointSummary(checkpoints);
-        instr.checkpointSummary = checkpointSummary;
-        return { ...instr, checkpoints, checkpointSummary };
+        return { ...instr };
     }
 }

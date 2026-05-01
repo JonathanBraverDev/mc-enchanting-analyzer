@@ -43,23 +43,13 @@ export interface CacheConfig {
   poolSize: number;
 }
 
-export interface MassCheckpoint {
+export interface ExploredMassSample {
   modLevel: number;
-  threshold: number;
-  mass: number;
+  targetMass: number;
+  exploredMass: number;
+  frontierProbability: number;
   iterations: number;
   totalIterations: number;
-}
-
-export interface CheckpointSummary {
-  /** The mass target (e.g. 0.5, 0.9, 0.999) */
-  target: number;
-  /** Minimum threshold needed to reach this target — worst case across all modified levels */
-  worstCaseThreshold: number;
-  /** Maximum iterations needed to reach this target — worst case across all modified levels */
-  worstCaseIterations: number;
-  /** The modified level that was the bottleneck */
-  bottleneckLevel: number;
 }
 
 export interface SearchTiming {
@@ -97,10 +87,11 @@ export interface EngineInstrumentation {
   /** Total results currently stored in ALL frontiers across the entire engine's LRU caches */
   globalCacheResults?: number | undefined;
 
-  /** Raw per-level checkpoints — one entry per modified level x checkpoint target crossed */
-  checkpoints: MassCheckpoint[];
-  /** Aggregated summary: worst-case threshold and iteration count per mass target across all levels */
-  checkpointSummary: CheckpointSummary[];
+  /** Optional script/diagnostic targets for recording explored mass crossings. */
+  exploredMassTargets?: number[] | undefined;
+  /** Diagnostic samples recorded when explored mass crosses configured targets. */
+  exploredMassSamples?: ExploredMassSample[] | undefined;
+
   exitReason?: EngineExitReason | undefined;
 
   /** Optional: If true, perform expensive global heap scans for cache nodes/results */
@@ -175,7 +166,6 @@ export interface SearchState {
     threshold: bigint;
     iterations: number;
     nodesProcessed: number;
-    checkpoints: MassCheckpoint[];  // per-call output; not carried over on resume
     exitReason?: EngineExitReason | undefined;  // per-call output; not carried over on resume
 }
 

@@ -10,25 +10,15 @@ test('Engine Instrumentation Collection', async () => {
         poolCache: { hits: 0, misses: 0 },
         distCache: { hits: 0, misses: 0 },
         frontierCache: { hits: 0, misses: 0 },
-        totalIterations: 0, totalPrunedNodes: 0, roundingErrorEvents: 0, checkpointSummary: [], levelsProcessed: 0, levelsFullyResolved: 0, fullyResolved: false,
-        checkpoints: []
+        totalIterations: 0, totalPrunedNodes: 0, roundingErrorEvents: 0, levelsProcessed: 0, levelsFullyResolved: 0, fullyResolved: false
     };
 
     // First run - should have many misses, 0 hits
     await engine.calculate('leggings', 30, 'diamond', { instrumentation, threshold: 0.0001 });
 
     assert.ok(instrumentation.totalIterations > 0, 'Should have recorded iterations');
-    assert.ok(instrumentation.checkpoints.length > 0, 'Should have recorded mass checkpoints');
     assert.ok(instrumentation.poolCache.misses > 0, 'Should have pool cache misses');
     assert.ok(instrumentation.distCache.misses > 0, 'Should have dist cache misses');
-
-    // Check checkpoint structure
-    const firstCheckpoint = instrumentation.checkpoints[0];
-    assert.ok(firstCheckpoint !== undefined, 'Should have at least one checkpoint recorded');
-    assert.ok(firstCheckpoint.mass >= 0.1, 'Checkpoints should start at 10% mass or higher');
-    assert.ok(firstCheckpoint.iterations > 0, 'Checkpoints should record iterations');
-    assert.ok(firstCheckpoint.totalIterations >= firstCheckpoint.iterations, 'Checkpoints should record global total iterations');
-    assert.ok(firstCheckpoint.threshold > 0, 'Checkpoints should record threshold');
     assert.ok(instrumentation.exitReason, 'Should have an exit reason');
 
     // Second run with same params - should hit caches
@@ -38,8 +28,7 @@ test('Engine Instrumentation Collection', async () => {
         poolCache: { hits: 0, misses: 0 },
         distCache: { hits: 0, misses: 0 },
         frontierCache: { hits: 0, misses: 0 },
-        totalIterations: 0, totalPrunedNodes: 0, roundingErrorEvents: 0, checkpointSummary: [], levelsProcessed: 0, levelsFullyResolved: 0, fullyResolved: false,
-        checkpoints: []
+        totalIterations: 0, totalPrunedNodes: 0, roundingErrorEvents: 0, levelsProcessed: 0, levelsFullyResolved: 0, fullyResolved: false
     };
 
     await engine.calculate('leggings', 30, 'diamond', { instrumentation: instrumentation2, threshold: 0.0001 });
@@ -56,8 +45,7 @@ test('Frontier Cache Instrumentation (Resumption)', async () => {
         poolCache: { hits: 0, misses: 0 },
         distCache: { hits: 0, misses: 0 },
         frontierCache: { hits: 0, misses: 0 },
-        totalIterations: 0, totalPrunedNodes: 0, roundingErrorEvents: 0, checkpointSummary: [], levelsProcessed: 0, levelsFullyResolved: 0, fullyResolved: false,
-        checkpoints: []
+        totalIterations: 0, totalPrunedNodes: 0, roundingErrorEvents: 0, levelsProcessed: 0, levelsFullyResolved: 0, fullyResolved: false
     };
 
     // Run a coarse search
@@ -69,8 +57,7 @@ test('Frontier Cache Instrumentation (Resumption)', async () => {
         poolCache: { hits: 0, misses: 0 },
         distCache: { hits: 0, misses: 0 },
         frontierCache: { hits: 0, misses: 0 },
-        totalIterations: 0, totalPrunedNodes: 0, roundingErrorEvents: 0, checkpointSummary: [], levelsProcessed: 0, levelsFullyResolved: 0, fullyResolved: false,
-        checkpoints: []
+        totalIterations: 0, totalPrunedNodes: 0, roundingErrorEvents: 0, levelsProcessed: 0, levelsFullyResolved: 0, fullyResolved: false
     };
 
     await engine.calculate('sword', 30, 'netherite', { threshold: 0.0001, instrumentation: instrumentation2 });

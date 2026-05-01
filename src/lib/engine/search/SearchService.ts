@@ -9,7 +9,7 @@ import { CacheManager } from '#engine/cache/CacheManager.js';
 
 /**
  * Service for the Best-First search of enchantment combinations.
- * Orchestrates the search loop and checkpointing with full DI.
+ * Orchestrates the search loop with full DI.
  */
 export class SearchService {
     constructor(private readonly cache: CacheManager) {}
@@ -88,7 +88,6 @@ export class SearchService {
             threshold,
             iterations: 0,
             nodesProcessed: 0,
-            checkpoints: [],
             exitReason: 'empty'
         };
     }
