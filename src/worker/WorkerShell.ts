@@ -55,18 +55,7 @@ export class WorkerShell {
     public async dispatch(msg: WorkerRequest): Promise<void> {
         try {
             if (msg.type === 'init') {
-                if (msg.data) {
-                    (globalThis as any).ENCHANTING_DATA = msg.data;
-                }
-                this.engine = EngineFactory.create(DATA, msg.version);
-                const ready: WorkerReadyResponse = {
-                    type: 'ready',
-                    requestId: msg.requestId,
-                    worker: this.workerName,
-                    version: msg.version
-                };
-                this.scope.postMessage(ready);
-                this.onInit?.(this.engine, msg as any);
+                this.initializeEngine(msg);
                 return;
             }
 
@@ -85,39 +74,63 @@ export class WorkerShell {
     private async startRun(msg: WorkerRequest): Promise<void> {
         const runId = (msg as any).runId as RunId;
 
-        // Abort the previous run if it's a different one
-        if (this.currentRunId && this.currentRunId !== runId) {
-            this.currentAbortController?.abort();
-            const superseded: RunTerminalResponse = {
-                type: 'terminal',
-                worker: this.workerName,
-                runId: this.currentRunId,
-                status: 'superseded'
-            };
-            this.scope.postMessage(superseded);
-        }
-
-        this.currentRunId = runId;
-        this.currentAbortController = new AbortController();
-        const signal = this.currentAbortController.signal;
+        this.supersedeActiveRun(runId);
+        const signal = this.startAbortableRun(runId);
 
         try {
             await this.onRun?.(msg, this.engine!, signal);
-
-            // Send terminal "done" if the run completed normally
-            if (this.currentRunId === runId && !signal.aborted) {
-                const terminal: RunTerminalResponse = {
-                    type: 'terminal',
-                    worker: this.workerName,
-                    runId,
-                    status: 'done'
-                };
-                this.scope.postMessage(terminal);
-            }
+            this.completeRun(runId, signal);
         } catch (err: any) {
             if (err.name === 'AbortError' || err.message === 'Aborted') return;
             throw err; // re-throw to be caught by dispatch()
         }
+    }
+
+    private initializeEngine(msg: WorkerRequest & { type: 'init' }): void {
+        if (msg.data) {
+            (globalThis as any).ENCHANTING_DATA = msg.data;
+        }
+
+        this.engine = EngineFactory.create(DATA, msg.version);
+        const ready: WorkerReadyResponse = {
+            type: 'ready',
+            requestId: msg.requestId,
+            worker: this.workerName,
+            version: msg.version
+        };
+        this.scope.postMessage(ready);
+        this.onInit?.(this.engine, msg);
+    }
+
+    private supersedeActiveRun(nextRunId: RunId): void {
+        if (!this.currentRunId || this.currentRunId === nextRunId) return;
+
+        this.currentAbortController?.abort();
+        this.postTerminal(this.currentRunId, 'superseded');
+    }
+
+    private startAbortableRun(runId: RunId): AbortSignal {
+        this.currentRunId = runId;
+        this.currentAbortController = new AbortController();
+
+        return this.currentAbortController.signal;
+    }
+
+    private completeRun(runId: RunId, signal: AbortSignal): void {
+        if (this.currentRunId === runId && !signal.aborted) {
+            this.postTerminal(runId, 'done');
+        }
+    }
+
+    private postTerminal(runId: RunId, status: RunTerminalResponse['status'], error?: string): void {
+        const terminal: RunTerminalResponse = {
+            type: 'terminal',
+            worker: this.workerName,
+            runId,
+            status
+        };
+        if (error !== undefined) terminal.error = error;
+        this.scope.postMessage(terminal);
     }
 
     /**
@@ -133,14 +146,7 @@ export class WorkerShell {
         this.scope.postMessage(errorMsg);
 
         if (this.currentRunId) {
-            const terminal: RunTerminalResponse = {
-                type: 'terminal',
-                worker: this.workerName,
-                runId: this.currentRunId,
-                status: 'error',
-                error: err.message
-            };
-            this.scope.postMessage(terminal);
+            this.postTerminal(this.currentRunId, 'error', err.message);
         }
     }
 }
