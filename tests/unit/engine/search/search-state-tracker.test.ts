@@ -70,12 +70,19 @@ describe('SearchStateTracker', () => {
         };
         
         // We use string-index access for private method testing in node:test
+        const ctx: any = { 
+            registry: { enchantToIndex: new Map() }, 
+            timing: {}, 
+            resultsLimit: 100, 
+            queue: { pushOrMerge: () => {} },
+            instrumentation: {}
+        };
+
         (tracker as any).processExpansionStep(
-            0n, PRECISION, 0n, 0n, // probStop=0, probForward=PRECISION
+            0n, PRECISION, 0n, 0n, // probStop=0, probForward=PRECISION, remStop=0, scaleLoss=0
             0n, blueprint, 
-            { registry: { enchantToIndex: new Map() }, timing: {}, resultsLimit: 100, anyMass: new BigUint64Array(10), rankMass: new BigUint64Array(10), queue: { pushOrMerge: () => {} } } as any, 
-            0, [], 
-            { withTiming: (_t: any, _b: any, fn: any) => fn() } // mock searchProcessor
+            ctx, 
+            0, []
         );
 
         // This is a bit hard to test via private methods, so I'll check the accountant state instead.

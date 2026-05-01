@@ -57,7 +57,7 @@ describe('Error Path Tests', () => {
             await assert.rejects(
                 () => engine.calculate('sword', 30, 'diamond', { clue: 'FakeEnchant X' }),
                 (err: Error) => {
-                    assert.ok(err.message.includes('Invalid clue format'), `Expected "Invalid clue format" in: ${err.message}`);
+                    assert.ok(err.message.includes('Unknown enchantment'), `Expected "Unknown enchantment" in: ${err.message}`);
                     return true;
                 }
             );
@@ -69,7 +69,7 @@ describe('Error Path Tests', () => {
             await assert.rejects(
                 () => engine.calculate('sword', 30, 'diamond', { clue: 'Aqua Affinity I' }),
                 (err: Error) => {
-                    assert.ok(err.message.includes('Invalid clue format'), `Got: ${err.message}`);
+                    assert.ok(err.message.includes('not applicable'), `Expected "not applicable" in: ${err.message}`);
                     return true;
                 }
             );
@@ -81,7 +81,7 @@ describe('Error Path Tests', () => {
             await assert.rejects(
                 () => engine.calculate('sword', 30, 'diamond', { clue: 'Sharpness VI' }),
                 (err: Error) => {
-                    assert.ok(err.message.includes('Invalid clue format'), `Got: ${err.message}`);
+                    assert.ok(err.message.includes('exceeds max rank'), `Expected "exceeds max rank" in: ${err.message}`);
                     return true;
                 }
             );

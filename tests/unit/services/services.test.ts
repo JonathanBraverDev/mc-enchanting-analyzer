@@ -14,7 +14,7 @@ import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedL
 import { EngineFactory } from '#engine/factory.js';
 import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
 import { DATA } from '#data/index.js';
-import type { CalculationStats, MassAccounting } from '#types/index.js';
+import type { CalculationStats, MassAccounting, PackedCombo } from '#types/index.js';
 
 // ── SummaryService ────────────────────────────────────────────────────────────
 
@@ -33,37 +33,33 @@ describe('SummaryService', () => {
         assert.ok(Math.abs(result.accounting.pending - 0.25) < 1e-12, `got ${result.accounting.pending}`);
     });
 
-    it('converts anyMass, rankMass, and countMass to float probabilities', () => {
-        const anyMass   = new BigUint64Array(256);
-        anyMass[5] = PRECISION / 2n;
-
-        const rankMass  = new BigUint64Array(16384);
-        rankMass[0x0501] = PRECISION / 4n;
-
-        const countMass = new BigUint64Array(16);
-        countMass[3] = PRECISION / 5n;
+    it('converts anyMass, rankMass, and countMass from combos correctly', () => {
+        const combos = new Map<PackedCombo, bigint>();
+        // index 1 -> Bit 0 set -> packed value 1
+        combos.set(1 as PackedCombo, PRECISION);
 
         const tracker = new SearchStateTracker();
-        const result = SummaryService.summarize(new Map(), tracker, [], anyMass, rankMass, countMass);
-        assert.ok(Math.abs((result.any[5] ?? 0)         - 0.5)  < 1e-12);
-        assert.ok(Math.abs((result.ranks[0x0501] ?? 0)  - 0.25) < 1e-12);
-        assert.ok(Math.abs((result.count[3] ?? 0)       - 0.2)  < 1e-10);
+        const result = SummaryService.summarize(combos, tracker, [0, 0x0501]);
+        assert.ok(Math.abs((result.any[5] ?? 0)         - 1.0)  < 1e-12);
+        assert.ok(Math.abs((result.ranks[0x0501] ?? 0)  - 1.0)  < 1e-12);
+        assert.ok(Math.abs((result.count[1] ?? 0)       - 1.0)  < 1e-10);
     });
 
     it('comboLimit=0 yields empty combos even when data is present', () => {
-        const combos = new Map<number, bigint>();
-        for (let i = 1; i <= 10; i++) combos.set(i, BigInt(i) * (PRECISION / 100n));
+        const rawCombos = new Map<PackedCombo, bigint>();
+        const indexToEnchant = [0x0101];
+        for (let i = 1; i <= 10; i++) rawCombos.set(i as PackedCombo, BigInt(i) * (PRECISION / 100n));
         const tracker = new SearchStateTracker();
-        const result = SummaryService.summarize(combos as any, tracker, [], undefined, undefined, undefined, 0);
+        const result = SummaryService.summarize(rawCombos, tracker, indexToEnchant, 0);
         assert.deepStrictEqual(result.combos, {});
     });
 
     it('comboLimit ≤ 250 path: returns only top-K highest-probability combos', () => {
-        const combos = new Map<number, bigint>();
-        for (let i = 1; i <= 10; i++) combos.set(i, BigInt(i) * (PRECISION / 1000n));
+        const combos = new Map<PackedCombo, bigint>();
+        for (let i = 1; i <= 10; i++) combos.set(i as PackedCombo, BigInt(i) * (PRECISION / 1000n));
 
         const tracker = new SearchStateTracker();
-        const result = SummaryService.summarize(combos as any, tracker, [], undefined, undefined, undefined, 3);
+        const result = SummaryService.summarize(combos as any, tracker, [], 3);
         const numericKeys = Object.keys(result.combos).map(k => parseInt(k, 16));
 
         assert.strictEqual(numericKeys.length, 3, 'should return exactly 3 combos');
@@ -73,11 +69,11 @@ describe('SummaryService', () => {
     });
 
     it('comboLimit > 250 path: returns only top-K highest-probability combos', () => {
-        const combos = new Map<number, bigint>();
-        for (let i = 1; i <= 400; i++) combos.set(i, BigInt(i) * (PRECISION / 100000n));
+        const combos = new Map<PackedCombo, bigint>();
+        for (let i = 1; i <= 400; i++) combos.set(i as PackedCombo, BigInt(i) * (PRECISION / 100000n));
 
         const tracker = new SearchStateTracker();
-        const result = SummaryService.summarize(combos as any, tracker, [], undefined, undefined, undefined, 300);
+        const result = SummaryService.summarize(combos as any, tracker, [], 300);
         const numericKeys = Object.keys(result.combos).map(k => parseInt(k, 16));
 
         assert.strictEqual(numericKeys.length, 300, 'should return exactly 300 combos');

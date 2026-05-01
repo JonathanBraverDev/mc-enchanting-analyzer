@@ -77,9 +77,6 @@ describe('Integration: Snapshot Integrity (Correction 4)', () => {
             res.combos,
             res.tracker,
             engine.registry.indexToEnchant,
-            res.anyMass,
-            res.rankMass,
-            res.countMass,
             30 // comboLimit
         );
 
@@ -98,8 +95,7 @@ describe('Integration: Snapshot Integrity (Correction 4)', () => {
                 },
                 refinementLevel: 'ultra',
                 clue: null
-            },
-            res // authoritative masses
+            }
         ) as any;
 
         // Compare "Any" probabilities

@@ -42,7 +42,7 @@ describe('ProgressiveStatsAggregator: tiered aggregation', () => {
             engine.registry, CAT, XP, MAT,
             { threshold: TEST_DATA.THRESHOLDS.PROB_MIN, resultsLimit: 10000 }
         );
-        const seqStats = SummaryService.summarize(seqRaw.combos, seqRaw.tracker, engine.registry.indexToEnchant, seqRaw.anyMass, seqRaw.rankMass, seqRaw.countMass, 10000, seqRaw.threshold);
+        const seqStats = SummaryService.summarize(seqRaw.combos, seqRaw.tracker, engine.registry.indexToEnchant, 10000, seqRaw.threshold);
 
         // Tiered
         const tieredRaw = await aggregator.calculateTiered(
@@ -54,7 +54,7 @@ describe('ProgressiveStatsAggregator: tiered aggregation', () => {
             () => {},
             { threshold: TEST_DATA.THRESHOLDS.PROB_MIN, resultsLimit: 10000 }
         );
-        const tieredStats = SummaryService.summarize(tieredRaw.combos, tieredRaw.tracker, engine.registry.indexToEnchant, tieredRaw.anyMass, tieredRaw.rankMass, tieredRaw.countMass, 10000, tieredRaw.threshold);
+        const tieredStats = SummaryService.summarize(tieredRaw.combos, tieredRaw.tracker, engine.registry.indexToEnchant, 10000, tieredRaw.threshold);
 
         const accuracyDiff = Math.abs(tieredStats.accuracy - seqStats.accuracy);
         assert.ok(accuracyDiff < 0.001, `Accuracy diff too high: ${accuracyDiff}`);
