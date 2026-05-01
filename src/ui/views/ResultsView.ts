@@ -104,48 +104,7 @@ export class ResultsView {
             fragment.appendChild(item);
         });
 
-        if (insights.accuracy < 0.999 || insights.accounting.pending > 0.001) {
-            const info = document.createElement("div");
-            info.className = "combo-item";
-            info.style.cssText = "border-top: 1px solid rgba(255,255,255,0.05); margin-top: 10px; padding-top: 10px; opacity: 0.8;";
-
-            const acc = insights.accounting;
-            const color = (acc.pending > 0.1) ? '#ffca28' : '#66bb6a';
-            const tooltip = [
-                `Resolved: ${UIUtils.formatPercent(acc.resolved)}`,
-                `Pending: ${UIUtils.formatPercent(acc.pending)}`,
-                `Pruned (Sieved): ${UIUtils.formatPercent(acc.sieved)}`,
-                `Dropped (Overflow): ${UIUtils.formatPercent(acc.overflow)}`,
-                `Rounding: ${UIUtils.formatPercent(acc.rounding)}`
-            ];
-
-            if (acc.clueKnownSpace !== undefined) {
-                tooltip.push(`--- Posterior (Clue-Conditioned) ---`);
-                tooltip.push(`Compatible Mass: ${UIUtils.formatPercent(acc.clueKnownSpace)} of explored space`);
-            }
-
-            info.title = tooltip.join('\n');
-
-            const showClueDiagnostic = acc.clueKnownSpace !== undefined;
-            const diagnosticHtml = showClueDiagnostic ? `
-                <div style="margin-top: 8px; border-top: 1px dotted rgba(255,255,255,0.1); padding-top: 6px; font-size: 0.75rem; opacity: 0.9;">
-                    <div style="display: flex; justify-content: space-between;">
-                        <span>Known compatible mass:</span>
-                        <span>${UIUtils.formatPercent(acc.clueKnownSpace ?? 0)}</span>
-                    </div>
-                </div>
-            ` : '';
-
-            info.innerHTML = `
-                <div style="display: flex; justify-content: space-between; font-size: 0.85rem;">
-                    <span>Calculation Confidence ⓘ</span>
-                    <span style="color: ${color}">${UIUtils.formatPercent(insights.accuracy)}</span>
-                </div>
-                ${acc.pending > 0.1 ? `<div style="font-size: 0.7rem; color: #ffca28; margin-top: 3px;">⚠️ High branching complexity - results approximated.</div>` : ''}
-                ${diagnosticHtml}
-            `;
-            fragment.appendChild(info);
-        }
+        this.appendConfidenceItem(fragment, insights.accuracy, insights.accounting, insights.accounting.clueKnownSpace);
 
         // Atomic swap
         this.comboEl.replaceChildren(fragment);
@@ -203,51 +162,10 @@ export class ResultsView {
             fragment.appendChild(item);
         });
 
-        const acc = view.accounting;
-        const norm = view.normalization;
-        const accuracy = acc.resolved; // Resolved mass is our accuracy metric
-
-        if (accuracy < 0.999 || acc.pending > 0.001) {
-            const info = document.createElement("div");
-            info.className = "combo-item";
-            info.style.cssText = "border-top: 1px solid rgba(255,255,255,0.05); margin-top: 10px; padding-top: 10px; opacity: 0.8;";
-
-            const color = (acc.pending > 0.1) ? '#ffca28' : '#66bb6a';
-            const tooltip = [
-                `Resolved: ${UIUtils.formatPercent(acc.resolved)}`,
-                `Pending: ${UIUtils.formatPercent(acc.pending)}`,
-                `Pruned (Sieved): ${UIUtils.formatPercent(acc.sieved)}`,
-                `Dropped (Overflow): ${UIUtils.formatPercent(acc.overflow)}`,
-                `Rounding: ${UIUtils.formatPercent(acc.rounding)}`
-            ];
-
-            if (norm.domain === 'clue-known-space') {
-                tooltip.push(`--- Posterior (Clue-Conditioned) ---`);
-                tooltip.push(`Compatible Mass: ${UIUtils.formatPercent(norm.clueKnownSpace ?? 0)} of explored space`);
-            }
-
-            info.title = tooltip.join('\n');
-
-            const showClueDiagnostic = norm.domain === 'clue-known-space';
-            const diagnosticHtml = showClueDiagnostic ? `
-                <div style="margin-top: 8px; border-top: 1px dotted rgba(255,255,255,0.1); padding-top: 6px; font-size: 0.75rem; opacity: 0.9;">
-                    <div style="display: flex; justify-content: space-between;">
-                        <span>Known compatible mass:</span>
-                        <span>${UIUtils.formatPercent(norm.clueKnownSpace ?? 0)}</span>
-                    </div>
-                </div>
-            ` : '';
-
-            info.innerHTML = `
-                <div style="display: flex; justify-content: space-between; font-size: 0.85rem;">
-                    <span>Calculation Confidence ⓘ</span>
-                    <span style="color: ${color}">${UIUtils.formatPercent(accuracy)}</span>
-                </div>
-                ${acc.pending > 0.1 ? `<div style="font-size: 0.7rem; color: #ffca28; margin-top: 3px;">⚠️ High branching complexity - results approximated.</div>` : ''}
-                ${diagnosticHtml}
-            `;
-            fragment.appendChild(info);
-        }
+        const clueKnownSpace = view.normalization.domain === 'clue-known-space'
+            ? view.normalization.clueKnownSpace
+            : undefined;
+        this.appendConfidenceItem(fragment, view.accounting.resolved, view.accounting, clueKnownSpace);
 
         // Atomic swap
         this.comboEl.replaceChildren(fragment);
@@ -287,5 +205,63 @@ export class ResultsView {
 
         // Atomic swap
         this.rankEl.replaceChildren(fragment);
+    }
+
+    private appendConfidenceItem(
+        fragment: DocumentFragment,
+        accuracy: number,
+        accounting: { resolved: number; pending: number; sieved: number; overflow: number; rounding: number },
+        clueKnownSpace?: number
+    ): void {
+        if (accuracy >= 0.999 && accounting.pending <= 0.001) return;
+
+        const info = document.createElement("div");
+        info.className = "combo-item";
+        info.style.cssText = "border-top: 1px solid rgba(255,255,255,0.05); margin-top: 10px; padding-top: 10px; opacity: 0.8;";
+        info.title = this.getAccountingTooltip(accounting, clueKnownSpace);
+
+        const color = accounting.pending > 0.1 ? '#ffca28' : '#66bb6a';
+        info.innerHTML = `
+            <div style="display: flex; justify-content: space-between; font-size: 0.85rem;">
+                <span>Calculation Confidence</span>
+                <span style="color: ${color}">${UIUtils.formatPercent(accuracy)}</span>
+            </div>
+            ${accounting.pending > 0.1 ? `<div style="font-size: 0.7rem; color: #ffca28; margin-top: 3px;">High branching complexity - results approximated.</div>` : ''}
+            ${this.getClueDiagnosticHtml(clueKnownSpace)}
+        `;
+        fragment.appendChild(info);
+    }
+
+    private getAccountingTooltip(
+        accounting: { resolved: number; pending: number; sieved: number; overflow: number; rounding: number },
+        clueKnownSpace?: number
+    ): string {
+        const tooltip = [
+            `Resolved: ${UIUtils.formatPercent(accounting.resolved)}`,
+            `Pending: ${UIUtils.formatPercent(accounting.pending)}`,
+            `Pruned (Sieved): ${UIUtils.formatPercent(accounting.sieved)}`,
+            `Dropped (Overflow): ${UIUtils.formatPercent(accounting.overflow)}`,
+            `Rounding: ${UIUtils.formatPercent(accounting.rounding)}`
+        ];
+
+        if (clueKnownSpace !== undefined) {
+            tooltip.push(`--- Posterior (Clue-Conditioned) ---`);
+            tooltip.push(`Compatible Mass: ${UIUtils.formatPercent(clueKnownSpace)} of explored space`);
+        }
+
+        return tooltip.join('\n');
+    }
+
+    private getClueDiagnosticHtml(clueKnownSpace?: number): string {
+        if (clueKnownSpace === undefined) return '';
+
+        return `
+            <div style="margin-top: 8px; border-top: 1px dotted rgba(255,255,255,0.1); padding-top: 6px; font-size: 0.75rem; opacity: 0.9;">
+                <div style="display: flex; justify-content: space-between;">
+                    <span>Known compatible mass:</span>
+                    <span>${UIUtils.formatPercent(clueKnownSpace)}</span>
+                </div>
+            </div>
+        `;
     }
 }

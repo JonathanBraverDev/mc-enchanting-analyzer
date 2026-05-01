@@ -1,7 +1,6 @@
 import { ProbUtils, ComboUtils } from '#utils/index.js';
 import { ENGINE_LIMITS, PACKING_CONSTANTS } from '#constants/engine.js';
-import { CalculationStats, PackedCombo } from '#types/index.js';
-import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
+import { CalculationStats, ConditionedSummaryRequest, PackedCombo, SummaryRequest } from '#types/index.js';
 import { ClueAnalysisService } from '#services/ClueAnalysisService.js';
 
 /**
@@ -11,15 +10,16 @@ export class SummaryService {
     /**
      * Summarizes search results into a CalculationStats object.
      */
-    public static summarize(
-        combos: Map<PackedCombo, bigint>,
-        tracker: SearchStateTracker,
-        indexToEnchant: number[],
-        comboLimit: number = ENGINE_LIMITS.MAX_RESULTS_SUMMARY,
-        threshold: number = 0,
-        frontiers: { heap: import('../utils/collections/SearchHeap.js').SearchHeap, scale: bigint }[] = [],
-        isBook: boolean = false
-    ): CalculationStats {
+    public static summarize(request: SummaryRequest): CalculationStats {
+        const {
+            combos,
+            tracker,
+            indexToEnchant,
+            comboLimit = ENGINE_LIMITS.MAX_RESULTS_SUMMARY,
+            threshold = 0,
+            frontiers = [],
+            isBook = false
+        } = request;
         const accounting = tracker.mass.toPublic();
         const stats: CalculationStats = {
             ranks: {},
@@ -91,17 +91,18 @@ export class SummaryService {
      * @param comboLimit Result set limit.
      * @returns Conditioned calculation statistics.
      */
-    public static summarizeConditioned(
-        combos: Map<PackedCombo, bigint>,
-        tracker: SearchStateTracker,
-        indexToEnchant: number[],
-        targetClueId: number,
-        comboLimit: number = ENGINE_LIMITS.MAX_RESULTS_SUMMARY,
-        frontiers: { heap: import('../utils/collections/SearchHeap.js').SearchHeap, scale: bigint }[] = [],
-        isBook: boolean = false
-    ): CalculationStats {
+    public static summarizeConditioned(request: ConditionedSummaryRequest): CalculationStats {
+        const {
+            combos,
+            tracker,
+            indexToEnchant,
+            targetClueId,
+            comboLimit = ENGINE_LIMITS.MAX_RESULTS_SUMMARY,
+            frontiers = [],
+            isBook = false
+        } = request;
         // 1. Get honest baseline stats (invariants, absolute accuracy)
-        const stats = SummaryService.summarize(combos, tracker, indexToEnchant, 0, 0, frontiers, isBook);
+        const stats = SummaryService.summarize({ combos, tracker, indexToEnchant, comboLimit: 0, threshold: 0, frontiers, isBook });
 
         // 2. Perform Bayesian conditioning
         const conditioned = ClueAnalysisService.conditionOnClue(combos, targetClueId, indexToEnchant);

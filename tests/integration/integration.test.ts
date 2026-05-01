@@ -76,12 +76,12 @@ describe('Integration: Snapshot Integrity (Correction 4)', () => {
             threshold: 1n // Very low threshold to ensure many combinations
         });
 
-        const summary = SummaryService.summarize(
-            res.combos,
-            res.tracker,
-            engine.registry.indexToEnchant,
-            30 // comboLimit
-        );
+        const summary = SummaryService.summarize({
+            combos: res.combos,
+            tracker: res.tracker,
+            indexToEnchant: engine.registry.indexToEnchant,
+            comboLimit: 30
+        });
 
         const snapshot = SnapshotService.create(
             engine.registry,

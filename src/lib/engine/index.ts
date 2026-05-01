@@ -185,16 +185,24 @@ export class EnchantEngine {
 
         const isBook = cat === "book";
         const finalStats = packedClue
-            ? SummaryService.summarizeConditioned(finalResult.combos, finalResult.tracker, this.registry.indexToEnchant, packedClue, summaryLimit, finalResult.frontiers, isBook)
-            : SummaryService.summarize(
-                finalResult.combos,
-                finalResult.tracker,
-                this.registry.indexToEnchant,
-                summaryLimit,
-                finalResult.threshold,
-                finalResult.frontiers,
+            ? SummaryService.summarizeConditioned({
+                combos: finalResult.combos,
+                tracker: finalResult.tracker,
+                indexToEnchant: this.registry.indexToEnchant,
+                targetClueId: packedClue,
+                comboLimit: summaryLimit,
+                frontiers: finalResult.frontiers,
                 isBook
-            );
+            })
+            : SummaryService.summarize({
+                combos: finalResult.combos,
+                tracker: finalResult.tracker,
+                indexToEnchant: this.registry.indexToEnchant,
+                comboLimit: summaryLimit,
+                threshold: finalResult.threshold,
+                frontiers: finalResult.frontiers,
+                isBook
+            });
 
         finalStats.instrumentation = finalResult.instrumentation;
         finalStats.timing = finalResult.timing;

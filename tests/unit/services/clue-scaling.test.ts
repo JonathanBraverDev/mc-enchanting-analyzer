@@ -16,7 +16,7 @@ describe('Clue Conditioning Scaling diagnostics', () => {
 
         const tracker = new SearchStateTracker();
         tracker.mass.record('resolved', PRECISION);
-        const stats = SummaryService.summarizeConditioned(rawCombos as any, tracker, indexToEnchant, targetClueId);
+        const stats = SummaryService.summarizeConditioned({ combos: rawCombos as any, tracker, indexToEnchant, targetClueId });
 
         assert.strictEqual(stats.accounting.clueKnownSpace, 0);
         assert.strictEqual(stats.accuracy, 1); // Search was 100% complete
@@ -30,7 +30,7 @@ describe('Clue Conditioning Scaling diagnostics', () => {
 
         const tracker = new SearchStateTracker();
         tracker.mass.record('resolved', PRECISION);
-        const stats = SummaryService.summarizeConditioned(rawCombos as any, tracker, indexToEnchant, targetClueId);
+        const stats = SummaryService.summarizeConditioned({ combos: rawCombos as any, tracker, indexToEnchant, targetClueId });
 
         // pClue should be 1.0
         assert.ok(Math.abs((stats.accounting.clueKnownSpace ?? 0) - 1.0) < 1e-12);
@@ -48,7 +48,7 @@ describe('Clue Conditioning Scaling diagnostics', () => {
 
         const tracker = new SearchStateTracker();
         tracker.mass.record('resolved', PRECISION); // Search is 100% accurate
-        const stats = SummaryService.summarizeConditioned(rawCombos as any, tracker, indexToEnchant, targetClueId);
+        const stats = SummaryService.summarizeConditioned({ combos: rawCombos as any, tracker, indexToEnchant, targetClueId });
 
         // pClue = 0.5
         assert.ok(Math.abs((stats.accounting.clueKnownSpace ?? 0) - 0.5) < 1e-12);
@@ -64,7 +64,7 @@ describe('Clue Conditioning Scaling diagnostics', () => {
         tracker.mass.record('resolved', PRECISION / 2n); // Only 50% search accuracy
         tracker.mass.record('pending', PRECISION / 2n);
 
-        const stats = SummaryService.summarizeConditioned(rawCombos as any, tracker, indexToEnchant, targetClueId);
+        const stats = SummaryService.summarizeConditioned({ combos: rawCombos as any, tracker, indexToEnchant, targetClueId });
 
         // pClue = 0.25 (Found 25% of absolute generation space)
         assert.ok(Math.abs((stats.accounting.clueKnownSpace ?? 0) - 0.25) < 1e-12);

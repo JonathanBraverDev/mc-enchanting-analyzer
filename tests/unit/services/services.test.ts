@@ -21,7 +21,7 @@ import type { CalculationStats, MassAccounting, PackedCombo } from '#types/index
 describe('SummaryService', () => {
     it('empty combos map yields empty combos output', () => {
         const tracker = new SearchStateTracker();
-        const result = SummaryService.summarize(new Map(), tracker, []);
+        const result = SummaryService.summarize({ combos: new Map(), tracker, indexToEnchant: [] });
         assert.deepStrictEqual(result.combos, {});
     });
 
@@ -29,7 +29,7 @@ describe('SummaryService', () => {
         const pending = PRECISION / 4n; // represents 0.25
         const tracker = new SearchStateTracker();
         tracker.mass.record('pending', pending);
-        const result = SummaryService.summarize(new Map(), tracker, []);
+        const result = SummaryService.summarize({ combos: new Map(), tracker, indexToEnchant: [] });
         assert.ok(Math.abs(result.accounting.pending - 0.25) < 1e-12, `got ${result.accounting.pending}`);
     });
 
@@ -39,7 +39,7 @@ describe('SummaryService', () => {
         combos.set(1 as PackedCombo, PRECISION);
 
         const tracker = new SearchStateTracker();
-        const result = SummaryService.summarize(combos, tracker, [0, 0x0501]);
+        const result = SummaryService.summarize({ combos, tracker, indexToEnchant: [0, 0x0501] });
         assert.ok(Math.abs((result.any[5] ?? 0)         - 1.0)  < 1e-12);
         assert.ok(Math.abs((result.ranks[0x0501] ?? 0)  - 1.0)  < 1e-12);
         assert.ok(Math.abs((result.count[1] ?? 0)       - 1.0)  < 1e-10);
@@ -50,7 +50,7 @@ describe('SummaryService', () => {
         const indexToEnchant = [0x0101];
         for (let i = 1; i <= 10; i++) rawCombos.set(i as PackedCombo, BigInt(i) * (PRECISION / 100n));
         const tracker = new SearchStateTracker();
-        const result = SummaryService.summarize(rawCombos, tracker, indexToEnchant, 0);
+        const result = SummaryService.summarize({ combos: rawCombos, tracker, indexToEnchant, comboLimit: 0 });
         assert.deepStrictEqual(result.combos, {});
     });
 
@@ -59,7 +59,7 @@ describe('SummaryService', () => {
         for (let i = 1; i <= 10; i++) combos.set(i as PackedCombo, BigInt(i) * (PRECISION / 1000n));
 
         const tracker = new SearchStateTracker();
-        const result = SummaryService.summarize(combos as any, tracker, [], 3);
+        const result = SummaryService.summarize({ combos: combos as any, tracker, indexToEnchant: [], comboLimit: 3 });
         const numericKeys = Object.keys(result.combos).map(k => parseInt(k, 16));
 
         assert.strictEqual(numericKeys.length, 3, 'should return exactly 3 combos');
@@ -73,7 +73,7 @@ describe('SummaryService', () => {
         for (let i = 1; i <= 400; i++) combos.set(i as PackedCombo, BigInt(i) * (PRECISION / 100000n));
 
         const tracker = new SearchStateTracker();
-        const result = SummaryService.summarize(combos as any, tracker, [], 300);
+        const result = SummaryService.summarize({ combos: combos as any, tracker, indexToEnchant: [], comboLimit: 300 });
         const numericKeys = Object.keys(result.combos).map(k => parseInt(k, 16));
 
         assert.strictEqual(numericKeys.length, 300, 'should return exactly 300 combos');
@@ -84,7 +84,7 @@ describe('SummaryService', () => {
     it('stores combo keys as lowercase hex strings', () => {
         const combos = new Map<number, bigint>([[255, PRECISION / 2n]]);
         const tracker = new SearchStateTracker();
-        const result = SummaryService.summarize(combos as any, tracker, []);
+        const result = SummaryService.summarize({ combos: combos as any, tracker, indexToEnchant: [] });
         assert.ok(Object.keys(result.combos).includes('ff'));
     });
 });

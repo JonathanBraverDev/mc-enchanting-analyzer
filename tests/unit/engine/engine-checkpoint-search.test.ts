@@ -38,7 +38,13 @@ describe('EnchantEngine: sequential checkpoint aggregation', () => {
             threshold: TEST_DATA.THRESHOLDS.PROB_MIN,
             resultsLimit: 10000
         });
-        const singleStats = SummaryService.summarize(singleResult.combos, singleResult.tracker, engine.registry.indexToEnchant, 10000, singleResult.threshold);
+        const singleStats = SummaryService.summarize({
+            combos: singleResult.combos,
+            tracker: singleResult.tracker,
+            indexToEnchant: engine.registry.indexToEnchant,
+            comboLimit: 10000,
+            threshold: singleResult.threshold
+        });
 
         const sequentialResult = await engine.searchSequentialCheckpoints({
             cat: CAT,
@@ -52,7 +58,13 @@ describe('EnchantEngine: sequential checkpoint aggregation', () => {
             threshold: TEST_DATA.THRESHOLDS.PROB_MIN,
             resultsLimit: 10000
         });
-        const sequentialStats = SummaryService.summarize(sequentialResult.combos, sequentialResult.tracker, engine.registry.indexToEnchant, 10000, sequentialResult.threshold);
+        const sequentialStats = SummaryService.summarize({
+            combos: sequentialResult.combos,
+            tracker: sequentialResult.tracker,
+            indexToEnchant: engine.registry.indexToEnchant,
+            comboLimit: 10000,
+            threshold: sequentialResult.threshold
+        });
 
         const accuracyDiff = Math.abs(sequentialStats.accuracy - singleStats.accuracy);
         assert.ok(accuracyDiff < 0.001, `Accuracy diff too high: ${accuracyDiff}`);
@@ -159,13 +171,13 @@ describe('EnchantEngine checkpoint search', () => {
             ],
             onCheckpointComplete: () => {}
         });
-        const sequentialStats = SummaryService.summarize(
-            sequentialResult.combos,
-            sequentialResult.tracker,
-            engine.registry.indexToEnchant,
-            10000,
-            sequentialResult.threshold
-        );
+        const sequentialStats = SummaryService.summarize({
+            combos: sequentialResult.combos,
+            tracker: sequentialResult.tracker,
+            indexToEnchant: engine.registry.indexToEnchant,
+            comboLimit: 10000,
+            threshold: sequentialResult.threshold
+        });
 
         engine.resetCaches();
 
