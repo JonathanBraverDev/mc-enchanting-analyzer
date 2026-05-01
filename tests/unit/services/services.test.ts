@@ -94,12 +94,12 @@ describe('SummaryService', () => {
 describe('SerializationService', () => {
     const makeStats = (overrides: Partial<CalculationStats> = {}): CalculationStats => {
         const accuracy = overrides.accuracy ?? 1.0;
-        const accounting = overrides.accounting ?? { 
-            resolved: accuracy, pending: 0, sieved: 0, overflow: 0, 
-            capped: 0, rounding: 0, recoveredRounding: 0, recoveredSieved: 0 
+        const accounting = overrides.accounting ?? {
+            resolved: accuracy, pending: 0, sieved: 0, overflow: 0,
+            capped: 0, rounding: 0, recoveredRounding: 0, recoveredSieved: 0
         };
         return {
-            ranks: {}, any: {}, count: {}, combos: {}, clues: {}, 
+            ranks: {}, any: {}, count: {}, combos: {}, clues: {},
             accuracy, accounting, threshold: 0.1,
             ...overrides
         };
@@ -127,11 +127,11 @@ describe('SerializationService', () => {
         const any = { 0: 0.1, 1: 0.2 };
         const stats = makeStats({ any });
         const { compact, transferables } = SerializationService.serialize(stats);
-        
+
         // CompactStats uses BigUint64Array for any/ranks/count mass in the internal message
         assert.ok(transferables.length > 0, 'Should have transferable buffers');
         assert.ok(transferables[0] instanceof ArrayBuffer, 'Transferables should be ArrayBuffers');
-        
+
         const recovered = SerializationService.deserialize(compact);
         assert.strictEqual(recovered.any[0], 0.1);
         assert.strictEqual(recovered.any[1], 0.2);
@@ -152,7 +152,7 @@ describe('HumanizationService', () => {
         const effId = reg.idMap.get('Efficiency')!;
         const acc: MassAccounting = { resolved: 0.85, pending: 0.15, sieved: 0, overflow: 0, capped: 0, rounding: 0, recoveredRounding: 0, recoveredSieved: 0 };
         const rawStats: CalculationStats = {
-            ranks: {}, any: { [effId]: 0.85 }, count: {}, combos: {}, clues: {}, 
+            ranks: {}, any: { [effId]: 0.85 }, count: {}, combos: {}, clues: {},
             accuracy: 0.85, accounting: acc, threshold: 0.85
         };
         const result = HumanizationService.humanize(rawStats, reg, 'prob');
@@ -161,19 +161,19 @@ describe('HumanizationService', () => {
 
     it('sorting by "count" correctly prioritizes primary count bucket', () => {
         const stats = {
-            combos: { 'ff': 0.1 }, 
-            count: { 1: 0.1 }, 
-            any: {}, ranks: {}, clues: {}, accuracy: 1, accounting: {}, threshold: 0 
+            combos: { 'ff': 0.1 },
+            count: { 1: 0.1 },
+            any: {}, ranks: {}, clues: {}, accuracy: 1, accounting: {}, threshold: 0
         } as any;
-        
+
         const result = HumanizationService.humanize(stats, reg, 'count');
         assert.ok(result.combos, 'Humanize should return combos map');
     });
 
     it('sorting by "rank" correctly prioritizes high-tier ranks', () => {
-        const stats = { 
-            combos: { 'ff': 0.1 }, 
-            count: {}, any: {}, ranks: {}, clues: {}, accuracy: 1, accounting: {}, threshold: 0 
+        const stats = {
+            combos: { 'ff': 0.1 },
+            count: {}, any: {}, ranks: {}, clues: {}, accuracy: 1, accounting: {}, threshold: 0
         } as any;
         const result = HumanizationService.humanize(stats, reg, 'rank');
         assert.ok(result, 'Humanize should not crash with sortMode=rank');
@@ -204,7 +204,7 @@ describe('SearchStateTracker Accounting', () => {
         const tracker = new SearchStateTracker();
         tracker.mass.record('resolved', PRECISION / 2n);
         tracker.mass.record('pending', PRECISION / 10n);
-        
+
         const accounting = tracker.mass.toPublic();
         assert.strictEqual(accounting.resolved, 0.5);
         assert.strictEqual(accounting.pending, 0.1);
@@ -213,16 +213,14 @@ describe('SearchStateTracker Accounting', () => {
     it('addScaled combines mass from another tracker', () => {
         const t1 = new SearchStateTracker();
         const t2 = new SearchStateTracker();
-        
+
         t1.mass.record('resolved', 100n);
         t2.mass.record('resolved', 200n);
-        
+
         // factor = 0.5 (PRECISION / 2)
         t1.mass.addScaled(t2.mass, PRECISION / 2n);
-        
+
         // 100 + (200 * 0.5) = 200
         assert.strictEqual(t1.mass.getBookkeeping().resolved, 200n);
     });
 });
-
-

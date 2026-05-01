@@ -1,7 +1,7 @@
-import { 
-  RegistryState, 
-  TopRunView, 
-  ChartCellView, 
+import {
+  RegistryState,
+  TopRunView,
+  ChartCellView,
   RefinementLevelName,
   TopInputSignature,
   ChartInputSignature
@@ -48,10 +48,10 @@ export class RefinementService {
         callbacks: RefinementCallbacks
     ): Promise<void> {
         const generation = ++this.activeRunGeneration;
-        
+
         this.isRefining = true;
         this.isSweepRunning = true;
-        
+
         try {
             const xpCap = registry?.mechanics?.xp_cap ?? UI_DEFAULTS.DEFAULT_VIEW_XP_CAP;
             this.sweep = new Array(xpCap).fill(null);
@@ -76,18 +76,18 @@ export class RefinementService {
 
             // Start Top Run (Single call for all levels)
             WorkerClient.startTopRun(
-                topInput, 
-                levels, 
+                topInput,
+                levels,
                 (view) => {
                     if (this.activeRunGeneration !== generation) return;
-                    
+
                     const params = getParamsForMode(view.refinementLevel, isBook);
                     callbacks.onStatus(params.status, view.refinementLevel);
                     callbacks.onStats(view, view.refinementLevel === 'ultra');
                 },
                 (status, error) => {
                     if (this.activeRunGeneration !== generation) return;
-                    
+
                     this.isRefining = false;
                     if (status === 'done') {
                         callbacks.onStatus(UI_TEXTS.STATUS_COMPLETE, "done");
@@ -99,20 +99,20 @@ export class RefinementService {
 
             // Start Chart Run (Single call for all levels)
             WorkerClient.startChartRun(
-                chartInput, 
-                levels, 
+                chartInput,
+                levels,
                 (cellView) => {
                     if (this.activeRunGeneration !== generation) return;
-                    
+
                     this.sweep[cellView.xpLevel - 1] = cellView;
                     callbacks.onChart(this.sweep);
-                    
+
                     const params = getParamsForMode(cellView.refinementLevel, isBook);
                     callbacks.onChartStatus?.(`${params.status} probabilities`, cellView.xpLevel / xpCap);
                 },
                 (status) => {
                     if (this.activeRunGeneration !== generation) return;
-                    
+
                     this.isSweepRunning = false;
                     if (status === 'done') {
                         callbacks.onChartStatus?.(UI_TEXTS.STATUS_CHART_COMPLETE);

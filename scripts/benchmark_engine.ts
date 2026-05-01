@@ -6,7 +6,7 @@ async function runProfile() {
 
     const version = '1.21';
     const engine = EngineFactory.create(DATA, version);
-    
+
     const categories = ['helmet', 'sword', 'book'];
     const materials = ['netherite', 'diamond'];
     const levels = [30];

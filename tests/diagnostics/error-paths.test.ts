@@ -91,7 +91,7 @@ describe('Error Path Tests', () => {
             const engine = EngineFactory.create(DATA, '1.21');
             // Sharpness V is impossible at level 1, but Bayesian p(Combo|Clue) just returns zero mass
             const stats = await engine.calculate('sword', 1, 'diamond', { clue: 'Sharpness V' });
-            
+
             // The search itself is still highly accurate/complete (100% of the tiny L1 space explored)
             assert.ok(stats.accuracy > 0.9999, `Expected search to be complete, got accuracy ${stats.accuracy}`);
             // But the results should be empty because the clue is impossible
@@ -236,5 +236,3 @@ describe('Error Path Tests', () => {
         });
     });
 });
-
-

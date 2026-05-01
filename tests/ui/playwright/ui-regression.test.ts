@@ -16,13 +16,13 @@ test.describe('UI Regression & Edge Cases', () => {
             await analyzer.selectVersion(TEST_DATA.VERSIONS.MODERN);
             await analyzer.selectCategory(TEST_DATA.ITEMS.BOOK);
         });
-        
+
         await analyzer.waitForResults();
-        
+
         // Check that some results have multiple enchantments (joined by ' + ')
         const combos = await analyzer.comboItems.allTextContents();
         expect(combos.length, 'Should have at least one result').toBeGreaterThan(0);
-        
+
         // Note: Modern books (1.7.2+) follow the "generate N, remove 1" rule.
         // At level 30, it is extremely rare for a book to end up with multiple enchantments
         // in the top results because it requires generating at least 3 initial enchantments.
@@ -34,16 +34,16 @@ test.describe('UI Regression & Edge Cases', () => {
         await analyzer.page.reload();
         await analyzer.page.waitForLoadState('networkidle');
         // Small buffer to ensure dynamic JS population is stable
-        await analyzer.page.waitForTimeout(500); 
-        
+        await analyzer.page.waitForTimeout(500);
+
         await analyzer.selectVersion(TEST_DATA.VERSIONS.LEGACY);
         await analyzer.page.waitForTimeout(200);
         await analyzer.triggerAndAwaitRefinement(async () => {
             await analyzer.selectCategory(TEST_DATA.ITEMS.BOOK);
         });
-        
+
         await analyzer.waitForResults();
-        
+
         // Check that ALL top combinations only have a single enchantment (no ' + ')
         const legacyCombos = await analyzer.comboItems.allTextContents();
         expect(legacyCombos.length, 'Should have at least one result').toBeGreaterThan(0);
@@ -56,7 +56,7 @@ test.describe('UI Regression & Edge Cases', () => {
         // Force a page reload to ensure a clean state for this sensitive version check
         await analyzer.page.reload();
         await analyzer.selectCategory(TEST_DATA.ITEMS.SWORD);
-        
+
         // 1.21 has Netherite
         await analyzer.selectVersion(TEST_DATA.VERSIONS.MODERN);
         await expect(analyzer.materialSelect.locator(`option[value="${TEST_DATA.MATERIALS.NETHERITE}"]`)).toBeAttached({ timeout: 10000 });
@@ -69,7 +69,7 @@ test.describe('UI Regression & Edge Cases', () => {
 
     test('should prevent selecting Copper in versions before 1.21.9', async () => {
         await analyzer.selectCategory(TEST_DATA.ITEMS.SWORD);
-        
+
         // 1.21.9 has Copper
         await analyzer.selectVersion(TEST_DATA.VERSIONS.POST_COPPER);
         await expect(analyzer.materialSelect.locator(`option[value="${TEST_DATA.MATERIALS.COPPER}"]`)).toBeAttached({ timeout: 10000 });
@@ -85,10 +85,10 @@ test.describe('UI Regression & Edge Cases', () => {
 
         // Default sort is probability
         await analyzer.comboItems.first().locator('.combo-prob').textContent();
-        
+
         // Sort by Count
         await analyzer.selectComboSort('count');
-        // The list should update. We can't easily verify the sort order without parsing, 
+        // The list should update. We can't easily verify the sort order without parsing,
         // but we can check it doesn't crash and at least one item is visible.
         await analyzer.waitForResults();
         await expect(analyzer.comboItems.first()).toBeVisible();
@@ -101,7 +101,7 @@ test.describe('UI Regression & Edge Cases', () => {
 
     test('should update the UI when switching from no clue to an explicit clue', async () => {
         await analyzer.selectCategory('pickaxe');
-        
+
         // No clue selected
         await analyzer.selectClue('');
         await analyzer.waitForRefinementComplete();
@@ -117,7 +117,7 @@ test.describe('UI Regression & Edge Cases', () => {
 
     test('should update enchantability display when material changes', async () => {
         await analyzer.selectCategory('sword');
-        
+
         // Diamond sword enchantability is 10
         await analyzer.selectMaterial(TEST_DATA.MATERIALS.DIAMOND);
         await expect(analyzer.enchantabilityValue).toHaveText('10');
@@ -131,9 +131,9 @@ test.describe('UI Regression & Edge Cases', () => {
         await analyzer.selectVersion(TEST_DATA.GOD_ARMOR.START);
         await analyzer.selectCategory(TEST_DATA.ITEMS.CHESTPLATE);
         await analyzer.selectClue('Protection IV');
-        
+
         await analyzer.waitForRefinementComplete();
-        
+
         // In 1.14, Protection should NOT conflict with Fire Protection
         await expect(analyzer.comboList).toContainText('Fire Protection');
     });
@@ -142,13 +142,10 @@ test.describe('UI Regression & Edge Cases', () => {
         await analyzer.selectVersion(TEST_DATA.GOD_ARMOR.END);
         await analyzer.selectCategory(TEST_DATA.ITEMS.CHESTPLATE);
         await analyzer.selectClue('Protection IV');
-        
+
         await analyzer.waitForRefinementComplete();
-        
+
         // In 1.14.3, Protection DOES conflict with Fire Protection
         await expect(analyzer.comboList).not.toContainText('Fire Protection');
     });
 });
-
-
-

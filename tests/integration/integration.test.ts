@@ -111,7 +111,7 @@ describe('Integration: Snapshot Integrity (Correction 4)', () => {
 describe('Integration: Clue Validation (Correction 5)', () => {
     it('should reject invalid clues consistently', async () => {
         const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
-        
+
         // Unknown enchantment
         await assert.rejects(async () => {
             await engine.calculate(TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND, { clue: 'FakeEnchant X' });

@@ -11,7 +11,7 @@ export const DATA: EnchantmentData = new Proxy({} as EnchantmentData, {
   get(_, prop) {
     // 1. Resolve target (Global or Local)
     let target = (typeof globalThis !== 'undefined' && (globalThis as any).ENCHANTING_DATA) || RAW_DATA;
-    
+
     // 2. Unwrap ES Module if needed
     if (target && typeof target === 'object' && 'RAW_DATA' in target) {
       target = (target as any).RAW_DATA;

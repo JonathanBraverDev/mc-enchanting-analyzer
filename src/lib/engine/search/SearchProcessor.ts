@@ -26,7 +26,7 @@ export class SearchProcessor {
         const isLimitReached = currentCount >= (isBook && !multiEnchantBooks ? 1 : ENGINE_LIMITS.MAX_ENCHANTS_PER_ITEM);
         const isTooSmall = probForward < floor;
         const isMapFull = resultsSize >= resultsLimit && !hasCombo;
-        
+
         return {
             isLimitReached,
             isTooSmall,
@@ -64,9 +64,9 @@ export class SearchProcessor {
         _currentCount: number,
         results: Map<PackedCombo, bigint>
     ): { rem: bigint } {
-        const redistributed = ComboUtils.removeAdditional(packedChosen) as PackedCombo[]; 
+        const redistributed = ComboUtils.removeAdditional(packedChosen) as PackedCombo[];
         const nOutcomes = redistributed.length;
-        
+
         let quotient = 0n;
         let splitRemainder = prob;
         if (nOutcomes > 0) {

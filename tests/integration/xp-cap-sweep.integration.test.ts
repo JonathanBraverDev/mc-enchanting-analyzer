@@ -27,7 +27,7 @@ describe('XP Cap Sweep Integration', () => {
     it('should sweep up to 30 for modern version (1.21)', async () => {
         const registry = RegistryFactory.build(DATA, '1.21');
         const service = new RefinementService();
-        
+
         let lastSweepLength = 0;
 
         WorkerClient.startTopRun = (_input, _refinement, _onUpdate, onTerminal) => {
@@ -43,7 +43,7 @@ describe('XP Cap Sweep Integration', () => {
             onTerminal('done');
             return 'chart-run' as any;
         };
-        
+
         const payload: RefinementPayload = {
             category: 'sword',
             material: 'diamond',
@@ -67,7 +67,7 @@ describe('XP Cap Sweep Integration', () => {
     it('should sweep up to 50 for legacy version (1.1)', async () => {
         const registry = RegistryFactory.build(DATA, '1.1');
         const service = new RefinementService();
-        
+
         let lastSweepLength = 0;
 
         WorkerClient.startTopRun = (_input, _refinement, _onUpdate, onTerminal) => {
@@ -83,7 +83,7 @@ describe('XP Cap Sweep Integration', () => {
             onTerminal('done');
             return 'chart-run' as any;
         };
-        
+
         const payload: RefinementPayload = {
             category: 'sword',
             material: 'diamond',

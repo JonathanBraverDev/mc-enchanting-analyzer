@@ -6,7 +6,7 @@ import { CalculationStats } from '#types/index.js';
 
 async function debug() {
     const engine = EngineFactory.create(DATA, '1.7.2');
-    const cat = 'book'; 
+    const cat = 'book';
     const level = 30;
     const mat = 'book';
 
@@ -41,7 +41,7 @@ async function debug() {
     if (fs.existsSync(snapshotPath)) {
         console.log('\nSimulating Snapshot Comparison (Deep Equality Check)...');
         const existing: CalculationStats = JSON.parse(fs.readFileSync(snapshotPath, 'utf8'));
-        
+
         try {
             console.log('Simulating a MISMATCH in assert.deepStrictEqual (67k+ entries)...');
             const statsMismatch: CalculationStats = JSON.parse(JSON.stringify(existing));
@@ -55,9 +55,9 @@ async function debug() {
         } catch (e: any) {
             console.log('Assertion Failed.');
             console.log('Memory after failure (before logging message):', process.memoryUsage().heapUsed / 1024 / 1024, 'MB');
-            
+
             console.log('Generating assertion message (this might take gigabytes)...');
-            const messageLength = e.message.length; 
+            const messageLength = e.message.length;
             console.log('Assertion message length:', messageLength.toLocaleString(), 'chars');
             console.log('Memory after generating message:', process.memoryUsage().heapUsed / 1024 / 1024, 'MB');
         }

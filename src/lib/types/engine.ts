@@ -17,14 +17,14 @@ export interface CalculationStats {
   combos: { [packed: string]: number };
   /** Map of enchantment rank IDs to their total probability of being the shown clue. Key is (enchantId << 8 | rank). */
   clues: { [idAndRank: number]: number };
-  
+
   /** The minimum probability threshold used for this search. */
   threshold: number;
   /** Normalized resolved mass (0.0 to 1.0). */
   accuracy: number;
   /** Detailed breakdown of where the total 1.0 probability mass settled. */
   accounting: MassAccounting;
-  
+
   instrumentation?: EngineInstrumentation | undefined;
   timing?: SearchTiming | undefined;
 }
@@ -156,7 +156,7 @@ export interface ForwardingContext {
     resultsLimit: number;
     instrumentation?: EngineInstrumentation | undefined;
     timing?: SearchTiming | undefined;
-    
+
     // Search-global parameters
     cat: string;
     pool: PackedEnchant[];

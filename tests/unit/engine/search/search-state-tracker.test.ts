@@ -55,7 +55,7 @@ describe('SearchStateTracker', () => {
         // With totalWeight 20, a prob of 15 would have individualRemainder 15.
         // If we have a residue of 5 already, then 15 + 5 = 20, which divides perfectly.
         // Recovered mass should be 15 (the remainder that was 'saved').
-        
+
         const blueprint: ExpansionBlueprint = {
             probContinue: PRECISION, // 100% forward
             totalWeight: 20,
@@ -68,20 +68,20 @@ describe('SearchStateTracker', () => {
             currentEnchants: [],
             residue: 15n // High residue from previous arrival
         };
-        
+
         // We use string-index access for private method testing in node:test
-        const ctx: any = { 
-            registry: { enchantToIndex: new Map() }, 
-            timing: {}, 
-            resultsLimit: 100, 
+        const ctx: any = {
+            registry: { enchantToIndex: new Map() },
+            timing: {},
+            resultsLimit: 100,
             queue: { pushOrMerge: () => {} },
             instrumentation: {}
         };
 
         (tracker as any).processExpansionStep(
             0n, PRECISION, 0n, 0n, // probStop=0, probForward=PRECISION, remStop=0, scaleLoss=0
-            0n, blueprint, 
-            ctx, 
+            0n, blueprint,
+            ctx,
             0, []
         );
 

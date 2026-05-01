@@ -14,7 +14,7 @@ async function runBenchmark() {
 
     for (const s of scenarios) {
         console.log(`\nScenario: ${s.name}`);
-        
+
         // Warmup
         await engine.calculate(s.cat, s.xp, s.mat, { threshold: 0.001 });
         engine.resetCaches();

@@ -34,7 +34,7 @@ export class EngineFactory {
         }
 
         const registry = overrides.registry || RegistryFactory.build(data, version);
-        
+
         const cache = overrides.cache || new CacheManager({
             comboOtherSize: CACHE_CONFIG.COMBO_OTHER_SIZE,
             comboBookSize: CACHE_CONFIG.COMBO_BOOK_SIZE,

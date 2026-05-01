@@ -12,7 +12,7 @@ describe('Clue Conditioning Scaling diagnostics', () => {
     it('handles zero-mass clue (no combos match)', () => {
         const rawCombos = new Map<number, bigint>();
         // Combo with only Sharpness II
-        rawCombos.set(2, PRECISION); 
+        rawCombos.set(2, PRECISION);
 
         const tracker = new SearchStateTracker();
         tracker.mass.record('resolved', PRECISION);
@@ -26,7 +26,7 @@ describe('Clue Conditioning Scaling diagnostics', () => {
     it('handles full-mass clue (all combos match)', () => {
         const rawCombos = new Map<number, bigint>();
         // Combo with only Sharpness I
-        rawCombos.set(1, PRECISION); 
+        rawCombos.set(1, PRECISION);
 
         const tracker = new SearchStateTracker();
         tracker.mass.record('resolved', PRECISION);
@@ -43,7 +43,7 @@ describe('Clue Conditioning Scaling diagnostics', () => {
         const rawCombos = new Map<number, bigint>();
         // 50% chance for a combo with Sharpness I
         // 50% chance for a combo with Sharpness II
-        rawCombos.set(1, PRECISION / 2n); 
+        rawCombos.set(1, PRECISION / 2n);
         rawCombos.set(2, PRECISION / 2n);
 
         const tracker = new SearchStateTracker();
@@ -63,7 +63,7 @@ describe('Clue Conditioning Scaling diagnostics', () => {
         const tracker = new SearchStateTracker();
         tracker.mass.record('resolved', PRECISION / 2n); // Only 50% search accuracy
         tracker.mass.record('pending', PRECISION / 2n);
-        
+
         const stats = SummaryService.summarizeConditioned(rawCombos as any, tracker, indexToEnchant, targetClueId);
 
         // pClue = 0.25 (Found 25% of absolute generation space)

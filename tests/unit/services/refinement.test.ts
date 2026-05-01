@@ -16,7 +16,7 @@ describe('RefinementService (V5 Hardened)', () => {
         originalStartChart = WorkerClient.startChartRun;
         topCallCount = 0;
         chartCallCount = 0;
-        
+
         WorkerClient.startTopRun = (input, refinement, onUpdate, onTerminal) => {
             topCallCount++;
             // Simulate streaming updates for each requested level
@@ -87,7 +87,7 @@ describe('RefinementService (V5 Hardened)', () => {
         };
 
         let statsCalls = 0;
-        
+
         // Start run 1
         const run1 = service.run(payload, { mechanics: { xp_cap: 30 } } as any, {
             onStatus: () => {},
@@ -108,8 +108,8 @@ describe('RefinementService (V5 Hardened)', () => {
         // If guarded correctly, only Run 2's callbacks should fire after it starts.
         // Since we start Run 2 immediately, most (if not all) of Run 1's timeouts will fire after generation increment.
         assert.ok(statsCalls <= 8 && statsCalls >= 4, `Stats calls should be at least 4 (run 2). Got: ${statsCalls}`);
-        
-        // In this specific mock setup, Run 1 callbacks might fire if they were scheduled but the generation check 
+
+        // In this specific mock setup, Run 1 callbacks might fire if they were scheduled but the generation check
         // in RefinementService should block them.
         // The fact that statsCalls is not 8 (if it was 8, it means Run 1 fully leaked) proves the guard works.
         // Actually, with 0ms or 1ms timeouts, it's possible some leaked before Run 2 started, but definitely not all.

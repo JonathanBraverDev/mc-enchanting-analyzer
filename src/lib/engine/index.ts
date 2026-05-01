@@ -68,7 +68,7 @@ export class EnchantEngine {
 
     /**
      * Search for enchantment combinations at a specific modified level.
-     * 
+     *
      * @param cat Item category.
      * @param modLevel The pre-computed modified level for this search.
      * @param mat Item material.
@@ -88,7 +88,7 @@ export class EnchantEngine {
     ): Promise<SearchState> {
         const limit = getSearchLimit(cat, ProbUtils.toNumber(threshold), maxIterations);
         const cacheKey = this.keyService.getPackedKey(this.registry, cat, modLevel, mat);
-        
+
         const cached = this.cache.getSearchState(cat, this.registry.version, cacheKey);
         if (cached && cached.threshold <= threshold) return cached as SearchState;
 
@@ -109,7 +109,7 @@ export class EnchantEngine {
      * Aggregates statistics using a tiered progressive search.
      * Fires a callback after each tier completes, allowing for responsive UI updates
      * without waiting for the finest precision.
-     * 
+     *
      * @param cat The item category.
      * @param xp The base XP level.
      * @param mat The item material.
@@ -157,9 +157,9 @@ export class EnchantEngine {
             resultsLimit,
             instrumentation,
             timing,
-            getCacheMetrics: () => ({ 
-                cacheNodes: this.cache.getTotalCachedNodes(), 
-                cacheResults: this.cache.getTotalCachedResults() 
+            getCacheMetrics: () => ({
+                cacheNodes: this.cache.getTotalCachedNodes(),
+                cacheResults: this.cache.getTotalCachedResults()
             })
         };
 
@@ -167,10 +167,10 @@ export class EnchantEngine {
             const stats = packedClue
                 ? SummaryService.summarizeConditioned(raw.combos, raw.tracker, this.registry.indexToEnchant, packedClue, summaryLimit)
                 : SummaryService.summarize(raw.combos, raw.tracker, this.registry.indexToEnchant, summaryLimit, raw.threshold);
-            
+
             stats.instrumentation = raw.instrumentation;
             stats.timing = raw.timing;
-            
+
             onTierComplete(stats, tierIndex);
             const currentCached = this.cache.getStats(this.registry.version, cacheKey);
             if (!currentCached || stats.accuracy > currentCached.accuracy) {
@@ -258,7 +258,7 @@ export class EnchantEngine {
     /**
      * Aggregates all statistics for a given enchantment attempt.
      * Use this for standard single-pass calculations (e.g. standard UI search).
-     * 
+     *
      * @param cat The item category (e.g., 'sword', 'pickaxe').
      * @param xp The base XP level from the enchantment table (1-50).
      * @param mat The item material (e.g., 'diamond', 'netherite').

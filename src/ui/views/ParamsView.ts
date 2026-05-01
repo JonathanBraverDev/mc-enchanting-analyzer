@@ -100,7 +100,7 @@ export class ParamsView {
         const saved = gSelect.value;
         gSelect.innerHTML = '<option value="">None (Unconditioned)</option>';
         if (!material) return;
-        
+
         const options = UiMetadataService.getClueOptions(version, category, material, xpLevel);
 
         options.forEach(s => {

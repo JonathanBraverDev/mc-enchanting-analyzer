@@ -83,7 +83,7 @@ export class SummaryService {
 
     /**
      * Summarizes statistics under the condition that a specific clue is shown.
-     * 
+     *
      * @param rawCombos Raw combination distribution.
      * @param tracker Original search manager (for metadata).
      * @param indexToEnchant Registry mapping.
@@ -105,7 +105,7 @@ export class SummaryService {
 
         // 2. Perform Bayesian conditioning
         const conditioned = ClueAnalysisService.conditionOnClue(rawCombos, targetClueId, indexToEnchant);
-        
+
         // 3. Update top-level accuracy and inject absolute clue mass
         stats.accounting.clueKnownSpace = ProbUtils.toNumber(conditioned.clueKnownSpace);
 
@@ -126,7 +126,7 @@ export class SummaryService {
         populatePlain(stats.any, conditioned.anyMass);
         populatePlain(stats.ranks, conditioned.rankMass);
         populatePlain(stats.count, conditioned.countMass);
-        
+
         // 5. Populate and rank conditioned combos
         let comboSource: [number, bigint][] = [];
         const compareProbDesc = (a: [any, bigint], b: [any, bigint]) => {
@@ -176,7 +176,7 @@ export class SummaryService {
             heap.forEach((_meta, prob, packed) => {
                 const mass = ProbUtils.scale(prob, scale);
                 const enchants = ComboUtils.unpack(packed as PackedCombo, indexToEnchant);
-                
+
                 // Count mass (pending nodes contribute to their current count)
                 // For books, if count > 1, it will eventually be reduced by 1 upon settling.
                 let n = enchants.length;
@@ -188,7 +188,7 @@ export class SummaryService {
                     anyScaleDen = BigInt(n);
                     n--;
                 }
-                
+
                 count[n] = (count[n] ?? 0n) + mass;
 
                 for (const e of enchants) {

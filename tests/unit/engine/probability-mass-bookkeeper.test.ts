@@ -35,7 +35,7 @@ describe('ProbabilityMassAccountant', () => {
         // recoveredRounding is a subset of rounding, not added to total
         tracker.record('rounding', 10n);
         tracker.record('recoveredRounding', 5n);
-        
+
         assert.strictEqual(tracker.getTotalMass(), 360n);
     });
 
@@ -53,10 +53,8 @@ describe('ProbabilityMassAccountant', () => {
         tracker.record('resolved', 100n);
         const clone = tracker.clone();
         clone.record('resolved', 50n);
-        
+
         assert.strictEqual(tracker.getBookkeeping().resolved, 100n);
         assert.strictEqual(clone.getBookkeeping().resolved, 150n);
     });
 });
-
-

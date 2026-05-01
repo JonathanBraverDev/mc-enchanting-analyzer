@@ -364,5 +364,3 @@ describe('EnchantUtils.parse', () => {
         assert.deepStrictEqual(EnchantUtils.parse('Sharpness Max', ROMAN_MAP), { name: 'Sharpness Max', rank: 1 });
     });
 });
-
-

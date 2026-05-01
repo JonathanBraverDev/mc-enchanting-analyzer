@@ -62,7 +62,7 @@ export class ChartManager {
 
         if (metric === "any") {
             const allEnchants = new Set<number>();
-            sweep.forEach(x => { 
+            sweep.forEach(x => {
                 if(x && x.buckets && x.buckets.anyByEnchantId) {
                     Object.keys(x.buckets.anyByEnchantId).forEach(idStr => allEnchants.add(parseInt(idStr)));
                 }
@@ -81,14 +81,14 @@ export class ChartManager {
             });
         } else if (metric === "ranks") {
             const allRanks = new Set<number>();
-            sweep.forEach(e => { 
+            sweep.forEach(e => {
                 if(e && e.buckets && e.buckets.rankByIdAndRank) {
-                    Object.entries(e.buckets.rankByIdAndRank).forEach(([idAndRankStr, p]) => { 
-                        if (p > 0.01) allRanks.add(parseInt(idAndRankStr)); 
-                    }); 
+                    Object.entries(e.buckets.rankByIdAndRank).forEach(([idAndRankStr, p]) => {
+                        if (p > 0.01) allRanks.add(parseInt(idAndRankStr));
+                    });
                 }
             });
-            
+
             Array.from(allRanks).sort((a, b) => {
                 const na = getFullEnchantName(registry, a), nb = getFullEnchantName(registry, b);
                 const ba = RomanUtils.getBaseName(na, romanMap), bb = RomanUtils.getBaseName(nb, romanMap);
@@ -113,7 +113,7 @@ export class ChartManager {
 
                 const hue = (c - 1) * (140 / (max - 1 || 1));
                 const color = `hsl(${hue}, 70%, 50%)`;
-                
+
                 datasets.push({
                     label: `${c} Enchant${c > 1 ? 's' : ''}`,
                     data: sweep.map(x => (x && x.buckets && x.buckets.countBySize[c] || 0) * 100),
@@ -134,23 +134,23 @@ export class ChartManager {
             spanGaps: true,   // Performance: Avoid line segmentation
             interaction: { mode: 'index', intersect: false },
             scales: {
-                y: { 
-                    beginAtZero: true, 
+                y: {
+                    beginAtZero: true,
                     min: 0,
                     max: 100,
-                    grid: { color: 'rgba(255,255,255,0.05)' } 
+                    grid: { color: 'rgba(255,255,255,0.05)' }
                 },
-                x: { 
+                x: {
                     grid: { color: 'rgba(255,255,255,0.05)' },
                     ticks: { maxTicksLimit: 30 } // Show all 30 levels if space permits
                 }
             },
 
-            plugins: { 
-                legend: { 
-                    position: 'bottom', 
-                    labels: { color: '#ccc', font: { size: 10 }, boxWidth: 10 } 
-                } 
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { color: '#ccc', font: { size: 10 }, boxWidth: 10 }
+                }
             }
         };
     }

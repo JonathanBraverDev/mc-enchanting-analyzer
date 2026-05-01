@@ -1,10 +1,10 @@
 import { DATA } from '#data/index.js';
 import { RegistryState } from '#types/index.js';
-import { 
-  getEligibleMaterials, 
-  getEnchantability, 
-  getFullEnchantName, 
-  getEligiblePool 
+import {
+  getEligibleMaterials,
+  getEnchantability,
+  getFullEnchantName,
+  getEligiblePool
 } from '#core/registry.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 
@@ -48,7 +48,7 @@ export class UiMetadataService {
     return getEnchantability(this.getRegistry(version), material, category);
   }
 
-  /** 
+  /**
    * Gets all possible enchantments that could appear in the clue slot.
    * Performs a lightweight modified-level distribution to find eligible pools.
    */
@@ -56,7 +56,7 @@ export class UiMetadataService {
     const registry = this.getRegistry(version);
     const ench = getEnchantability(registry, material, category);
     const dist = this.distributionService.getModifiedLevelDist(registry, xpLevel, ench);
-    
+
     const allPossible = new Set<string>();
     for (const mlStr of Object.keys(dist)) {
       const ml = parseInt(mlStr);

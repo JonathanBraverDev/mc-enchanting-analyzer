@@ -21,7 +21,7 @@ const buildOptions = (entry, outfile, isStandalone) => ({
 
 async function build() {
   console.log('Building standalone components...');
-  
+
   // 1. Build Data as a clean IIFE that defines global ENCHANTING_DATA
   await esbuild.build({
     entryPoints: [path.join(root, 'src/lib/data/registry.ts')],

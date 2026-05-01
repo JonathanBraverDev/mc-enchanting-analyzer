@@ -187,5 +187,3 @@ describe('Frontier Resumability & Cache Behavior', () => {
         // Cache is instance-local
     });
 });
-
-

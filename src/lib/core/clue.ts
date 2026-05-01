@@ -11,7 +11,7 @@ export class ClueValidator {
     /**
      * Validates a clue string against the registry and returns its packed representation.
      * Throws an error if the clue is invalid.
-     * 
+     *
      * @param registry Resolved registry state.
      * @param cat Item category.
      * @param clue The clue string (e.g., "Sharpness IV").
@@ -20,11 +20,11 @@ export class ClueValidator {
     public static validate(registry: RegistryState, cat: string, clue: string): number {
         const romanMap = registry.data.constants.ROMAN_MAP;
         const parsed = EnchantUtils.parse(clue, romanMap);
-        
+
         if (!parsed) {
             throw new Error(`Invalid clue format: "${clue}"`);
         }
-        
+
         const enchantId = getEnchantId(registry, parsed.name);
         if (enchantId === ENGINE_LIMITS.UNKNOWN_ENCHANT_ID && parsed.name.toLowerCase() !== 'none') {
             // Check if it's a valid enchant name but just not in the registry
@@ -32,7 +32,7 @@ export class ClueValidator {
         }
 
         const rank = parsed.rank ?? 1;
-        
+
         // Applicability check
         const versionPool = registry.versionPool.get(cat);
         if (versionPool && !versionPool.includes(parsed.name) && cat !== 'book') {

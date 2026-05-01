@@ -28,7 +28,7 @@ function getJobs(engine: EnchantEngine): Array<{ cat: string; mat: string }> {
     const registry = engine.registry;
     const categories = Object.keys(registry.mergedItems);
     const versionMaterials = registry.mergedMaterials;
-    
+
     const { ARMOR_CATS, ITEM_SPECIFIC_CATS } = DATA.constants;
     const armorMats = Object.keys(DATA.material_values.armor).filter(m => versionMaterials.has(m as any));
     const toolMats = Object.keys(DATA.material_values.tools).filter(m => versionMaterials.has(m as any));

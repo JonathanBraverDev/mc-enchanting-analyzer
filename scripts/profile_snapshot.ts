@@ -11,7 +11,7 @@ async function profile() {
         return (next && !next.startsWith('--')) ? next : null;
     };
     const version = findArg('--version') ?? '1.21.11';
-    
+
     console.log(`Profiling ${version} search performance...`);
     const engine = EngineFactory.create(DATA, version);
 

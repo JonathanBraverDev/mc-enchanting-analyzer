@@ -30,7 +30,7 @@ describe('ProgressiveStatsAggregator: tiered aggregation', () => {
     });
 
     it('tiered produces same final result as sequential calculate calls', async () => {
-        const engine = EngineFactory.create(DATA, VERSION, { 
+        const engine = EngineFactory.create(DATA, VERSION, {
             statAggregator: aggregator,
             cache: cache,
             distributionService: distService,
@@ -61,7 +61,7 @@ describe('ProgressiveStatsAggregator: tiered aggregation', () => {
     });
 
     it('onTierComplete fires for each tier', async () => {
-        const engine = EngineFactory.create(DATA, VERSION, { 
+        const engine = EngineFactory.create(DATA, VERSION, {
             statAggregator: aggregator,
             cache: cache
         });
@@ -83,7 +83,7 @@ describe('ProgressiveStatsAggregator: tiered aggregation', () => {
     });
 
     it('each tier improves on the previous (accuracy increases monotonically)', async () => {
-        const engine = EngineFactory.create(DATA, VERSION, { 
+        const engine = EngineFactory.create(DATA, VERSION, {
             statAggregator: aggregator,
             cache: cache
         });
@@ -96,7 +96,7 @@ describe('ProgressiveStatsAggregator: tiered aggregation', () => {
                 { threshold: 0.01,   limit: 500 },
                 { threshold: 0.001,  limit: 2000 },
             ],
-            (raw: AggregationResult) => { 
+            (raw: AggregationResult) => {
                 accuracies.push(raw.tracker.mass.toPublic().resolved);
             },
             {}

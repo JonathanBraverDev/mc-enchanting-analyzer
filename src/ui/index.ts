@@ -16,7 +16,7 @@ class AppController {
     public results: ResultsView;
     public chart: ChartController;
     public refinement: RefinementService;
-    
+
     private isWorkerReady: boolean = false;
     private runDebounceTimeout: number = 0;
     private lastView: TopRunView | null = null;
@@ -105,7 +105,7 @@ class AppController {
 
         try {
             this.params.updateClueTarget();
-            
+
             const vals = this.params.getValues();
             const ench = UiMetadataService.getEnchantability(vals.version, vals.material, vals.category);
             this.params.setEnchantability(ench);
@@ -132,7 +132,7 @@ class AppController {
         this.lastView = view;
         const { version } = this.params.getValues();
         const registry = UiMetadataService.getRegistry(version);
-        
+
         this.results.updateV5(view, registry);
     }
 

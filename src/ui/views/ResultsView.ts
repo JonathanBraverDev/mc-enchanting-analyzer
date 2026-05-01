@@ -40,18 +40,18 @@ export class ResultsView {
             this.chartStatusEl.style.opacity = '0';
             return;
         }
-        
+
         const isComplete = text === UI_TEXTS.STATUS_CHART_COMPLETE;
         const progressText = progress !== undefined ? ` (${Math.round(progress * 100)}%)` : '';
         const postfix = (progress !== undefined || isComplete) ? '' : UI_TEXTS.STATUS_POSTFIX;
-        
+
         this.chartStatusEl.textContent = text + progressText + postfix;
         this.chartStatusEl.style.opacity = isComplete ? '0.6' : '1';
     }
 
     public update(insights: EnchantInsights, registry: RegistryState): void {
         const hasResults = Object.keys(insights.combos).length > 0;
-        
+
         if (hasResults) {
             this.renderCombos(insights, registry);
             this.renderRanks(insights, registry);
@@ -87,7 +87,7 @@ export class ResultsView {
         Object.entries(insights.combos).slice(0, UI_DEFAULTS.MAX_TOP_COMBOS_DISPLAY).forEach(([combo, prob]) => {
             const item = document.createElement("div");
             item.className = "combo-item";
-            
+
             const tooltip = combo.split('+').map(e => {
                 const name = RomanUtils.getBaseName(e.trim(), romanMap);
                 const props = registry.resolvedRegistry[name];
@@ -108,7 +108,7 @@ export class ResultsView {
             const info = document.createElement("div");
             info.className = "combo-item";
             info.style.cssText = "border-top: 1px solid rgba(255,255,255,0.05); margin-top: 10px; padding-top: 10px; opacity: 0.8;";
-            
+
             const acc = insights.accounting;
             const color = (acc.pending > 0.1) ? '#ffca28' : '#66bb6a';
             const tooltip = [
@@ -118,14 +118,14 @@ export class ResultsView {
                 `Dropped (Overflow): ${UIUtils.formatPercent(acc.overflow)}`,
                 `Rounding: ${UIUtils.formatPercent(acc.rounding)}`
             ];
-            
+
             if (acc.clueKnownSpace !== undefined) {
                 tooltip.push(`--- Posterior (Clue-Conditioned) ---`);
                 tooltip.push(`Compatible Mass: ${UIUtils.formatPercent(acc.clueKnownSpace)} of explored space`);
             }
-            
+
             info.title = tooltip.join('\n');
-            
+
             const showClueDiagnostic = acc.clueKnownSpace !== undefined;
             const diagnosticHtml = showClueDiagnostic ? `
                 <div style="margin-top: 8px; border-top: 1px dotted rgba(255,255,255,0.1); padding-top: 6px; font-size: 0.75rem; opacity: 0.9;">
@@ -155,15 +155,15 @@ export class ResultsView {
         if (!this.rankEl) return;
 
         const fragment = document.createDocumentFragment();
-        
+
         Object.entries(insights.any).sort((a, b) => b[1] - a[1]).forEach(([name, prob]) => {
             const props = registry.resolvedRegistry[name];
             const levelsCount = props ? Object.keys(props.levels).length : 2;
             const label = levelsCount > 1 ? `Any ${name}` : name;
-            
+
             const item = document.createElement("div");
             item.className = "rank-item";
-            
+
             const tooltipEntries = [`Weight: ${props?.weight ?? '?'}`];
             if (props?.valid_from) tooltipEntries.push(`From: ${props.valid_from}`);
             if (props?.valid_to) tooltipEntries.push(`Until: ${props.valid_to}`);
@@ -191,7 +191,7 @@ export class ResultsView {
         view.combos.slice(0, UI_DEFAULTS.MAX_TOP_COMBOS_DISPLAY).forEach((combo) => {
             const item = document.createElement("div");
             item.className = "combo-item";
-            
+
             if (combo.tooltip) item.title = combo.tooltip;
 
             item.innerHTML = `
@@ -211,7 +211,7 @@ export class ResultsView {
             const info = document.createElement("div");
             info.className = "combo-item";
             info.style.cssText = "border-top: 1px solid rgba(255,255,255,0.05); margin-top: 10px; padding-top: 10px; opacity: 0.8;";
-            
+
             const color = (acc.pending > 0.1) ? '#ffca28' : '#66bb6a';
             const tooltip = [
                 `Resolved: ${UIUtils.formatPercent(acc.resolved)}`,
@@ -220,14 +220,14 @@ export class ResultsView {
                 `Dropped (Overflow): ${UIUtils.formatPercent(acc.overflow)}`,
                 `Rounding: ${UIUtils.formatPercent(acc.rounding)}`
             ];
-            
+
             if (norm.domain === 'clue-known-space') {
                 tooltip.push(`--- Posterior (Clue-Conditioned) ---`);
                 tooltip.push(`Compatible Mass: ${UIUtils.formatPercent(norm.clueKnownSpace ?? 0)} of explored space`);
             }
-            
+
             info.title = tooltip.join('\n');
-            
+
             const showClueDiagnostic = norm.domain === 'clue-known-space';
             const diagnosticHtml = showClueDiagnostic ? `
                 <div style="margin-top: 8px; border-top: 1px dotted rgba(255,255,255,0.1); padding-top: 6px; font-size: 0.75rem; opacity: 0.9;">
@@ -257,15 +257,15 @@ export class ResultsView {
         if (!this.rankEl) return;
 
         const fragment = document.createDocumentFragment();
-        
+
         view.enchants.forEach((enchant) => {
             const props = registry.resolvedRegistry[enchant.label];
             const levelsCount = props ? Object.keys(props.levels).length : 2;
             const label = levelsCount > 1 ? `Any ${enchant.label}` : enchant.label;
-            
+
             const item = document.createElement("div");
             item.className = "rank-item";
-            
+
             if (enchant.tooltip) {
                 item.title = enchant.tooltip;
             } else {

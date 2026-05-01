@@ -9,13 +9,13 @@ export class ClueAnalysisService {
     /**
      * Calculates the probability of each enchantment being the shown clue.
      * Derived from the final surviving list of enchantments after generation and transforms.
-     * 
+     *
      * @param combos Map of final combinations and their probabilities (as BigInt units).
      * @param indexToEnchant Mapping from byte indices to packed enchantment IDs.
      * @returns A map of packed enchantment IDs to their clue probabilities.
      */
     public static calculateClueMass(
-        combos: Map<PackedCombo, bigint>, 
+        combos: Map<PackedCombo, bigint>,
         indexToEnchant: number[],
         frontiers: { heap: import('../utils/collections/SearchHeap.js').SearchHeap, scale: bigint }[] = []
     ): Map<number, bigint> {
@@ -38,7 +38,7 @@ export class ClueAnalysisService {
                 }
             }
         };
-        
+
         for (const [packed, prob] of combos.entries()) {
             addContribution(packed, prob);
         }
@@ -48,14 +48,14 @@ export class ClueAnalysisService {
                 addContribution(packed as PackedCombo, ProbUtils.scale(prob, scale));
             });
         }
-        
+
         return clueMass;
     }
 
     /**
      * Re-normalizes statistics based on a specific displayed clue.
      * Implements Bayesian conditioning: P(Combo | Clue) = P(Clue | Combo) * P(Combo) / P(Clue).
-     * 
+     *
      * @param rawCombos Raw combination distribution.
      * @param targetClueId The packed ID (id << 8 | rank) of the observed clue.
      * @param indexToEnchant Registry mapping.
@@ -65,7 +65,7 @@ export class ClueAnalysisService {
         targetClueId: number,
         indexToEnchant: number[],
         frontiers: { heap: import('../utils/collections/SearchHeap.js').SearchHeap, scale: bigint }[] = []
-    ): { 
+    ): {
         combos: Map<PackedCombo, bigint>,
         anyMass: Map<number, bigint>,
         rankMass: Map<number, bigint>,
@@ -104,7 +104,7 @@ export class ClueAnalysisService {
                 const current = conditionedCombos.get(firstPacked)!;
                 const newProb = current + remainder;
                 conditionedCombos.set(firstPacked, newProb);
-                
+
                 // Also update aggregated mass to keep them in sync
                 const enchants = ComboUtils.unpack(firstPacked, indexToEnchant);
                 const count = enchants.length;
@@ -147,7 +147,7 @@ export class ClueAnalysisService {
             const pConditioned = (share * PRECISION) / pClue;
             const existing = conditionedCombos.get(packed) ?? 0n;
             conditionedCombos.set(packed, existing + pConditioned);
-            
+
             const count = enchants.length;
             ProbUtils.addItemMass(countMass, count, pConditioned);
             for (const e of enchants) {

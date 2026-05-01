@@ -1,9 +1,9 @@
-import { 
-  WorkerRequest, 
-  WorkerResponse, 
-  RunId, 
-  TopInputSignature, 
-  ChartInputSignature, 
+import {
+  WorkerRequest,
+  WorkerResponse,
+  RunId,
+  TopInputSignature,
+  ChartInputSignature,
   RefinementLevelName,
   TopRunView,
   ChartCellView,
@@ -25,7 +25,7 @@ export const WorkerClient = {
         top: null as Worker | null,
         chart: null as Worker | null
     },
-    
+
     callbacks: {
         top: new Map<RunId, TopUpdateCallback>(),
         chart: new Map<RunId, ChartUpdateCallback>(),
@@ -38,7 +38,7 @@ export const WorkerClient = {
     },
 
     requestId: 0 as RequestId,
-    
+
     /** Tracking generations to avoid stale callbacks from superseded runs */
     generations: {
         top: 0,
@@ -55,13 +55,13 @@ export const WorkerClient = {
     initWorker(kind: 'top' | 'chart', version: string): Promise<void> {
         return new Promise(async (resolve, reject) => {
             if (this.workers[kind]) this.workers[kind]!.terminate();
-            
+
             if (kind === 'top') {
                 this.workers.top = new Worker('dist/top-worker.js');
             } else {
                 this.workers.chart = new Worker('dist/chart-worker.js');
             }
-            
+
             const timeout = setTimeout(() => reject(new Error(`Worker ${kind} initialization timed out`)), 10000);
 
             this.workers[kind]!.onmessage = (e: MessageEvent<WorkerResponse>) => {
@@ -77,9 +77,9 @@ export const WorkerClient = {
                 // Generic handler for run-based messages
                 if ('runId' in data) {
                     const runId = data.runId;
-                    
+
                     const isActive = runId === this.activeRunIds[kind];
-                    
+
                     if (type === 'topUpdate' && kind === 'top' && isActive) {
                         this.callbacks.top.get(runId)?.(data.view);
                     } else if (type === 'chartUpdate' && kind === 'chart' && isActive) {
@@ -101,16 +101,16 @@ export const WorkerClient = {
             };
 
             const reqId = ++(this.requestId as any) as RequestId;
-            
+
             // In standalone, we must send the raw data, not the Proxy (Proxies aren't cloneable)
             let rawData = (globalThis as any).ENCHANTING_DATA;
             if (rawData && rawData.RAW_DATA) rawData = rawData.RAW_DATA;
-            
-            this.workers[kind]!.postMessage({ 
-                type: 'init', 
-                requestId: reqId, 
-                version, 
-                data: rawData 
+
+            this.workers[kind]!.postMessage({
+                type: 'init',
+                requestId: reqId,
+                version,
+                data: rawData
             });
         });
     },

@@ -27,11 +27,11 @@ test.describe('Chart Loading Regression', () => {
             });
             // At this point, refinement is complete, but chart sweep might still be running.
         });
-        
+
         await test.step('Step 2: Sequential Coarse Sweep Observed via UI', async () => {
             // Wait for main refinement
             await analyzer.waitForRefinementComplete(90000);
-            
+
             // Wait for chart sweep to reach at least a high percentage or complete.
             // This is more stable than waiting for "Idle" which can be transient between sweeps.
             await expect(analyzer.chartStatus).toHaveText(TEST_DATA.REGEX.CHART_PROGRESS, { timeout: 90000 });
@@ -39,7 +39,7 @@ test.describe('Chart Loading Regression', () => {
             const log = await analyzer.getObservedProgress();
 
 
-            
+
             // Extract percentages from log
             const percentages = log
                 .map(s => {
@@ -47,26 +47,26 @@ test.describe('Chart Loading Regression', () => {
                     return match ? parseInt(match[1]!) : null;
                 })
                 .filter(n => n !== null) as number[];
-            
+
             // Expected levels in percentage: (L / 30) * 100
             // For L=1..30, we expect values like 3, 7, 10, ..., 100
             // We verify that the captured percentages contain a non-decreasing sequence
             // that eventually covers the full range, confirming level-by-level drawing.
-            
+
             expect(percentages.length, 'Should have multiple progress steps recorded').toBeGreaterThan(10);
-            
+
             let lastVal = 0;
             let linearSteps = 0;
             for (const val of percentages) {
                 if (val >= lastVal) {
                     linearSteps++;
                     lastVal = val;
-                } else if (val <= 10) { 
+                } else if (val <= 10) {
                     // Reset observed if a new sweep starts (e.g. coarse -> standard)
                     lastVal = val;
                 }
             }
-            
+
             expect(linearSteps, 'Should have a significant number of non-decreasing steps').toBeGreaterThan(10);
             expect(Math.max(...percentages), 'Should reach some progress').toBeGreaterThanOrEqual(10);
         });
@@ -83,6 +83,3 @@ test.describe('Chart Loading Regression', () => {
         });
     });
 });
-
-
-

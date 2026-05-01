@@ -22,7 +22,7 @@ export class ProgressiveStatsAggregator {
      * Aggregates statistics across tiers of increasing search depth.
      * This is the orchestrator for progressive refinement, reusing previous tiers'
      * results and search states to efficiently deepen the calculation.
-     * 
+     *
      * @param registry Resolved registry state.
      * @param cat Item category.
      * @param xp Base XP level.
@@ -53,7 +53,7 @@ export class ProgressiveStatsAggregator {
         const stateMap = new Map<number, SearchState>();
         const initialTracker = new SearchStateTracker();
         initialTracker.mass.record('pending', PRECISION);
-        
+
         let lastResult: AggregationResult = {
             combos: new Map(),
             tracker: initialTracker,

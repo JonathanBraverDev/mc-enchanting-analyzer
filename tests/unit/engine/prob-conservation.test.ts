@@ -104,7 +104,7 @@ describe('Probability Conservation', () => {
             stats.accuracy >= 1.0 - TOLERANCE,
             `Guaranteed enchant accuracy should be ≈ 1.0, got ${stats.accuracy}. Breakdown: ${JSON.stringify(stats.accounting)}`
         );
-        
+
         const powerId = engine.registry.idMap.get('Power')!;
         assert.strictEqual(
             stats.any[powerId],
@@ -113,5 +113,3 @@ describe('Probability Conservation', () => {
         );
     });
 });
-
-
