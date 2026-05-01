@@ -81,44 +81,45 @@ workerScope.onmessage = async (e: MessageEvent<WorkerRequest>) => {
           ClueValidator.validate(engine.registry, input.category, input.clue);
         }
 
-        for (const level of refinement) {
-          if (signal.aborted) break;
+        const tiers = refinement.map(level => getParamsForMode(level, isBook));
+        
+        await engine.calculateTiered(
+          input.category,
+          input.xpLevel,
+          input.material,
+          tiers,
+          (result, tierIndex) => {
+            if (signal.aborted || currentRunId !== runId) return;
 
-          const params = getParamsForMode(level, isBook);
-          const result = await engine.calculateTop(input.category, input.xpLevel, input.material, {
-            clue: input.clue,
-            threshold: params.threshold,
-            maxIterations: params.limit,
-            signal
-          });
+            const level = refinement[tierIndex]!;
+            
+            const view = SearchStateSnapshotFactory.create(
+              engine!.registry,
+              result.tracker,
+              result.combos,
+              {
+                snapshotType: 'top',
+                input,
+                refinementLevel: level,
+                clue: input.clue
+              }
+            );
 
-          if (signal.aborted || currentRunId !== runId) break;
-
-          // Project into TopRunView
-          // NOTE: Projection logic will be updated in Phase 3 for authoritative masses
-          const view = SearchStateSnapshotFactory.create(
-            engine.registry,
-            result.tracker,
-            result.combos,
-            {
-              snapshotType: 'top',
-              input,
+            const response: TopUpdateResponse = {
+              type: 'topUpdate',
+              worker: 'top',
+              runId,
               refinementLevel: level,
-              clue: input.clue
-            },
-            result // authoritative masses
-          );
+              view: view as any
+            };
 
-          const response: TopUpdateResponse = {
-            type: 'topUpdate',
-            worker: 'top',
-            runId,
-            refinementLevel: level,
-            view: view as any
-          };
-
-          workerScope.postMessage(response);
-        }
+            workerScope.postMessage(response);
+          },
+          {
+            clue: input.clue,
+            signal
+          }
+        );
 
         // Terminal message
         if (currentRunId === runId && !signal.aborted) {

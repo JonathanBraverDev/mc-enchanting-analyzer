@@ -169,7 +169,7 @@ export class EnchantEngine {
         const wrappedOnTierComplete = (raw: any, tierIndex: number) => {
             const stats = packedClue
                 ? SummaryService.summarizeConditioned(raw.combos, raw.tracker, this.registry.indexToEnchant, packedClue, summaryLimit)
-                : SummaryService.summarize(raw.combos, raw.tracker, this.registry.indexToEnchant, raw.anyMass, raw.rankMass, raw.countMass, summaryLimit, raw.threshold);
+                : SummaryService.summarize(raw.combos, raw.tracker, this.registry.indexToEnchant, summaryLimit, raw.threshold);
             
             stats.instrumentation = raw.instrumentation;
             stats.timing = raw.timing;
@@ -191,9 +191,6 @@ export class EnchantEngine {
                 finalRaw.combos,
                 finalRaw.tracker,
                 this.registry.indexToEnchant,
-                finalRaw.anyMass,
-                finalRaw.rankMass,
-                finalRaw.countMass,
                 summaryLimit,
                 finalRaw.threshold
             );
@@ -207,6 +204,53 @@ export class EnchantEngine {
         }
 
         return finalStats;
+    }
+
+    /**
+     * Tiered version of calculateTop for v5 workers.
+     * Streams raw aggregation results via callback for each tier.
+     */
+    public async calculateTiered(
+        cat: string,
+        xp: number,
+        mat: string,
+        tiers: Array<{ threshold: number; limit: number }>,
+        onTierComplete: (result: import('#types/index.js').AggregationResult, tierIndex: number) => void,
+        config: SearchConfig = {}
+    ): Promise<import('#types/index.js').AggregationResult> {
+        this.validateRequest(cat, xp, mat, config);
+
+        const {
+            signal,
+            onProgress,
+            instrumentation,
+            timing
+        } = config;
+
+        const internalConfig: InternalSearchConfig = {
+            threshold: ProbUtils.toBigInt(tiers[tiers.length - 1]?.threshold ?? 0),
+            signal,
+            onProgress,
+            getExtendedCache: (ml) => {
+                const pk = this.keyService.getPackedKey(this.registry, cat, ml, mat);
+                return (cat === "book" ? this.cache.getBook(this.registry.version, pk) : this.cache.getCombo(this.registry.version, pk)) as SearchState;
+            },
+            setExtendedCache: (ml, state) => {
+                const pk = this.keyService.getPackedKey(this.registry, cat, ml, mat);
+                if (cat === "book") this.cache.setBook(this.registry.version, pk, state);
+                else this.cache.setCombo(this.registry.version, pk, state);
+            },
+            instrumentation,
+            timing,
+            getCacheMetrics: () => ({ 
+                cacheNodes: this.cache.getTotalCachedNodes(), 
+                cacheResults: this.cache.getTotalCachedResults() 
+            })
+        };
+
+        return this.statAggregator.calculateTiered(
+            this.registry, cat, xp, mat, tiers, onTierComplete, internalConfig
+        );
     }
 
     /**
@@ -325,9 +369,6 @@ export class EnchantEngine {
                 finalRaw.combos,
                 finalRaw.tracker,
                 this.registry.indexToEnchant,
-                finalRaw.anyMass,
-                finalRaw.rankMass,
-                finalRaw.countMass,
                 summaryLimit,
                 finalRaw.threshold
             );

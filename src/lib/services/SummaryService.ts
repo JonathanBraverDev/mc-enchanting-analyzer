@@ -1,4 +1,4 @@
-import { ProbUtils } from '#utils/math/ProbUtils.js';
+import { ProbUtils, ComboUtils } from '#utils/index.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import { CalculationStats, PackedCombo } from '#types/index.js';
 import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
@@ -15,9 +15,6 @@ export class SummaryService {
         combos: Map<PackedCombo, bigint>,
         tracker: SearchStateTracker,
         indexToEnchant: number[],
-        anyMass?: Map<number, bigint> | BigUint64Array,
-        rankMass?: Map<number, bigint> | BigUint64Array,
-        countMass?: Map<number, bigint> | BigUint64Array,
         comboLimit: number = ENGINE_LIMITS.MAX_RESULTS_SUMMARY,
         threshold: number = 0
     ): CalculationStats {
@@ -33,9 +30,13 @@ export class SummaryService {
             accounting
         };
 
-        if (anyMass) SummaryService.populateStats(stats.any, anyMass);
-        if (rankMass) SummaryService.populateStats(stats.ranks, rankMass);
-        if (countMass) SummaryService.populateStats(stats.count, countMass);
+        const anyMass = this.calculateAnyMass(combos, indexToEnchant);
+        const rankMass = this.calculateRankMass(combos, indexToEnchant);
+        const countMass = this.calculateCountMass(combos, indexToEnchant);
+
+        SummaryService.populateStats(stats.any, anyMass);
+        SummaryService.populateStats(stats.ranks, rankMass);
+        SummaryService.populateStats(stats.count, countMass);
 
         const clueMass = ClueAnalysisService.calculateClueMass(combos, indexToEnchant);
         SummaryService.populateStats(stats.clues, clueMass);
@@ -98,7 +99,7 @@ export class SummaryService {
         comboLimit: number = ENGINE_LIMITS.MAX_RESULTS_SUMMARY
     ): CalculationStats {
         // 1. Get honest baseline stats (invariants, absolute accuracy)
-        const stats = SummaryService.summarize(rawCombos, tracker, indexToEnchant, undefined, undefined, undefined, 0);
+        const stats = SummaryService.summarize(rawCombos, tracker, indexToEnchant, 0);
 
         // 2. Perform Bayesian conditioning
         const conditioned = ClueAnalysisService.conditionOnClue(rawCombos, targetClueId, indexToEnchant);
@@ -143,6 +144,38 @@ export class SummaryService {
         }
 
         return stats;
+    }
+
+    private static calculateAnyMass(combos: Map<PackedCombo, bigint>, indexToEnchant: number[]): Map<number, bigint> {
+        const mass = new Map<number, bigint>();
+        for (const [packed, prob] of combos) {
+            const enchants = ComboUtils.unpack(packed, indexToEnchant);
+            for (const e of enchants) {
+                const id = e >> 8;
+                ProbUtils.addItemMass(mass, id, prob);
+            }
+        }
+        return mass;
+    }
+
+    private static calculateRankMass(combos: Map<PackedCombo, bigint>, indexToEnchant: number[]): Map<number, bigint> {
+        const mass = new Map<number, bigint>();
+        for (const [packed, prob] of combos) {
+            const enchants = ComboUtils.unpack(packed, indexToEnchant);
+            for (const e of enchants) {
+                ProbUtils.addItemMass(mass, e, prob);
+            }
+        }
+        return mass;
+    }
+
+    private static calculateCountMass(combos: Map<PackedCombo, bigint>, indexToEnchant: number[]): Map<number, bigint> {
+        const mass = new Map<number, bigint>();
+        for (const [packed, prob] of combos) {
+            const count = ComboUtils.unpack(packed, indexToEnchant).length;
+            ProbUtils.addItemMass(mass, count, prob);
+        }
+        return mass;
     }
 
     private static populateStats(target: { [key: number]: number }, source: Map<number, bigint> | BigUint64Array): void {

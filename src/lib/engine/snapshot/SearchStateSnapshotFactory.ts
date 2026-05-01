@@ -19,11 +19,6 @@ import { getFullEnchantName, getEnchantName } from '#core/registry.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import { ClueValidator } from '#core/clue.js';
 
-export interface AuthoritativeMasses {
-  anyMass: Map<number, bigint> | BigUint64Array;
-  rankMass: Map<number, bigint> | BigUint64Array;
-  countMass: Map<number, bigint> | BigUint64Array;
-}
 
 export class SearchStateSnapshotFactory {
   /**
@@ -40,8 +35,7 @@ export class SearchStateSnapshotFactory {
     state: RegistryState,
     tracker: SearchStateTracker,
     combos: Map<PackedCombo, bigint>,
-    request: SnapshotRequest,
-    authoritative?: AuthoritativeMasses
+    request: SnapshotRequest
   ): TopRunView | ChartCellView {
     const { snapshotType, refinementLevel, clue, comboLimit } = request;
 
@@ -63,17 +57,17 @@ export class SearchStateSnapshotFactory {
     let clueKnownSpace: number | undefined;
 
     if (isConditioned) {
-      // Conditioned views ALWAYS derive from top combos (they represent the posterior)
+      // Conditioned views derive from top combos (representing the posterior)
       const conditioned = ClueAnalysisService.conditionOnClue(combos, targetClueId!, state.indexToEnchant);
       clueKnownSpace = ProbUtils.toNumber(conditioned.clueKnownSpace);
       result = conditioned;
     } else {
-      // Unconditioned views should use authoritative masses if available (Correction 4)
+      // Unconditioned views derive aggregate stats from the capped combos map (Correction 4)
       result = {
         combos,
-        anyMass: authoritative?.anyMass ?? this.calculateAnyMassFallback(combos, state.indexToEnchant),
-        rankMass: authoritative?.rankMass ?? this.calculateRankMassFallback(combos, state.indexToEnchant),
-        countMass: authoritative?.countMass ?? this.calculateCountMassFallback(combos, state.indexToEnchant)
+        anyMass: this.calculateAnyMass(combos, state.indexToEnchant),
+        rankMass: this.calculateRankMass(combos, state.indexToEnchant),
+        countMass: this.calculateCountMass(combos, state.indexToEnchant)
       };
     }
 
@@ -106,9 +100,9 @@ export class SearchStateSnapshotFactory {
     }
   }
 
-  // Fallback methods remain for robustness, but workers should ideally pass authoritative masses.
+  // Aggregation methods that derive stats from the combos map.
 
-  private static calculateAnyMassFallback(combos: Map<PackedCombo, bigint>, indexToEnchant: number[]): Map<number, bigint> {
+  private static calculateAnyMass(combos: Map<PackedCombo, bigint>, indexToEnchant: number[]): Map<number, bigint> {
     const mass = new Map<number, bigint>();
     for (const [packed, prob] of combos) {
       const enchants = ComboUtils.unpack(packed, indexToEnchant);
@@ -120,7 +114,7 @@ export class SearchStateSnapshotFactory {
     return mass;
   }
 
-  private static calculateRankMassFallback(combos: Map<PackedCombo, bigint>, indexToEnchant: number[]): Map<number, bigint> {
+  private static calculateRankMass(combos: Map<PackedCombo, bigint>, indexToEnchant: number[]): Map<number, bigint> {
     const mass = new Map<number, bigint>();
     for (const [packed, prob] of combos) {
       const enchants = ComboUtils.unpack(packed, indexToEnchant);
@@ -131,7 +125,7 @@ export class SearchStateSnapshotFactory {
     return mass;
   }
 
-  private static calculateCountMassFallback(combos: Map<PackedCombo, bigint>, indexToEnchant: number[]): Map<number, bigint> {
+  private static calculateCountMass(combos: Map<PackedCombo, bigint>, indexToEnchant: number[]): Map<number, bigint> {
     const mass = new Map<number, bigint>();
     for (const [packed, prob] of combos) {
       const count = ComboUtils.unpack(packed, indexToEnchant).length;
@@ -147,7 +141,7 @@ export class SearchStateSnapshotFactory {
     clueConditioned: boolean,
     normalization: NormalizationView,
     accounting: AccountingView,
-    result: AuthoritativeMasses & { combos: Map<PackedCombo, bigint> },
+    result: { anyMass: Map<number, bigint>, rankMass: Map<number, bigint>, countMass: Map<number, bigint>, combos: Map<PackedCombo, bigint> },
     comboLimit: number
   ): TopRunView {
     const combos: TopComboView[] = [];
@@ -166,26 +160,12 @@ export class SearchStateSnapshotFactory {
     }
 
     const enchants: TopEnchantShareView[] = [];
-    if (result.anyMass instanceof Map) {
-      for (const [id, mass] of result.anyMass) {
-        enchants.push({
-          enchantId: id,
-          label: getEnchantName(state, id),
-          share: ProbUtils.toNumber(mass)
-        });
-      }
-    } else {
-      // BigUint64Array
-      for (let id = 0; id < result.anyMass.length; id++) {
-        const mass = result.anyMass[id]!;
-        if (mass > 0n) {
-          enchants.push({
-            enchantId: id,
-            label: getEnchantName(state, id),
-            share: ProbUtils.toNumber(mass)
-          });
-        }
-      }
+    for (const [id, mass] of result.anyMass) {
+      enchants.push({
+        enchantId: id,
+        label: getEnchantName(state, id),
+        share: ProbUtils.toNumber(mass)
+      });
     }
     enchants.sort((a, b) => b.share - a.share);
 
@@ -206,7 +186,7 @@ export class SearchStateSnapshotFactory {
     clueConditioned: boolean,
     normalization: NormalizationView,
     accounting: AccountingView,
-    result: AuthoritativeMasses
+    result: { anyMass: Map<number, bigint>, rankMass: Map<number, bigint>, countMass: Map<number, bigint> }
   ): ChartCellView {
     const buckets: ChartBucketsView = {
       anyByEnchantId: {},
@@ -214,34 +194,16 @@ export class SearchStateSnapshotFactory {
       countBySize: {}
     };
 
-    if (result.anyMass instanceof Map) {
-      for (const [id, mass] of result.anyMass) {
-        buckets.anyByEnchantId[id] = ProbUtils.toNumber(mass);
-      }
-    } else {
-      for (let i = 0; i < result.anyMass.length; i++) {
-        if (result.anyMass[i]! > 0n) buckets.anyByEnchantId[i] = ProbUtils.toNumber(result.anyMass[i]!);
-      }
+    for (const [id, mass] of result.anyMass) {
+      buckets.anyByEnchantId[id] = ProbUtils.toNumber(mass);
     }
 
-    if (result.rankMass instanceof Map) {
-      for (const [idAndRank, mass] of result.rankMass) {
-        buckets.rankByIdAndRank[idAndRank] = ProbUtils.toNumber(mass);
-      }
-    } else {
-      for (let i = 0; i < result.rankMass.length; i++) {
-        if (result.rankMass[i]! > 0n) buckets.rankByIdAndRank[i] = ProbUtils.toNumber(result.rankMass[i]!);
-      }
+    for (const [idAndRank, mass] of result.rankMass) {
+      buckets.rankByIdAndRank[idAndRank] = ProbUtils.toNumber(mass);
     }
 
-    if (result.countMass instanceof Map) {
-      for (const [count, mass] of result.countMass) {
-        buckets.countBySize[count] = ProbUtils.toNumber(mass);
-      }
-    } else {
-      for (let i = 0; i < result.countMass.length; i++) {
-        if (result.countMass[i]! > 0n) buckets.countBySize[i] = ProbUtils.toNumber(result.countMass[i]!);
-      }
+    for (const [count, mass] of result.countMass) {
+      buckets.countBySize[count] = ProbUtils.toNumber(mass);
     }
 
     return {

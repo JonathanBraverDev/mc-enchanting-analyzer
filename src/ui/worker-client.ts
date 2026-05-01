@@ -38,6 +38,12 @@ export const WorkerClient = {
     },
 
     requestId: 0 as RequestId,
+    
+    /** Tracking generations to avoid stale callbacks from superseded runs */
+    generations: {
+        top: 0,
+        chart: 0
+    },
 
     async init(version: string): Promise<void> {
         await Promise.all([
@@ -68,7 +74,7 @@ export const WorkerClient = {
                 if ('runId' in data) {
                     const runId = data.runId;
                     
-                    // Ignore messages from superseded runs (but still process terminal for cleanup)
+                    const currentGen = this.generations[kind];
                     const isActive = runId === this.activeRunIds[kind];
                     
                     if (type === 'topUpdate' && kind === 'top' && isActive) {
@@ -100,11 +106,7 @@ export const WorkerClient = {
         if (this.activeRunIds[kind] === runId) {
             this.activeRunIds[kind] = null;
         }
-        if (kind === 'top') {
-            this.callbacks.top.delete(runId);
-        } else {
-            this.callbacks.chart.delete(runId);
-        }
+        this.callbacks[kind].delete(runId);
         this.callbacks.terminal.delete(runId);
     },
 
@@ -112,6 +114,7 @@ export const WorkerClient = {
      * Explicitly cancel an active run from the UI side.
      */
     cancelRun(kind: 'top' | 'chart'): void {
+        this.generations[kind]++;
         const runId = this.activeRunIds[kind];
         if (runId) {
             const cb = this.callbacks.terminal.get(runId);
