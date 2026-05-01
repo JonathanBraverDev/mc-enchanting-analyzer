@@ -256,6 +256,7 @@ export interface ProgressReporter {
 export interface AggregationResult {
     combos: Map<PackedCombo, bigint>;
     tracker: import('../engine/search/SearchStateTracker.js').SearchStateTracker;
+    frontiers?: { heap: import('../utils/collections/SearchHeap.js').SearchHeap, scale: bigint }[] | undefined;
     instrumentation?: EngineInstrumentation | undefined;
     timing?: SearchTiming | undefined;
     threshold: number;

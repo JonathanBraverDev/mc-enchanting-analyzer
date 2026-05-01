@@ -128,7 +128,7 @@ export class SearchStateTracker {
             const remStop = searchProcessor.withTiming(timing, 'settlingMs', () => 
                 searchProcessor.settleMass(
                     cat === "book", blueprint.currentCount, blueprint.currentCombo, blueprint.currentEnchants, 
-                    probStop, ctx.results, ctx.countMass
+                    probStop, ctx.results
                 )
             );
 
@@ -171,7 +171,7 @@ export class SearchStateTracker {
         const remForward = searchProcessor.withTiming(timing, 'settlingMs', () => 
             searchProcessor.settleMass(
                 cat === "book", blueprint.currentCount, blueprint.currentCombo, blueprint.currentEnchants, 
-                probForward, ctx.results, ctx.countMass
+                probForward, ctx.results
             )
         );
 

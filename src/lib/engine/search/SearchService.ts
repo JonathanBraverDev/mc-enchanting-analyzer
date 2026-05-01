@@ -54,9 +54,6 @@ export class SearchService {
             registry,
             results,
             queue,
-            anyMass: state.anyMass,
-            rankMass: state.rankMass,
-            countMass: state.countMass,
             resultsLimit,
             instrumentation: config?.instrumentation,
             timing: timingResult ? { totalMs: 0, searchMs: 0 } : undefined,
@@ -84,17 +81,10 @@ export class SearchService {
     private handleEmptyPool(threshold: bigint): SearchState {
         const rootTracker = new SearchStateTracker();
         rootTracker.record('resolved', PRECISION);
-        const anyMass = new BigUint64Array(PACKING_CONSTANTS.BYTE_BASIS);
-        const rankMass = new BigUint64Array(PACKING_CONSTANTS.MAX_RANKED_INDEX);
-        const countMass = new BigUint64Array(PACKING_CONSTANTS.MAX_COUNT_INDEX);
-        countMass[0] = PRECISION;
 
         return {
             queue: new SearchHeap(),
             results: new Map(),
-            anyMass,
-            rankMass,
-            countMass,
             tracker: rootTracker,
             threshold,
             iterations: 0,

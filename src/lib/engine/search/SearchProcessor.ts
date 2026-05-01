@@ -51,15 +51,13 @@ export class SearchProcessor {
         packedChosen: PackedCombo,
         currentEnchants: PackedEnchant[],
         prob: bigint,
-        results: Map<PackedCombo, bigint>,
-        countMass: BigUint64Array
+        results: Map<PackedCombo, bigint>
     ): bigint {
         if (isBook && currentCount > 1) {
-            const { rem } = this.redistributeBookProb(packedChosen, currentEnchants, prob, currentCount, results, countMass);
+            const { rem } = this.redistributeBookProb(packedChosen, currentEnchants, prob, currentCount, results);
             return rem;
         } else {
             ProbUtils.addItemMass(results, packedChosen, prob);
-            ProbUtils.addItemMass(countMass, currentCount, prob);
             return 0n;
         }
     }
@@ -70,11 +68,10 @@ export class SearchProcessor {
      */
     public static redistributeBookProb(
         packedChosen: PackedCombo,
-        originalEnchants: PackedEnchant[],
+        _originalEnchants: PackedEnchant[],
         prob: bigint,
-        currentCount: number,
-        results: Map<PackedCombo, bigint>,
-        countMass: BigUint64Array
+        _currentCount: number,
+        results: Map<PackedCombo, bigint>
     ): { rem: bigint } {
         const redistributed = ComboUtils.removeAdditional(packedChosen) as PackedCombo[]; 
         const nOutcomes = redistributed.length;
@@ -95,8 +92,7 @@ export class SearchProcessor {
             ProbUtils.addItemMass(results, firstRedistributed, splitRemainder);
         }
 
-        const finalCount = currentCount - 1;
-        ProbUtils.addItemMass(countMass, finalCount, prob);
+        // countMass tracking removed - derived in snapshots
 
         return { rem: 0n };
     }
