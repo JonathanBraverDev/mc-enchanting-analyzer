@@ -102,7 +102,7 @@ export class SearchProcessor {
 
         const buffer = DistributionBufferPool.getBuffer(0);
         const splitRemainder = ProbUtils.distributeDetailed(currentProb, poolWeights, initialTotalWeight, buffer);
-        tracker.record('sieved', splitRemainder);
+        tracker.mass.record('sieved', splitRemainder);
 
         for (const [i, e] of pool.entries()) {
             const pNext = buffer[i];
@@ -112,7 +112,7 @@ export class SearchProcessor {
             const nextMeta = (BIGINT_CONSTANTS.ID_BIT_LOOKUP[nextId]! << BIGINT_CONSTANTS.ENCHANT_SHIFT) | BIGINT_CONSTANTS.LEVEL_LOOKUP[currentLevel]!;
             const nextPacked = ComboUtils.pack([e], registry.enchantToIndex) as PackedCombo;
 
-            tracker.record('pending', pNext);
+            tracker.mass.record('pending', pNext);
             queue.pushOrMerge(nextMeta, pNext, nextPacked);
         }
     }

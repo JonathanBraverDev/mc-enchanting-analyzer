@@ -52,7 +52,7 @@ export class ProgressiveStatsAggregator {
 
         const stateMap = new Map<number, SearchState>();
         const initialTracker = new SearchStateTracker();
-        initialTracker.record('pending', PRECISION);
+        initialTracker.mass.record('pending', PRECISION);
         
         let lastResult: AggregationResult = {
             combos: new Map(),
@@ -104,16 +104,14 @@ export class ProgressiveStatsAggregator {
 
                 ProbUtils.addMapMass(finalCombos, result.results, mProb);
 
-                tierTracker.addScaled(result.tracker, mProb);
+                tierTracker.mass.addScaled(result.tracker.mass, mProb);
 
                 processedMProb += mProb;
                 await AsyncUtils.yield();
             }
 
-            if (abortedMidTier && processedMProb === 0n) return lastResult;
-
             const distRoundingError = PRECISION - processedMProb;
-            tierTracker.record('rounding', distRoundingError);
+            tierTracker.mass.record('rounding', distRoundingError);
 
 
             const tierResult: AggregationResult = {
@@ -137,7 +135,7 @@ export class ProgressiveStatsAggregator {
      * Performs a single-pass aggregation for the given XP level.
      * Aggregates mass from the probability distribution of modified levels
      * into global any/rank/count counters.
-     * 
+     *
      * @param registry Resolved registry state.
      * @param cat Item category.
      * @param xp Base XP level.
@@ -220,13 +218,13 @@ export class ProgressiveStatsAggregator {
 
             ProbUtils.addMapMass(finalCombos, result.results, mProb);
 
-            globalTracker.addScaled(result.tracker, mProb);
+            globalTracker.mass.addScaled(result.tracker.mass, mProb);
             frontiers.push({ heap: result.queue, scale: mProb });
 
             processedMProb += mProb;
             if (++iterCount % UI_CONSTANTS.PROGRESS_UPDATE_FREQUENCY === 0) {
                 if (config.onProgress) {
-                    const accuracy = globalTracker.toPublic().resolved;
+                    const accuracy = globalTracker.mass.toPublic().resolved;
                     config.onProgress({
                         processed: iterCount,
                         total: levels.length,
@@ -238,7 +236,7 @@ export class ProgressiveStatsAggregator {
         }
 
         const distRoundingError = PRECISION - processedMProb;
-        globalTracker.record('rounding', distRoundingError);
+        globalTracker.mass.record('rounding', distRoundingError);
 
 
         return {
@@ -255,9 +253,9 @@ export class ProgressiveStatsAggregator {
         instr.checkpoints = instr.checkpoints || [];
         if (state.checkpoints) {
             for (const cp of state.checkpoints) {
-                instr.checkpoints.push({ 
-                    ...cp, 
-                    totalIterations: (instr.totalIterations || 0) + cp.iterations 
+                instr.checkpoints.push({
+                    ...cp,
+                    totalIterations: (instr.totalIterations || 0) + cp.iterations
                 });
             }
         }
@@ -266,7 +264,7 @@ export class ProgressiveStatsAggregator {
         instr.levelsProcessed = (instr.levelsProcessed || 0) + 1;
         if (state.exitReason === 'empty') instr.levelsFullyResolved = (instr.levelsFullyResolved || 0) + 1;
         instr.fullyResolved = instr.levelsFullyResolved === instr.levelsProcessed;
-        
+
         // Update cache performance metrics
         const metrics = this.cache.getEngineMetrics();
         instr.poolCache = metrics.poolCache;

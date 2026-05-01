@@ -2,7 +2,6 @@ import { PRECISION } from '#utils/index.js';
 import { getEligiblePool } from '#core/registry.js';
 import { ENGINE_LIMITS, PACKING_CONSTANTS } from '#constants/engine.js';
 import { SearchState, RegistryState, SearchContext, ForwardingContext } from '#types/index.js';
-import { StateFactory } from '#engine/search/StateFactory.js';
 import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
 import { SearchController } from '#engine/search/SearchController.js';
 import { SearchHeap } from '#utils/collections/SearchHeap.js';
@@ -34,15 +33,15 @@ export class SearchService {
 
         let startTime = 0;
         if (timingResult) startTime = performance.now();
-        
-        const state = StateFactory.create(modLevel, existingState, threshold);
+
+        const state = SearchStateTracker.createState(modLevel, existingState, threshold);
         const { results, queue } = state;
-        
+
         // Minecraft fixes the eligible enchant/rank pool from the initial full modified level once.
         // Later level halving affects only the chance to continue to another enchant slot, not which
         // enchantments can appear in this run, so downstream search nodes must keep reusing this pool.
         const initialPool = getEligiblePool(registry, cat, modLevel, this.cache, registry.version);
-        
+
         const poolWeights: number[] = initialPool.map(e => registry.weightMap[e >> PACKING_CONSTANTS.ENCHANT_SHIFT] ?? 0);
         const initialTotalWeight = poolWeights.reduce((a, b) => a + b, 0);
 
@@ -74,13 +73,13 @@ export class SearchService {
             const totalMs = performance.now() - startTime;
             timingResult.totalMs += totalMs;
         }
-        
+
         return state;
     }
 
     private handleEmptyPool(threshold: bigint): SearchState {
         const rootTracker = new SearchStateTracker();
-        rootTracker.record('resolved', PRECISION);
+        rootTracker.mass.record('resolved', PRECISION);
 
         return {
             queue: new SearchHeap(),

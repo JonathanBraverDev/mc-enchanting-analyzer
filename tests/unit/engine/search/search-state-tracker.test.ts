@@ -8,25 +8,25 @@ describe('SearchStateTracker', () => {
 
     it('should initialize with empty mass bookkeeping', () => {
         const tracker = new SearchStateTracker();
-        const mass = tracker.toPublic();
+        const mass = tracker.mass.toPublic();
         assert.strictEqual(mass.resolved, 0);
         assert.strictEqual(mass.pending, 0);
     });
 
     it('should record mass events correctly', () => {
         const tracker = new SearchStateTracker();
-        tracker.record('resolved', PRECISION / 2n);
-        assert.strictEqual(tracker.toPublic().resolved, 0.5);
+        tracker.mass.record('resolved', PRECISION / 2n);
+        assert.strictEqual(tracker.mass.toPublic().resolved, 0.5);
     });
 
     it('should handle cloning correctly', () => {
         const tracker = new SearchStateTracker();
-        tracker.record('resolved', PRECISION / 4n);
+        tracker.mass.record('resolved', PRECISION / 4n);
         const clone = tracker.clone();
-        assert.strictEqual(clone.toPublic().resolved, 0.25);
-        clone.record('resolved', PRECISION / 4n);
-        assert.strictEqual(clone.toPublic().resolved, 0.5);
-        assert.strictEqual(tracker.toPublic().resolved, 0.25);
+        assert.strictEqual(clone.mass.toPublic().resolved, 0.25);
+        clone.mass.record('resolved', PRECISION / 4n);
+        assert.strictEqual(clone.mass.toPublic().resolved, 0.5);
+        assert.strictEqual(tracker.mass.toPublic().resolved, 0.25);
     });
 
     it('should register and retrieve expansion blueprints', () => {
@@ -86,7 +86,7 @@ describe('SearchStateTracker', () => {
         );
 
         // This is a bit hard to test via private methods, so I'll check the accountant state instead.
-        const bk = tracker.getBookkeeping();
+        const bk = tracker.mass.getBookkeeping();
         assert.ok(bk.recoveredRounding > 0n || bk.resolved > 0n, 'Should have accounted for recovered mass or resolved it');
     });
 });

@@ -20,7 +20,7 @@ export class SummaryService {
         frontiers: { heap: import('../utils/collections/SearchHeap.js').SearchHeap, scale: bigint }[] = [],
         isBook: boolean = false
     ): CalculationStats {
-        const accounting = tracker.toPublic();
+        const accounting = tracker.mass.toPublic();
         const stats: CalculationStats = {
             ranks: {},
             any: {},

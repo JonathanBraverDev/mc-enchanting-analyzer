@@ -1,7 +1,7 @@
 import { EnchantmentData, RegistryState } from '#types/index.js';
 import { EnchantEngine } from '#engine/index.js';
 import { CacheManager } from '#engine/cache/CacheManager.js';
-import { KeyService } from '#services/KeyService.js';
+import { KeyService } from '#engine/cache/KeyService.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { SearchService } from '#engine/search/SearchService.js';
 import { ProgressiveStatsAggregator } from '#engine/aggregation/ProgressiveStatsAggregator.js';

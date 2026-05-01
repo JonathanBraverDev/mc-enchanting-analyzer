@@ -5,7 +5,7 @@ import { ENGINE_LIMITS } from '#constants/engine.js';
 import { MINECRAFT_RULES } from '#constants/minecraft.js';
 import { getSearchLimit } from '#engine/utils.js';
 import { CacheManager } from '#engine/cache/CacheManager.js';
-import { KeyService } from '#services/KeyService.js';
+import { KeyService } from '#engine/cache/KeyService.js';
 import { SummaryService } from '#services/SummaryService.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { SearchService } from '#engine/search/SearchService.js';

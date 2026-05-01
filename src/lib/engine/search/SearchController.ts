@@ -70,7 +70,7 @@ export class SearchController {
 
             if (!queue.popFast(current as any)) break;
 
-            tracker.subtract('pending', current.prob);
+            tracker.mass.subtract('pending', current.prob);
             const currentCount = ComboUtils.getCount(current.combo);
 
             if (currentCount === 0) {
@@ -80,7 +80,7 @@ export class SearchController {
             }
 
             // Checkpoints
-            const bk = tracker.getBookkeeping();
+            const bk = tracker.mass.getBookkeeping();
             while (checkpointIdx < ProbUtils.CHECKPOINT_TARGETS.length) {
                 const targetMass = ProbUtils.CHECKPOINT_TARGETS[checkpointIdx];
                 if (targetMass === undefined) break;

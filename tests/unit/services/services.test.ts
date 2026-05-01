@@ -28,7 +28,7 @@ describe('SummaryService', () => {
     it('converts pending mass bigint to float correctly', () => {
         const pending = PRECISION / 4n; // represents 0.25
         const tracker = new SearchStateTracker();
-        tracker.record('pending', pending);
+        tracker.mass.record('pending', pending);
         const result = SummaryService.summarize(new Map(), tracker, []);
         assert.ok(Math.abs(result.accounting.pending - 0.25) < 1e-12, `got ${result.accounting.pending}`);
     });
@@ -202,10 +202,10 @@ describe('ModifiedLevelDistributionService', () => {
 describe('SearchStateTracker Accounting', () => {
     it('toPublic converts BigInt buckets to floating-point accurately', () => {
         const tracker = new SearchStateTracker();
-        tracker.record('resolved', PRECISION / 2n);
-        tracker.record('pending', PRECISION / 10n);
+        tracker.mass.record('resolved', PRECISION / 2n);
+        tracker.mass.record('pending', PRECISION / 10n);
         
-        const accounting = tracker.toPublic();
+        const accounting = tracker.mass.toPublic();
         assert.strictEqual(accounting.resolved, 0.5);
         assert.strictEqual(accounting.pending, 0.1);
     });
@@ -214,14 +214,14 @@ describe('SearchStateTracker Accounting', () => {
         const t1 = new SearchStateTracker();
         const t2 = new SearchStateTracker();
         
-        t1.record('resolved', 100n);
-        t2.record('resolved', 200n);
+        t1.mass.record('resolved', 100n);
+        t2.mass.record('resolved', 200n);
         
         // factor = 0.5 (PRECISION / 2)
-        t1.addScaled(t2, PRECISION / 2n); 
+        t1.mass.addScaled(t2.mass, PRECISION / 2n);
         
         // 100 + (200 * 0.5) = 200
-        assert.strictEqual(t1.getBookkeeping().resolved, 200n);
+        assert.strictEqual(t1.mass.getBookkeeping().resolved, 200n);
     });
 });
 

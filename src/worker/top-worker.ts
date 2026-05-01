@@ -4,7 +4,7 @@ import {
     TopUpdateResponse,
     RunAcceptedResponse,
 } from '#types/index.js';
-import { SearchStateSnapshotFactory } from '#engine/snapshot/SearchStateSnapshotFactory.js';
+import { SnapshotService } from '#services/SnapshotService.js';
 import { getParamsForMode } from '#core/config.js';
 import { ClueValidator } from '#core/clue.js';
 
@@ -46,7 +46,7 @@ shell.onRun = async (msg: WorkerRequest, engine, signal) => {
 
             const level = refinement[tierIndex]!;
 
-            const view = SearchStateSnapshotFactory.create(
+            const view = SnapshotService.create(
                 engine.registry,
                 result.tracker,
                 result.combos,

@@ -15,7 +15,7 @@ describe('Clue Conditioning Scaling diagnostics', () => {
         rawCombos.set(2, PRECISION); 
 
         const tracker = new SearchStateTracker();
-        tracker.record('resolved', PRECISION); 
+        tracker.mass.record('resolved', PRECISION);
         const stats = SummaryService.summarizeConditioned(rawCombos as any, tracker, indexToEnchant, targetClueId);
 
         assert.strictEqual(stats.accounting.clueKnownSpace, 0);
@@ -29,7 +29,7 @@ describe('Clue Conditioning Scaling diagnostics', () => {
         rawCombos.set(1, PRECISION); 
 
         const tracker = new SearchStateTracker();
-        tracker.record('resolved', PRECISION);
+        tracker.mass.record('resolved', PRECISION);
         const stats = SummaryService.summarizeConditioned(rawCombos as any, tracker, indexToEnchant, targetClueId);
 
         // pClue should be 1.0
@@ -47,7 +47,7 @@ describe('Clue Conditioning Scaling diagnostics', () => {
         rawCombos.set(2, PRECISION / 2n);
 
         const tracker = new SearchStateTracker();
-        tracker.record('resolved', PRECISION); // Search is 100% accurate
+        tracker.mass.record('resolved', PRECISION); // Search is 100% accurate
         const stats = SummaryService.summarizeConditioned(rawCombos as any, tracker, indexToEnchant, targetClueId);
 
         // pClue = 0.5
@@ -61,8 +61,8 @@ describe('Clue Conditioning Scaling diagnostics', () => {
         rawCombos.set(1, PRECISION / 4n); // 25% compatible resolved mass
 
         const tracker = new SearchStateTracker();
-        tracker.record('resolved', PRECISION / 2n); // Only 50% search accuracy
-        tracker.record('pending', PRECISION / 2n);
+        tracker.mass.record('resolved', PRECISION / 2n); // Only 50% search accuracy
+        tracker.mass.record('pending', PRECISION / 2n);
         
         const stats = SummaryService.summarizeConditioned(rawCombos as any, tracker, indexToEnchant, targetClueId);
 

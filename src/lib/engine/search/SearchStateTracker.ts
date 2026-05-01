@@ -1,69 +1,77 @@
-import { MassBookkeeping, MassAccounting, MassEventType } from '#types/mass.js';
-import { ExpansionBlueprint, ForwardingContext, PackedCombo, PackedEnchant } from '#types/index.js';
+import { MassBookkeeping } from '#types/mass.js';
+import { ExpansionBlueprint, ForwardingContext, PackedCombo, PackedEnchant, SearchState } from '#types/index.js';
 import { ProbUtils, ComboUtils, PRECISION } from '#utils/index.js';
 
 import { DistributionBufferPool } from '#engine/distribution/DistributionBufferPool.js';
 import { ENGINE_LIMITS, SEARCH_CONSTANTS, BIGINT_CONSTANTS } from '#constants/engine.js';
-import { ProbabilityMassBookkeeper } from '#engine/search/ProbabilityMassBookkeeper.js';
+import { ProbabilityMassAccountant } from '#engine/search/ProbabilityMassAccountant.js';
+import { SearchHeap } from '#utils/collections/SearchHeap.js';
 
 /**
- * Unified state tracker for probability mass and expanded node blueprints.
+ * Unified state accountant for probability mass and expanded node blueprints.
  * Facilitates high-speed forwarding through cached search subtrees.
  */
 export class SearchStateTracker {
     private static readonly MAX_RECURSION_DEPTH = SEARCH_CONSTANTS.MAX_RECURSION_DEPTH;
-    
-    private readonly accountant: ProbabilityMassBookkeeper;
+
+    public readonly mass: ProbabilityMassAccountant;
     private readonly expansionCache: Map<bigint, ExpansionBlueprint>;
 
     constructor(initialMass?: MassBookkeeping, initialCache?: Map<bigint, ExpansionBlueprint>) {
-        this.accountant = new ProbabilityMassBookkeeper(initialMass);
+        this.mass = new ProbabilityMassAccountant(initialMass);
         this.expansionCache = initialCache || new Map();
     }
 
-    public record(type: MassEventType, prob: bigint): void {
-        this.accountant.record(type, prob);
-    }
-
-    public subtract(type: MassEventType, prob: bigint): void {
-        this.accountant.subtract(type, prob);
-    }
-
-    public addScaled(other: SearchStateTracker, factor: bigint): void {
-        this.accountant.addScaled(other.accountant, factor);
-    }
-
-    public getTotalMass(): bigint {
-        return this.accountant.getTotalMass();
-    }
-
-    public getBookkeeping(): MassBookkeeping {
-        return this.accountant.getBookkeeping();
-    }
-
-    public toPublic(): MassAccounting {
-        return this.accountant.toPublic();
-    }
-
     /**
-     * Returns the mass from generation paths that reached a valid leaf state.
+     * Initializes a new SearchState or clones an existing one.
+     * Replaces the legacy StateFactory.
      */
-    public getResolvedMass(): bigint {
-        return this.accountant.getResolvedMass();
-    }
+    public static createState(
+        modLevel: number,
+        existing?: SearchState,
+        threshold: bigint = 0n
+    ): SearchState {
+        if (existing) {
+            return {
+                queue: existing.queue.clone(),
+                results: new Map(existing.results),
+                tracker: existing.tracker.clone(),
+                threshold,
+                // iterations resets each run so SearchController can enforce per-run limits;
+                // nodesProcessed is cumulative across all tiers and used for diagnostics only.
+                iterations: 0,
+                nodesProcessed: existing.nodesProcessed,
+                checkpoints: []
+            };
+        }
 
-    /**
-     * Returns the mass from frontiers that were discovered but not yet expanded.
-     */
-    public getUnexploredMass(): bigint {
-        return this.accountant.getUnexploredMass();
-    }
+        const results = new Map<PackedCombo, bigint>();
+        const queue = new SearchHeap();
 
-    /**
-     * Returns the mass that was intentionally pruned or discarded due to technical limits.
-     */
-    public getDiscardedMass(): bigint {
-        return this.accountant.getDiscardedMass();
+        // Always start from an empty generation state (0 packed, 0 bitset)
+        const initialPacked = 0 as PackedCombo;
+        const initialBitset = 0n;
+
+        queue.pushOrMerge((initialBitset << 8n) | BigInt(modLevel), PRECISION, initialPacked);
+
+        return {
+            queue, results,
+            tracker: new SearchStateTracker({
+                resolved: 0n,
+                pending: PRECISION,
+                sieved: 0n,
+                overflow: 0n,
+                capped: 0n,
+                rounding: 0n,
+                recoveredRounding: 0n,
+                recoveredSieved: 0n,
+                clueKnownSpace: 0n
+            }),
+            threshold,
+            iterations: 0,
+            nodesProcessed: 0,
+            checkpoints: []
+        };
     }
 
     // --- Expansion Caching ---
@@ -108,28 +116,28 @@ export class SearchStateTracker {
 
         while (stack.length > 0) {
             const { mass: incomingMass, meta, depth } = stack.pop()! ;
-            
+
             const blueprint = this.expansionCache.get(meta);
             if (!blueprint) continue;
 
             const { registry, cat } = ctx;
             const currentBitset = meta >> BIGINT_CONSTANTS.ENCHANT_SHIFT;
             const probContinue = blueprint.probContinue;
-            
+
             // Split mass into stop vs forward
             const probStop = ProbUtils.scale(incomingMass, (PRECISION - probContinue));
             const probForward = ProbUtils.scale(incomingMass, probContinue);
             const scaleLoss = incomingMass - (probStop + probForward);
 
             const remStop = searchProcessor.settleMass(
-                cat === "book", blueprint.currentCount, blueprint.currentCombo, blueprint.currentEnchants, 
+                cat === "book", blueprint.currentCount, blueprint.currentCombo, blueprint.currentEnchants,
                 probStop, ctx.results
             );
 
             // Terminal Check
             const term = searchProcessor.isTerminalCondition(
-                blueprint.currentCount, cat === "book", probForward, ctx.results.size, ctx.resultsLimit, 
-                ctx.results.has(blueprint.currentCombo), registry.multiEnchantBooks, 
+                blueprint.currentCount, cat === "book", probForward, ctx.results.size, ctx.resultsLimit,
+                ctx.results.has(blueprint.currentCombo), registry.multiEnchantBooks,
                 ProbUtils.toBigInt(ENGINE_LIMITS.SYSTEM_THRESHOLD_FLOOR) // SYSTEM_THRESHOLD_FLOOR
             );
 
@@ -160,26 +168,26 @@ export class SearchStateTracker {
         }
     ): bigint {
         const { cat, instrumentation } = ctx;
-        
+
         const remForward = searchProcessor.settleMass(
-            cat === "book", blueprint.currentCount, blueprint.currentCombo, blueprint.currentEnchants, 
+            cat === "book", blueprint.currentCount, blueprint.currentCombo, blueprint.currentEnchants,
             probForward, ctx.results
         );
 
         const localRounding = remStop + remForward + scaleLoss;
-        
-        this.accountant.record('resolved', probStop - remStop);
-        this.accountant.record('rounding', localRounding);
-        
+
+        this.mass.record('resolved', probStop - remStop);
+        this.mass.record('rounding', localRounding);
+
         if (term.isTooSmall) {
             if (instrumentation) instrumentation.totalPrunedNodes++;
-            this.accountant.record('sieved', probForward - remForward);
+            this.mass.record('sieved', probForward - remForward);
         } else if (term.isLimitReached) {
-            this.accountant.record('overflow', probForward - remForward);
+            this.mass.record('overflow', probForward - remForward);
         } else if (term.isMapFull) {
-            this.accountant.record('capped', probForward - remForward);
+            this.mass.record('capped', probForward - remForward);
         } else if (blueprint.totalWeight === 0) {
-            this.accountant.record('resolved', probForward - remForward);
+            this.mass.record('resolved', probForward - remForward);
         }
 
         if (localRounding > 0n && instrumentation) instrumentation.roundingErrorEvents++;
@@ -203,15 +211,15 @@ export class SearchStateTracker {
         const splits = DistributionBufferPool.getBuffer(depth);
 
         const individualRemainder = probForward % BigInt(blueprint.totalWeight);
-        this.accountant.record('rounding', individualRemainder);
+        this.mass.record('rounding', individualRemainder);
 
         const { recovered } = ProbUtils.distributeWithResidue(
             probForward, blueprint.eligibleWeights, blueprint.totalWeight, splits, blueprint, eligibleCount
         );
 
         if (recovered > 0n) {
-            this.accountant.subtract('rounding', recovered);
-            this.accountant.record('recoveredRounding', recovered);
+            this.mass.subtract('rounding', recovered);
+            this.mass.record('recoveredRounding', recovered);
             if (instrumentation) instrumentation.roundingErrorEvents++;
         }
 
@@ -230,18 +238,18 @@ export class SearchStateTracker {
             if (this.expansionCache.has(nextMeta) && depth < SearchStateTracker.MAX_RECURSION_DEPTH) {
                 stack.push({ mass: pNext, meta: nextMeta, combo: nextPacked, depth: depth + 1 });
             } else {
-                this.accountant.record('pending', pNext);
+                this.mass.record('pending', pNext);
                 queue.pushOrMerge(nextMeta, pNext, nextPacked);
             }
         }
 
-        this.accountant.record('resolved', probStop - remStop);
-        this.accountant.record('rounding', remStop + scaleLoss);
-        
+        this.mass.record('resolved', probStop - remStop);
+        this.mass.record('rounding', remStop + scaleLoss);
+
         return (probStop - remStop);
     }
 
     public clone(): SearchStateTracker {
-        return new SearchStateTracker(this.getBookkeeping(), new Map(this.expansionCache));
+        return new SearchStateTracker(this.mass.getBookkeeping(), new Map(this.expansionCache));
     }
 }

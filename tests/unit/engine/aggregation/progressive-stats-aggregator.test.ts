@@ -97,7 +97,7 @@ describe('ProgressiveStatsAggregator: tiered aggregation', () => {
                 { threshold: 0.001,  limit: 2000 },
             ],
             (raw: AggregationResult) => { 
-                accuracies.push(raw.tracker.toPublic().resolved); 
+                accuracies.push(raw.tracker.mass.toPublic().resolved);
             },
             {}
         );

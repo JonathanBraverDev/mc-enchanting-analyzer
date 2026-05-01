@@ -5,7 +5,7 @@ import {
     RunAcceptedResponse,
     PassId
 } from '#types/index.js';
-import { SearchStateSnapshotFactory } from '#engine/snapshot/SearchStateSnapshotFactory.js';
+import { SnapshotService } from '#services/SnapshotService.js';
 import { getParamsForMode } from '#core/config.js';
 import { ClueValidator } from '#core/clue.js';
 
@@ -63,7 +63,7 @@ shell.onRun = async (msg: WorkerRequest, engine, signal) => {
 
             if (signal.aborted || shell.runId !== runId) break;
 
-            const cell = SearchStateSnapshotFactory.create(
+            const cell = SnapshotService.create(
                 engine.registry,
                 result.tracker,
                 result.combos,

@@ -1,9 +1,9 @@
-import { 
-  TopRunView, 
-  ChartCellView, 
-  SnapshotRequest, 
-  RegistryState, 
-  PackedCombo, 
+import {
+  TopRunView,
+  ChartCellView,
+  SnapshotRequest,
+  RegistryState,
+  PackedCombo,
   TopInputSignature,
   NormalizationView,
   AccountingView,
@@ -21,10 +21,10 @@ import { ClueValidator } from '#core/clue.js';
 import { SummaryService } from '#services/SummaryService.js';
 
 
-export class SearchStateSnapshotFactory {
+export class SnapshotService {
   /**
    * Creates a display-oriented snapshot view of the engine state.
-   * 
+   *
    * @param state Registry state for name lookups.
    * @param tracker Tracker for accounting metrics.
    * @param combos Top combinations map.
@@ -76,7 +76,7 @@ export class SearchStateSnapshotFactory {
       };
     }
 
-    const accounting = tracker.toPublic();
+    const accounting = tracker.mass.toPublic();
     const normalization: NormalizationView = {
       domain: isConditioned ? 'clue-known-space' : 'resolved-mass',
       ...(clueKnownSpace !== undefined ? { clueKnownSpace } : {})
@@ -128,7 +128,7 @@ export class SearchStateSnapshotFactory {
   ): TopRunView {
     const combos: TopComboView[] = [];
     const entries = [...result.combos.entries()].sort((a, b) => b[1] > a[1] ? 1 : (b[1] < a[1] ? -1 : 0));
-    
+
     const limitedEntries = comboLimit > 0 ? entries.slice(0, comboLimit) : entries;
 
     for (const [packed, mass] of limitedEntries) {

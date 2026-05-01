@@ -5,7 +5,7 @@ import { WorkerClient } from '#ui/worker-client.js';
 import { EngineFactory } from '#engine/factory.js';
 import { DATA } from '#data/index.js';
 import { TEST_DATA } from '#tests/infra/test-data.js';
-import { SearchStateSnapshotFactory } from '#engine/snapshot/SearchStateSnapshotFactory.js';
+import { SnapshotService } from '#services/SnapshotService.js';
 import { SummaryService } from '#services/SummaryService.js';
 
 const BASE_PAYLOAD = TEST_DATA.PAYLOADS.BASE_SWORD;
@@ -80,7 +80,7 @@ describe('Integration: Snapshot Integrity (Correction 4)', () => {
             30 // comboLimit
         );
 
-        const snapshot = SearchStateSnapshotFactory.create(
+        const snapshot = SnapshotService.create(
             engine.registry,
             res.tracker,
             res.combos,
