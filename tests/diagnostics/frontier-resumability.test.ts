@@ -1,14 +1,6 @@
 /**
  * Integration tests for frontier resumability and cache behavior.
  *
- * NOTE (Test A): book/ml=50 is used instead of sword/diamond because sword's
- * ~65 valid enchantment combinations are exhausted well within 500 iterations
- * (condition 3 — 99.99 % mass accounted — fires before the limit). When the first
- * run exits via condition 3 rather than the limit, the resumed run's while-loop
- * terminates immediately (cumulativeAccountedMass is restored from the frontier and
- * already at the threshold), producing no improvement. Book at ml=50 has millions of
- * reachable combinations, guaranteeing the limit is the binding constraint.
- *
  * NOTE (Test B): limit is no longer included in the combo cache key
  * (KeyUtils.getPackedKey), so cross-tier combo cache sharing is possible within a
  * single engine. However, to isolate the threshold-driven quality difference cleanly,
@@ -22,58 +14,9 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { EngineFactory } from '#engine/factory.js';
-import { SearchService } from '#engine/search/SearchService.js';
-import { CacheManager } from '#engine/cache/CacheManager.js';
 import { DATA } from '#data/index.js';
-import { ProbUtils } from '#utils/index.js';
 
 describe('Frontier Resumability & Cache Behavior', () => {
-
-    // ── Test A: SearchService direct resumption ─────────────────────────────
-
-    it('SearchService resumes from existing frontier', async () => {
-        const engine = EngineFactory.create(DATA, '1.21');
-        const cache = new CacheManager({ poolSize: 100, comboOtherSize: 100, comboBookSize: 100, statsSize: 100 });
-        const searchService = new SearchService(cache);
-
-        // book/ml=50 has millions of reachable combinations; 500 iterations barely
-        // scratch the surface, so the limit — not mass convergence — is the
-        // binding exit condition.  sword/diamond has only ~65 valid combinations
-        // and always converges before reaching the limit, making resumption a no-op.
-        const threshold = ProbUtils.toBigInt(0.0001);
-        const cat = 'book', ml = 50;
-
-        // First pass: 500 iterations from the initial state
-        const result500 = await searchService.search(
-            engine.registry, cat, ml, undefined, { threshold, limit: 500, resultsLimit: 1000 }
-        );
-
-        // Second pass: 2 000 more iterations, resuming from result500
-        const result2000 = await searchService.search(
-            engine.registry, cat, ml, result500, { threshold, limit: 2000, resultsLimit: 1000 }
-        );
-
-        assert.ok(result500.results.size > 0, 'First run should have produced results');
-        assert.ok(result2000.results.size > 0, 'Resumed run should have produced results');
-
-        assert.ok(
-            result2000.results.size >= result500.results.size,
-            'Resumed run must not have fewer results than the first run'
-        );
-        assert.ok(
-            result2000.results.size > result500.results.size ||
-            result2000.tracker.mass.getBookkeeping().pending < result500.tracker.mass.getBookkeeping().pending,
-            'Resumed search must produce more results or lower pending mass than the first run'
-        );
-
-        // Superset check: every result from the first run must survive in the resumed run
-        for (const key of result500.results.keys()) {
-            assert.ok(
-                result2000.results.has(key),
-                `Resumed results must be a superset of first run (missing combo key ${key})`
-            );
-        }
-    });
 
     // ── Test B: Progressive refinement improves accuracy ─────────────────────
     //

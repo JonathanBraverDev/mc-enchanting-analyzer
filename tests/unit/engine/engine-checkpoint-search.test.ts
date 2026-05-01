@@ -1,12 +1,9 @@
 /**
- * Tests for ProgressiveStatsAggregator sequential checkpoint search.
+ * Tests for EnchantEngine sequential checkpoint search.
  */
 import { describe, it, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { EngineFactory } from '#engine/factory.js';
-import { ProgressiveStatsAggregator } from '#engine/aggregation/ProgressiveStatsAggregator.js';
-import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
-import { SearchService } from '#engine/search/SearchService.js';
 import { CacheManager } from '#engine/cache/CacheManager.js';
 import { SummaryService } from '#services/SummaryService.js';
 import { DATA } from '#data/index.js';
@@ -18,34 +15,30 @@ const XP = 30;
 const MAT = TEST_DATA.MATERIALS.DIAMOND;
 const VERSION = TEST_DATA.VERSIONS.MODERN;
 
-describe('ProgressiveStatsAggregator: sequential checkpoint aggregation', () => {
+describe('EnchantEngine: sequential checkpoint aggregation', () => {
     const cacheConfig: CacheConfig = { comboOtherSize: 1000, comboBookSize: 1000, statsSize: 100, poolSize: 1000 };
-    const cache = new CacheManager(cacheConfig);
-    const distService = new ModifiedLevelDistributionService(1024);
-    const searchService = new SearchService(cache);
-    const aggregator = new ProgressiveStatsAggregator(cache, distService, searchService);
+    let cache: CacheManager;
+
+    function createEngine() {
+        cache = new CacheManager(cacheConfig);
+        return EngineFactory.create(DATA, VERSION, { cache });
+    }
 
     afterEach(() => {
         cache.clearAll();
     });
 
     it('sequential checkpoints produce same final result as single checkpoint search', async () => {
-        const engine = EngineFactory.create(DATA, VERSION, {
-            statAggregator: aggregator,
-            cache: cache,
-            distributionService: distService,
-            searchService: searchService
-        });
+        const engine = createEngine();
 
-        // Sequential
-        const singleResult = await aggregator.searchToCheckpoint(
-            engine.registry, CAT, XP, MAT,
+        const singleResult = await engine.searchToCheckpoint(
+            CAT, XP, MAT,
             { threshold: TEST_DATA.THRESHOLDS.PROB_MIN, resultsLimit: 10000 }
         );
         const singleStats = SummaryService.summarize(singleResult.combos, singleResult.tracker, engine.registry.indexToEnchant, 10000, singleResult.threshold);
 
-        const sequentialResult = await aggregator.searchSequentialCheckpoints(
-            engine.registry, CAT, XP, MAT,
+        const sequentialResult = await engine.searchSequentialCheckpoints(
+            CAT, XP, MAT,
             [
                 { threshold: 0.01,   limit: 500 },
                 { threshold: TEST_DATA.THRESHOLDS.PROB_MIN, limit: 10000 },
@@ -60,10 +53,7 @@ describe('ProgressiveStatsAggregator: sequential checkpoint aggregation', () => 
     });
 
     it('onCheckpointComplete fires for each checkpoint', async () => {
-        const engine = EngineFactory.create(DATA, VERSION, {
-            statAggregator: aggregator,
-            cache: cache
-        });
+        const engine = createEngine();
         const checkpoints = [
             { threshold: 0.01,   limit: 200 },
             { threshold: 0.001,  limit: 500 },
@@ -71,8 +61,8 @@ describe('ProgressiveStatsAggregator: sequential checkpoint aggregation', () => 
         ];
         const callbackIndices: number[] = [];
 
-        await aggregator.searchSequentialCheckpoints(
-            engine.registry, CAT, XP, MAT,
+        await engine.searchSequentialCheckpoints(
+            CAT, XP, MAT,
             checkpoints,
             (_result: SearchResult, checkpointIndex: number) => { callbackIndices.push(checkpointIndex); },
             {}
@@ -81,15 +71,45 @@ describe('ProgressiveStatsAggregator: sequential checkpoint aggregation', () => 
         assert.deepStrictEqual(callbackIndices, [0, 1, 2]);
     });
 
+    it('returns the last completed checkpoint if aborted before processing the next checkpoint', async () => {
+        const engine = createEngine();
+        const completed: SearchResult[] = [];
+        let armed = false;
+        let allowedOuterCheckpointCheck = false;
+        const signal = {
+            get aborted() {
+                if (!armed) return false;
+                if (!allowedOuterCheckpointCheck) {
+                    allowedOuterCheckpointCheck = true;
+                    return false;
+                }
+                return true;
+            }
+        } as AbortSignal;
+
+        const result = await engine.searchSequentialCheckpoints(
+            CAT, XP, MAT,
+            [
+                { threshold: 0.01, limit: 200 },
+                { threshold: 0.001, limit: 500 },
+            ],
+            (checkpointResult: SearchResult) => {
+                completed.push(checkpointResult);
+                armed = true;
+            },
+            { signal }
+        );
+
+        assert.strictEqual(completed.length, 1);
+        assert.strictEqual(result, completed[0]);
+    });
+
     it('each checkpoint improves on the previous (accuracy increases monotonically)', async () => {
-        const engine = EngineFactory.create(DATA, VERSION, {
-            statAggregator: aggregator,
-            cache: cache
-        });
+        const engine = createEngine();
         const accuracies: number[] = [];
 
-        await aggregator.searchSequentialCheckpoints(
-            engine.registry, TEST_DATA.ITEMS.BOOK, 30, TEST_DATA.MATERIALS.BOOK,
+        await engine.searchSequentialCheckpoints(
+            TEST_DATA.ITEMS.BOOK, 30, TEST_DATA.MATERIALS.BOOK,
             [
                 { threshold: 0.1,    limit: 100 },
                 { threshold: 0.01,   limit: 500 },

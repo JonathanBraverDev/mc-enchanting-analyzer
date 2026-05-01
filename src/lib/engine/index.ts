@@ -1,15 +1,13 @@
-import { CalculationStats, SearchState, RegistryState, SearchConfig, InternalSearchConfig, EngineInstrumentation, } from '#types/index.js';
-import { ProbUtils } from '#utils/index.js';
-import { getMaterialId, isCategoryAvailable, getEligibleListNumeric as getRegistryEligibleListNumeric } from '#core/registry.js';
+import { CalculationStats, SearchState, RegistryState, SearchConfig, EngineInstrumentation } from '#types/index.js';
+import { KeyUtils, ProbUtils } from '#utils/index.js';
+import { getCategoryId, getMaterialId, isCategoryAvailable, getEligibleListNumeric as getRegistryEligibleListNumeric } from '#core/registry.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import { MINECRAFT_RULES } from '#constants/minecraft.js';
 import { getSearchLimit } from '#engine/utils.js';
 import { CacheManager } from '#engine/cache/CacheManager.js';
-import { KeyService } from '#engine/cache/KeyService.js';
 import { SummaryService } from '#services/SummaryService.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { SearchService } from '#engine/search/SearchService.js';
-import { ProgressiveStatsAggregator } from '#engine/aggregation/ProgressiveStatsAggregator.js';
 import { ClueValidator } from '#core/clue.js';
 export { EngineFactory } from './factory.js';
 
@@ -25,10 +23,8 @@ export class EnchantEngine {
     constructor(
         registry: RegistryState,
         private readonly cache: CacheManager,
-        private readonly keyService: KeyService,
         private readonly distributionService: ModifiedLevelDistributionService,
-        private readonly searchService: SearchService,
-        private readonly statAggregator: ProgressiveStatsAggregator
+        private readonly searchService: SearchService
     ) {
         this._registry = registry;
     }
@@ -86,23 +82,21 @@ export class EnchantEngine {
         resultsLimit: number = ENGINE_LIMITS.MAX_RESULTS_SIZE,
         instrumentation?: EngineInstrumentation
     ): Promise<SearchState> {
-        const limit = getSearchLimit(cat, ProbUtils.toNumber(threshold), maxIterations);
-        const cacheKey = this.keyService.getPackedKey(this.registry, cat, modLevel, mat);
+        const cacheKey = this.getPackedKey(cat, modLevel, mat);
+        const cached = this.cache.getSearchState(cat, this.registry.version, cacheKey) as SearchState | undefined;
+        // This one-level API returns a frontier directly, so a complete cached frontier is already
+        // the full answer. Request-level searches still enter SearchService to preserve reporting.
+        if (cached && cached.threshold <= threshold) return cached;
 
-        const cached = this.cache.getSearchState(cat, this.registry.version, cacheKey);
-        if (cached && cached.threshold <= threshold) return cached as SearchState;
-
-        const result = await this.searchService.search(
-            this.registry, cat, modLevel, cached as SearchState, {
-                threshold,
-                limit,
-                resultsLimit,
-                instrumentation
-            }
-        );
-
-        this.cache.setSearchState(cat, this.registry.version, cacheKey, result);
-        return result;
+        return this.searchService.searchModifiedLevel(this.registry, cat, modLevel, {
+            mat,
+            useCache: true,
+            existingState: cached,
+            threshold,
+            limit: getSearchLimit(cat, ProbUtils.toNumber(threshold), maxIterations),
+            resultsLimit,
+            instrumentation
+        });
     }
 
     /**
@@ -119,17 +113,8 @@ export class EnchantEngine {
     ): Promise<import('#types/index.js').SearchResult> {
         this.validateRequest(cat, xp, mat, config);
 
-        const internalConfig: InternalSearchConfig = {
-            threshold: ProbUtils.toBigInt(checkpoints[checkpoints.length - 1]?.threshold ?? 0),
-            signal: config.signal,
-            onProgress: config.onProgress,
-            instrumentation: config.instrumentation,
-            timing: config.timing,
-            ...this.makeExtendedCacheConfig(cat, mat),
-        };
-
-        return this.statAggregator.searchSequentialCheckpoints(
-            this.registry, cat, xp, mat, checkpoints, onCheckpointComplete, internalConfig
+        return this.searchService.searchSequentialCheckpoints(
+            this.registry, cat, xp, mat, checkpoints, onCheckpointComplete, config
         );
     }
 
@@ -144,17 +129,7 @@ export class EnchantEngine {
     ): Promise<import('#types/index.js').SearchResult> {
         this.validateRequest(cat, xp, mat, config);
 
-        const internalConfig: InternalSearchConfig = {
-            threshold: config.threshold ?? ENGINE_LIMITS.DEFAULT_THRESHOLD,
-            signal: config.signal,
-            onProgress: config.onProgress,
-            maxIterations: config.maxIterations,
-            instrumentation: config.instrumentation,
-            timing: config.timing,
-            ...this.makeExtendedCacheConfig(cat, mat),
-        };
-
-        return this.statAggregator.searchToCheckpoint(this.registry, cat, xp, mat, internalConfig);
+        return this.searchService.searchToCheckpoint(this.registry, cat, xp, mat, config);
     }
 
     /**
@@ -183,32 +158,30 @@ export class EnchantEngine {
             maxIterations,
             summaryLimit = ENGINE_LIMITS.MAX_RESULTS_SUMMARY,
             resultsLimit = ENGINE_LIMITS.MAX_RESULTS_SIZE,
+            useCache,
             instrumentation,
             timing
         } = config;
 
         const packedClue = clue ? this.getPackedClue(cat, clue) : null;
 
-        const cacheKey = this.keyService.getStatsKey(this.registry, cat, xp, mat, packedClue);
+        const cacheKey = this.getStatsKey(cat, xp, mat, packedClue);
 
         const cachedStats = this.cache.getStats(this.registry.version, cacheKey);
         if (cachedStats && cachedStats.threshold <= threshold) return cachedStats;
 
-        const internalConfig: InternalSearchConfig = {
+        const searchConfig: SearchConfig = {
             threshold,
             signal,
             onProgress,
             maxIterations,
-            summaryLimit,
             resultsLimit,
+            useCache,
             instrumentation,
-            timing,
-            ...this.makeExtendedCacheConfig(cat, mat),
+            timing
         };
 
-        const finalResult = await this.statAggregator.searchToCheckpoint(
-            this.registry, cat, xp, mat, internalConfig
-        );
+        const finalResult = await this.searchService.searchToCheckpoint(this.registry, cat, xp, mat, searchConfig);
 
         const isBook = cat === "book";
         const finalStats = packedClue
@@ -238,28 +211,24 @@ export class EnchantEngine {
         return ClueValidator.validate(this.registry, cat, clue);
     }
 
-    /**
-     * Builds the extended cache accessor pair for InternalSearchConfig.
-     * Centralises the key derivation and book/combo routing that would
-     * otherwise be duplicated in every public calculation method.
-     */
-    private makeExtendedCacheConfig(cat: string, mat: string): Pick<InternalSearchConfig, 'getExtendedCache' | 'setExtendedCache' | 'getCacheMetrics'> {
-        return {
-            getExtendedCache: (ml: number) => {
-                const pk = this.keyService.getPackedKey(this.registry, cat, ml, mat);
-                return this.cache.getSearchState(cat, this.registry.version, pk) as SearchState;
-            },
-            setExtendedCache: (ml: number, state: SearchState) => {
-                const pk = this.keyService.getPackedKey(this.registry, cat, ml, mat);
-                this.cache.setSearchState(cat, this.registry.version, pk, state);
-            },
-            getCacheMetrics: () => ({
-                cacheNodes: this.cache.getTotalCachedNodes(),
-                cacheResults: this.cache.getTotalCachedResults()
-            })
-        };
+    private getPackedKey(cat: string, modLevel: number, mat: string): number {
+        const catId = getCategoryId(this.registry, cat);
+        const matId = getMaterialId(this.registry, mat);
+
+        return KeyUtils.getPackedKey(catId, matId, modLevel);
     }
 
+    private getStatsKey(cat: string, xp: number, mat: string, packedClue: number | null = null): number {
+        const catId = getCategoryId(this.registry, cat);
+        const matId = getMaterialId(this.registry, mat);
+
+        let key = KeyUtils.getStatsKey(catId, matId, xp);
+        if (packedClue !== null) {
+            // Encode the clue into the high bits above the cat/material/level fields.
+            key |= (packedClue << 18);
+        }
+        return key;
+    }
 
     private validateRequest(cat: string, xp: number, mat: string, config: SearchConfig): void {
 

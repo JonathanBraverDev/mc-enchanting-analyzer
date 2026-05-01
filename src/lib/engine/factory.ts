@@ -1,20 +1,16 @@
 import { EnchantmentData, RegistryState } from '#types/index.js';
 import { EnchantEngine } from '#engine/index.js';
 import { CacheManager } from '#engine/cache/CacheManager.js';
-import { KeyService } from '#engine/cache/KeyService.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { SearchService } from '#engine/search/SearchService.js';
-import { ProgressiveStatsAggregator } from '#engine/aggregation/ProgressiveStatsAggregator.js';
 import { CACHE_CONFIG } from '#constants/engine.js';
 import { RegistryFactory } from '#core/factory.js';
 
 export interface EngineDependencies {
     registry: RegistryState;
     cache: CacheManager;
-    keyService: KeyService;
     distributionService: ModifiedLevelDistributionService;
     searchService: SearchService;
-    statAggregator: ProgressiveStatsAggregator;
 }
 
 /**
@@ -42,18 +38,14 @@ export class EngineFactory {
             poolSize: CACHE_CONFIG.POOL_SIZE
         });
 
-        const keyService = overrides.keyService || new KeyService();
         const distributionService = overrides.distributionService || new ModifiedLevelDistributionService(1024);
-        const searchService = overrides.searchService || new SearchService(cache);
-        const statAggregator = overrides.statAggregator || new ProgressiveStatsAggregator(cache, distributionService, searchService);
+        const searchService = overrides.searchService || new SearchService(cache, distributionService);
 
         const engine = new EnchantEngine(
             registry,
             cache,
-            keyService,
             distributionService,
-            searchService,
-            statAggregator
+            searchService
         );
 
         if (Object.keys(overrides).length === 0) {

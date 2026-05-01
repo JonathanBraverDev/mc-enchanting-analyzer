@@ -2,7 +2,7 @@ import { SEARCH_CONSTANTS } from '#constants/engine.js';
 import { ProbUtils } from '#utils/index.js';
 
 /**
- * Shared threshold-to-limit lookup used by both EnchantEngine and ProgressiveStatsAggregator.
+ * Shared threshold-to-limit lookup used by EnchantEngine search paths.
  * Determines the iteration limit based on the item category and target threshold.
  */
 export function getSearchLimit(cat: string, threshold: number | bigint, maxIterations?: number): number {
