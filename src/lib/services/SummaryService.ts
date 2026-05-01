@@ -5,11 +5,11 @@ import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
 import { ClueAnalysisService } from '#services/ClueAnalysisService.js';
 
 /**
- * Service for summarizing raw engine results into a standard JSON format.
+ * Service for summarizing search results into a standard JSON format.
  */
 export class SummaryService {
     /**
-     * Summarizes raw engine results into a CalculationStats object.
+     * Summarizes search results into a CalculationStats object.
      */
     public static summarize(
         combos: Map<PackedCombo, bigint>,
@@ -84,7 +84,7 @@ export class SummaryService {
     /**
      * Summarizes statistics under the condition that a specific clue is shown.
      *
-     * @param rawCombos Raw combination distribution.
+     * @param combos Combination distribution before clue conditioning.
      * @param tracker Original search manager (for metadata).
      * @param indexToEnchant Registry mapping.
      * @param targetClueId The observed clue ID.
@@ -92,7 +92,7 @@ export class SummaryService {
      * @returns Conditioned calculation statistics.
      */
     public static summarizeConditioned(
-        rawCombos: Map<PackedCombo, bigint>,
+        combos: Map<PackedCombo, bigint>,
         tracker: SearchStateTracker,
         indexToEnchant: number[],
         targetClueId: number,
@@ -101,10 +101,10 @@ export class SummaryService {
         isBook: boolean = false
     ): CalculationStats {
         // 1. Get honest baseline stats (invariants, absolute accuracy)
-        const stats = SummaryService.summarize(rawCombos, tracker, indexToEnchant, 0, 0, frontiers, isBook);
+        const stats = SummaryService.summarize(combos, tracker, indexToEnchant, 0, 0, frontiers, isBook);
 
         // 2. Perform Bayesian conditioning
-        const conditioned = ClueAnalysisService.conditionOnClue(rawCombos, targetClueId, indexToEnchant);
+        const conditioned = ClueAnalysisService.conditionOnClue(combos, targetClueId, indexToEnchant);
 
         // 3. Update top-level accuracy and inject absolute clue mass
         stats.accounting.clueKnownSpace = ProbUtils.toNumber(conditioned.clueKnownSpace);

@@ -56,12 +56,12 @@ export class ClueAnalysisService {
      * Re-normalizes statistics based on a specific displayed clue.
      * Implements Bayesian conditioning: P(Combo | Clue) = P(Clue | Combo) * P(Combo) / P(Clue).
      *
-     * @param rawCombos Raw combination distribution.
+     * @param combos Combination distribution before clue conditioning.
      * @param targetClueId The packed ID (id << 8 | rank) of the observed clue.
      * @param indexToEnchant Registry mapping.
      */
     public static conditionOnClue(
-        rawCombos: Map<PackedCombo, bigint>,
+        combos: Map<PackedCombo, bigint>,
         targetClueId: number,
         indexToEnchant: number[],
         frontiers: { heap: import('../utils/collections/SearchHeap.js').SearchHeap, scale: bigint }[] = []
@@ -72,7 +72,7 @@ export class ClueAnalysisService {
         countMass: Map<number, bigint>,
         clueKnownSpace: bigint
     } {
-        const clueMasses = this.calculateClueMass(rawCombos, indexToEnchant, frontiers);
+        const clueMasses = this.calculateClueMass(combos, indexToEnchant, frontiers);
         const pClue = clueMasses.get(targetClueId) ?? 0n;
 
         const conditionedCombos = new Map<PackedCombo, bigint>();
@@ -86,7 +86,7 @@ export class ClueAnalysisService {
 
         let totalMass = 0n;
 
-        for (const [packed, pCombo] of rawCombos.entries()) {
+        for (const [packed, pCombo] of combos.entries()) {
             totalMass += this.processConditionedNode(packed, pCombo, targetClueId, pClue, indexToEnchant, conditionedCombos, anyMass, rankMass, countMass);
         }
 

@@ -4,7 +4,7 @@ import { SearchHeap } from '#utils/collections/SearchHeap.js';
 import { MassAccounting } from '#types/mass.js';
 
 /**
- * Raw calculation statistics from the search engine.
+ * Presented calculation statistics from the search engine.
  */
 export interface CalculationStats {
   /** Map of enchantment rank IDs to their total cumulative probability. Key is (enchantId << 8 | rank). */
@@ -214,16 +214,6 @@ export interface SearchConfig {
     useCache?: boolean | undefined;
     instrumentation?: EngineInstrumentation | undefined;
     timing?: SearchTiming | undefined;
-}
-
-/**
- * Internal configuration used at the engine→aggregator boundary.
- * Extends SearchConfig with cache accessors that are internal implementation details.
- */
-export interface InternalSearchConfig extends SearchConfig {
-    getExtendedCache?: ((ml: number) => SearchState | undefined) | undefined;
-    setExtendedCache?: ((ml: number, frontier: SearchState) => void) | undefined;
-    getCacheMetrics?: (() => { cacheNodes: number; cacheResults: number }) | undefined;
 }
 
 /**

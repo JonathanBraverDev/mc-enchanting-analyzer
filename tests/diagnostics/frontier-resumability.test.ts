@@ -1,8 +1,8 @@
 /**
  * Integration tests for frontier resumability and cache behavior.
  *
- * NOTE (Test B): limit is no longer included in the combo cache key
- * (KeyUtils.getPackedKey), so cross-tier combo cache sharing is possible within a
+ * NOTE (Test B): limit is no longer included in the frontier cache key
+ * (KeyUtils.getPackedKey), so cross-tier frontier cache sharing is possible within a
  * single engine. However, to isolate the threshold-driven quality difference cleanly,
  * we use two separate engines so the coarse stats-cache result does not short-circuit
  * the deep run.
@@ -24,8 +24,8 @@ describe('Frontier Resumability & Cache Behavior', () => {
     // from short-circuiting the deep run. The test validates that a tighter threshold
     // (0.0001) drives genuinely lower pending mass than a coarser one (0.01) for the
     // same input, independent of cache sharing.
-    // NOTE: limit is no longer in the combo cache key (see KeyUtils.getPackedKey),
-    // so cross-tier combo cache sharing is now correct; this test intentionally avoids
+    // NOTE: limit is no longer in the frontier cache key (see KeyUtils.getPackedKey),
+    // so cross-tier frontier cache sharing is now correct; this test intentionally avoids
     // it to keep the assertion clean.
 
     it('progressive refinement improves accuracy (decreases pending mass)', async () => {
@@ -69,26 +69,26 @@ describe('Frontier Resumability & Cache Behavior', () => {
             'Second getFullStats call with same params should return the exact same cached object');
     });
 
-    // ── Test E: Cross-tier resumption through combo cache ───────────────────
+    // ── Test E: Cross-tier resumption through frontier cache ────────────────
     //
-    // Same engine: coarse run populates comboCache, then only statsCache is cleared.
+    // Same engine: coarse run populates the frontier cache, then only statsCache is cleared.
     // Deep run must resume from the cached coarse frontiers (not start from scratch),
     // producing strictly higher accuracy than the coarse run.
 
-    it('cross-tier combo cache: deep run resumes from coarse frontier', async () => {
+    it('cross-tier frontier cache: deep run resumes from coarse frontier', async () => {
         EngineFactory.clearCaches();
         const engine = EngineFactory.create(DATA, '1.21');
 
-        // Coarse pass: populates both statsCache and comboCache.
+        // Coarse pass: populates both statsCache and frontier cache.
         const coarseResult = await engine.calculate('sword', 30, 'diamond', {
             threshold: 0.01,
             resultsLimit: 1000
         });
 
-        // Clear only the statsCache; comboCache retains the coarse frontiers.
+        // Clear only the statsCache; frontier cache retains the coarse frontiers.
         engine.resetStatsCache();
 
-        // Deep pass: statsCache miss forces recomputation, but comboCache hit
+        // Deep pass: statsCache miss forces recomputation, but frontier cache hit
         // lets each modLevel search resume from the already-explored coarse frontier.
         const deepResult = await engine.calculate('sword', 30, 'diamond', {
             threshold: 0.0001,

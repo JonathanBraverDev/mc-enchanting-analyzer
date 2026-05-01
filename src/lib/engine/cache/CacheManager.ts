@@ -8,15 +8,15 @@ import { CalculationStats, SearchFrontier, PackedEnchant, CacheStats, CacheConfi
 export class CacheManager {
     private readonly dist = new Map<string, { [level: number]: bigint }>();
     private readonly pool: LRUCache<string, PackedEnchant[]>;
-    private readonly combo: LRUCache<string, SearchFrontier>;
-    private readonly book: LRUCache<string, SearchFrontier>;
+    private readonly itemFrontiers: LRUCache<string, SearchFrontier>;
+    private readonly bookFrontiers: LRUCache<string, SearchFrontier>;
     private readonly stats: LRUCache<string, CalculationStats>;
 
     private metrics = {
         dist: { hits: 0, misses: 0 },
         pool: { hits: 0, misses: 0 },
-        combo: { hits: 0, misses: 0 },
-        book: { hits: 0, misses: 0 },
+        itemFrontiers: { hits: 0, misses: 0 },
+        bookFrontiers: { hits: 0, misses: 0 },
         stats: { hits: 0, misses: 0 }
     };
 
@@ -25,8 +25,8 @@ export class CacheManager {
      */
     constructor(config: CacheConfig) {
         this.pool = new LRUCache<string, PackedEnchant[]>(config.poolSize);
-        this.combo = new LRUCache<string, SearchFrontier>(config.comboOtherSize);
-        this.book = new LRUCache<string, SearchFrontier>(config.comboBookSize);
+        this.itemFrontiers = new LRUCache<string, SearchFrontier>(config.comboOtherSize);
+        this.bookFrontiers = new LRUCache<string, SearchFrontier>(config.comboBookSize);
         this.stats = new LRUCache<string, CalculationStats>(config.statsSize);
     }
 
@@ -50,35 +50,35 @@ export class CacheManager {
         this.pool.set(`${version}:${key}`, val);
     }
 
-    // --- Combo / Frontier Cache ---
-    public getCombo(version: string, key: number): SearchFrontier | undefined {
-        const val = this.combo.get(`${version}:${key}`);
-        if (val) this.metrics.combo.hits++; else this.metrics.combo.misses++;
+    // --- Frontier Cache ---
+    private getItemFrontier(version: string, key: number): SearchFrontier | undefined {
+        const val = this.itemFrontiers.get(`${version}:${key}`);
+        if (val) this.metrics.itemFrontiers.hits++; else this.metrics.itemFrontiers.misses++;
         return val;
     }
-    public setCombo(version: string, key: number, val: SearchFrontier): void {
-        this.combo.set(`${version}:${key}`, val);
+    private setItemFrontier(version: string, key: number, val: SearchFrontier): void {
+        this.itemFrontiers.set(`${version}:${key}`, val);
     }
 
-    public getBook(version: string, key: number): SearchFrontier | undefined {
-        const val = this.book.get(`${version}:${key}`);
-        if (val) this.metrics.book.hits++; else this.metrics.book.misses++;
+    private getBookFrontier(version: string, key: number): SearchFrontier | undefined {
+        const val = this.bookFrontiers.get(`${version}:${key}`);
+        if (val) this.metrics.bookFrontiers.hits++; else this.metrics.bookFrontiers.misses++;
         return val;
     }
-    public setBook(version: string, key: number, val: SearchFrontier): void {
-        this.book.set(`${version}:${key}`, val);
+    private setBookFrontier(version: string, key: number, val: SearchFrontier): void {
+        this.bookFrontiers.set(`${version}:${key}`, val);
     }
 
     /**
-     * Unified accessor: routes to the book or combo frontier cache based on category.
+     * Unified accessor: routes to the book or item frontier cache based on category.
      * Centralizes the `cat === "book"` branch that would otherwise be duplicated at call sites.
      */
     public getSearchState(cat: string, version: string, key: number): SearchFrontier | undefined {
-        return cat === 'book' ? this.getBook(version, key) : this.getCombo(version, key);
+        return cat === 'book' ? this.getBookFrontier(version, key) : this.getItemFrontier(version, key);
     }
     public setSearchState(cat: string, version: string, key: number, val: SearchFrontier): void {
-        if (cat === 'book') this.setBook(version, key, val);
-        else this.setCombo(version, key, val);
+        if (cat === 'book') this.setBookFrontier(version, key, val);
+        else this.setItemFrontier(version, key, val);
     }
 
     // --- Stats Cache ---
@@ -95,8 +95,8 @@ export class CacheManager {
     public clearAll(): void {
         this.dist.clear();
         this.pool.clear();
-        this.combo.clear();
-        this.book.clear();
+        this.itemFrontiers.clear();
+        this.bookFrontiers.clear();
         this.stats.clear();
         this.resetMetrics();
     }
@@ -110,8 +110,8 @@ export class CacheManager {
     public resetMetrics(): void {
         this.metrics.dist = { hits: 0, misses: 0 };
         this.metrics.pool = { hits: 0, misses: 0 };
-        this.metrics.combo = { hits: 0, misses: 0 };
-        this.metrics.book = { hits: 0, misses: 0 };
+        this.metrics.itemFrontiers = { hits: 0, misses: 0 };
+        this.metrics.bookFrontiers = { hits: 0, misses: 0 };
         this.metrics.stats = { hits: 0, misses: 0 };
     }
 
@@ -119,39 +119,39 @@ export class CacheManager {
         return {
             dist: { ...this.metrics.dist },
             pool: { ...this.metrics.pool },
-            combo: { ...this.metrics.combo },
-            book: { ...this.metrics.book },
+            itemFrontiers: { ...this.metrics.itemFrontiers },
+            bookFrontiers: { ...this.metrics.bookFrontiers },
             stats: { ...this.metrics.stats }
         };
     }
 
     /**
-     * For internal engine metrics, merges combo and book caches into 'frontierCache'.
+     * For internal engine metrics, merges item and book frontier caches into 'frontierCache'.
      */
     public getEngineMetrics(): { distCache: CacheStats; poolCache: CacheStats; frontierCache: CacheStats } {
         return {
             distCache: { ...this.metrics.dist },
             poolCache: { ...this.metrics.pool },
             frontierCache: {
-                hits: this.metrics.combo.hits + this.metrics.book.hits,
-                misses: this.metrics.combo.misses + this.metrics.book.misses
+                hits: this.metrics.itemFrontiers.hits + this.metrics.bookFrontiers.hits,
+                misses: this.metrics.itemFrontiers.misses + this.metrics.bookFrontiers.misses
             }
         };
     }
 
-    /** Returns total number of nodes cached in both combo and book frontiers. */
+    /** Returns total number of nodes cached in item and book frontiers. */
     public getTotalCachedNodes(): number {
         let count = 0;
-        for (const f of this.combo.values()) count += f.queue.size();
-        for (const f of this.book.values()) count += f.queue.size();
+        for (const f of this.itemFrontiers.values()) count += f.queue.size();
+        for (const f of this.bookFrontiers.values()) count += f.queue.size();
         return count;
     }
 
-    /** Returns total number of results cached in both combo and book frontiers. */
+    /** Returns total number of results cached in item and book frontiers. */
     public getTotalCachedResults(): number {
         let count = 0;
-        for (const f of this.combo.values()) count += f.results.size;
-        for (const f of this.book.values()) count += f.results.size;
+        for (const f of this.itemFrontiers.values()) count += f.results.size;
+        for (const f of this.bookFrontiers.values()) count += f.results.size;
         return count;
     }
 }

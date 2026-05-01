@@ -4,7 +4,7 @@ import type { EnchantInsights, ResultSortMode, CalculationStats, RegistryState, 
 import { getEnchantName, getFullEnchantName } from '#core/registry.js';
 
 /**
- * Service for converting raw statistics into human-readable insights.
+ * Service for converting calculation statistics into human-readable insights.
  */
 export class HumanizationService {
     /**
@@ -43,15 +43,15 @@ export class HumanizationService {
             }
         }
 
-        const rawCombos: Record<string, number> = {};
+        const comboShares: Record<string, number> = {};
         for (const [packed, prob] of Object.entries(stats.combos)) {
             const ids = ComboUtils.unpack(parseInt(packed, 16) as PackedCombo, resolver.indexToEnchant);
             const comboKey = ids.map(n => getFullEnchantName(resolver, n)).join("+");
-            rawCombos[comboKey] = prob as number;
+            comboShares[comboKey] = prob as number;
         }
 
         // Apply sorting
-        const entries = Object.entries(rawCombos);
+        const entries = Object.entries(comboShares);
         if (sortMode === 'prob') {
             entries.sort((a, b) => b[1] - a[1]);
         } else if (sortMode === 'count') {
