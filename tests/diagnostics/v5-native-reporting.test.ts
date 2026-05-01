@@ -3,7 +3,7 @@ import assert from 'node:assert';
 import { EngineFactory } from '#engine/factory.js';
 import { DATA } from '#data/index.js';
 import { SnapshotService } from '#services/SnapshotService.js';
-import { AggregationResult, EngineInstrumentation } from '#types/index.js';
+import { SearchResult, EngineInstrumentation } from '#types/index.js';
 
 const EXPLORED_MASS_TARGETS = [0.1, 0.25, 0.5, 0.75, 0.8, 0.85, 0.9, 0.95, 0.99, 0.999];
 
@@ -45,14 +45,14 @@ test('V5 native reporting can reproduce the obsolete matrix runner payload', asy
         snapshotComboCount: number;
     }> = [];
 
-    await engine.calculateTiered(
+    await engine.searchSequentialCheckpoints(
         input.category,
         input.xpLevel,
         input.material,
         [
             { threshold: 0.0001, limit: 50_000 }
         ],
-        (result: AggregationResult) => {
+        (result: SearchResult) => {
             const accounting = result.tracker.mass.toPublic();
             const snapshot = SnapshotService.create(
                 engine.registry,

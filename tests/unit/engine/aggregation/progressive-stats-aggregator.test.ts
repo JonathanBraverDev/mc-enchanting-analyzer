@@ -1,5 +1,5 @@
 /**
- * Tests for ProgressiveStatsAggregator.getFullStatsTiered — tiered search depth aggregation.
+ * Tests for ProgressiveStatsAggregator sequential checkpoint search.
  */
 import { describe, it, afterEach } from 'node:test';
 import assert from 'node:assert';
@@ -11,14 +11,14 @@ import { CacheManager } from '#engine/cache/CacheManager.js';
 import { SummaryService } from '#services/SummaryService.js';
 import { DATA } from '#data/index.js';
 import { TEST_DATA } from '#tests/infra/test-data.js';
-import { CacheConfig, AggregationResult } from '#types/index.js';
+import { CacheConfig, SearchResult } from '#types/index.js';
 
 const CAT = TEST_DATA.ITEMS.SWORD;
 const XP = 30;
 const MAT = TEST_DATA.MATERIALS.DIAMOND;
 const VERSION = TEST_DATA.VERSIONS.MODERN;
 
-describe('ProgressiveStatsAggregator: tiered aggregation', () => {
+describe('ProgressiveStatsAggregator: sequential checkpoint aggregation', () => {
     const cacheConfig: CacheConfig = { comboOtherSize: 1000, comboBookSize: 1000, statsSize: 100, poolSize: 1000 };
     const cache = new CacheManager(cacheConfig);
     const distService = new ModifiedLevelDistributionService(1024);
@@ -29,7 +29,7 @@ describe('ProgressiveStatsAggregator: tiered aggregation', () => {
         cache.clearAll();
     });
 
-    it('tiered produces same final result as sequential calculate calls', async () => {
+    it('sequential checkpoints produce same final result as single checkpoint search', async () => {
         const engine = EngineFactory.create(DATA, VERSION, {
             statAggregator: aggregator,
             cache: cache,
@@ -38,14 +38,13 @@ describe('ProgressiveStatsAggregator: tiered aggregation', () => {
         });
 
         // Sequential
-        const seqRaw = await aggregator.calculate(
+        const singleResult = await aggregator.searchToCheckpoint(
             engine.registry, CAT, XP, MAT,
             { threshold: TEST_DATA.THRESHOLDS.PROB_MIN, resultsLimit: 10000 }
         );
-        const seqStats = SummaryService.summarize(seqRaw.combos, seqRaw.tracker, engine.registry.indexToEnchant, 10000, seqRaw.threshold);
+        const singleStats = SummaryService.summarize(singleResult.combos, singleResult.tracker, engine.registry.indexToEnchant, 10000, singleResult.threshold);
 
-        // Tiered
-        const tieredRaw = await aggregator.calculateTiered(
+        const sequentialResult = await aggregator.searchSequentialCheckpoints(
             engine.registry, CAT, XP, MAT,
             [
                 { threshold: 0.01,   limit: 500 },
@@ -54,50 +53,50 @@ describe('ProgressiveStatsAggregator: tiered aggregation', () => {
             () => {},
             { threshold: TEST_DATA.THRESHOLDS.PROB_MIN, resultsLimit: 10000 }
         );
-        const tieredStats = SummaryService.summarize(tieredRaw.combos, tieredRaw.tracker, engine.registry.indexToEnchant, 10000, tieredRaw.threshold);
+        const sequentialStats = SummaryService.summarize(sequentialResult.combos, sequentialResult.tracker, engine.registry.indexToEnchant, 10000, sequentialResult.threshold);
 
-        const accuracyDiff = Math.abs(tieredStats.accuracy - seqStats.accuracy);
+        const accuracyDiff = Math.abs(sequentialStats.accuracy - singleStats.accuracy);
         assert.ok(accuracyDiff < 0.001, `Accuracy diff too high: ${accuracyDiff}`);
     });
 
-    it('onTierComplete fires for each tier', async () => {
+    it('onCheckpointComplete fires for each checkpoint', async () => {
         const engine = EngineFactory.create(DATA, VERSION, {
             statAggregator: aggregator,
             cache: cache
         });
-        const tiers = [
+        const checkpoints = [
             { threshold: 0.01,   limit: 200 },
             { threshold: 0.001,  limit: 500 },
             { threshold: TEST_DATA.THRESHOLDS.PROB_MIN, limit: 2000 },
         ];
         const callbackIndices: number[] = [];
 
-        await aggregator.calculateTiered(
+        await aggregator.searchSequentialCheckpoints(
             engine.registry, CAT, XP, MAT,
-            tiers,
-            (_raw: AggregationResult, tierIndex: number) => { callbackIndices.push(tierIndex); },
+            checkpoints,
+            (_result: SearchResult, checkpointIndex: number) => { callbackIndices.push(checkpointIndex); },
             {}
         );
 
         assert.deepStrictEqual(callbackIndices, [0, 1, 2]);
     });
 
-    it('each tier improves on the previous (accuracy increases monotonically)', async () => {
+    it('each checkpoint improves on the previous (accuracy increases monotonically)', async () => {
         const engine = EngineFactory.create(DATA, VERSION, {
             statAggregator: aggregator,
             cache: cache
         });
         const accuracies: number[] = [];
 
-        await aggregator.calculateTiered(
+        await aggregator.searchSequentialCheckpoints(
             engine.registry, TEST_DATA.ITEMS.BOOK, 30, TEST_DATA.MATERIALS.BOOK,
             [
                 { threshold: 0.1,    limit: 100 },
                 { threshold: 0.01,   limit: 500 },
                 { threshold: 0.001,  limit: 2000 },
             ],
-            (raw: AggregationResult) => {
-                accuracies.push(raw.tracker.mass.toPublic().resolved);
+            (result: SearchResult) => {
+                accuracies.push(result.tracker.mass.toPublic().resolved);
             },
             {}
         );
@@ -144,7 +143,7 @@ describe('EnchantEngine.calculateProgressive', () => {
     it('best intermediate result survives for future calls', async () => {
         const engine = EngineFactory.create(DATA, VERSION);
         engine.resetCaches();
-        const tierAccuracies: number[] = [];
+        const checkpointAccuracies: number[] = [];
 
         await engine.calculateProgressive(
             CAT, XP, MAT,
@@ -153,11 +152,11 @@ describe('EnchantEngine.calculateProgressive', () => {
                 { threshold: 0.01,   limit: 500 },
                 { threshold: TEST_DATA.THRESHOLDS.PROB_MIN, limit: 10000 },
             ],
-            (stats) => { tierAccuracies.push(stats.accuracy); }
+            (stats) => { checkpointAccuracies.push(stats.accuracy); }
         );
 
-        assert.strictEqual(tierAccuracies.length, 3);
-        const ultraAccuracy = tierAccuracies[2];
+        assert.strictEqual(checkpointAccuracies.length, 3);
+        const ultraAccuracy = checkpointAccuracies[2];
         const futureStats = await engine.calculate(CAT, XP, MAT, { threshold: TEST_DATA.THRESHOLDS.PROB_MIN });
         assert.strictEqual(futureStats.accuracy, ultraAccuracy);
     });

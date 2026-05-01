@@ -1,4 +1,4 @@
-import { TopInputSignature, BaseInputSignature, RefinementLevelName } from './protocol.js';
+import { TopInputSignature, BaseInputSignature, RefinementLevelName } from '#lib/types/protocol.js';
 
 export type SnapshotType = 'top' | 'chart-cell';
 

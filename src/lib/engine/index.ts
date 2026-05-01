@@ -106,23 +106,23 @@ export class EnchantEngine {
     }
 
     /**
-     * Aggregates statistics using a tiered progressive search.
-     * Fires a callback after each tier completes, allowing for responsive UI updates
+     * Aggregates statistics using a sequential checkpoint search.
+     * Fires a callback after each checkpoint completes, allowing for responsive UI updates
      * without waiting for the finest precision.
      *
      * @param cat The item category.
      * @param xp The base XP level.
      * @param mat The item material.
-     * @param tiers Array of search depths (thresholds and iteration limits).
-     * @param onTierComplete Callback fired when a tier finishing aggregating.
+     * @param checkpoints Array of search depths (thresholds and iteration limits).
+     * @param onCheckpointComplete Callback fired when a checkpoint finishes aggregating.
      * @param config Optional base configuration.
      */
     public async calculateProgressive(
         cat: string,
         xp: number,
         mat: string,
-        tiers: Array<{ threshold: number; limit: number }>,
-        onTierComplete: (stats: CalculationStats, tierIndex: number) => void,
+        checkpoints: Array<{ threshold: number; limit: number }>,
+        onCheckpointComplete: (stats: CalculationStats, checkpointIndex: number) => void,
         config?: Partial<SearchConfig>
     ): Promise<CalculationStats> {
         this.validateRequest(cat, xp, mat, config ?? {});
@@ -144,8 +144,8 @@ export class EnchantEngine {
         const cacheKey = this.keyService.getStatsKey(this.registry, cat, xp, mat, packedClue);
 
         const cachedStats = this.cache.getStats(this.registry.version, cacheKey);
-        const lastTier = tiers[tiers.length - 1];
-        const finestThreshold = lastTier?.threshold ?? Infinity;
+        const finalCheckpoint = checkpoints[checkpoints.length - 1];
+        const finestThreshold = finalCheckpoint?.threshold ?? Infinity;
         if (cachedStats && cachedStats.threshold <= finestThreshold) return cachedStats;
 
         const internalConfig: InternalSearchConfig = {
@@ -163,37 +163,37 @@ export class EnchantEngine {
             })
         };
 
-        const wrappedOnTierComplete = (raw: any, tierIndex: number) => {
+        const wrappedOnCheckpointComplete = (result: any, checkpointIndex: number) => {
             const stats = packedClue
-                ? SummaryService.summarizeConditioned(raw.combos, raw.tracker, this.registry.indexToEnchant, packedClue, summaryLimit)
-                : SummaryService.summarize(raw.combos, raw.tracker, this.registry.indexToEnchant, summaryLimit, raw.threshold);
+                ? SummaryService.summarizeConditioned(result.combos, result.tracker, this.registry.indexToEnchant, packedClue, summaryLimit)
+                : SummaryService.summarize(result.combos, result.tracker, this.registry.indexToEnchant, summaryLimit, result.threshold);
 
-            stats.instrumentation = raw.instrumentation;
-            stats.timing = raw.timing;
+            stats.instrumentation = result.instrumentation;
+            stats.timing = result.timing;
 
-            onTierComplete(stats, tierIndex);
+            onCheckpointComplete(stats, checkpointIndex);
             const currentCached = this.cache.getStats(this.registry.version, cacheKey);
             if (!currentCached || stats.accuracy > currentCached.accuracy) {
                 this.cache.setStats(this.registry.version, cacheKey, stats);
             }
         };
 
-        const finalRaw = await this.statAggregator.calculateTiered(
-            this.registry, cat, xp, mat, tiers, wrappedOnTierComplete, internalConfig
+        const finalResult = await this.statAggregator.searchSequentialCheckpoints(
+            this.registry, cat, xp, mat, checkpoints, wrappedOnCheckpointComplete, internalConfig
         );
 
         const finalStats = packedClue
-            ? SummaryService.summarizeConditioned(finalRaw.combos, finalRaw.tracker, this.registry.indexToEnchant, packedClue, summaryLimit)
+            ? SummaryService.summarizeConditioned(finalResult.combos, finalResult.tracker, this.registry.indexToEnchant, packedClue, summaryLimit)
             : SummaryService.summarize(
-                finalRaw.combos,
-                finalRaw.tracker,
+                finalResult.combos,
+                finalResult.tracker,
                 this.registry.indexToEnchant,
                 summaryLimit,
-                finalRaw.threshold
+                finalResult.threshold
             );
 
-        finalStats.instrumentation = finalRaw.instrumentation;
-        finalStats.timing = finalRaw.timing;
+        finalStats.instrumentation = finalResult.instrumentation;
+        finalStats.timing = finalResult.timing;
 
         const currentCached = this.cache.getStats(this.registry.version, cacheKey);
         if (!currentCached || finalStats.accuracy > currentCached.accuracy) {
@@ -204,21 +204,21 @@ export class EnchantEngine {
     }
 
     /**
-     * Tiered version of calculateTop for v5 workers.
-     * Streams raw aggregation results via callback for each tier.
+     * Sequential checkpoint version of searchToCheckpoint for v5 workers.
+     * Streams search results via callback for each checkpoint.
      */
-    public async calculateTiered(
+    public async searchSequentialCheckpoints(
         cat: string,
         xp: number,
         mat: string,
-        tiers: Array<{ threshold: number; limit: number }>,
-        onTierComplete: (result: import('#types/index.js').AggregationResult, tierIndex: number) => void,
+        checkpoints: Array<{ threshold: number; limit: number }>,
+        onCheckpointComplete: (result: import('#types/index.js').SearchResult, checkpointIndex: number) => void,
         config: SearchConfig = {}
-    ): Promise<import('#types/index.js').AggregationResult> {
+    ): Promise<import('#types/index.js').SearchResult> {
         this.validateRequest(cat, xp, mat, config);
 
         const internalConfig: InternalSearchConfig = {
-            threshold: ProbUtils.toBigInt(tiers[tiers.length - 1]?.threshold ?? 0),
+            threshold: ProbUtils.toBigInt(checkpoints[checkpoints.length - 1]?.threshold ?? 0),
             signal: config.signal,
             onProgress: config.onProgress,
             instrumentation: config.instrumentation,
@@ -226,20 +226,20 @@ export class EnchantEngine {
             ...this.makeExtendedCacheConfig(cat, mat),
         };
 
-        return this.statAggregator.calculateTiered(
-            this.registry, cat, xp, mat, tiers, onTierComplete, internalConfig
+        return this.statAggregator.searchSequentialCheckpoints(
+            this.registry, cat, xp, mat, checkpoints, onCheckpointComplete, internalConfig
         );
     }
 
     /**
-     * Internal method for v5 workers to get raw aggregation results.
+     * Internal method for v5 workers to get search results.
      */
-    public async calculateTop(
+    public async searchToCheckpoint(
         cat: string,
         xp: number,
         mat: string,
         config: SearchConfig = {}
-    ): Promise<import('#types/index.js').AggregationResult> {
+    ): Promise<import('#types/index.js').SearchResult> {
         this.validateRequest(cat, xp, mat, config);
 
         const internalConfig: InternalSearchConfig = {
@@ -252,7 +252,7 @@ export class EnchantEngine {
             ...this.makeExtendedCacheConfig(cat, mat),
         };
 
-        return this.statAggregator.calculate(this.registry, cat, xp, mat, internalConfig);
+        return this.statAggregator.searchToCheckpoint(this.registry, cat, xp, mat, internalConfig);
     }
 
     /**
@@ -304,25 +304,25 @@ export class EnchantEngine {
             ...this.makeExtendedCacheConfig(cat, mat),
         };
 
-        const finalRaw = await this.statAggregator.calculate(
+        const finalResult = await this.statAggregator.searchToCheckpoint(
             this.registry, cat, xp, mat, internalConfig
         );
 
         const isBook = cat === "book";
         const finalStats = packedClue
-            ? SummaryService.summarizeConditioned(finalRaw.combos, finalRaw.tracker, this.registry.indexToEnchant, packedClue, summaryLimit, finalRaw.frontiers, isBook)
+            ? SummaryService.summarizeConditioned(finalResult.combos, finalResult.tracker, this.registry.indexToEnchant, packedClue, summaryLimit, finalResult.frontiers, isBook)
             : SummaryService.summarize(
-                finalRaw.combos,
-                finalRaw.tracker,
+                finalResult.combos,
+                finalResult.tracker,
                 this.registry.indexToEnchant,
                 summaryLimit,
-                finalRaw.threshold,
-                finalRaw.frontiers,
+                finalResult.threshold,
+                finalResult.frontiers,
                 isBook
             );
 
-        finalStats.instrumentation = finalRaw.instrumentation;
-        finalStats.timing = finalRaw.timing;
+        finalStats.instrumentation = finalResult.instrumentation;
+        finalStats.timing = finalResult.timing;
 
         const currentCached = this.cache.getStats(this.registry.version, cacheKey);
         if (!currentCached || finalStats.accuracy > currentCached.accuracy) {

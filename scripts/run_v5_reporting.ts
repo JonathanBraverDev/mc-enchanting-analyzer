@@ -1,13 +1,13 @@
 /**
  * V5 reporting runner.
- * Runs tiered V5 searches across meaningful item/material/xp combinations and
+ * Runs V5 checkpoint searches across meaningful item/material/xp combinations and
  * writes one JSON file per combination to scripts/v5-report-output/.
  *
  * Usage: npx tsx scripts/run_v5_reporting.ts
  */
 import { EnchantEngine, EngineFactory } from '#engine/index.js';
 import { DATA } from '#data/index.js';
-import { AggregationResult, EngineInstrumentation, ExploredMassSample } from '#types/index.js';
+import { SearchResult, EngineInstrumentation, ExploredMassSample } from '#types/index.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -89,7 +89,7 @@ function freshInstrumentation(): EngineInstrumentation {
     };
 }
 
-function toReport(result: AggregationResult, elapsedMs: number) {
+function toReport(result: SearchResult, elapsedMs: number) {
     const accounting = result.tracker.mass.toPublic();
     const instrumentation = result.instrumentation;
 
@@ -155,7 +155,7 @@ async function runOne(engine: EnchantEngine, cat: string, mat: string, xp: numbe
     let error: string | null = null;
 
     try {
-        const result = await engine.calculateTop(
+        const result = await engine.searchToCheckpoint(
             cat,
             xp,
             mat,

@@ -24,7 +24,7 @@ describe('Integration: RefinementService V5 Contract', () => {
         WorkerClient.startChartRun = originalStartChart;
     });
 
-    it('Correction 1: should stream all 4 tiers in a single run', async () => {
+    it('Correction 1: should stream all 4 checkpoints in a single run', async () => {
         let callCount = 0;
         WorkerClient.startTopRun = (_input, _refinement, _onUpdate, onTerminal) => {
             callCount++;
@@ -69,7 +69,7 @@ describe('Integration: RefinementService V5 Contract', () => {
 describe('Integration: Snapshot Integrity (Correction 4)', () => {
     it('unconditioned snapshot masses should match engine summary exactly', async () => {
         const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
-        const res = await engine.calculateTop(TEST_DATA.ITEMS.BOOK, 30, TEST_DATA.MATERIALS.DIAMOND, {
+        const res = await engine.searchToCheckpoint(TEST_DATA.ITEMS.BOOK, 30, TEST_DATA.MATERIALS.DIAMOND, {
             threshold: 1n // Very low threshold to ensure many combinations
         });
 

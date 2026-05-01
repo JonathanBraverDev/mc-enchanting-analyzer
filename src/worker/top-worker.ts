@@ -1,4 +1,4 @@
-import { WorkerShell } from './WorkerShell.js';
+import { WorkerShell } from '#worker/WorkerShell.js';
 import {
     WorkerRequest,
     TopUpdateResponse,
@@ -34,17 +34,17 @@ shell.onRun = async (msg: WorkerRequest, engine, signal) => {
         ClueValidator.validate(engine.registry, input.category, input.clue);
     }
 
-    const tiers = refinement.map(level => getParamsForMode(level, isBook));
+    const checkpoints = refinement.map(level => getParamsForMode(level, isBook));
 
-    await engine.calculateTiered(
+    await engine.searchSequentialCheckpoints(
         input.category,
         input.xpLevel,
         input.material,
-        tiers,
-        (result, tierIndex) => {
+        checkpoints,
+        (result, checkpointIndex) => {
             if (signal.aborted || shell.runId !== runId) return;
 
-            const level = refinement[tierIndex]!;
+            const level = refinement[checkpointIndex]!;
 
             const view = SnapshotService.create(
                 engine.registry,

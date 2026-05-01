@@ -2,7 +2,7 @@ import { PRECISION, ProbUtils, AsyncUtils } from '#utils/index.js';
 import { getEnchantability } from '#core/registry.js';
 import { ENGINE_LIMITS, UI_CONSTANTS } from '#constants/engine.js';
 import { getSearchLimit } from '#engine/utils.js';
-import { PackedCombo, SearchState, RegistryState, InternalSearchConfig, EngineInstrumentation, AggregationResult } from '#types/index.js';
+import { PackedCombo, SearchState, RegistryState, InternalSearchConfig, EngineInstrumentation, SearchResult } from '#types/index.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { SearchService } from '#engine/search/SearchService.js';
 import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
@@ -19,28 +19,28 @@ export class ProgressiveStatsAggregator {
     ) {}
 
     /**
-     * Aggregates statistics across tiers of increasing search depth.
-     * This is the orchestrator for progressive refinement, reusing previous tiers'
+     * Aggregates statistics across checkpoints of increasing search depth.
+     * This is the orchestrator for progressive refinement, reusing previous checkpoints'
      * results and search states to efficiently deepen the calculation.
      *
      * @param registry Resolved registry state.
      * @param cat Item category.
      * @param xp Base XP level.
      * @param mat Item material.
-     * @param tiers Array of (threshold, limit) configs for each pass.
-     * @param onTierComplete Callback fired with results after each tier.
+     * @param checkpoints Array of (threshold, limit) configs for each pass.
+     * @param onCheckpointComplete Callback fired with results after each checkpoint.
      * @param config Internal search configuration.
-     * @returns The final aggregated result from the last tier.
+     * @returns The final aggregated result from the last checkpoint.
      */
-    public async calculateTiered(
+    public async searchSequentialCheckpoints(
         registry: RegistryState,
         cat: string,
         xp: number,
         mat: string,
-        tiers: Array<{ threshold: number; limit: number }>,
-        onTierComplete: (result: AggregationResult, tierIndex: number) => void,
+        checkpoints: Array<{ threshold: number; limit: number }>,
+        onCheckpointComplete: (result: SearchResult, checkpointIndex: number) => void,
         config: InternalSearchConfig
-    ): Promise<AggregationResult> {
+    ): Promise<SearchResult> {
         const {
             signal,
             instrumentation
@@ -54,29 +54,29 @@ export class ProgressiveStatsAggregator {
         const initialTracker = new SearchStateTracker();
         initialTracker.mass.record('pending', PRECISION);
 
-        let lastResult: AggregationResult = {
+        let lastResult: SearchResult = {
             combos: new Map(),
             tracker: initialTracker,
             threshold: 0
         };
 
-        for (let tierIndex = 0; tierIndex < tiers.length; tierIndex++) {
+        for (let checkpointIndex = 0; checkpointIndex < checkpoints.length; checkpointIndex++) {
             if (signal?.aborted) return lastResult;
 
-            const tier = tiers[tierIndex];
-            if (tier === undefined) continue;
-            const activeThreshold = ProbUtils.toBigInt(tier.threshold);
+            const checkpoint = checkpoints[checkpointIndex];
+            if (checkpoint === undefined) continue;
+            const activeThreshold = ProbUtils.toBigInt(checkpoint.threshold);
 
             const finalCombos = new Map<PackedCombo, bigint>();
-            let tierTracker = new SearchStateTracker();
+            let checkpointTracker = new SearchStateTracker();
 
             let processedMProb = 0n;
-            let abortedMidTier = false;
+            let abortedMidCheckpoint = false;
 
             for (const ml of levels) {
                 if (signal?.aborted) {
                     if (instrumentation) instrumentation.exitReason = 'aborted';
-                    abortedMidTier = true;
+                    abortedMidCheckpoint = true;
                     break;
                 }
 
@@ -88,7 +88,7 @@ export class ProgressiveStatsAggregator {
                     registry, cat, ml,
                     existingState, {
                         threshold: activeThreshold,
-                        limit: tier.limit,
+                        limit: checkpoint.limit,
                         resultsLimit: config.resultsLimit ?? ENGINE_LIMITS.MAX_RESULTS_SIZE,
                         signal,
                         instrumentation,
@@ -104,28 +104,28 @@ export class ProgressiveStatsAggregator {
 
                 ProbUtils.addMapMass(finalCombos, result.results, mProb);
 
-                tierTracker.mass.addScaled(result.tracker.mass, mProb);
+                checkpointTracker.mass.addScaled(result.tracker.mass, mProb);
 
                 processedMProb += mProb;
                 await AsyncUtils.yield();
             }
 
             const distRoundingError = PRECISION - processedMProb;
-            tierTracker.mass.record('rounding', distRoundingError);
+            checkpointTracker.mass.record('rounding', distRoundingError);
 
 
-            const tierResult: AggregationResult = {
+            const checkpointResult: SearchResult = {
                 combos: finalCombos,
-                tracker: tierTracker,
+                tracker: checkpointTracker,
                 instrumentation: instrumentation ? this.snapshotInstrumentation(instrumentation) : undefined,
                 timing: config.timing ? { ...config.timing } : undefined,
-                threshold: tier.threshold
+                threshold: checkpoint.threshold
             };
 
-            if (abortedMidTier) return tierResult;
+            if (abortedMidCheckpoint) return checkpointResult;
 
-            onTierComplete(tierResult, tierIndex);
-            lastResult = tierResult;
+            onCheckpointComplete(checkpointResult, checkpointIndex);
+            lastResult = checkpointResult;
         }
 
         return lastResult;
@@ -142,13 +142,13 @@ export class ProgressiveStatsAggregator {
      * @param mat Item material.
      * @param config Internal search configuration.
      */
-    public async calculate(
+    public async searchToCheckpoint(
         registry: RegistryState,
         cat: string,
         xp: number,
         mat: string,
         config: InternalSearchConfig = {}
-    ): Promise<AggregationResult> {
+    ): Promise<SearchResult> {
         const {
             threshold = ENGINE_LIMITS.DEFAULT_THRESHOLD,
             signal,

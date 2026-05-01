@@ -19,7 +19,7 @@ describe('Engine Architectural Invariants', () => {
         assert.ok(acc.resolved > 0.9, 'Should have resolved most mass at level 30');
     });
 
-    it('Invariant: Static Pruning Floor (No leakage between tiers)', async () => {
+    it('Invariant: Static Pruning Floor (No leakage between checkpoints)', async () => {
         const engine = EngineFactory.create(DATA, '1.21');
 
         // Run with a very high threshold (0.1).

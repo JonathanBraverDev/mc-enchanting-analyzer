@@ -1,4 +1,4 @@
-import { WorkerShell } from './WorkerShell.js';
+import { WorkerShell } from '#worker/WorkerShell.js';
 import {
     WorkerRequest,
     ChartUpdateResponse,
@@ -54,7 +54,7 @@ shell.onRun = async (msg: WorkerRequest, engine, signal) => {
         for (let xp = 1; xp <= xpCap; xp++) {
             if (signal.aborted || shell.runId !== runId) break;
 
-            const result = await engine.calculateTop(input.category, xp, input.material, {
+            const result = await engine.searchToCheckpoint(input.category, xp, input.material, {
                 clue: input.clue,
                 threshold: params.threshold,
                 maxIterations: params.limit,

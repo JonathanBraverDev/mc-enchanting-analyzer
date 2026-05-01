@@ -38,7 +38,7 @@ export class SearchStateTracker {
                 tracker: existing.tracker.clone(),
                 threshold,
                 // iterations resets each run so SearchController can enforce per-run limits;
-                // nodesProcessed is cumulative across all tiers and used for diagnostics only.
+                // nodesProcessed is cumulative across all checkpoints and used for diagnostics only.
                 iterations: 0,
                 nodesProcessed: existing.nodesProcessed
             };

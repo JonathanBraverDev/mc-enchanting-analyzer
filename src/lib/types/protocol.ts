@@ -72,7 +72,7 @@ export interface WorkerReadyResponse {
   version: string;
 }
 
-import { ChartRunEnvelopeView, TopRunView, ChartProgressView, ChartCellView } from './views.js';
+import { ChartRunEnvelopeView, TopRunView, ChartProgressView, ChartCellView } from '#lib/types/views.js';
 
 export interface RunAcceptedResponse {
   type: 'runAccepted';

@@ -161,7 +161,7 @@ describe('Frontier Resumability & Cache Behavior', () => {
 
     // ── Test D: Ultra result satisfies coarse request via stats cache ────────
 
-    it('tiered produces same final result as sequential getFullStats calls', async () => {
+    it('sequential checkpoints produce same final result as repeated calculate calls', async () => {
         const engine = EngineFactory.create(DATA, '1.21');
 
         // Ultra run first: produces low-uncertainty stats, cached at K_stats.

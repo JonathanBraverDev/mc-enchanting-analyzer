@@ -240,10 +240,8 @@ export interface ProgressReporter {
   onProgress(update: ProgressUpdate): void;
 }
 
-/**
- * Raw results from an aggregation run before summarization.
- */
-export interface AggregationResult {
+/** Search results before presentation summarization. */
+export interface SearchResult {
     combos: Map<PackedCombo, bigint>;
     tracker: import('../engine/search/SearchStateTracker.js').SearchStateTracker;
     frontiers?: { heap: import('../utils/collections/SearchHeap.js').SearchHeap, scale: bigint }[] | undefined;
