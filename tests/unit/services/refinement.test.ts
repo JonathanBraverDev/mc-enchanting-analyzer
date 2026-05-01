@@ -115,7 +115,7 @@ describe('RefinementService (V5 Hardened)', () => {
         // Actually, with 0ms or 1ms timeouts, it's possible some leaked before Run 2 started, but definitely not all.
     });
 
-    it('should correctly mark the final tier in streaming mode', async () => {
+    it('should correctly mark the final refinement checkpoint in streaming mode', async () => {
         const payload = {
             category: 'sword',
             material: 'diamond',
@@ -133,6 +133,6 @@ describe('RefinementService (V5 Hardened)', () => {
             onChart: () => {}
         });
 
-        assert.strictEqual(finalCount, 1, 'Only the final tier (ultra) should be marked as final');
+        assert.strictEqual(finalCount, 1, 'Only the final refinement checkpoint (ultra) should be marked as final');
     });
 });

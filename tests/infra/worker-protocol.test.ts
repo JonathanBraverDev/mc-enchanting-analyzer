@@ -85,7 +85,7 @@ describe('Worker: Protocol Hardening (v5)', () => {
                     clue: null,
                     version: TEST_DATA.VERSIONS.MODERN
                 },
-                refinement: ['coarse', 'standard']
+                refinementLevels: ['coarse', 'standard']
             });
 
             await waitForMessages(captured, 'runAccepted', 1);
@@ -111,7 +111,7 @@ describe('Worker: Protocol Hardening (v5)', () => {
                     clue: 'FakeEnchant X',
                     version: TEST_DATA.VERSIONS.MODERN
                 },
-                refinement: ['coarse']
+                refinementLevels: ['coarse']
             });
 
             const terminal = await waitForTerminal(captured, runId) as any;
@@ -142,7 +142,7 @@ describe('Worker: Protocol Hardening (v5)', () => {
                     clue: null,
                     version: TEST_DATA.VERSIONS.MODERN
                 },
-                refinement: ['coarse']
+                refinementLevels: ['coarse']
             });
 
             const accepted = await waitForMessages(captured, 'runAccepted', 1) as any;

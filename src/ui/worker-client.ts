@@ -136,7 +136,7 @@ export const WorkerClient = {
         }
     },
 
-    startTopRun(input: TopInputSignature, refinement: RefinementLevelName[], onUpdate: TopUpdateCallback, onTerminal: TerminalCallback): RunId {
+    startTopRun(input: TopInputSignature, refinementLevels: RefinementLevelName[], onUpdate: TopUpdateCallback, onTerminal: TerminalCallback): RunId {
         this.cancelRun('top');
 
         const runId = `top_${Date.now()}_${++(this.requestId as any)}` as RunId;
@@ -149,13 +149,13 @@ export const WorkerClient = {
             requestId: ++(this.requestId as any) as RequestId,
             runId,
             input,
-            refinement
+            refinementLevels
         } as WorkerRequest);
 
         return runId;
     },
 
-    startChartRun(input: ChartInputSignature, refinement: RefinementLevelName[], onUpdate: ChartUpdateCallback, onTerminal: TerminalCallback): RunId {
+    startChartRun(input: ChartInputSignature, refinementLevels: RefinementLevelName[], onUpdate: ChartUpdateCallback, onTerminal: TerminalCallback): RunId {
         this.cancelRun('chart');
 
         const runId = `chart_${Date.now()}_${++(this.requestId as any)}` as RunId;
@@ -168,7 +168,7 @@ export const WorkerClient = {
             requestId: ++(this.requestId as any) as RequestId,
             runId,
             input,
-            refinement
+            refinementLevels
         } as WorkerRequest);
 
         return runId;

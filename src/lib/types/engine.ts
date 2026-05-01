@@ -43,6 +43,11 @@ export interface CacheConfig {
   poolSize: number;
 }
 
+export interface SearchCheckpoint {
+  threshold: number;
+  limit: number;
+}
+
 export interface ExploredMassSample {
   modLevel: number;
   targetMass: number;

@@ -6,7 +6,7 @@ import {
     PassId
 } from '#types/index.js';
 import { SnapshotService } from '#services/SnapshotService.js';
-import { getParamsForMode } from '#core/config.js';
+import { getSearchCheckpointForRefinement } from '#core/config.js';
 import { ClueValidator } from '#core/clue.js';
 
 const workerScope = self as any;
@@ -15,7 +15,7 @@ const shell = new WorkerShell('chart', workerScope);
 shell.onRun = async (msg: WorkerRequest, engine, signal) => {
     if (msg.type !== 'chartRunStart') return;
 
-    const { requestId, runId, input, refinement } = msg;
+    const { requestId, runId, input, refinementLevels } = msg;
     const isBook = input.category === 'book';
     const xpCap = engine.registry.mechanics.xp_cap || 30;
 
@@ -31,7 +31,7 @@ shell.onRun = async (msg: WorkerRequest, engine, signal) => {
         chart: {
             input,
             maxXpLevel: xpCap,
-            refinement: refinement.map((level, i) => ({
+            refinement: refinementLevels.map((level, i) => ({
                 refinementLevel: level,
                 label: level.toUpperCase(),
                 order: i
@@ -45,10 +45,10 @@ shell.onRun = async (msg: WorkerRequest, engine, signal) => {
         ClueValidator.validate(engine.registry, input.category, input.clue);
     }
 
-    for (const level of refinement) {
+    for (const level of refinementLevels) {
         if (signal.aborted) break;
 
-        const params = getParamsForMode(level, isBook);
+        const params = getSearchCheckpointForRefinement(level, isBook);
         const passId = `pass_${level}` as PassId;
 
         for (let xp = 1; xp <= xpCap; xp++) {

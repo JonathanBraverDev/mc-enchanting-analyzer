@@ -6,7 +6,7 @@ import {
   TopInputSignature,
   ChartInputSignature
 } from '#types/index.js';
-import { UI_TEXTS, UI_DEFAULTS, SearchLevel, getParamsForMode } from '#core/config.js';
+import { UI_TEXTS, UI_DEFAULTS, RefinementStatusLevel, getSearchCheckpointForRefinement } from '#core/config.js';
 import { WorkerClient } from '#ui/worker-client.js';
 
 export interface RefinementPayload {
@@ -18,7 +18,7 @@ export interface RefinementPayload {
 }
 
 export interface RefinementCallbacks {
-    onStatus: (status: string, level: SearchLevel) => void;
+    onStatus: (status: string, level: RefinementStatusLevel) => void;
     onChartStatus?: (status: string, progress?: number) => void;
     onStats: (view: TopRunView, isFinal: boolean) => void;
     onChart: (sweep: ChartCellView[]) => void;
@@ -71,17 +71,17 @@ export class RefinementService {
                 version: payload.version
             };
 
-            const levels: RefinementLevelName[] = ['coarse', 'standard', 'deep', 'ultra'];
+            const refinementLevels: RefinementLevelName[] = ['coarse', 'standard', 'deep', 'ultra'];
             const isBook = payload.category === 'book';
 
             // Start Top Run (Single call for all levels)
             WorkerClient.startTopRun(
                 topInput,
-                levels,
+                refinementLevels,
                 (view) => {
                     if (this.activeRunGeneration !== generation) return;
 
-                    const params = getParamsForMode(view.refinementLevel, isBook);
+                    const params = getSearchCheckpointForRefinement(view.refinementLevel, isBook);
                     callbacks.onStatus(params.status, view.refinementLevel);
                     callbacks.onStats(view, view.refinementLevel === 'ultra');
                 },
@@ -100,14 +100,14 @@ export class RefinementService {
             // Start Chart Run (Single call for all levels)
             WorkerClient.startChartRun(
                 chartInput,
-                levels,
+                refinementLevels,
                 (cellView) => {
                     if (this.activeRunGeneration !== generation) return;
 
                     this.sweep[cellView.xpLevel - 1] = cellView;
                     callbacks.onChart(this.sweep);
 
-                    const params = getParamsForMode(cellView.refinementLevel, isBook);
+                    const params = getSearchCheckpointForRefinement(cellView.refinementLevel, isBook);
                     callbacks.onChartStatus?.(`${params.status} probabilities`, cellView.xpLevel / xpCap);
                 },
                 (status) => {

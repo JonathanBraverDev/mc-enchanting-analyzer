@@ -1,5 +1,5 @@
 import { UIUtils, RomanUtils } from '#utils/index.js';
-import { UI_DEFAULTS, UI_TEXTS, SEARCH_LEVEL_COLORS, SearchLevel } from '#core/config.js';
+import { UI_DEFAULTS, UI_TEXTS, REFINEMENT_LEVEL_COLORS, RefinementStatusLevel } from '#core/config.js';
 import { RegistryState, EnchantInsights, TopRunView } from '#types/index.js';
 
 /**
@@ -24,9 +24,9 @@ export class ResultsView {
         }
     }
 
-    public setRefinementStatus(text: string, level: SearchLevel): void {
+    public setRefinementStatus(text: string, level: RefinementStatusLevel): void {
         if (!this.statusEl) return;
-        const c = SEARCH_LEVEL_COLORS[level];
+        const c = REFINEMENT_LEVEL_COLORS[level];
         this.statusEl.textContent = text + (level === 'done' ? '' : UI_TEXTS.STATUS_POSTFIX);
         this.statusEl.style.backgroundColor = c.bg;
         this.statusEl.style.color = c.text;

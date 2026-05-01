@@ -41,7 +41,7 @@ export interface TopRunStartRequest {
   requestId: RequestId;
   runId: RunId;
   input: TopInputSignature;
-  refinement: RefinementLevelName[];
+  refinementLevels: RefinementLevelName[];
   view?: {
     comboLimit?: number;
   };
@@ -52,7 +52,7 @@ export interface ChartRunStartRequest {
   requestId: RequestId;
   runId: RunId;
   input: ChartInputSignature;
-  refinement: RefinementLevelName[];
+  refinementLevels: RefinementLevelName[];
 }
 
 // Responses
