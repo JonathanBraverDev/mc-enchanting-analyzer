@@ -9,6 +9,13 @@ import { CacheManager } from '#engine/cache/CacheManager.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { getSearchLimit } from '#engine/utils.js';
 
+interface CheckpointAccumulator {
+    combos: Map<PackedCombo, bigint>;
+    tracker: SearchStateTracker;
+    frontiers: { heap: SearchHeap, scale: bigint }[];
+    processedMProb: bigint;
+}
+
 /**
  * Service for the Best-First search of enchantment combinations.
  * Orchestrates the search loop with full DI.
@@ -105,23 +112,12 @@ export class SearchService {
         } = request;
 
         const bThreshold = ProbUtils.toBigInt(threshold);
-        const enchantability = getEnchantability(registry, mat, cat);
-        const modDist = this.distributionService.getModifiedLevelDist(registry, xp, enchantability, this.cache, instrumentation);
-        const levels = Object.keys(modDist).map(Number).sort((a, b) => b - a);
-
-        const finalCombos = new Map<PackedCombo, bigint>();
-        const globalTracker = new SearchStateTracker();
-        const frontiers: { heap: SearchHeap, scale: bigint }[] = [];
-
-        let processedMProb = 0n;
+        const { modDist, levels } = this.getLevelDistribution(registry, cat, xp, mat, instrumentation);
+        const accumulator = this.createCheckpointAccumulator();
         let iterCount = 0;
         const limit = getSearchLimit(cat, threshold, maxIterations);
 
-        if (instrumentation) {
-            instrumentation.totalIterations = 0;
-            instrumentation.levelsFullyResolved = 0;
-            instrumentation.frontierCache = instrumentation.frontierCache || { hits: 0, misses: 0 };
-        }
+        this.prepareInstrumentation(instrumentation);
 
         for (const ml of levels) {
             if (signal?.aborted) throw new Error("Aborted");
@@ -133,36 +129,33 @@ export class SearchService {
             }
 
             const result = await this.searchModifiedLevel({
-                    registry,
-                    cat,
-                    modLevel: ml,
-                    mat,
-                    useCache,
-                    threshold: bThreshold,
-                    limit,
-                    resultsLimit,
-                    signal,
-                    instrumentation,
-                    timing: request.timing
-                });
+                registry,
+                cat,
+                modLevel: ml,
+                mat,
+                useCache,
+                threshold: bThreshold,
+                limit,
+                resultsLimit,
+                signal,
+                instrumentation,
+                timing: request.timing
+            });
 
             if (instrumentation) {
                 this.updateInstrumentation(instrumentation, result);
                 if (instrumentation.trackGlobalMetrics) {
-                    instrumentation.globalResultsSize = finalCombos.size;
+                    instrumentation.globalResultsSize = accumulator.combos.size;
                     instrumentation.globalCacheNodes = this.cache.getTotalCachedNodes();
                     instrumentation.globalCacheResults = this.cache.getTotalCachedResults();
                 }
             }
 
-            ProbUtils.addMapMass(finalCombos, result.results, mProb);
-            globalTracker.mass.addScaled(result.tracker.mass, mProb);
-            frontiers.push({ heap: result.queue, scale: mProb });
+            this.recordCheckpointLevel(accumulator, result, mProb);
 
-            processedMProb += mProb;
             if (++iterCount % UI_CONSTANTS.PROGRESS_UPDATE_FREQUENCY === 0) {
                 if (request.onProgress) {
-                    const accuracy = globalTracker.mass.toPublic().resolved;
+                    const accuracy = accumulator.tracker.mass.toPublic().resolved;
                     request.onProgress({
                         processed: iterCount,
                         total: levels.length,
@@ -173,17 +166,7 @@ export class SearchService {
             }
         }
 
-        const distRoundingError = PRECISION - processedMProb;
-        globalTracker.mass.record('rounding', distRoundingError);
-
-        return {
-            combos: finalCombos,
-            tracker: globalTracker,
-            frontiers,
-            instrumentation: instrumentation ? this.snapshotInstrumentation(instrumentation) : undefined,
-            timing: request.timing ? { ...request.timing } : undefined,
-            threshold: ProbUtils.toNumber(threshold)
-        };
+        return this.finalizeCheckpoint(accumulator, ProbUtils.toNumber(threshold), instrumentation, request.timing);
     }
 
     /**
@@ -192,9 +175,7 @@ export class SearchService {
     public async searchSequentialCheckpoints(request: SequentialCheckpointSearchContext): Promise<SearchResult> {
         const { registry, cat, xp, mat, checkpoints, onCheckpointComplete, signal, instrumentation } = request;
 
-        const enchantability = getEnchantability(registry, mat, cat);
-        const modDist = this.distributionService.getModifiedLevelDist(registry, xp, enchantability, this.cache, instrumentation);
-        const levels = Object.keys(modDist).map(Number).sort((a, b) => b - a);
+        const { modDist, levels } = this.getLevelDistribution(registry, cat, xp, mat, instrumentation);
 
         const stateMap = new Map<number, SearchState>();
         const initialTracker = new SearchStateTracker();
@@ -212,9 +193,7 @@ export class SearchService {
             const checkpoint = checkpoints[checkpointIndex];
             if (checkpoint === undefined) continue;
             const activeThreshold = ProbUtils.toBigInt(checkpoint.threshold);
-
-            const finalCombos = new Map<PackedCombo, bigint>();
-            const checkpointTracker = new SearchStateTracker();
+            const accumulator = this.createCheckpointAccumulator();
 
             let processedMProb = 0n;
             let abortedMidCheckpoint = false;
@@ -231,17 +210,17 @@ export class SearchService {
                 const existingState = stateMap.get(ml);
 
                 const result = await this.searchModifiedLevel({
-                        registry,
-                        cat,
-                        modLevel: ml,
-                        existingState,
-                        threshold: activeThreshold,
-                        limit: checkpoint.limit,
-                        resultsLimit: request.resultsLimit ?? ENGINE_LIMITS.MAX_RESULTS_SIZE,
-                        signal,
-                        instrumentation,
-                        timing: request.timing
-                    });
+                    registry,
+                    cat,
+                    modLevel: ml,
+                    existingState,
+                    threshold: activeThreshold,
+                    limit: checkpoint.limit,
+                    resultsLimit: request.resultsLimit ?? ENGINE_LIMITS.MAX_RESULTS_SIZE,
+                    signal,
+                    instrumentation,
+                    timing: request.timing
+                });
 
                 stateMap.set(ml, result);
 
@@ -249,23 +228,13 @@ export class SearchService {
                     this.updateInstrumentation(instrumentation, result);
                 }
 
-                ProbUtils.addMapMass(finalCombos, result.results, mProb);
-                checkpointTracker.mass.addScaled(result.tracker.mass, mProb);
+                this.recordCheckpointLevel(accumulator, result, mProb);
 
                 processedMProb += mProb;
                 await AsyncUtils.yield();
             }
 
-            const distRoundingError = PRECISION - processedMProb;
-            checkpointTracker.mass.record('rounding', distRoundingError);
-
-            const checkpointResult: SearchResult = {
-                combos: finalCombos,
-                tracker: checkpointTracker,
-                instrumentation: instrumentation ? this.snapshotInstrumentation(instrumentation) : undefined,
-                timing: request.timing ? { ...request.timing } : undefined,
-                threshold: checkpoint.threshold
-            };
+            const checkpointResult = this.finalizeCheckpoint(accumulator, checkpoint.threshold, instrumentation, request.timing);
 
             if (abortedMidCheckpoint) {
                 return processedMProb === 0n ? lastResult : checkpointResult;
@@ -276,6 +245,57 @@ export class SearchService {
         }
 
         return lastResult;
+    }
+
+    private getLevelDistribution(registry: RegistryState, cat: string, xp: number, mat: string, instrumentation?: EngineInstrumentation): { modDist: { [level: number]: bigint }; levels: number[] } {
+        const enchantability = getEnchantability(registry, mat, cat);
+        const modDist = this.distributionService.getModifiedLevelDist(registry, xp, enchantability, this.cache, instrumentation);
+        const levels = Object.keys(modDist).map(Number).sort((a, b) => b - a);
+
+        return { modDist, levels };
+    }
+
+    private createCheckpointAccumulator(): CheckpointAccumulator {
+        return {
+            combos: new Map<PackedCombo, bigint>(),
+            tracker: new SearchStateTracker(),
+            frontiers: [],
+            processedMProb: 0n
+        };
+    }
+
+    private recordCheckpointLevel(accumulator: CheckpointAccumulator, result: SearchState, mProb: bigint): void {
+        ProbUtils.addMapMass(accumulator.combos, result.results, mProb);
+        accumulator.tracker.mass.addScaled(result.tracker.mass, mProb);
+        accumulator.frontiers.push({ heap: result.queue, scale: mProb });
+        accumulator.processedMProb += mProb;
+    }
+
+    private finalizeCheckpoint(
+        accumulator: CheckpointAccumulator,
+        threshold: number,
+        instrumentation?: EngineInstrumentation,
+        timing?: { totalMs: number; searchMs: number }
+    ): SearchResult {
+        const distRoundingError = PRECISION - accumulator.processedMProb;
+        accumulator.tracker.mass.record('rounding', distRoundingError);
+
+        return {
+            combos: accumulator.combos,
+            tracker: accumulator.tracker,
+            frontiers: accumulator.frontiers,
+            instrumentation: instrumentation ? this.snapshotInstrumentation(instrumentation) : undefined,
+            timing: timing ? { ...timing } : undefined,
+            threshold
+        };
+    }
+
+    private prepareInstrumentation(instrumentation?: EngineInstrumentation): void {
+        if (!instrumentation) return;
+
+        instrumentation.totalIterations = 0;
+        instrumentation.levelsFullyResolved = 0;
+        instrumentation.frontierCache = instrumentation.frontierCache || { hits: 0, misses: 0 };
     }
 
     private handleEmptyPool(threshold: bigint): SearchState {
