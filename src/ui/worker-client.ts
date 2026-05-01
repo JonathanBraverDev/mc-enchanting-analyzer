@@ -74,7 +74,6 @@ export const WorkerClient = {
                 if ('runId' in data) {
                     const runId = data.runId;
                     
-                    const currentGen = this.generations[kind];
                     const isActive = runId === this.activeRunIds[kind];
                     
                     if (type === 'topUpdate' && kind === 'top' && isActive) {

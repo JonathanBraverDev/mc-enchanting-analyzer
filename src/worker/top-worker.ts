@@ -102,7 +102,8 @@ workerScope.onmessage = async (e: MessageEvent<WorkerRequest>) => {
                 input,
                 refinementLevel: level,
                 clue: input.clue
-              }
+              },
+              result.frontiers
             );
 
             const response: TopUpdateResponse = {

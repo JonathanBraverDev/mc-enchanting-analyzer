@@ -121,7 +121,8 @@ workerScope.onmessage = async (e: MessageEvent<WorkerRequest>) => {
                 input: { ...input, xpLevel: xp },
                 refinementLevel: level,
                 clue: input.clue
-              }
+              },
+              result.frontiers
             );
 
             const response: ChartUpdateResponse = {

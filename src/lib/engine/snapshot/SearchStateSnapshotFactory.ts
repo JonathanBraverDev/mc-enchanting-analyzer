@@ -18,6 +18,7 @@ import { ClueAnalysisService } from '#services/ClueAnalysisService.js';
 import { getFullEnchantName, getEnchantName } from '#core/registry.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import { ClueValidator } from '#core/clue.js';
+import { SummaryService } from '#services/SummaryService.js';
 
 
 export class SearchStateSnapshotFactory {
@@ -35,9 +36,11 @@ export class SearchStateSnapshotFactory {
     state: RegistryState,
     tracker: SearchStateTracker,
     combos: Map<PackedCombo, bigint>,
-    request: SnapshotRequest
+    request: SnapshotRequest,
+    frontiers: { heap: import('#utils/collections/SearchHeap.js').SearchHeap, scale: bigint }[] = []
   ): TopRunView | ChartCellView {
     const { snapshotType, refinementLevel, clue, comboLimit } = request;
+    const isBook = request.input.category === 'book';
 
     // 1. Resolve clue if present (Correction 5: use centralized validation)
     let targetClueId: number | null = null;
@@ -58,16 +61,18 @@ export class SearchStateSnapshotFactory {
 
     if (isConditioned) {
       // Conditioned views derive from top combos (representing the posterior)
-      const conditioned = ClueAnalysisService.conditionOnClue(combos, targetClueId!, state.indexToEnchant);
+      // Note: frontiers are passed to conditionOnClue which now handles them
+      const conditioned = ClueAnalysisService.conditionOnClue(combos, targetClueId!, state.indexToEnchant, frontiers);
       clueKnownSpace = ProbUtils.toNumber(conditioned.clueKnownSpace);
       result = conditioned;
     } else {
-      // Unconditioned views derive aggregate stats from the capped combos map (Correction 4)
+      // Unconditioned views derive aggregate stats from combos + frontiers (SSoT)
+      const derived = SummaryService.deriveAggregateMasses(combos, state.indexToEnchant, frontiers, isBook);
       result = {
         combos,
-        anyMass: this.calculateAnyMass(combos, state.indexToEnchant),
-        rankMass: this.calculateRankMass(combos, state.indexToEnchant),
-        countMass: this.calculateCountMass(combos, state.indexToEnchant)
+        anyMass: this.toMassMap(derived.any),
+        rankMass: this.toMassMap(derived.ranks),
+        countMass: this.toMassMap(derived.count)
       };
     }
 
@@ -100,38 +105,15 @@ export class SearchStateSnapshotFactory {
     }
   }
 
-  // Aggregation methods that derive stats from the combos map.
-
-  private static calculateAnyMass(combos: Map<PackedCombo, bigint>, indexToEnchant: number[]): Map<number, bigint> {
-    const mass = new Map<number, bigint>();
-    for (const [packed, prob] of combos) {
-      const enchants = ComboUtils.unpack(packed, indexToEnchant);
-      for (const e of enchants) {
-        const id = e >> 8;
-        ProbUtils.addItemMass(mass, id, prob);
+  private static toMassMap(masses: bigint[]): Map<number, bigint> {
+    const map = new Map<number, bigint>();
+    for (let i = 0; i < masses.length; i++) {
+      const val = masses[i];
+      if (val !== undefined && val > 0n) {
+        map.set(i, val);
       }
     }
-    return mass;
-  }
-
-  private static calculateRankMass(combos: Map<PackedCombo, bigint>, indexToEnchant: number[]): Map<number, bigint> {
-    const mass = new Map<number, bigint>();
-    for (const [packed, prob] of combos) {
-      const enchants = ComboUtils.unpack(packed, indexToEnchant);
-      for (const e of enchants) {
-        ProbUtils.addItemMass(mass, e, prob);
-      }
-    }
-    return mass;
-  }
-
-  private static calculateCountMass(combos: Map<PackedCombo, bigint>, indexToEnchant: number[]): Map<number, bigint> {
-    const mass = new Map<number, bigint>();
-    for (const [packed, prob] of combos) {
-      const count = ComboUtils.unpack(packed, indexToEnchant).length;
-      ProbUtils.addItemMass(mass, count, prob);
-    }
-    return mass;
+    return map;
   }
 
   private static createTopView(
