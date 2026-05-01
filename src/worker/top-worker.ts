@@ -36,12 +36,12 @@ shell.onRun = async (msg: WorkerRequest, engine, signal) => {
 
     const checkpoints = refinementLevels.map(level => getSearchCheckpointForRefinement(level, isBook));
 
-    await engine.searchSequentialCheckpoints(
-        input.category,
-        input.xpLevel,
-        input.material,
+    await engine.searchSequentialCheckpoints({
+        cat: input.category,
+        xp: input.xpLevel,
+        mat: input.material,
         checkpoints,
-        (result, checkpointIndex) => {
+        onCheckpointComplete: (result, checkpointIndex) => {
             if (signal.aborted || shell.runId !== runId) return;
 
             const level = refinementLevels[checkpointIndex]!;
@@ -69,8 +69,9 @@ shell.onRun = async (msg: WorkerRequest, engine, signal) => {
 
             workerScope.postMessage(response);
         },
-        { clue: input.clue, signal }
-    );
+        clue: input.clue,
+        signal
+    });
 };
 
 workerScope.onmessage = async (e: MessageEvent<WorkerRequest>) => {

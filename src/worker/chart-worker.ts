@@ -54,7 +54,10 @@ shell.onRun = async (msg: WorkerRequest, engine, signal) => {
         for (let xp = 1; xp <= xpCap; xp++) {
             if (signal.aborted || shell.runId !== runId) break;
 
-            const result = await engine.searchToCheckpoint(input.category, xp, input.material, {
+            const result = await engine.searchToCheckpoint({
+                cat: input.category,
+                xp,
+                mat: input.material,
                 clue: input.clue,
                 threshold: params.threshold,
                 maxIterations: params.limit,

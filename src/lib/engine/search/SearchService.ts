@@ -1,7 +1,7 @@
 import { AsyncUtils, KeyUtils, PRECISION, ProbUtils } from '#utils/index.js';
 import { getCategoryId, getEnchantability, getEligiblePool, getMaterialId } from '#core/registry.js';
 import { ENGINE_LIMITS, PACKING_CONSTANTS, UI_CONSTANTS } from '#constants/engine.js';
-import { EngineInstrumentation, PackedCombo, RegistryState, SearchConfig, SearchContext, SearchResult, SearchState, ForwardingContext } from '#types/index.js';
+import { CheckpointSearchContext, EngineInstrumentation, ModifiedLevelSearchContext, PackedCombo, RegistryState, SearchContext, SearchResult, SearchState, ForwardingContext, SequentialCheckpointSearchContext } from '#types/index.js';
 import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
 import { SearchController } from '#engine/search/SearchController.js';
 import { SearchHeap } from '#utils/collections/SearchHeap.js';
@@ -19,17 +19,11 @@ export class SearchService {
         private readonly distributionService: ModifiedLevelDistributionService = new ModifiedLevelDistributionService()
     ) {}
 
-    public async searchModifiedLevel(
-        registry: RegistryState,
-        cat: string,
-        modLevel: number,
-        config: SearchContext & {
-            mat?: string | undefined;
-            existingState?: SearchState | undefined;
-            useCache?: boolean | undefined;
-        }
-    ): Promise<SearchState> {
+    public async searchModifiedLevel(request: ModifiedLevelSearchContext): Promise<SearchState> {
         const {
+            registry,
+            cat,
+            modLevel,
             threshold = 0n,
             limit = ENGINE_LIMITS.MAX_ITERATIONS_UNBOUNDED,
             resultsLimit = ENGINE_LIMITS.MAX_RESULTS_SIZE,
@@ -37,7 +31,7 @@ export class SearchService {
             mat,
             existingState,
             useCache = false
-        } = config;
+        } = request;
 
         const cacheKey = mat !== undefined ? this.getPackedKey(registry, cat, modLevel, mat) : undefined;
         const cached = useCache && cacheKey !== undefined
@@ -66,7 +60,7 @@ export class SearchService {
             results,
             queue,
             resultsLimit,
-            instrumentation: config?.instrumentation,
+            instrumentation: request.instrumentation,
             timing: timingResult ? { totalMs: 0, searchMs: 0 } : undefined,
             cat,
             pool: initialPool,
@@ -75,7 +69,7 @@ export class SearchService {
         };
 
         await SearchController.run(state, ctx, modLevel, {
-            ...config,
+            ...request,
             threshold,
             limit,
             resultsLimit
@@ -96,21 +90,19 @@ export class SearchService {
     /**
      * Searches all modified levels for one request target and returns the aggregated result.
      */
-    public async searchToCheckpoint(
-        registry: RegistryState,
-        cat: string,
-        xp: number,
-        mat: string,
-        config: SearchConfig = {}
-    ): Promise<SearchResult> {
+    public async searchToCheckpoint(request: CheckpointSearchContext): Promise<SearchResult> {
         const {
+            registry,
+            cat,
+            xp,
+            mat,
             threshold = ENGINE_LIMITS.DEFAULT_THRESHOLD,
             signal,
             maxIterations,
             resultsLimit = ENGINE_LIMITS.MAX_RESULTS_SIZE,
             useCache = true,
             instrumentation
-        } = config;
+        } = request;
 
         const bThreshold = ProbUtils.toBigInt(threshold);
         const enchantability = getEnchantability(registry, mat, cat);
@@ -140,8 +132,10 @@ export class SearchService {
                 instrumentation.frontierCache = this.cache.getEngineMetrics().frontierCache;
             }
 
-            const result = await this.searchModifiedLevel(
-                registry, cat, ml, {
+            const result = await this.searchModifiedLevel({
+                    registry,
+                    cat,
+                    modLevel: ml,
                     mat,
                     useCache,
                     threshold: bThreshold,
@@ -149,9 +143,8 @@ export class SearchService {
                     resultsLimit,
                     signal,
                     instrumentation,
-                    timing: config.timing
-                }
-            );
+                    timing: request.timing
+                });
 
             if (instrumentation) {
                 this.updateInstrumentation(instrumentation, result);
@@ -168,9 +161,9 @@ export class SearchService {
 
             processedMProb += mProb;
             if (++iterCount % UI_CONSTANTS.PROGRESS_UPDATE_FREQUENCY === 0) {
-                if (config.onProgress) {
+                if (request.onProgress) {
                     const accuracy = globalTracker.mass.toPublic().resolved;
-                    config.onProgress({
+                    request.onProgress({
                         processed: iterCount,
                         total: levels.length,
                         accuracy
@@ -188,7 +181,7 @@ export class SearchService {
             tracker: globalTracker,
             frontiers,
             instrumentation: instrumentation ? this.snapshotInstrumentation(instrumentation) : undefined,
-            timing: config.timing ? { ...config.timing } : undefined,
+            timing: request.timing ? { ...request.timing } : undefined,
             threshold: ProbUtils.toNumber(threshold)
         };
     }
@@ -196,16 +189,8 @@ export class SearchService {
     /**
      * Searches a sequence of request checkpoints and streams each aggregated checkpoint result.
      */
-    public async searchSequentialCheckpoints(
-        registry: RegistryState,
-        cat: string,
-        xp: number,
-        mat: string,
-        checkpoints: Array<{ threshold: number; limit: number }>,
-        onCheckpointComplete: (result: SearchResult, checkpointIndex: number) => void,
-        config: SearchConfig = {}
-    ): Promise<SearchResult> {
-        const { signal, instrumentation } = config;
+    public async searchSequentialCheckpoints(request: SequentialCheckpointSearchContext): Promise<SearchResult> {
+        const { registry, cat, xp, mat, checkpoints, onCheckpointComplete, signal, instrumentation } = request;
 
         const enchantability = getEnchantability(registry, mat, cat);
         const modDist = this.distributionService.getModifiedLevelDist(registry, xp, enchantability, this.cache, instrumentation);
@@ -245,17 +230,18 @@ export class SearchService {
                 if (mProb === undefined) continue;
                 const existingState = stateMap.get(ml);
 
-                const result = await this.searchModifiedLevel(
-                    registry, cat, ml, {
+                const result = await this.searchModifiedLevel({
+                        registry,
+                        cat,
+                        modLevel: ml,
                         existingState,
                         threshold: activeThreshold,
                         limit: checkpoint.limit,
-                        resultsLimit: config.resultsLimit ?? ENGINE_LIMITS.MAX_RESULTS_SIZE,
+                        resultsLimit: request.resultsLimit ?? ENGINE_LIMITS.MAX_RESULTS_SIZE,
                         signal,
                         instrumentation,
-                        timing: config.timing
-                    }
-                );
+                        timing: request.timing
+                    });
 
                 stateMap.set(ml, result);
 
@@ -277,7 +263,7 @@ export class SearchService {
                 combos: finalCombos,
                 tracker: checkpointTracker,
                 instrumentation: instrumentation ? this.snapshotInstrumentation(instrumentation) : undefined,
-                timing: config.timing ? { ...config.timing } : undefined,
+                timing: request.timing ? { ...request.timing } : undefined,
                 threshold: checkpoint.threshold
             };
 

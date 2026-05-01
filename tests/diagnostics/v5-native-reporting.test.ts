@@ -45,14 +45,14 @@ test('V5 native reporting can reproduce the obsolete matrix runner payload', asy
         snapshotComboCount: number;
     }> = [];
 
-    await engine.searchSequentialCheckpoints(
-        input.category,
-        input.xpLevel,
-        input.material,
-        [
+    await engine.searchSequentialCheckpoints({
+        cat: input.category,
+        xp: input.xpLevel,
+        mat: input.material,
+        checkpoints: [
             { threshold: 0.0001, limit: 50_000 }
         ],
-        (result: SearchResult) => {
+        onCheckpointComplete: (result: SearchResult) => {
             const accounting = result.tracker.mass.toPublic();
             const snapshot = SnapshotService.create(
                 engine.registry,
@@ -83,8 +83,8 @@ test('V5 native reporting can reproduce the obsolete matrix runner payload', asy
                 snapshotComboCount: 'combos' in snapshot ? snapshot.combos.length : 0
             });
         },
-        { instrumentation }
-    );
+        instrumentation
+    });
 
     assert.strictEqual(records.length, 1, 'single deep V5 search should emit one final result');
 

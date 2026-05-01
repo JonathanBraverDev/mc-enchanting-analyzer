@@ -1,4 +1,4 @@
-import { CalculationStats, SearchState, RegistryState, SearchConfig, EngineInstrumentation } from '#types/index.js';
+import { CalculationRequest, CalculationStats, CheckpointSearchRequest, EngineInstrumentation, ModifiedLevelSearchRequest, RegistryState, SearchResult, SearchConfig, SearchState, SequentialCheckpointSearchRequest } from '#types/index.js';
 import { KeyUtils, ProbUtils } from '#utils/index.js';
 import { getCategoryId, getMaterialId, isCategoryAvailable, getEligibleListNumeric as getRegistryEligibleListNumeric } from '#core/registry.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
@@ -73,22 +73,26 @@ export class EnchantEngine {
      * @param resultsLimit Max unique combinations to return.
      * @param instrumentation Optional performance tracking.
      */
-    public async search(
-        cat: string,
-        modLevel: number,
-        mat: string,
-        threshold: bigint = ProbUtils.toBigInt(ENGINE_LIMITS.DEFAULT_THRESHOLD),
-        maxIterations?: number,
-        resultsLimit: number = ENGINE_LIMITS.MAX_RESULTS_SIZE,
-        instrumentation?: EngineInstrumentation
-    ): Promise<SearchState> {
+    public async searchModifiedLevel(request: ModifiedLevelSearchRequest): Promise<SearchState> {
+        const {
+            cat,
+            modLevel,
+            mat,
+            threshold = ProbUtils.toBigInt(ENGINE_LIMITS.DEFAULT_THRESHOLD),
+            maxIterations,
+            resultsLimit = ENGINE_LIMITS.MAX_RESULTS_SIZE,
+            instrumentation
+        } = request;
         const cacheKey = this.getPackedKey(cat, modLevel, mat);
         const cached = this.cache.getSearchState(cat, this.registry.version, cacheKey) as SearchState | undefined;
         // This one-level API returns a frontier directly, so a complete cached frontier is already
         // the full answer. Request-level searches still enter SearchService to preserve reporting.
         if (cached && cached.threshold <= threshold) return cached;
 
-        return this.searchService.searchModifiedLevel(this.registry, cat, modLevel, {
+        return this.searchService.searchModifiedLevel({
+            registry: this.registry,
+            cat,
+            modLevel,
             mat,
             useCache: true,
             existingState: cached,
@@ -103,33 +107,25 @@ export class EnchantEngine {
      * Sequential checkpoint version of searchToCheckpoint for v5 workers.
      * Streams search results via callback for each checkpoint.
      */
-    public async searchSequentialCheckpoints(
-        cat: string,
-        xp: number,
-        mat: string,
-        checkpoints: Array<{ threshold: number; limit: number }>,
-        onCheckpointComplete: (result: import('#types/index.js').SearchResult, checkpointIndex: number) => void,
-        config: SearchConfig = {}
-    ): Promise<import('#types/index.js').SearchResult> {
-        this.validateRequest(cat, xp, mat, config);
+    public async searchSequentialCheckpoints(request: SequentialCheckpointSearchRequest): Promise<SearchResult> {
+        this.validateRequest(request);
 
-        return this.searchService.searchSequentialCheckpoints(
-            this.registry, cat, xp, mat, checkpoints, onCheckpointComplete, config
-        );
+        return this.searchService.searchSequentialCheckpoints({
+            ...request,
+            registry: this.registry
+        });
     }
 
     /**
      * Internal method for v5 workers to get search results.
      */
-    public async searchToCheckpoint(
-        cat: string,
-        xp: number,
-        mat: string,
-        config: SearchConfig = {}
-    ): Promise<import('#types/index.js').SearchResult> {
-        this.validateRequest(cat, xp, mat, config);
+    public async searchToCheckpoint(request: CheckpointSearchRequest): Promise<SearchResult> {
+        this.validateRequest(request);
 
-        return this.searchService.searchToCheckpoint(this.registry, cat, xp, mat, config);
+        return this.searchService.searchToCheckpoint({
+            ...request,
+            registry: this.registry
+        });
     }
 
     /**
@@ -142,15 +138,13 @@ export class EnchantEngine {
      * @param config Optional search configuration (threshold, signals, etc).
      * @returns A promise resolving to the final aggregated statistics.
      */
-    public async calculate(
-        cat: string,
-        xp: number,
-        mat: string,
-        config: SearchConfig = {}
-    ): Promise<CalculationStats> {
-        this.validateRequest(cat, xp, mat, config);
+    public async calculate(request: CalculationRequest): Promise<CalculationStats> {
+        this.validateRequest(request);
 
         const {
+            cat,
+            xp,
+            mat,
             clue,
             threshold = ENGINE_LIMITS.DEFAULT_THRESHOLD,
             signal,
@@ -161,7 +155,7 @@ export class EnchantEngine {
             useCache,
             instrumentation,
             timing
-        } = config;
+        } = request;
 
         const packedClue = clue ? this.getPackedClue(cat, clue) : null;
 
@@ -181,7 +175,13 @@ export class EnchantEngine {
             timing
         };
 
-        const finalResult = await this.searchService.searchToCheckpoint(this.registry, cat, xp, mat, searchConfig);
+        const finalResult = await this.searchService.searchToCheckpoint({
+            registry: this.registry,
+            cat,
+            xp,
+            mat,
+            ...searchConfig
+        });
 
         const isBook = cat === "book";
         const finalStats = packedClue
@@ -230,7 +230,8 @@ export class EnchantEngine {
         return key;
     }
 
-    private validateRequest(cat: string, xp: number, mat: string, config: SearchConfig): void {
+    private validateRequest(request: CalculationRequest | CheckpointSearchRequest | SequentialCheckpointSearchRequest): void {
+        const { cat, xp, mat } = request;
 
         if (!Number.isFinite(xp) || !Number.isInteger(xp) || xp <= 0) {
             throw new Error(`Invalid XP level: ${xp}. XP must be a positive integer.`);
@@ -247,17 +248,17 @@ export class EnchantEngine {
         }
 
         // Config validation
-        if (config.threshold !== undefined) {
-            const t = ProbUtils.toNumber(config.threshold);
+        if (request.threshold !== undefined) {
+            const t = ProbUtils.toNumber(request.threshold);
             if (t < 0 || t > 1.0) {
                 throw new Error(`Invalid threshold: ${t}. Threshold must be between 0 and 1.0.`);
             }
         }
-        if (config.maxIterations !== undefined && (config.maxIterations <= 0 || !Number.isInteger(config.maxIterations))) {
-            throw new Error(`Invalid maxIterations: ${config.maxIterations}. Must be a positive integer.`);
+        if (request.maxIterations !== undefined && (request.maxIterations <= 0 || !Number.isInteger(request.maxIterations))) {
+            throw new Error(`Invalid maxIterations: ${request.maxIterations}. Must be a positive integer.`);
         }
-        if (config.resultsLimit !== undefined && (config.resultsLimit <= 0 || config.resultsLimit > 1_000_000)) {
-            throw new Error(`Invalid resultsLimit: ${config.resultsLimit}. Must be between 1 and 1,000,000.`);
+        if (request.resultsLimit !== undefined && (request.resultsLimit <= 0 || request.resultsLimit > 1_000_000)) {
+            throw new Error(`Invalid resultsLimit: ${request.resultsLimit}. Must be between 1 and 1,000,000.`);
         }
 
     }

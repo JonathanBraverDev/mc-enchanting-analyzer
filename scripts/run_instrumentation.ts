@@ -31,7 +31,10 @@ async function run() {
 
     const threshold = 0.001; // 1e-3 Standard UI Fine Accuracy
     const start = performance.now();
-    const stats = await engine.calculate(cat, xp, mat, {
+    const stats = await engine.calculate({
+        cat,
+        xp,
+        mat,
         instrumentation,
         threshold,
         maxIterations: 100000, // High limit for snapshot level

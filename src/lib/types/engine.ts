@@ -216,6 +216,50 @@ export interface SearchConfig {
     timing?: SearchTiming | undefined;
 }
 
+export interface CalculationRequest extends SearchConfig {
+    cat: string;
+    xp: number;
+    mat: string;
+}
+
+export interface ModifiedLevelSearchRequest {
+    cat: string;
+    modLevel: number;
+    mat: string;
+    threshold?: bigint | undefined;
+    maxIterations?: number | undefined;
+    resultsLimit?: number | undefined;
+    instrumentation?: EngineInstrumentation | undefined;
+}
+
+export interface CheckpointSearchRequest extends SearchConfig {
+    cat: string;
+    xp: number;
+    mat: string;
+}
+
+export interface SequentialCheckpointSearchRequest extends SearchConfig {
+    cat: string;
+    xp: number;
+    mat: string;
+    checkpoints: SearchCheckpoint[];
+    onCheckpointComplete: (result: SearchResult, checkpointIndex: number) => void;
+}
+
+export interface SummaryRequest {
+    combos: Map<PackedCombo, bigint>;
+    tracker: import('../engine/search/SearchStateTracker.js').SearchStateTracker;
+    indexToEnchant: number[];
+    comboLimit?: number | undefined;
+    threshold?: number | undefined;
+    frontiers?: { heap: import('../utils/collections/SearchHeap.js').SearchHeap, scale: bigint }[] | undefined;
+    isBook?: boolean | undefined;
+}
+
+export interface ConditionedSummaryRequest extends SummaryRequest {
+    targetClueId: number;
+}
+
 /**
  * Lightweight progress update from the engine.
  */
@@ -256,4 +300,25 @@ export interface SearchContext {
     signal?: AbortSignal | undefined;
     instrumentation?: EngineInstrumentation | undefined;
     timing?: SearchTiming | undefined;
+}
+
+export interface ModifiedLevelSearchContext extends SearchContext {
+    registry: RegistryState;
+    cat: string;
+    modLevel: number;
+    mat?: string | undefined;
+    existingState?: SearchState | undefined;
+    useCache?: boolean | undefined;
+}
+
+export interface CheckpointSearchContext extends SearchConfig {
+    registry: RegistryState;
+    cat: string;
+    xp: number;
+    mat: string;
+}
+
+export interface SequentialCheckpointSearchContext extends CheckpointSearchContext {
+    checkpoints: SearchCheckpoint[];
+    onCheckpointComplete: (result: SearchResult, checkpointIndex: number) => void;
 }

@@ -31,21 +31,27 @@ describe('EnchantEngine: sequential checkpoint aggregation', () => {
     it('sequential checkpoints produce same final result as single checkpoint search', async () => {
         const engine = createEngine();
 
-        const singleResult = await engine.searchToCheckpoint(
-            CAT, XP, MAT,
-            { threshold: TEST_DATA.THRESHOLDS.PROB_MIN, resultsLimit: 10000 }
-        );
+        const singleResult = await engine.searchToCheckpoint({
+            cat: CAT,
+            xp: XP,
+            mat: MAT,
+            threshold: TEST_DATA.THRESHOLDS.PROB_MIN,
+            resultsLimit: 10000
+        });
         const singleStats = SummaryService.summarize(singleResult.combos, singleResult.tracker, engine.registry.indexToEnchant, 10000, singleResult.threshold);
 
-        const sequentialResult = await engine.searchSequentialCheckpoints(
-            CAT, XP, MAT,
-            [
+        const sequentialResult = await engine.searchSequentialCheckpoints({
+            cat: CAT,
+            xp: XP,
+            mat: MAT,
+            checkpoints: [
                 { threshold: 0.01,   limit: 500 },
                 { threshold: TEST_DATA.THRESHOLDS.PROB_MIN, limit: 10000 },
             ],
-            () => {},
-            { threshold: TEST_DATA.THRESHOLDS.PROB_MIN, resultsLimit: 10000 }
-        );
+            onCheckpointComplete: () => {},
+            threshold: TEST_DATA.THRESHOLDS.PROB_MIN,
+            resultsLimit: 10000
+        });
         const sequentialStats = SummaryService.summarize(sequentialResult.combos, sequentialResult.tracker, engine.registry.indexToEnchant, 10000, sequentialResult.threshold);
 
         const accuracyDiff = Math.abs(sequentialStats.accuracy - singleStats.accuracy);
@@ -61,12 +67,13 @@ describe('EnchantEngine: sequential checkpoint aggregation', () => {
         ];
         const callbackIndices: number[] = [];
 
-        await engine.searchSequentialCheckpoints(
-            CAT, XP, MAT,
+        await engine.searchSequentialCheckpoints({
+            cat: CAT,
+            xp: XP,
+            mat: MAT,
             checkpoints,
-            (_result: SearchResult, checkpointIndex: number) => { callbackIndices.push(checkpointIndex); },
-            {}
-        );
+            onCheckpointComplete: (_result: SearchResult, checkpointIndex: number) => { callbackIndices.push(checkpointIndex); }
+        });
 
         assert.deepStrictEqual(callbackIndices, [0, 1, 2]);
     });
@@ -87,18 +94,20 @@ describe('EnchantEngine: sequential checkpoint aggregation', () => {
             }
         } as AbortSignal;
 
-        const result = await engine.searchSequentialCheckpoints(
-            CAT, XP, MAT,
-            [
+        const result = await engine.searchSequentialCheckpoints({
+            cat: CAT,
+            xp: XP,
+            mat: MAT,
+            checkpoints: [
                 { threshold: 0.01, limit: 200 },
                 { threshold: 0.001, limit: 500 },
             ],
-            (checkpointResult: SearchResult) => {
+            onCheckpointComplete: (checkpointResult: SearchResult) => {
                 completed.push(checkpointResult);
                 armed = true;
             },
-            { signal }
-        );
+            signal
+        });
 
         assert.strictEqual(completed.length, 1);
         assert.strictEqual(result, completed[0]);
@@ -108,18 +117,19 @@ describe('EnchantEngine: sequential checkpoint aggregation', () => {
         const engine = createEngine();
         const accuracies: number[] = [];
 
-        await engine.searchSequentialCheckpoints(
-            TEST_DATA.ITEMS.BOOK, 30, TEST_DATA.MATERIALS.BOOK,
-            [
+        await engine.searchSequentialCheckpoints({
+            cat: TEST_DATA.ITEMS.BOOK,
+            xp: 30,
+            mat: TEST_DATA.MATERIALS.BOOK,
+            checkpoints: [
                 { threshold: 0.1,    limit: 100 },
                 { threshold: 0.01,   limit: 500 },
                 { threshold: 0.001,  limit: 2000 },
             ],
-            (result: SearchResult) => {
+            onCheckpointComplete: (result: SearchResult) => {
                 accuracies.push(result.tracker.mass.toPublic().resolved);
-            },
-            {}
-        );
+            }
+        });
 
         assert.strictEqual(accuracies.length, 3);
         for (let i = 1; i < accuracies.length; i++) {
@@ -139,14 +149,16 @@ describe('EnchantEngine checkpoint search', () => {
         const engine = EngineFactory.create(DATA, VERSION);
         engine.resetCaches();
 
-        const sequentialResult = await engine.searchSequentialCheckpoints(
-            CAT, XP, MAT,
-            [
+        const sequentialResult = await engine.searchSequentialCheckpoints({
+            cat: CAT,
+            xp: XP,
+            mat: MAT,
+            checkpoints: [
                 { threshold: 0.01,   limit: 500 },
                 { threshold: TEST_DATA.THRESHOLDS.PROB_MIN, limit: 10000 },
             ],
-            () => {}
-        );
+            onCheckpointComplete: () => {}
+        });
         const sequentialStats = SummaryService.summarize(
             sequentialResult.combos,
             sequentialResult.tracker,
@@ -157,7 +169,10 @@ describe('EnchantEngine checkpoint search', () => {
 
         engine.resetCaches();
 
-        const fullStats = await engine.calculate(CAT, XP, MAT, {
+        const fullStats = await engine.calculate({
+            cat: CAT,
+            xp: XP,
+            mat: MAT,
             threshold: TEST_DATA.THRESHOLDS.PROB_MIN,
             summaryLimit: 10000,
             resultsLimit: 10000
@@ -173,19 +188,21 @@ describe('EnchantEngine checkpoint search', () => {
         engine.resetCaches();
         const checkpointAccuracies: number[] = [];
 
-        await engine.searchSequentialCheckpoints(
-            CAT, XP, MAT,
-            [
+        await engine.searchSequentialCheckpoints({
+            cat: CAT,
+            xp: XP,
+            mat: MAT,
+            checkpoints: [
                 { threshold: 0.1,    limit: 100 },
                 { threshold: 0.01,   limit: 500 },
                 { threshold: TEST_DATA.THRESHOLDS.PROB_MIN, limit: 10000 },
             ],
-            (result) => { checkpointAccuracies.push(result.tracker.mass.toPublic().resolved); }
-        );
+            onCheckpointComplete: (result) => { checkpointAccuracies.push(result.tracker.mass.toPublic().resolved); }
+        });
 
         assert.strictEqual(checkpointAccuracies.length, 3);
         const ultraAccuracy = checkpointAccuracies[2];
-        const futureResult = await engine.searchToCheckpoint(CAT, XP, MAT, { threshold: TEST_DATA.THRESHOLDS.PROB_MIN });
+        const futureResult = await engine.searchToCheckpoint({ cat: CAT, xp: XP, mat: MAT, threshold: TEST_DATA.THRESHOLDS.PROB_MIN });
         assert.strictEqual(futureResult.tracker.mass.toPublic().resolved, ultraAccuracy);
     });
 });

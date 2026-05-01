@@ -155,17 +155,15 @@ async function runOne(engine: EnchantEngine, cat: string, mat: string, xp: numbe
     let error: string | null = null;
 
     try {
-        const result = await engine.searchToCheckpoint(
-            cat,
-            xp,
-            mat,
-            {
+        const result = await engine.searchToCheckpoint({
+                cat,
+                xp,
+                mat,
                 threshold: THRESHOLD,
                 maxIterations: MAX_ITERATIONS,
                 instrumentation,
                 resultsLimit: RESULTS_LIMIT
-            }
-        );
+            });
         report = toReport(result, performance.now() - start);
     } catch (e: any) {
         error = e?.message ?? String(e);

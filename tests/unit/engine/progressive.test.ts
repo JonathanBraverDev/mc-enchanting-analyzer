@@ -25,13 +25,15 @@ describe('EnchantEngine: Sequential Checkpoint Search', () => {
             { threshold: 0.001, limit: 1000 }
         ];
 
-        await engine.searchSequentialCheckpoints(
-            TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND,
+        await engine.searchSequentialCheckpoints({
+            cat: TEST_DATA.ITEMS.SWORD,
+            xp: 30,
+            mat: TEST_DATA.MATERIALS.DIAMOND,
             checkpoints,
-            (result) => {
+            onCheckpointComplete: (result) => {
                 accuracies.push(result.tracker.mass.toPublic().resolved);
             }
-        );
+        });
 
         assert.strictEqual(accuracies.length, 3, 'Should have fired 3 checkpoint callbacks');
         for (let i = 1; i < accuracies.length; i++) {
@@ -46,13 +48,15 @@ describe('EnchantEngine: Sequential Checkpoint Search', () => {
             { threshold: 0.1,   limit: 10 },    // Very shallow second pass
         ];
 
-        const finalResult = await engine.searchSequentialCheckpoints(
-            TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND,
+        const finalResult = await engine.searchSequentialCheckpoints({
+            cat: TEST_DATA.ITEMS.SWORD,
+            xp: 30,
+            mat: TEST_DATA.MATERIALS.DIAMOND,
             checkpoints,
-            () => {
+            onCheckpointComplete: () => {
                 checkpointCount++;
             }
-        );
+        });
 
         assert.ok(checkpointCount >= 1);
         assert.ok(finalResult.tracker.mass.toPublic().resolved > 0.99);
@@ -65,13 +69,15 @@ describe('EnchantEngine: Sequential Checkpoint Search', () => {
             { threshold: 0.01,  limit: 1000 }
         ];
 
-        await engine.searchSequentialCheckpoints(
-            TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND,
+        await engine.searchSequentialCheckpoints({
+            cat: TEST_DATA.ITEMS.SWORD,
+            xp: 30,
+            mat: TEST_DATA.MATERIALS.DIAMOND,
             checkpoints,
-            (result) => {
+            onCheckpointComplete: (result) => {
                 roundingValues.push(result.tracker.mass.toPublic().rounding);
             }
-        );
+        });
 
         assert.strictEqual(roundingValues.length, 2);
         assert.ok((roundingValues[1] ?? 0) <= (roundingValues[0] ?? 0) + 1e-15, 'Rounding mass should not balloon between checkpoints');

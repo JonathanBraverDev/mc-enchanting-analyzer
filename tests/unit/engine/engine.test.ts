@@ -25,7 +25,7 @@ describe('Enchantment Engine Test Suite', () => {
         });
 
         it('should NOT return "X undefined" when no enchants are possible', async () => {
-            const stats = await engine.calculate(TEST_DATA.ITEMS.SWORD, 1, TEST_DATA.MATERIALS.DIAMOND);
+            const stats = await engine.calculate({ cat: TEST_DATA.ITEMS.SWORD, xp: 1, mat: TEST_DATA.MATERIALS.DIAMOND });
             const h = HumanizationService.humanize(stats, engine.registry);
             const hasUndefined = Object.keys(h.combos).some(c => c.includes('undefined')) ||
                                 Object.keys(h.ranks).some(r => r.includes('undefined'));
@@ -37,11 +37,11 @@ describe('Enchantment Engine Test Suite', () => {
         it('1.11.1+: Sweeping Edge should only appear in valid versions', async () => {
             const v18 = EngineFactory.create(DATA, TEST_DATA.VERSIONS.LEGACY);
             const id = v18.registry.idMap.get('Sweeping Edge')!;
-            const s18 = await v18.calculate(TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND);
+            const s18 = await v18.calculate({ cat: TEST_DATA.ITEMS.SWORD, xp: 30, mat: TEST_DATA.MATERIALS.DIAMOND });
             assert.ok(!(s18.any[id] ?? 0));
 
             const v111 = EngineFactory.create(DATA, '1.11.1');
-            const s111 = await v111.calculate(TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND);
+            const s111 = await v111.calculate({ cat: TEST_DATA.ITEMS.SWORD, xp: 30, mat: TEST_DATA.MATERIALS.DIAMOND });
             assert.ok((s111.any[id] ?? 0) > 0);
         });
 
@@ -69,10 +69,10 @@ describe('Enchantment Engine Test Suite', () => {
         const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.POST_NETHERITE);
 
         it('Progressive Refinement Parity: Resumed search should match fresh search', async () => {
-            const standard = await engine.calculate(TEST_DATA.ITEMS.BOOK, 30, TEST_DATA.MATERIALS.BOOK, { threshold: 0.001 });
+            const standard = await engine.calculate({ cat: TEST_DATA.ITEMS.BOOK, xp: 30, mat: TEST_DATA.MATERIALS.BOOK, threshold: 0.001 });
             engine.resetCaches();
-            await engine.calculate(TEST_DATA.ITEMS.BOOK, 30, TEST_DATA.MATERIALS.BOOK, { threshold: 0.05 }); // Coarse
-            const resumed = await engine.calculate(TEST_DATA.ITEMS.BOOK, 30, TEST_DATA.MATERIALS.BOOK, { threshold: 0.001 }); // Resume
+            await engine.calculate({ cat: TEST_DATA.ITEMS.BOOK, xp: 30, mat: TEST_DATA.MATERIALS.BOOK, threshold: 0.05 }); // Coarse
+            const resumed = await engine.calculate({ cat: TEST_DATA.ITEMS.BOOK, xp: 30, mat: TEST_DATA.MATERIALS.BOOK, threshold: 0.001 }); // Resume
 
             const keysS = Object.keys(standard.any).sort().slice(0, 5);
             const keysR = Object.keys(resumed.any).sort().slice(0, 5);
@@ -80,7 +80,7 @@ describe('Enchantment Engine Test Suite', () => {
         });
 
         it('Delayed Level Decay & Pool Persistence', async () => {
-            const stats = await engine.calculate(TEST_DATA.ITEMS.PICKAXE, 30, TEST_DATA.MATERIALS.DIAMOND);
+            const stats = await engine.calculate({ cat: TEST_DATA.ITEMS.PICKAXE, xp: 30, mat: TEST_DATA.MATERIALS.DIAMOND });
             const human = HumanizationService.humanize(stats, engine.registry);
 
             const hasEffIVDeep = Object.keys(human.combos)
@@ -104,7 +104,7 @@ describe('Enchantment Engine Test Suite', () => {
 
         it('Clue conditioning should yield 100% total probability (Pickaxe)', async () => {
             const clue = "Efficiency IV";
-            const stats = await engine.calculate(TEST_DATA.ITEMS.PICKAXE, 30, TEST_DATA.MATERIALS.DIAMOND, { clue, threshold: TEST_DATA.THRESHOLDS.PROB_MIN });
+            const stats = await engine.calculate({ cat: TEST_DATA.ITEMS.PICKAXE, xp: 30, mat: TEST_DATA.MATERIALS.DIAMOND, clue, threshold: TEST_DATA.THRESHOLDS.PROB_MIN });
             const effId = engine.registry.idMap.get('Efficiency')!;
             const probAnyEff = stats.any[effId];
 
@@ -118,7 +118,7 @@ describe('Enchantment Engine Test Suite', () => {
         });
 
         it('should maintain high precision for complex enchantment results', async () => {
-            const stats = await engine.calculate(TEST_DATA.ITEMS.PICKAXE, 30, TEST_DATA.MATERIALS.DIAMOND, { threshold: 0.00001 });
+            const stats = await engine.calculate({ cat: TEST_DATA.ITEMS.PICKAXE, xp: 30, mat: TEST_DATA.MATERIALS.DIAMOND, threshold: 0.00001 });
             let totalProb = 0; // Uncertainty is now properly tracked within the combos themselves as partial states
             for (const p of Object.values(stats.combos)) {
                 totalProb += Number(p);
@@ -130,10 +130,14 @@ describe('Enchantment Engine Test Suite', () => {
              const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
 
              // Force a high-uncertainty search by setting extremely low maxIterations (e.g., 5)
-             const stats = await engine.calculate(
-                 TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND,
-                 { clue: 'Sharpness IV', threshold: 0.000001, maxIterations: 5 }
-             );
+             const stats = await engine.calculate({
+                 cat: TEST_DATA.ITEMS.SWORD,
+                 xp: 30,
+                 mat: TEST_DATA.MATERIALS.DIAMOND,
+                 clue: 'Sharpness IV',
+                 threshold: 0.000001,
+                 maxIterations: 5
+             });
 
              const sharpnessId = getEnchantId(engine.registry,'Sharpness');
              const anySharpness = stats.any[sharpnessId];
@@ -149,7 +153,10 @@ describe('Enchantment Engine Test Suite', () => {
 
          it('Regression: Clue conditioning must still allow single-enchant outcomes (Match Wiki)', async () => {
              const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.LAPIS_PIVOT);
-             const stats = await engine.calculate(TEST_DATA.ITEMS.BOW, 30, TEST_DATA.MATERIALS.BOW, {
+             const stats = await engine.calculate({
+                 cat: TEST_DATA.ITEMS.BOW,
+                 xp: 30,
+                 mat: TEST_DATA.MATERIALS.BOW,
                  clue: 'Power IV',
                  threshold: 0.0001
              });
@@ -160,7 +167,7 @@ describe('Enchantment Engine Test Suite', () => {
 
          it('Clue conditioned book enchant should be exactly 100%', async () => {
              const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.POST_NETHERITE);
-             const stats = await engine.calculate(TEST_DATA.ITEMS.BOOK, 30, TEST_DATA.MATERIALS.BOOK, { clue: 'Silk Touch I', threshold: TEST_DATA.THRESHOLDS.PROB_MIN, summaryLimit: 1000 });
+             const stats = await engine.calculate({ cat: TEST_DATA.ITEMS.BOOK, xp: 30, mat: TEST_DATA.MATERIALS.BOOK, clue: 'Silk Touch I', threshold: TEST_DATA.THRESHOLDS.PROB_MIN, summaryLimit: 1000 });
              const silkTouchId = getEnchantId(engine.registry,'Silk Touch');
              assert.strictEqual(stats.any[silkTouchId], 1.0, 'Guaranteed book enchant should be exactly 100%');
          });
@@ -171,13 +178,13 @@ describe('Enchantment Engine Test Suite', () => {
              const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.LAPIS_PIVOT);
 
              // 1. Get stats for Sword
-             const swordStats = await engine.calculate(TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND, { threshold: 0.001 });
+             const swordStats = await engine.calculate({ cat: TEST_DATA.ITEMS.SWORD, xp: 30, mat: TEST_DATA.MATERIALS.DIAMOND, threshold: 0.001 });
              const sharpnessId = getEnchantId(engine.registry,'Sharpness') as number;
              assert.ok((swordStats.any[sharpnessId] ?? 0) > 0, 'Sword should have Sharpness');
 
              // 2. Get stats for Pickaxe (same version, level, material)
              // This should bypass the sword cache because category ID is different
-             const pickaxeStats = await engine.calculate(TEST_DATA.ITEMS.PICKAXE, 30, TEST_DATA.MATERIALS.DIAMOND, { threshold: 0.001 });
+             const pickaxeStats = await engine.calculate({ cat: TEST_DATA.ITEMS.PICKAXE, xp: 30, mat: TEST_DATA.MATERIALS.DIAMOND, threshold: 0.001 });
              const efficiencyId = getEnchantId(engine.registry,'Efficiency') as number;
 
              assert.strictEqual(pickaxeStats.any[sharpnessId] || 0, 0, 'Pickaxe should NOT have Sharpness');

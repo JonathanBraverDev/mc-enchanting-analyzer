@@ -32,7 +32,10 @@ describe('Frontier Resumability & Cache Behavior', () => {
         // Coarse engine: threshold=0.01 — search stops when queue-top prob < 0.001
         EngineFactory.clearCaches();
         const coarseEngine = EngineFactory.create(DATA, '1.21');
-        const coarseResult = await coarseEngine.calculate('sword', 30, 'diamond', {
+        const coarseResult = await coarseEngine.calculate({
+            cat: 'sword',
+            xp: 30,
+            mat: 'diamond',
             threshold: 0.01,
             resultsLimit: 1000
         });
@@ -42,7 +45,10 @@ describe('Frontier Resumability & Cache Behavior', () => {
         // A fresh engine ensures the stats cache from the coarse run doesn't interfere.
         EngineFactory.clearCaches();
         const deepEngine = EngineFactory.create(DATA, '1.21');
-        const deepResult = await deepEngine.calculate('sword', 30, 'diamond', {
+        const deepResult = await deepEngine.calculate({
+            cat: 'sword',
+            xp: 30,
+            mat: 'diamond',
             threshold: 0.0001,
             resultsLimit: 1000
         });
@@ -60,10 +66,10 @@ describe('Frontier Resumability & Cache Behavior', () => {
         const engine = EngineFactory.create(DATA, '1.21');
 
         // First call: computes stats and stores them in the stats cache.
-        const result1 = await engine.calculate('sword', 30, 'diamond', { threshold: 0.001, resultsLimit: 1000 });
+        const result1 = await engine.calculate({ cat: 'sword', xp: 30, mat: 'diamond', threshold: 0.001, resultsLimit: 1000 });
 
         // Second call with identical params: stats cache hit, returns the same object.
-        const result2 = await engine.calculate('sword', 30, 'diamond', { threshold: 0.001, resultsLimit: 1000 });
+        const result2 = await engine.calculate({ cat: 'sword', xp: 30, mat: 'diamond', threshold: 0.001, resultsLimit: 1000 });
 
         assert.strictEqual(result1, result2,
             'Second getFullStats call with same params should return the exact same cached object');
@@ -80,7 +86,10 @@ describe('Frontier Resumability & Cache Behavior', () => {
         const engine = EngineFactory.create(DATA, '1.21');
 
         // Coarse pass: populates both statsCache and frontier cache.
-        const coarseResult = await engine.calculate('sword', 30, 'diamond', {
+        const coarseResult = await engine.calculate({
+            cat: 'sword',
+            xp: 30,
+            mat: 'diamond',
             threshold: 0.01,
             resultsLimit: 1000
         });
@@ -90,7 +99,10 @@ describe('Frontier Resumability & Cache Behavior', () => {
 
         // Deep pass: statsCache miss forces recomputation, but frontier cache hit
         // lets each modLevel search resume from the already-explored coarse frontier.
-        const deepResult = await engine.calculate('sword', 30, 'diamond', {
+        const deepResult = await engine.calculate({
+            cat: 'sword',
+            xp: 30,
+            mat: 'diamond',
             threshold: 0.0001,
             resultsLimit: 1000
         });
@@ -110,14 +122,20 @@ describe('Frontier Resumability & Cache Behavior', () => {
         // Ultra run first: produces low-uncertainty stats, cached at K_stats.
         // The stats key excludes limit and threshold, so K_stats is the same
         // for any config on the same (cat, mat, xp, guaranteed) tuple.
-        const ultraResult = await engine.calculate('sword', 30, 'diamond', {
+        const ultraResult = await engine.calculate({
+            cat: 'sword',
+            xp: 30,
+            mat: 'diamond',
             threshold: 0.00001,
             maxIterations: 200
         });
 
         // Coarse run: looks up the same K_stats → immediate stats cache hit.
         // Returns the already-cached ultra result without recomputing.
-        const coarseResult = await engine.calculate('sword', 30, 'diamond', {
+        const coarseResult = await engine.calculate({
+            cat: 'sword',
+            xp: 30,
+            mat: 'diamond',
             threshold: 0.1, // use a very coarse threshold to be safe
             maxIterations: 20
         });

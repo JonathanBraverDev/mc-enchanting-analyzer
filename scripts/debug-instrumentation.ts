@@ -18,7 +18,10 @@ async function debug() {
         distCache: { hits: 0, misses: 0 }
     };
 
-    await engine.calculate(cat, level, mat, {
+    await engine.calculate({
+        cat,
+        xp: level,
+        mat,
         threshold: 0.000000001,
         maxIterations: 1000000,
         instrumentation,
