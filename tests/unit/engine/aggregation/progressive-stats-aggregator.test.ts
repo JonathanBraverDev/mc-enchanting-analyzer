@@ -109,17 +109,17 @@ describe('ProgressiveStatsAggregator: sequential checkpoint aggregation', () => 
     });
 });
 
-describe('EnchantEngine.calculateProgressive', () => {
+describe('EnchantEngine checkpoint search', () => {
     afterEach(() => {
         const engine = EngineFactory.create(DATA, VERSION);
         engine.resetCaches();
     });
 
-    it('calculateProgressive produces same result as calculate', async () => {
+    it('searchSequentialCheckpoints produces same summarized result as calculate', async () => {
         const engine = EngineFactory.create(DATA, VERSION);
         engine.resetCaches();
 
-        const progressiveStats = await engine.calculateProgressive(
+        const sequentialResult = await engine.searchSequentialCheckpoints(
             CAT, XP, MAT,
             [
                 { threshold: 0.01,   limit: 500 },
@@ -127,37 +127,45 @@ describe('EnchantEngine.calculateProgressive', () => {
             ],
             () => {}
         );
+        const sequentialStats = SummaryService.summarize(
+            sequentialResult.combos,
+            sequentialResult.tracker,
+            engine.registry.indexToEnchant,
+            10000,
+            sequentialResult.threshold
+        );
 
         engine.resetCaches();
 
         const fullStats = await engine.calculate(CAT, XP, MAT, {
             threshold: TEST_DATA.THRESHOLDS.PROB_MIN,
+            summaryLimit: 10000,
             resultsLimit: 10000
         });
 
-        assert.strictEqual(Object.keys(progressiveStats.combos).length, Object.keys(fullStats.combos).length);
-        const accuracyDiff = Math.abs(progressiveStats.accuracy - fullStats.accuracy);
+        assert.strictEqual(Object.keys(sequentialStats.combos).length, Object.keys(fullStats.combos).length);
+        const accuracyDiff = Math.abs(sequentialStats.accuracy - fullStats.accuracy);
         assert.ok(accuracyDiff < 0.001);
     });
 
-    it('best intermediate result survives for future calls', async () => {
+    it('best checkpoint result survives for future calls', async () => {
         const engine = EngineFactory.create(DATA, VERSION);
         engine.resetCaches();
         const checkpointAccuracies: number[] = [];
 
-        await engine.calculateProgressive(
+        await engine.searchSequentialCheckpoints(
             CAT, XP, MAT,
             [
                 { threshold: 0.1,    limit: 100 },
                 { threshold: 0.01,   limit: 500 },
                 { threshold: TEST_DATA.THRESHOLDS.PROB_MIN, limit: 10000 },
             ],
-            (stats) => { checkpointAccuracies.push(stats.accuracy); }
+            (result) => { checkpointAccuracies.push(result.tracker.mass.toPublic().resolved); }
         );
 
         assert.strictEqual(checkpointAccuracies.length, 3);
         const ultraAccuracy = checkpointAccuracies[2];
-        const futureStats = await engine.calculate(CAT, XP, MAT, { threshold: TEST_DATA.THRESHOLDS.PROB_MIN });
-        assert.strictEqual(futureStats.accuracy, ultraAccuracy);
+        const futureResult = await engine.searchToCheckpoint(CAT, XP, MAT, { threshold: TEST_DATA.THRESHOLDS.PROB_MIN });
+        assert.strictEqual(futureResult.tracker.mass.toPublic().resolved, ultraAccuracy);
     });
 });

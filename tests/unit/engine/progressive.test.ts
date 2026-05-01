@@ -6,7 +6,7 @@ import { EngineFactory } from '#engine/factory.js';
 import { DATA } from '#data/index.js';
 import { TEST_DATA } from '#tests/infra/test-data.js';
 
-describe('EnchantEngine: Progressive Search', () => {
+describe('EnchantEngine: Sequential Checkpoint Search', () => {
 
     let cache: CacheManager;
     let engine: EnchantEngine;
@@ -25,11 +25,11 @@ describe('EnchantEngine: Progressive Search', () => {
             { threshold: 0.001, limit: 1000 }
         ];
 
-        await engine.calculateProgressive(
+        await engine.searchSequentialCheckpoints(
             TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND,
             checkpoints,
-            (stats: any) => {
-                accuracies.push(stats.accuracy);
+            (result) => {
+                accuracies.push(result.tracker.mass.toPublic().resolved);
             }
         );
 
@@ -46,7 +46,7 @@ describe('EnchantEngine: Progressive Search', () => {
             { threshold: 0.1,   limit: 10 },    // Very shallow second pass
         ];
 
-        const stats = await engine.calculateProgressive(
+        const finalResult = await engine.searchSequentialCheckpoints(
             TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND,
             checkpoints,
             () => {
@@ -55,7 +55,7 @@ describe('EnchantEngine: Progressive Search', () => {
         );
 
         assert.ok(checkpointCount >= 1);
-        assert.ok(stats.accuracy > 0.99);
+        assert.ok(finalResult.tracker.mass.toPublic().resolved > 0.99);
     });
 
     it('should recover rounding residue between checkpoints (High Precision)', async () => {
@@ -65,11 +65,11 @@ describe('EnchantEngine: Progressive Search', () => {
             { threshold: 0.01,  limit: 1000 }
         ];
 
-        await engine.calculateProgressive(
+        await engine.searchSequentialCheckpoints(
             TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND,
             checkpoints,
-            (stats: any) => {
-                roundingValues.push(stats.accounting.rounding);
+            (result) => {
+                roundingValues.push(result.tracker.mass.toPublic().rounding);
             }
         );
 
