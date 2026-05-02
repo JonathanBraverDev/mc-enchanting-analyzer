@@ -15,7 +15,7 @@ A high-performance, real-time simulation tool for Minecraft's enchanting mechani
 ## 🚀 Getting Started
 
 ### 📥 Standalone HTML (Zero Install)
-The easiest way to use the analyzer is to download the **Standalone HTML** file from our [Releases Page](https://github.com/JonathanBraverDev/mc-enchanting-analyzer/releases). 
+The easiest way to use the analyzer is to download the **Standalone HTML** file from our [Releases Page](https://github.com/JonathanBraverDev/mc-enchanting-analyzer/releases).
 - **No install needed**: Just open the file in any modern web browser.
 - **Portable**: Everything (logic, styles, data) is contained in a single file.
 

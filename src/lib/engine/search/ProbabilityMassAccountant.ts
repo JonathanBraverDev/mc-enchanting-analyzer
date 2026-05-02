@@ -21,7 +21,7 @@ const BUCKET_COUNT = 9;
  * Encapsulated state tracker for probability mass units.
  * Ensures strict conservation invariants and provides diagnostic visibility.
  */
-export class ProbabilityMassBookkeeper {
+export class ProbabilityMassAccountant {
     private data: BigUint64Array;
 
     constructor(initialMass?: MassBookkeeping) {
@@ -56,7 +56,7 @@ export class ProbabilityMassBookkeeper {
     /**
      * Scales and adds all mass from another accountant to this one.
      */
-    public addScaled(other: ProbabilityMassBookkeeper, factor: bigint): void {
+    public addScaled(other: ProbabilityMassAccountant, factor: bigint): void {
         for (let i = 0; i < BUCKET_COUNT; i++) {
             this.data[i]! += ProbUtils.scale(other.data[i]!, factor);
         }
@@ -130,6 +130,14 @@ export class ProbabilityMassBookkeeper {
     }
 
     /**
+     * Returns the mass that has been removed from the frontier by normal exploration.
+     */
+    public getExploredMass(): bigint {
+        const d = this.data;
+        return d[0]! + d[2]! + d[3]!;
+    }
+
+    /**
      * Returns the mass from frontiers that were discovered but not yet expanded.
      */
     public getUnexploredMass(): bigint {
@@ -144,8 +152,8 @@ export class ProbabilityMassBookkeeper {
         return d[2]! + d[3]! + d[4]!;
     }
 
-    public clone(): ProbabilityMassBookkeeper {
-        const other = new ProbabilityMassBookkeeper();
+    public clone(): ProbabilityMassAccountant {
+        const other = new ProbabilityMassAccountant();
         other.data.set(this.data);
         return other;
     }

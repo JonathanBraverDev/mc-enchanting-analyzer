@@ -11,25 +11,23 @@ async function profile() {
         return (next && !next.startsWith('--')) ? next : null;
     };
     const version = findArg('--version') ?? '1.21.11';
-    
+
     console.log(`Profiling ${version} search performance...`);
     const engine = EngineFactory.create(DATA, version);
 
     const timing = { totalMs: 0, searchMs: 0 };
     console.time('TargetSnapshot');
-    const stats = await engine.calculate(
-        'book',
-        30,
-        'book',
-        {
+    const stats = await engine.calculate({
+            cat: 'book',
+            xp: 30,
+            mat: 'book',
             threshold: TEST_DEFAULTS.SNAPSHOT_THRESHOLD,
             maxIterations: ENGINE_LIMITS.MAX_ITERATIONS_UNBOUNDED,
             summaryLimit: ENGINE_LIMITS.MAX_RESULTS_UNBOUNDED,
             resultsLimit: ENGINE_LIMITS.MAX_RESULTS_UNBOUNDED,
             useCache: false,
             timing
-        }
-    );
+        });
     console.timeEnd('TargetSnapshot');
     console.log('Results size:', Object.keys(stats.combos).length);
     console.log('--- Timing Breakdown ---');

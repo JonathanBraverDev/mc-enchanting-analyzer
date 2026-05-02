@@ -38,7 +38,7 @@ export class SerializationService {
             anyProbs[ai] = prob as number;
             ai++;
         }
-        
+
         const clueEntries = Object.entries(stats.clues);
         const clueKeys = new Uint32Array(clueEntries.length);
         const clueProbs = new Float64Array(clueEntries.length);
@@ -57,7 +57,7 @@ export class SerializationService {
             rankKeys, rankProbs,
             anyKeys, anyProbs,
             clueKeys, clueProbs,
-            counts, 
+            counts,
             accuracy: stats.accuracy,
             accounting: stats.accounting,
             threshold: stats.threshold
@@ -79,13 +79,13 @@ export class SerializationService {
      * Reconstructs statistics from a CompactStats object.
      */
     public static deserialize(compact: CompactStats): CalculationStats {
-        const stats: CalculationStats = { 
-            ranks: {}, any: {}, count: {}, combos: {}, clues: {}, 
+        const stats: CalculationStats = {
+            ranks: {}, any: {}, count: {}, combos: {}, clues: {},
             accuracy: compact.accuracy,
             accounting: compact.accounting,
             threshold: compact.threshold
         };
-        
+
         for (const [i, key] of compact.comboKeys.entries()) {
             const prob = compact.comboProbs[i];
             if (prob === undefined) continue;
@@ -109,7 +109,7 @@ export class SerializationService {
         for (const [i, val] of compact.counts.entries()) {
             if (val > 0) stats.count[i] = val;
         }
-        
+
         return stats;
     }
 }

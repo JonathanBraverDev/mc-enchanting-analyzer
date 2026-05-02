@@ -105,14 +105,14 @@ describe('Registry & Data Rules Test Suite', () => {
             assert.strictEqual(chestplatePool.includes('Lure'), false, 'Chestplates should not have Lure');
         });
     });
-    
+
     describe('3. Category & Material ID Mapping', () => {
         const reg = EngineFactory.create(DATA, '1.20').registry;
 
         it('should assign unique Category IDs to common item types', () => {
             const categories = ["sword", "pickaxe", "axe", "shovel", "helmet", "chestplate", "leggings", "boots", "hoe", "bow"];
             const ids = new Set<number>();
-            
+
             categories.forEach(cat => {
                 const id = getCategoryId(reg, cat);
                 assert.notStrictEqual(id, 63, `Category "${cat}" should not have the default unknown ID (63)`);
@@ -141,5 +141,3 @@ describe('Registry & Data Rules Test Suite', () => {
         });
     });
 });
-
-

@@ -101,9 +101,6 @@ export const CACHE_CONFIG = {
  * Search logic constants.
  */
 export const SEARCH_CONSTANTS = {
-    /** Target mass coverage percentages where checkpoints are recorded. (As floats) */
-    CHECKPOINT_TARGET_FLOATS: [0.1, 0.25, 0.5, 0.75, 0.8, 0.85, 0.9, 0.95, 0.99, 0.999],
-
     /** Max length for the continue table. */
     CONTINUE_TABLE_SIZE: 65,
 

@@ -1,5 +1,7 @@
 
-export interface SearchMode {
+import { RefinementLevelName, SearchCheckpoint } from '#types/index.js';
+
+export interface RefinementCheckpointPreset {
     thresholdBook: number;
     thresholdOther: number;
     limitBook: number;
@@ -7,7 +9,11 @@ export interface SearchMode {
     status: string;
 }
 
-export type SearchLevel = 'coarse' | 'standard' | 'deep' | 'ultra' | 'done';
+export type RefinementStatusLevel = RefinementLevelName | 'done';
+export interface RefinementSearchCheckpoint extends SearchCheckpoint {
+    refinementLevel: RefinementLevelName;
+    status: string;
+}
 
 export const UI_TEXTS = {
     PAGE_TITLE: "Minecraft Enchantment Analyzer",
@@ -38,7 +44,7 @@ export const UI_DEFAULTS = {
     CHART_METRIC_COUNT: "count"
 };
 
-export const SEARCH_MODES: Record<Exclude<SearchLevel, 'done'>, SearchMode> = {
+export const REFINEMENT_CHECKPOINTS: Record<RefinementLevelName, RefinementCheckpointPreset> = {
     coarse: {
         thresholdBook: 0.05,
         thresholdOther: 0.01,
@@ -69,7 +75,7 @@ export const SEARCH_MODES: Record<Exclude<SearchLevel, 'done'>, SearchMode> = {
     }
 };
 
-export const SEARCH_LEVEL_COLORS: Record<SearchLevel, { bg: string; text: string }> = {
+export const REFINEMENT_LEVEL_COLORS: Record<RefinementStatusLevel, { bg: string; text: string }> = {
     coarse:   { bg: 'rgba(255, 193, 7, 0.15)',   text: '#ffca28' },
     standard: { bg: 'rgba(76, 175, 80, 0.15)',   text: '#66bb6a' },
     deep:     { bg: 'rgba(33, 150, 243, 0.15)',  text: '#42a5f5' },
@@ -77,9 +83,10 @@ export const SEARCH_LEVEL_COLORS: Record<SearchLevel, { bg: string; text: string
     done:     { bg: 'rgba(255, 255, 255, 0.05)', text: 'var(--text-muted)' }
 };
 
-export function getParamsForMode(level: Exclude<SearchLevel, 'done'>, isBook: boolean) {
-    const mode = SEARCH_MODES[level];
+export function getSearchCheckpointForRefinement(level: RefinementLevelName, isBook: boolean): RefinementSearchCheckpoint {
+    const mode = REFINEMENT_CHECKPOINTS[level];
     return {
+        refinementLevel: level,
         threshold: isBook ? mode.thresholdBook : mode.thresholdOther,
         limit: isBook ? mode.limitBook : mode.limitOther,
         status: mode.status

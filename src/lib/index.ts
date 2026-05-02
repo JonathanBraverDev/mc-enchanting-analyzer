@@ -5,4 +5,4 @@ export { DATA } from './data/index.js';
 export * from './types/index.js';
 export * from './core/config.js';
 export * from './utils/index.js';
-export { CacheManager } from './services/index.js';
+export { CacheManager } from './engine/cache/CacheManager.js';

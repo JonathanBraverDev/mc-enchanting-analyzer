@@ -292,7 +292,7 @@ describe('KeyUtils.getPackedKey', () => {
     });
 
     it('produces the same key regardless of search limit (cross-tier resumability)', () => {
-        // limit is NOT part of the packed key — coarse and deep tiers share one cache entry
+        // limit is NOT part of the packed key — coarse and deep checkpoints share one cache entry
         const kCoarse = KeyUtils.getPackedKey(1, 2, 15);
         const kDeep   = KeyUtils.getPackedKey(1, 2, 15);
         assert.strictEqual(kCoarse, kDeep);
@@ -364,5 +364,3 @@ describe('EnchantUtils.parse', () => {
         assert.deepStrictEqual(EnchantUtils.parse('Sharpness Max', ROMAN_MAP), { name: 'Sharpness Max', rank: 1 });
     });
 });
-
-

@@ -224,16 +224,6 @@ export const ProbUtils = {
     },
 
     /**
-     * Pre-computed BigInt versions of checkpoint targets to avoid repeated conversion.
-     */
-    CHECKPOINT_TARGETS: SEARCH_CONSTANTS.CHECKPOINT_TARGET_FLOATS.map(t => {
-        if (t <= 0) return 0n;
-        if (t >= 1) return PRECISION;
-        const mantissaScale = 2 ** MATH_CONSTANTS.FLOAT_MANTISSA_BITS;
-        return BigInt(Math.floor(t * mantissaScale)) << MATH_CONSTANTS.MANTISSA_TO_FIXED_SHIFT;
-    }),
-
-    /**
      * Probability table for continuing to add more enchantments at a given modified level.
      */
     PROB_CONTINUE_TABLE: Array.from({ length: SEARCH_CONSTANTS.CONTINUE_TABLE_SIZE }, (_, ml) => {

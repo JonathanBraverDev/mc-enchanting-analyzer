@@ -1,15 +1,14 @@
-import { CalculationStats, SearchState, RegistryState, SearchConfig, InternalSearchConfig, EngineInstrumentation, } from '#types/index.js';
-import { ProbUtils, EnchantUtils } from '#utils/index.js';
-import { getMaterialId, getEnchantId, isCategoryAvailable, getEligibleListNumeric as getRegistryEligibleListNumeric } from '#core/registry.js';
+import { CalculationRequest, CalculationStats, CheckpointSearchRequest, EngineInstrumentation, ModifiedLevelSearchRequest, RegistryState, SearchResult, SearchConfig, SearchState, SequentialCheckpointSearchRequest } from '#types/index.js';
+import { KeyUtils, ProbUtils } from '#utils/index.js';
+import { getCategoryId, getMaterialId, isCategoryAvailable, getEligibleListNumeric as getRegistryEligibleListNumeric } from '#core/registry.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import { MINECRAFT_RULES } from '#constants/minecraft.js';
 import { getSearchLimit } from '#engine/utils.js';
 import { CacheManager } from '#engine/cache/CacheManager.js';
-import { KeyService } from '#services/KeyService.js';
 import { SummaryService } from '#services/SummaryService.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { SearchService } from '#engine/search/SearchService.js';
-import { ProgressiveStatsAggregator } from '#engine/aggregation/ProgressiveStatsAggregator.js';
+import { ClueValidator } from '#core/clue.js';
 export { EngineFactory } from './factory.js';
 
 /**
@@ -24,10 +23,8 @@ export class EnchantEngine {
     constructor(
         registry: RegistryState,
         private readonly cache: CacheManager,
-        private readonly keyService: KeyService,
         private readonly distributionService: ModifiedLevelDistributionService,
-        private readonly searchService: SearchService,
-        private readonly statAggregator: ProgressiveStatsAggregator
+        private readonly searchService: SearchService
     ) {
         this._registry = registry;
     }
@@ -67,7 +64,7 @@ export class EnchantEngine {
 
     /**
      * Search for enchantment combinations at a specific modified level.
-     * 
+     *
      * @param cat Item category.
      * @param modLevel The pre-computed modified level for this search.
      * @param mat Item material.
@@ -76,157 +73,78 @@ export class EnchantEngine {
      * @param resultsLimit Max unique combinations to return.
      * @param instrumentation Optional performance tracking.
      */
-    public async search(
-        cat: string,
-        modLevel: number,
-        mat: string,
-        threshold: bigint = ProbUtils.toBigInt(ENGINE_LIMITS.DEFAULT_THRESHOLD),
-        maxIterations?: number,
-        resultsLimit: number = ENGINE_LIMITS.MAX_RESULTS_SIZE,
-        instrumentation?: EngineInstrumentation
-    ): Promise<SearchState> {
-        const limit = getSearchLimit(cat, ProbUtils.toNumber(threshold), maxIterations);
-        const cacheKey = this.keyService.getPackedKey(this.registry, cat, modLevel, mat);
-        
-        const cached = cat === "book" ? this.cache.getBook(this.registry.version, cacheKey) : this.cache.getCombo(this.registry.version, cacheKey);
-        // Cast cached to SearchState if needed, but the cache should already store SearchState 3.0 types
-        if (cached && cached.threshold <= threshold) return cached as SearchState;
+    public async searchModifiedLevel(request: ModifiedLevelSearchRequest): Promise<SearchState> {
+        const {
+            cat,
+            modLevel,
+            mat,
+            threshold = ProbUtils.toBigInt(ENGINE_LIMITS.DEFAULT_THRESHOLD),
+            maxIterations,
+            resultsLimit = ENGINE_LIMITS.MAX_RESULTS_SIZE,
+            instrumentation
+        } = request;
+        const cacheKey = this.getPackedKey(cat, modLevel, mat);
+        const cached = this.cache.getSearchState(cat, this.registry.version, cacheKey) as SearchState | undefined;
+        // This one-level API returns a frontier directly, so a complete cached frontier is already
+        // the full answer. Request-level searches still enter SearchService to preserve reporting.
+        if (cached && cached.threshold <= threshold) return cached;
 
-        const result = await this.searchService.search(
-            this.registry, cat, modLevel, cached as SearchState, {
-                threshold,
-                limit,
-                resultsLimit,
-                instrumentation
-            }
-        );
-
-        if (cat === "book") this.cache.setBook(this.registry.version, cacheKey, result);
-        else this.cache.setCombo(this.registry.version, cacheKey, result);
-        
-        return result;
+        return this.searchService.searchModifiedLevel({
+            registry: this.registry,
+            cat,
+            modLevel,
+            mat,
+            useCache: true,
+            existingState: cached,
+            threshold,
+            limit: getSearchLimit(cat, ProbUtils.toNumber(threshold), maxIterations),
+            resultsLimit,
+            instrumentation
+        });
     }
 
     /**
-     * Aggregates statistics using a tiered progressive search.
-     * Fires a callback after each tier completes, allowing for responsive UI updates
-     * without waiting for the finest precision.
-     * 
-     * @param cat The item category.
-     * @param xp The base XP level.
-     * @param mat The item material.
-     * @param tiers Array of search depths (thresholds and iteration limits).
-     * @param onTierComplete Callback fired when a tier finishing aggregating.
-     * @param config Optional base configuration.
+     * Sequential checkpoint version of searchToCheckpoint for v5 workers.
+     * Streams search results via callback for each checkpoint.
      */
-    public async calculateProgressive(
-        cat: string,
-        xp: number,
-        mat: string,
-        tiers: Array<{ threshold: number; limit: number }>,
-        onTierComplete: (stats: CalculationStats, tierIndex: number) => void,
-        config?: Partial<SearchConfig>
-    ): Promise<CalculationStats> {
-        this.validateRequest(cat, xp, mat, config ?? {});
+    public async searchSequentialCheckpoints(request: SequentialCheckpointSearchRequest): Promise<SearchResult> {
+        this.validateRequest(request);
 
-        const {
-            clue,
-            threshold = ENGINE_LIMITS.DEFAULT_THRESHOLD,
-            signal,
-            onProgress,
-            maxIterations,
-            summaryLimit = ENGINE_LIMITS.MAX_RESULTS_SUMMARY,
-            resultsLimit = ENGINE_LIMITS.MAX_RESULTS_SIZE,
-            instrumentation,
-            timing
-        } = config ?? {};
+        return this.searchService.searchSequentialCheckpoints({
+            ...request,
+            registry: this.registry
+        });
+    }
 
-        const packedClue = clue ? this.getPackedClue(cat, clue) : null;
+    /**
+     * Internal method for v5 workers to get search results.
+     */
+    public async searchToCheckpoint(request: CheckpointSearchRequest): Promise<SearchResult> {
+        this.validateRequest(request);
 
-        const cacheKey = this.keyService.getStatsKey(this.registry, cat, xp, mat, packedClue);
-
-        const cachedStats = this.cache.getStats(this.registry.version, cacheKey);
-        const lastTier = tiers[tiers.length - 1];
-        const finestThreshold = lastTier?.threshold ?? Infinity;
-        if (cachedStats && cachedStats.threshold <= finestThreshold) return cachedStats;
-
-        const internalConfig: InternalSearchConfig = {
-            threshold,
-            signal,
-            onProgress,
-            maxIterations,
-            summaryLimit,
-            resultsLimit,
-            instrumentation,
-            timing,
-            getCacheMetrics: () => ({ 
-                cacheNodes: this.cache.getTotalCachedNodes(), 
-                cacheResults: this.cache.getTotalCachedResults() 
-            })
-        };
-
-        const wrappedOnTierComplete = (raw: any, tierIndex: number) => {
-            const stats = packedClue
-                ? SummaryService.summarizeConditioned(raw.combos, raw.tracker, this.registry.indexToEnchant, packedClue, summaryLimit)
-                : SummaryService.summarize(raw.combos, raw.tracker, this.registry.indexToEnchant, raw.anyMass, raw.rankMass, raw.countMass, summaryLimit, raw.threshold);
-            
-            stats.instrumentation = raw.instrumentation;
-            stats.timing = raw.timing;
-            
-            onTierComplete(stats, tierIndex);
-            const currentCached = this.cache.getStats(this.registry.version, cacheKey);
-            if (!currentCached || stats.accuracy > currentCached.accuracy) {
-                this.cache.setStats(this.registry.version, cacheKey, stats);
-            }
-        };
-
-        const finalRaw = await this.statAggregator.calculateTiered(
-            this.registry, cat, xp, mat, tiers, wrappedOnTierComplete, internalConfig
-        );
-
-        const finalStats = packedClue
-            ? SummaryService.summarizeConditioned(finalRaw.combos, finalRaw.tracker, this.registry.indexToEnchant, packedClue, summaryLimit)
-            : SummaryService.summarize(
-                finalRaw.combos,
-                finalRaw.tracker,
-                this.registry.indexToEnchant,
-                finalRaw.anyMass,
-                finalRaw.rankMass,
-                finalRaw.countMass,
-                summaryLimit,
-                finalRaw.threshold
-            );
-
-        finalStats.instrumentation = finalRaw.instrumentation;
-        finalStats.timing = finalRaw.timing;
-
-        const currentCached = this.cache.getStats(this.registry.version, cacheKey);
-        if (!currentCached || finalStats.accuracy > currentCached.accuracy) {
-            this.cache.setStats(this.registry.version, cacheKey, finalStats);
-        }
-
-        return finalStats;
+        return this.searchService.searchToCheckpoint({
+            ...request,
+            registry: this.registry
+        });
     }
 
     /**
      * Aggregates all statistics for a given enchantment attempt.
      * Use this for standard single-pass calculations (e.g. standard UI search).
-     * 
+     *
      * @param cat The item category (e.g., 'sword', 'pickaxe').
      * @param xp The base XP level from the enchantment table (1-50).
      * @param mat The item material (e.g., 'diamond', 'netherite').
      * @param config Optional search configuration (threshold, signals, etc).
      * @returns A promise resolving to the final aggregated statistics.
      */
-    public async calculate(
-        cat: string,
-        xp: number,
-        mat: string,
-        config: SearchConfig = {}
-    ): Promise<CalculationStats> {
-        this.validateRequest(cat, xp, mat, config);
+    public async calculate(request: CalculationRequest): Promise<CalculationStats> {
+        this.validateRequest(request);
 
         const {
+            cat,
+            xp,
+            mat,
             clue,
             threshold = ENGINE_LIMITS.DEFAULT_THRESHOLD,
             signal,
@@ -234,60 +152,60 @@ export class EnchantEngine {
             maxIterations,
             summaryLimit = ENGINE_LIMITS.MAX_RESULTS_SUMMARY,
             resultsLimit = ENGINE_LIMITS.MAX_RESULTS_SIZE,
+            useCache,
             instrumentation,
             timing
-        } = config;
+        } = request;
 
         const packedClue = clue ? this.getPackedClue(cat, clue) : null;
 
-        const cacheKey = this.keyService.getStatsKey(this.registry, cat, xp, mat, packedClue);
+        const cacheKey = this.getStatsKey(cat, xp, mat, packedClue);
 
         const cachedStats = this.cache.getStats(this.registry.version, cacheKey);
         if (cachedStats && cachedStats.threshold <= threshold) return cachedStats;
 
-        const internalConfig: InternalSearchConfig = {
+        const searchConfig: SearchConfig = {
             threshold,
             signal,
             onProgress,
             maxIterations,
-            summaryLimit,
             resultsLimit,
-            getExtendedCache: (ml) => {
-                const pk = this.keyService.getPackedKey(this.registry, cat, ml, mat);
-                return (cat === "book" ? this.cache.getBook(this.registry.version, pk) : this.cache.getCombo(this.registry.version, pk)) as SearchState;
-            },
-            setExtendedCache: (ml, state) => {
-                const pk = this.keyService.getPackedKey(this.registry, cat, ml, mat);
-                if (cat === "book") this.cache.setBook(this.registry.version, pk, state);
-                else this.cache.setCombo(this.registry.version, pk, state);
-            },
+            useCache,
             instrumentation,
-            timing,
-            getCacheMetrics: () => ({ 
-                cacheNodes: this.cache.getTotalCachedNodes(), 
-                cacheResults: this.cache.getTotalCachedResults() 
-            })
+            timing
         };
 
-        const finalRaw = await this.statAggregator.calculate(
-            this.registry, cat, xp, mat, internalConfig
-        );
+        const finalResult = await this.searchService.searchToCheckpoint({
+            registry: this.registry,
+            cat,
+            xp,
+            mat,
+            ...searchConfig
+        });
 
+        const isBook = cat === "book";
         const finalStats = packedClue
-            ? SummaryService.summarizeConditioned(finalRaw.combos, finalRaw.tracker, this.registry.indexToEnchant, packedClue, summaryLimit)
-            : SummaryService.summarize(
-                finalRaw.combos,
-                finalRaw.tracker,
-                this.registry.indexToEnchant,
-                finalRaw.anyMass,
-                finalRaw.rankMass,
-                finalRaw.countMass,
-                summaryLimit,
-                finalRaw.threshold
-            );
+            ? SummaryService.summarizeConditioned({
+                combos: finalResult.combos,
+                tracker: finalResult.tracker,
+                indexToEnchant: this.registry.indexToEnchant,
+                targetClueId: packedClue,
+                comboLimit: summaryLimit,
+                frontiers: finalResult.frontiers,
+                isBook
+            })
+            : SummaryService.summarize({
+                combos: finalResult.combos,
+                tracker: finalResult.tracker,
+                indexToEnchant: this.registry.indexToEnchant,
+                comboLimit: summaryLimit,
+                threshold: finalResult.threshold,
+                frontiers: finalResult.frontiers,
+                isBook
+            });
 
-        finalStats.instrumentation = finalRaw.instrumentation;
-        finalStats.timing = finalRaw.timing;
+        finalStats.instrumentation = finalResult.instrumentation;
+        finalStats.timing = finalResult.timing;
 
         const currentCached = this.cache.getStats(this.registry.version, cacheKey);
         if (!currentCached || finalStats.accuracy > currentCached.accuracy) {
@@ -295,86 +213,33 @@ export class EnchantEngine {
         }
 
         return finalStats;
-    }    /**
-     * Aggregates statistics conditioned on a specific observed clue.
-     * This performs the normal search flow first, then applies clue conditioning
-     * to the aggregated results.
-     * 
-     * @param cat Item category.
-     * @param xp Base XP level.
-     * @param mat Item material.
-     * @param clue The observed enchantment clue (e.g. "Sharpness IV").
-     * @param config Optional search configuration.
-     */
-    public async calculateConditioned(
-        cat: string,
-        xp: number,
-        mat: string,
-        clue: string,
-        config: SearchConfig = {}
-    ): Promise<CalculationStats> {
-        this.validateRequest(cat, xp, mat, config);
-        
-        const romanMap = this.registry.data.constants.ROMAN_MAP;
-        const parsed = EnchantUtils.parse(clue, romanMap);
-        if (!parsed) throw new Error(`Invalid clue format: "${clue}"`);
-        
-        const clueId = getEnchantId(this.registry, parsed.name);
-        const packedClue = (clueId << 8) | (parsed.rank ?? 1);
-
-        // Perform raw calculation first (or retrieve from internal cache if possible)
-        const internalConfig: InternalSearchConfig = {
-            ...config,
-            threshold: ProbUtils.toBigInt(config.threshold ?? ENGINE_LIMITS.DEFAULT_THRESHOLD),
-            summaryLimit: config.summaryLimit ?? ENGINE_LIMITS.MAX_RESULTS_SUMMARY,
-            resultsLimit: config.resultsLimit ?? ENGINE_LIMITS.MAX_RESULTS_SIZE
-        };
-
-        const finalRaw = await this.statAggregator.calculate(
-            this.registry, cat, xp, mat, internalConfig
-        );
-
-        // Apply Bayesian conditioning
-        return SummaryService.summarizeConditioned(
-            finalRaw.combos,
-            finalRaw.tracker,
-            this.registry.indexToEnchant,
-            packedClue,
-            internalConfig.summaryLimit
-        );
     }
 
     private getPackedClue(cat: string, clue: string): number {
-        const romanMap = this.registry.data.constants.ROMAN_MAP;
-        const parsed = EnchantUtils.parse(clue, romanMap);
-        if (!parsed) throw new Error(`Invalid clue format: "${clue}"`);
-        
-        const clueId = getEnchantId(this.registry, parsed.name);
-        if (clueId === ENGINE_LIMITS.UNKNOWN_ENCHANT_ID) {
-            throw new Error(`Invalid clue format: Unknown enchantment "${parsed.name}"`);
-        }
-
-        const enchantData = this.registry.resolvedRegistry[parsed.name];
-        if (!enchantData) {
-            throw new Error(`Invalid clue format: Unknown enchantment "${parsed.name}"`);
-        }
-
-        // Check if applicable to category
-        const pool = this.registry.mergedItems[cat] || [];
-        if (!pool.includes(parsed.name)) {
-            throw new Error(`Invalid clue format: Enchantment "${parsed.name}" is not applicable to category "${cat}"`);
-        }
-
-        const maxRank = Object.keys(enchantData.levels).length;
-        if (parsed.rank > maxRank) {
-            throw new Error(`Invalid clue format: Rank ${parsed.rank} exceeds max for ${parsed.name}`);
-        }
-
-        return (clueId << 8) | (parsed.rank ?? 1);
+        return ClueValidator.validate(this.registry, cat, clue);
     }
 
+    private getPackedKey(cat: string, modLevel: number, mat: string): number {
+        const catId = getCategoryId(this.registry, cat);
+        const matId = getMaterialId(this.registry, mat);
 
-    private validateRequest(cat: string, xp: number, mat: string, config: SearchConfig): void {
+        return KeyUtils.getPackedKey(catId, matId, modLevel);
+    }
+
+    private getStatsKey(cat: string, xp: number, mat: string, packedClue: number | null = null): number {
+        const catId = getCategoryId(this.registry, cat);
+        const matId = getMaterialId(this.registry, mat);
+
+        let key = KeyUtils.getStatsKey(catId, matId, xp);
+        if (packedClue !== null) {
+            // Encode the clue into the high bits above the cat/material/level fields.
+            key |= (packedClue << 18);
+        }
+        return key;
+    }
+
+    private validateRequest(request: CalculationRequest | CheckpointSearchRequest | SequentialCheckpointSearchRequest): void {
+        const { cat, xp, mat } = request;
 
         if (!Number.isFinite(xp) || !Number.isInteger(xp) || xp <= 0) {
             throw new Error(`Invalid XP level: ${xp}. XP must be a positive integer.`);
@@ -391,17 +256,17 @@ export class EnchantEngine {
         }
 
         // Config validation
-        if (config.threshold !== undefined) {
-            const t = ProbUtils.toNumber(config.threshold);
+        if (request.threshold !== undefined) {
+            const t = ProbUtils.toNumber(request.threshold);
             if (t < 0 || t > 1.0) {
                 throw new Error(`Invalid threshold: ${t}. Threshold must be between 0 and 1.0.`);
             }
         }
-        if (config.maxIterations !== undefined && (config.maxIterations <= 0 || !Number.isInteger(config.maxIterations))) {
-            throw new Error(`Invalid maxIterations: ${config.maxIterations}. Must be a positive integer.`);
+        if (request.maxIterations !== undefined && (request.maxIterations <= 0 || !Number.isInteger(request.maxIterations))) {
+            throw new Error(`Invalid maxIterations: ${request.maxIterations}. Must be a positive integer.`);
         }
-        if (config.resultsLimit !== undefined && (config.resultsLimit <= 0 || config.resultsLimit > 1_000_000)) {
-            throw new Error(`Invalid resultsLimit: ${config.resultsLimit}. Must be between 1 and 1,000,000.`);
+        if (request.resultsLimit !== undefined && (request.resultsLimit <= 0 || request.resultsLimit > 1_000_000)) {
+            throw new Error(`Invalid resultsLimit: ${request.resultsLimit}. Must be between 1 and 1,000,000.`);
         }
 
     }

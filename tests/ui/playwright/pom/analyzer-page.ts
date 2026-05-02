@@ -4,7 +4,7 @@ import { UI_TIMEOUT } from '#tests/infra/test-utils.js';
 
 export class AnalyzerPage {
     readonly page: Page;
-    
+
     // Locators
     readonly versionSelect: Locator;
     readonly categorySelect: Locator;
@@ -13,11 +13,11 @@ export class AnalyzerPage {
     readonly levelSlider: Locator;
     readonly levelValue: Locator;
     readonly enchantabilityValue: Locator;
-    
+
     readonly chartCanvas: Locator;
     readonly chartStatus: Locator;
     readonly chartMetricSelect: Locator;
-    
+
     readonly refinementStatus: Locator;
     readonly comboSortSelect: Locator;
     readonly comboList: Locator;
@@ -26,13 +26,13 @@ export class AnalyzerPage {
 
     constructor(page: Page) {
         this.page = page;
-        
+
         // Using getByLabel where possible for better accessibility/resilience
         this.versionSelect = page.getByLabel('Version');
         this.categorySelect = page.getByLabel('Item Category');
         this.materialSelect = page.getByLabel('Material');
         this.clueSelect = page.getByLabel('Shown in Table');
-        
+
         // Level slider label contains dynamic text, so we use the slider role or specific text
         this.levelSlider = page.getByRole('slider');
         this.levelValue = page.locator('#lvl-val'); // Specific ID for the displayed value
@@ -99,14 +99,14 @@ export class AnalyzerPage {
     async triggerAndAwaitRefinement(action: () => Promise<void>, timeout = UI_TIMEOUT * 2) {
         // Perform the action
         await action();
-        
+
         // Wait for it to become 'Scanning...' (it might be very fast, so we handle that)
         try {
             await expect(this.refinementStatus).not.toHaveText(UI_TEXTS.STATUS_COMPLETE, { timeout: 1000 });
         } catch (e) {
             // Already complete or too fast
         }
-        
+
         await this.waitForRefinementComplete(timeout);
     }
 
@@ -179,9 +179,3 @@ export class AnalyzerPage {
         await expect(this.chartStatus).toHaveText(/^$|Complete/, { timeout });
     }
 }
-
-
-
-
-
-

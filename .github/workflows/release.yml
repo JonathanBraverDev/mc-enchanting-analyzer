@@ -1,79 +1,134 @@
-name: Release Automation
+name: Release & Sync
 
 on:
-  pull_request:
-    types: [closed]
+  push:
     branches:
       - main
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   release:
-    if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.title, 'Release: v')
+    name: Create Tag and GitHub Release
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      
-      - name: Extract Version
-        id: get_version
-        run: |
-          TITLE="${{ github.event.pull_request.title }}"
-          TAG=$(echo "$TITLE" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
-
-      - name: Use Node.js 22.x
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22.x
-          cache: 'npm'
-
-      - run: npm ci
-      - run: npm run build:standalone
-
-      - name: Create Release and Tag
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.get_version.outputs.tag }}
-          files: dist/analyzer-standalone.html
-          generate_release_notes: true
-          name: "Release ${{ steps.get_version.outputs.tag }}"
-          body: ${{ github.event.pull_request.body }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  sync-dev:
-    needs: release
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      should_release: ${{ steps.version.outputs.should_release }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Rebase Dev onto Main
+      - name: Extract version from main commit
+        id: version
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          
-          git fetch origin main dev
-          git checkout dev
-          
-          if git rebase origin/main; then
-            git push origin dev --force
-          else
-            echo "CONFLICT: Rebase failed. Please resolve manually."
-            exit 1
+          SUBJECT=$(git log -1 --pretty=%s)
+          TAG=$(printf '%s\n' "$SUBJECT" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n 1 || true)
+
+          if [ -z "$TAG" ]; then
+            echo "No semantic version found in main commit subject: $SUBJECT"
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
 
-      - name: Cleanup Release Branch
-        if: success()
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "should_release=true" >> "$GITHUB_OUTPUT"
+
+      - name: Use Node.js 22.x
+        if: steps.version.outputs.should_release == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: 'npm'
+
+      - name: Build standalone release asset
+        if: steps.version.outputs.should_release == 'true'
         run: |
-          BRANCH_NAME="${{ github.event.pull_request.head.ref }}"
-          if [[ "$BRANCH_NAME" == release/* ]] || [[ "$BRANCH_NAME" == 4.3.0 ]]; then
-            git push origin --delete "$BRANCH_NAME"
+          npm ci
+          npm run build:standalone
+          test -s dist/analyzer-standalone.html
+
+      - name: Extract release notes
+        if: steps.version.outputs.should_release == 'true'
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+
+          awk -v tag="$TAG" '
+            $0 ~ "^## \\[?" tag "\\]?" { found=1; next }
+            /^## / { if (found) exit }
+            found { print }
+          ' CHANGELOG.md | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' > release-notes.md
+
+          if [ ! -s release-notes.md ]; then
+            git log -1 --pretty=%B > release-notes.md
           fi
+
+      - name: Create or verify tag
+        if: steps.version.outputs.should_release == 'true'
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          SHA="${{ github.sha }}"
+          REMOTE_SHA=$(git ls-remote --tags origin "refs/tags/$TAG" | awk '{print $1}')
+
+          if [ -n "$REMOTE_SHA" ]; then
+            if [ "$REMOTE_SHA" != "$SHA" ]; then
+              echo "::error::Tag $TAG already exists at $REMOTE_SHA, expected $SHA"
+              exit 1
+            fi
+            echo "Tag $TAG already exists at this commit."
+          else
+            git tag "$TAG" "$SHA"
+            git push origin "refs/tags/$TAG"
+          fi
+
+      - name: Create or update GitHub Release
+        if: steps.version.outputs.should_release == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/analyzer-standalone.html --clobber
+            gh release edit "$TAG" \
+              --title "Release $TAG" \
+              --notes-file release-notes.md \
+              --latest \
+              --draft=false \
+              --verify-tag
+          else
+            gh release create "$TAG" dist/analyzer-standalone.html \
+              --title "Release $TAG" \
+              --notes-file release-notes.md \
+              --latest \
+              --verify-tag
+          fi
+
+  sync-dev:
+    name: Sync Dev Branch
+    needs: release
+    if: needs.release.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: dev
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Merge main into dev
+        run: |
+          git fetch origin main dev
+          git merge origin/main -m "sync: auto-align dev with production milestone"
+          git push origin dev

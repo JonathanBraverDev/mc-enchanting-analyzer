@@ -16,7 +16,7 @@ test.describe('UI Performance & Stability', () => {
 
     test('top combinations should not flicker during refinement (Stability)', async ({ page }) => {
         await analyzer.selectCategory('book');
-        
+
         // Wait for INITIAL results to appear so we have a baseline
         await analyzer.waitForResults();
 
@@ -55,7 +55,7 @@ test.describe('UI Performance & Stability', () => {
     test('should update result probabilities correctly when scrubbing the enchanting level slider', async () => {
         await analyzer.selectCategory('pickaxe');
         await analyzer.selectClue('Efficiency IV');
-        
+
         const levelsToTest = [25, 28, 30];
         for (const lvl of levelsToTest) {
             await analyzer.triggerAndAwaitRefinement(async () => {
@@ -67,12 +67,12 @@ test.describe('UI Performance & Stability', () => {
 
     test('should maintain chart metric if changed mid-calculation', async () => {
         await analyzer.selectCategory('book');
-        
+
         // Wait for it to start searching/refining (it might be fast, so we handle potential immediate completion)
         try {
             await expect(analyzer.refinementStatus).not.toHaveText(UI_TEXTS.STATUS_COMPLETE, { timeout: 1000 });
         } catch (e) { /* ignore if already moved past or too fast */ }
-        
+
         // Ensure the engine is actually working before clicking (we used to check status here, but now we just proceed)
         await analyzer.selectChartMetric(UI_DEFAULTS.CHART_METRIC_RANKS);
         await analyzer.waitForRefinementComplete(90000);
@@ -82,9 +82,9 @@ test.describe('UI Performance & Stability', () => {
     test('should handle rapid item/material changes without crashing (Stress)', async () => {
         // Set a longer timeout for this specific test to handle the overhead of many rapid runs
         test.slow();
-        
+
         await analyzer.waitForRefinementComplete();
-        
+
         // RAPID switches: don't await results between these
         const categories = [TEST_DATA.ITEMS.SWORD, TEST_DATA.ITEMS.PICKAXE];
         for (let i = 0; i < 5; i++) {
@@ -97,7 +97,7 @@ test.describe('UI Performance & Stability', () => {
         await analyzer.triggerAndAwaitRefinement(async () => {
             await analyzer.selectCategory(TEST_DATA.ITEMS.SWORD);
         });
-        
+
         // Increase locator timeout for the final results visibility check after stress
         await analyzer.waitForResults(30000);
         await expect(analyzer.comboList.locator('.combo-placeholder')).toHaveCount(0);
@@ -106,18 +106,18 @@ test.describe('UI Performance & Stability', () => {
 
     test('should redraw the chart sequentially for initial book selection', async () => {
         test.setTimeout(120000);
-        
+
         // 1. Start monitoring from a clean state (Fresh page load from beforeEach)
         await analyzer.startMonitoringProgress();
         await analyzer.selectCategory('book');
-        
+
         // Wait for it to leave 'Complete' status
         await expect(analyzer.refinementStatus).not.toHaveText(UI_TEXTS.STATUS_COMPLETE);
 
         // 2. Verify sequential progress
         await expect(analyzer.chartStatus).toHaveText(/\((9\d|100)%\)|Complete/, { timeout: 90000 });
         const log = await analyzer.getObservedProgress();
-        
+
         const percentages = log
             .map(s => {
                 const match = s.match(/\((\d+)%\)/);
@@ -126,7 +126,7 @@ test.describe('UI Performance & Stability', () => {
             .filter(n => n !== null) as number[];
 
         expect(percentages.length, 'Should observe multiple progress steps').toBeGreaterThan(10);
-        
+
         let currentSequence = 0;
         let maxSequence = 0;
         let lastVal = -1;
@@ -145,17 +145,17 @@ test.describe('UI Performance & Stability', () => {
 
     test('should reset and redraw the chart when switching from pickaxe to book category', async () => {
         test.setTimeout(150000);
-        
+
         // 1. Establish initial state
         await analyzer.selectCategory('pickaxe');
         await analyzer.waitForRefinementComplete();
-        
+
         // No need to wait for chart idle here, the switch will abort any running sweep.
         // We just need to ensure the monitoring is fresh and starts AFTER the category switch is processed.
-        
+
         // 2. Trigger change
         await analyzer.selectCategory('book');
-        
+
         // Wait for it to leave 'Complete' status - this confirms run() has started and aborted old sweeps
         await expect(analyzer.refinementStatus).not.toHaveText(UI_TEXTS.STATUS_COMPLETE);
 
@@ -165,7 +165,7 @@ test.describe('UI Performance & Stability', () => {
         // 4. Verify sequential progress was observed for the NEW sweep
         await expect(analyzer.chartStatus).toHaveText(/\((9\d|100)%\)|Complete/, { timeout: 90000 });
         const log = await analyzer.getObservedProgress();
-        
+
         const percentages = log
             .map(s => {
                 const match = s.match(/\((\d+)%\)/);
@@ -174,7 +174,7 @@ test.describe('UI Performance & Stability', () => {
             .filter(n => n !== null) as number[];
 
         expect(percentages.length, 'Should observe multiple progress steps for the new sweep').toBeGreaterThan(10);
-        
+
         let currentSequence = 0;
         let maxSequence = 0;
         let lastVal = -1;
@@ -190,6 +190,3 @@ test.describe('UI Performance & Stability', () => {
         expect(maxSequence, 'Redraw after reset should have a sequential run of at least 5 steps').toBeGreaterThan(5);
     });
 });
-
-
-

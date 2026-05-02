@@ -9,7 +9,10 @@ async function updateSnapshots() {
 
     // Helper to generate snapshots with new API signature
     const getStats = async (engine: EnchantEngine, cat: string, xp: number, mat: string, clue: string | null = null) => {
-        return await engine.calculate(cat, xp, mat, {
+        return await engine.calculate({
+            cat,
+            xp,
+            mat,
             clue,
             threshold: TEST_DEFAULTS.SNAPSHOT_THRESHOLD,
             maxIterations: ENGINE_LIMITS.MAX_ITERATIONS_UNBOUNDED,
@@ -23,42 +26,42 @@ async function updateSnapshots() {
     const e18 = EngineFactory.create(DATA, '1.8');
     const s18 = await getStats(e18, 'sword', 30, 'diamond');
     await SnapshotUtils.saveSnapshot('1.8_sword_30_diamond', s18, e18.registry);
-    
+
 
     // 1.21 Mace @ Level 30
     console.log('Generating 1.21_mace_30_mace...');
     const v121 = EngineFactory.create(DATA, '1.21');
     const s121 = await getStats(v121, 'mace', 30, 'mace');
     await SnapshotUtils.saveSnapshot('1.21_mace_30_mace', s121, v121.registry);
-    
+
 
     // 1.7.2 Multi-Enchant Book @ Level 30
     console.log('Generating 1.7.2_book_30_book...');
     const v172 = EngineFactory.create(DATA, '1.7.2');
     const s172 = await getStats(v172, 'book', 30, 'book');
     await SnapshotUtils.saveSnapshot('1.7.2_book_30_book', s172, v172.registry);
-    
+
 
     // 1.21.11 Spear @ Level 30
     console.log('Generating 1.21.11_spear_30_diamond...');
     const v12111s = EngineFactory.create(DATA, '1.21.11');
     const s12111s = await getStats(v12111s, 'spear', 30, 'diamond');
     await SnapshotUtils.saveSnapshot('1.21.11_spear_30_diamond', s12111s, v12111s.registry);
-    
+
 
     // 1.21.11 Book @ Level 30
     console.log('Generating 1.21.11_book_30_book...');
     const v12111b = EngineFactory.create(DATA, '1.21.11');
     const s12111b = await getStats(v12111b, 'book', 30, 'book');
     await SnapshotUtils.saveSnapshot('1.21.11_book_30_book', s12111b, v12111b.registry);
-    
+
 
     // 1.21 Sword @ Level 30 with Guaranteed Sharpness IV
     console.log('Generating 1.21_sword_30_diamond_clue_sharpness...');
     const v121g = EngineFactory.create(DATA, '1.21');
     const s121g = await getStats(v121g, 'sword', 30, 'diamond', 'Sharpness IV');
     await SnapshotUtils.saveSnapshot('1.21_sword_30_diamond_clue_sharpness', s121g, v121g.registry);
-    
+
     v121g.resetCaches();
 
     // 1.8 Bow @ Level 30 with Guaranteed Power IV

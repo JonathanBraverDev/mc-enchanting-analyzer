@@ -3,5 +3,8 @@ export * from './engine.js';
 export * from './serialization.js';
 export * from './ui.js';
 export * from './mass.js';
+export * from './protocol.js';
+export * from './views.js';
+export * from './snapshot.js';
 import { SearchState } from '#types/engine.js';
 export type SearchFrontier = SearchState;

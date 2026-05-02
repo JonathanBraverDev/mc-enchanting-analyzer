@@ -44,7 +44,7 @@ To avoid the binary-decimal drift of IEEE 754 floats, the engine uses `BigUint64
 - **Conversion**: Probabilities are converted to BigInt as early as possible (in `ProbUtils.toBigInt`) and returned to `number` only for final UI display.
 
 ### 2. Banker's Rounding (Statistically Neutral)
-The engine implements **Banker's Rounding** (Round-to-Nearest-Even) for scaling operations. 
+The engine implements **Banker's Rounding** (Round-to-Nearest-Even) for scaling operations.
 - **The Why**: Standard "round half up" introduces a positive bias over millions of operations. Banker's Rounding ensures that ties are rounded to the nearest even neighbor, neutralizing the cumulative drift across deep search trees.
 - **Implementation**: See `ProbUtils.roundDiv`.
 

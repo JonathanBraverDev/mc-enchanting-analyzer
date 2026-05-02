@@ -12,12 +12,12 @@ export const TEST_DATA = {
         BOOK_MULTI_LIMIT: '1.7.2', // Threshold for multi-enchant books
         LAPIS_PIVOT: '1.8'
     },
-    
+
     GOD_ARMOR: {
         START: '1.14',
         END: '1.14.3' // exclusive
     },
-    
+
     ITEMS: {
         SWORD: 'sword',
         PICKAXE: 'pickaxe',
@@ -27,7 +27,7 @@ export const TEST_DATA = {
         CHESTPLATE: 'chestplate',
         BOW: 'bow'
     },
-    
+
     MATERIALS: {
         DIAMOND: 'diamond',
         BOOK: 'book',
@@ -37,7 +37,7 @@ export const TEST_DATA = {
         GOLD: 'gold',
         COPPER: 'copper'
     },
-    
+
     PAYLOADS: {
         BASE_SWORD: {
             category: 'sword',
@@ -61,16 +61,15 @@ export const TEST_DATA = {
             version: '1.21' // Internal ref
         }
     },
-    
+
     REGEX: {
         // Matches "(XP%)" or "Complete" in chart status
         CHART_PROGRESS: /\((9\d|100)%\)|Complete/,
     },
-    
+
     THRESHOLDS: {
         ACCURACY_HIGH: 0.999,
         ACCURACY_STANDARD: 0.99,
         PROB_MIN: 0.0001
     }
 };
-

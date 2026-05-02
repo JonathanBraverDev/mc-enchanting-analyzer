@@ -17,7 +17,7 @@ test.describe('Basic UI Functionality', () => {
 
         // Wait for initially triggered refinement to complete
         await analyzer.waitForRefinementComplete();
-        
+
         // Check that some results are visible
         await analyzer.waitForResults();
         await expect(analyzer.comboItems.first()).toBeVisible();
@@ -28,10 +28,10 @@ test.describe('Basic UI Functionality', () => {
         await analyzer.triggerAndAwaitRefinement(async () => {
             await analyzer.selectCategory(TEST_DATA.ITEMS.BOW);
         });
-        
+
         // Wait for Bow refinement
         await analyzer.waitForRefinementComplete();
-        
+
         // BOW should have "Power" or "Infinity" usually
         const results = await analyzer.comboList.textContent();
         expect(results).toMatch(/Power|Infinity|Unbreaking/);
@@ -48,6 +48,3 @@ test.describe('Basic UI Functionality', () => {
         await expect(analyzer.enchantabilityValue).toHaveText('10');
     });
 });
-
-
-
