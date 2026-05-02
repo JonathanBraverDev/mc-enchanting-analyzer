@@ -75,3 +75,60 @@ jobs:
             fi
           fi
           echo "SemVer jump validation successful."
+
+      - name: Verify Release Documentation
+        run: |
+          git fetch origin main --tags || true
+          LATEST_TAG=$(git tag -l "v[0-9]*" --sort=v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | tail -n 1)
+          PROPOSED_TAG="${{ steps.check_title.outputs.tag }}"
+
+          if [ -z "$LATEST_TAG" ] || [ "$LATEST_TAG" = "$PROPOSED_TAG" ]; then
+            echo "No previous semantic release tag found, or proposed tag already exists. Skipping documentation delta check."
+            exit 0
+          fi
+
+          LATEST_VERSION="${LATEST_TAG#v}"
+          PROPOSED_VERSION="${PROPOSED_TAG#v}"
+          IFS=. read -r LATEST_MAJOR LATEST_MINOR LATEST_PATCH <<< "$LATEST_VERSION"
+          IFS=. read -r PROPOSED_MAJOR PROPOSED_MINOR PROPOSED_PATCH <<< "$PROPOSED_VERSION"
+
+          if [ "$PROPOSED_MAJOR" -gt "$LATEST_MAJOR" ]; then
+            BUMP="major"
+          elif [ "$PROPOSED_MAJOR" -eq "$LATEST_MAJOR" ] && [ "$PROPOSED_MINOR" -gt "$LATEST_MINOR" ]; then
+            BUMP="minor"
+          else
+            BUMP="patch"
+          fi
+
+          CHANGED_FILES=$(git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}")
+          echo "Detected release bump: $BUMP"
+          echo "$CHANGED_FILES"
+
+          if [ "$BUMP" = "patch" ]; then
+            echo "Patch releases are exempt from documentation update requirements."
+            exit 0
+          fi
+
+          CORE_DOC_PATTERN='^(README|MASS_HANDLING|CONTRIBUTING)\.md$'
+          PROJECT_DOC_PATTERN='^(ARCHITECTURE|README|MASS_HANDLING|CONTRIBUTING)\.md$'
+
+          if [ "$BUMP" = "major" ]; then
+            if ! printf '%s\n' "$CHANGED_FILES" | grep -qx 'ARCHITECTURE.md'; then
+              echo "::error::Major releases must update ARCHITECTURE.md."
+              exit 1
+            fi
+
+            if ! printf '%s\n' "$CHANGED_FILES" | grep -Eq "$CORE_DOC_PATTERN"; then
+              echo "::error::Major releases must update at least one additional top-level project doc: README.md, MASS_HANDLING.md, or CONTRIBUTING.md."
+              exit 1
+            fi
+
+            echo "Major release documentation updates found."
+            exit 0
+          fi
+
+          if ! printf '%s\n' "$CHANGED_FILES" | grep -Eq "$PROJECT_DOC_PATTERN"; then
+            echo "::warning::Minor releases should update project docs when behavior, architecture, workflows, or user-facing capabilities changed."
+          else
+            echo "Minor release documentation updates found."
+          fi
