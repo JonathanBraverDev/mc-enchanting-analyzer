@@ -10,6 +10,9 @@ We follow a specialized workflow to ensure a clean production history while main
     *   Every PR to `dev` must pass the full test suite and security scan.
 2.  **Releases (`release/vX.Y.Z`)**: When preparing for a release, create a branch from `dev`.
     *   Update the `CHANGELOG.md` on this branch.
+    *   For major releases, update `ARCHITECTURE.md` and at least one other top-level project doc (`README.md`, `MASS_HANDLING.md`, or `CONTRIBUTING.md`).
+    *   For minor releases, update project docs when behavior, architecture, workflows, or user-facing capabilities changed.
+    *   Patch releases are exempt from release documentation checks unless the patch changes documented behavior.
     *   PR the release branch into `main`.
 3.  **Production (`main`)**: This branch contains ONLY milestone commits.
     *   Releases are merged into `main` using **Squash and Merge**.
