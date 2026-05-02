@@ -57,7 +57,7 @@ export class BinaryHeap<T extends { prob: bigint }> {
     pop(): T | undefined {
         const length = this.heap.length;
         if (length === 0) return undefined;
-        
+
         const top = this.at(0);
         const idSelector = this.idSelector;
         if (idSelector) {
@@ -101,7 +101,7 @@ export class BinaryHeap<T extends { prob: bigint }> {
         while (idx > 0) {
             const parentIdx = (idx - 1) >>> 1;
             const parent = this.at(parentIdx);
-            
+
             if (prob <= parent.prob) break;
 
             this.heap[idx] = parent;

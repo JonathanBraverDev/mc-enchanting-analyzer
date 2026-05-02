@@ -1,78 +1,57 @@
-/**
- * Tests for the worker protocol — calculateProgressive handler.
- *
- * worker.ts registers self.onmessage at module load time and uses
- * workerScope (= self = globalThis in Node.js) to postMessage.
- * We mock globalThis.postMessage to intercept outbound messages and
- * drive the handler synchronously through synthetic MessageEvents.
- */
 import { describe, it, before, after, afterEach } from 'node:test';
 import assert from 'node:assert';
-import { EngineFactory } from '#engine/factory.js';
-import { DATA } from '#data/index.js';
-import { SerializationService } from '#services/index.js';
-import type { WorkerResponse } from '#worker/protocol.js';
+import type { WorkerResponse, WorkerRequest, RunId } from '#types/index.js';
 import { TEST_DATA } from '#tests/infra/test-data.js';
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function sendMessage(data: unknown): void {
+function sendMessage(data: WorkerRequest): void {
     const handler = (self as unknown as { onmessage: (e: MessageEvent) => void }).onmessage;
+    if (!handler) throw new Error("No onmessage handler registered");
     handler({ data } as MessageEvent);
 }
 
-async function waitForMessage(
+async function waitForMessages(
     captured: WorkerResponse[],
-    predicate: (msg: WorkerResponse) => boolean,
+    type: string,
+    count: number,
+    timeoutMs = 5000
+): Promise<WorkerResponse[]> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+        const matches = captured.filter(m => m.type === type);
+        if (matches.length >= count) return matches;
+        await new Promise(r => setTimeout(r, 10));
+    }
+    throw new Error(`Timeout waiting for ${count} messages of type ${type}. Captured so far types: ${JSON.stringify(captured.map(m => m.type))}`);
+}
+
+async function waitForTerminal(
+    captured: WorkerResponse[],
+    runId: RunId,
     timeoutMs = 5000
 ): Promise<WorkerResponse> {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
-        const msg = captured.find(predicate);
+        const msg = captured.find(m => m.type === 'terminal' && m.runId === runId);
         if (msg) return msg;
         await new Promise(r => setTimeout(r, 10));
     }
-    throw new Error(`Timeout waiting for message. Captured so far: ${JSON.stringify(captured)}`);
+    throw new Error(`Timeout waiting for terminal for ${runId}.`);
 }
 
-// ---------------------------------------------------------------------------
-// Suite
-// ---------------------------------------------------------------------------
-
-describe('Worker: calculateProgressive handler', () => {
+describe('Worker: Protocol Hardening (v5)', () => {
     const captured: WorkerResponse[] = [];
     let originalPostMessage: typeof globalThis.postMessage | undefined;
 
-    before(async () => {
+    before(() => {
         originalPostMessage = (globalThis as any).postMessage;
-
-        // worker.ts uses `self` (DedicatedWorkerGlobalScope alias). In Node.js,
-        // `self` is not defined, so we alias it to globalThis before import.
         (globalThis as any).self = globalThis;
-
-        // Mock postMessage — handler uses workerScope.postMessage(msg, transfer)
-        // and self.postMessage(msg). Both resolve to globalThis.postMessage.
         (globalThis as any).postMessage = (msg: unknown, _transfer?: unknown) => {
             captured.push(msg as WorkerResponse);
         };
-
-        // Import the worker to register self.onmessage
-        await import('#worker/worker.js');
-
-        // Initialize the engine inside the worker
-        sendMessage({ type: 'init', id: 0, payload: { version: TEST_DATA.VERSIONS.MODERN } });
-        await waitForMessage(captured, m => m.type === 'ready' && m.id === 0);
     });
 
-    afterEach(async () => {
+    afterEach(() => {
         captured.length = 0;
-        // sendMessage({ type: 'init' }) recreates the engine, clearing its caches.
-        // This ensures the next test doesn't get a cached 'result' without 'progress' callbacks.
-        sendMessage({ type: 'init', id: 0, payload: { version: TEST_DATA.VERSIONS.MODERN } });
-        await waitForMessage(captured, m => m.type === 'ready' && m.id === 0);
-        captured.length = 0; // Clear the 'ready' msg
     });
 
     after(() => {
@@ -83,95 +62,99 @@ describe('Worker: calculateProgressive handler', () => {
         }
     });
 
-    // -------------------------------------------------------------------------
-    // Test 1: tier callbacks fire as 'progress' messages
-    // -------------------------------------------------------------------------
-    it('progressive worker request fires tier callbacks as progress', async () => {
-        const id = 10;
-        sendMessage({
-            type: 'calculateProgressive',
-            id,
-            payload: {
-                cat: TEST_DATA.ITEMS.SWORD,
-                xp: 30,
-                mat: TEST_DATA.MATERIALS.DIAMOND,
-                clue: null,
-                source: 'test-prog',
-                tiers: [
-                    { threshold: 0.01,   limit: 500 },
-                    { threshold: TEST_DATA.THRESHOLDS.PROB_MIN, limit: 5000 },
-                ],
-            },
+    describe('top-worker protocol', () => {
+        before(async () => {
+            // Register top-worker handler
+            await import('#worker/top-worker.js?t=' + Date.now());
         });
 
-        // Wait for the final result so all progress messages have been posted
-        await waitForMessage(captured, m => m.type === 'result' && m.id === id);
+        it('should stream multiple refinement levels and send terminal', async () => {
+            sendMessage({ type: 'init', requestId: 1, version: TEST_DATA.VERSIONS.MODERN });
+            await waitForMessages(captured, 'ready', 1);
+            captured.length = 0;
 
-        const progressMsgs = captured.filter(m => m.type === 'progress' && m.id === id);
-        assert.ok(
-            progressMsgs.length >= 1,
-            `Expected at least 1 progress message, got ${progressMsgs.length}`
-        );
+            const runId = 'run-1' as RunId;
+            sendMessage({
+                type: 'topRunStart',
+                requestId: 2,
+                runId,
+                input: {
+                    category: TEST_DATA.ITEMS.SWORD,
+                    xpLevel: 30,
+                    material: TEST_DATA.MATERIALS.DIAMOND,
+                    clue: null,
+                    version: TEST_DATA.VERSIONS.MODERN
+                },
+                refinementLevels: ['coarse', 'standard']
+            });
 
-        // Each progress message must carry a valid stats payload
-        for (const msg of progressMsgs) {
-            assert.ok(
-                msg.type === 'progress' && msg.payload?.stats,
-                'Each progress message must have a stats payload'
-            );
-        }
+            await waitForMessages(captured, 'runAccepted', 1);
+            const updates = await waitForMessages(captured, 'topUpdate', 2);
+            assert.strictEqual(updates[0]!.type, 'topUpdate');
+            assert.strictEqual((updates[0] as any).refinementLevel, 'coarse');
+            assert.strictEqual((updates[1] as any).refinementLevel, 'standard');
+
+            const terminal = await waitForTerminal(captured, runId) as any;
+            assert.strictEqual(terminal.status, 'done');
+        });
+
+        it('should report error for invalid clue', async () => {
+            const runId = 'run-err' as RunId;
+            sendMessage({
+                type: 'topRunStart',
+                requestId: 3,
+                runId,
+                input: {
+                    category: TEST_DATA.ITEMS.SWORD,
+                    xpLevel: 30,
+                    material: TEST_DATA.MATERIALS.DIAMOND,
+                    clue: 'FakeEnchant X',
+                    version: TEST_DATA.VERSIONS.MODERN
+                },
+                refinementLevels: ['coarse']
+            });
+
+            const terminal = await waitForTerminal(captured, runId) as any;
+            assert.strictEqual(terminal.status, 'error');
+            assert.match(terminal.error, /Unknown enchantment/);
+        });
     });
 
-    // -------------------------------------------------------------------------
-    // Test 2: final result matches direct engine call
-    // -------------------------------------------------------------------------
-    it('progressive worker request returns final result', async () => {
-        const id = 11;
-        sendMessage({
-            type: 'calculateProgressive',
-            id,
-            payload: {
-                cat: TEST_DATA.ITEMS.SWORD,
-                xp: 30,
-                mat: TEST_DATA.MATERIALS.DIAMOND,
-                clue: null,
-                source: 'test-prog-final',
-                tiers: [
-                    { threshold: 0.01,   limit: 500 },
-                    { threshold: TEST_DATA.THRESHOLDS.PROB_MIN, limit: 5000 },
-                ],
-            },
+    describe('chart-worker protocol', () => {
+        before(async () => {
+            // Register chart-worker handler (overwrites top-worker)
+            await import('#worker/chart-worker.js?t=' + Date.now());
         });
 
-        const resultMsg = await waitForMessage(captured, m => m.type === 'result' && m.id === id);
-        assert.strictEqual(resultMsg.type, 'result');
-        assert.ok(resultMsg.payload?.stats, 'result message must carry stats');
+        it('should include chart envelope and stream all cells', async () => {
+            sendMessage({ type: 'init', requestId: 6, version: TEST_DATA.VERSIONS.MODERN });
+            await waitForMessages(captured, 'ready', 1);
+            captured.length = 0;
 
-        const workerStats = SerializationService.deserialize(resultMsg.payload.stats);
+            const runId = 'run-chart' as RunId;
+            sendMessage({
+                type: 'chartRunStart',
+                requestId: 7,
+                runId,
+                input: {
+                    category: TEST_DATA.ITEMS.SWORD,
+                    material: TEST_DATA.MATERIALS.DIAMOND,
+                    clue: null,
+                    version: TEST_DATA.VERSIONS.MODERN
+                },
+                refinementLevels: ['coarse']
+            });
 
-        // Compare against a fresh direct engine call
-        const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
-        const directStats = await engine.calculateProgressive(
-            TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND,
-            [
-                { threshold: 0.01,   limit: 500 },
-                { threshold: TEST_DATA.THRESHOLDS.PROB_MIN, limit: 5000 },
-            ],
-            () => {}
-        );
-        engine.resetCaches();
+            const accepted = await waitForMessages(captured, 'runAccepted', 1) as any;
+            assert.ok(accepted[0].chart, 'runAccepted must carry chart envelope');
+            assert.strictEqual(accepted[0].chart.maxXpLevel, 30);
 
-        const accuracyDiff = Math.abs(workerStats.accuracy - directStats.accuracy);
-        assert.ok(
-            accuracyDiff < 0.001,
-            `Worker accuracy (${workerStats.accuracy}) must match direct engine (${directStats.accuracy}); diff=${accuracyDiff}`
-        );
-        assert.strictEqual(
-            Object.keys(workerStats.combos).length,
-            Object.keys(directStats.combos).length,
-            'Worker and direct engine must produce the same number of combos'
-        );
+            const updates = await waitForMessages(captured, 'chartUpdate', 1) as any;
+            assert.strictEqual(updates[0].runId, runId);
+            assert.ok(updates[0].cell, 'chartUpdate must carry a cell');
+
+            const terminal = await waitForTerminal(captured, runId) as any;
+            assert.strictEqual(terminal.status, 'done');
+        });
     });
 });
-
-

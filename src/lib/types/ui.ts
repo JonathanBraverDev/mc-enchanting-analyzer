@@ -9,7 +9,7 @@ export interface EnchantInsights {
     any: Record<string, number>;
     count: Record<number, number>;
     combos: Record<string, number>;
-    
+
     /** Reliability of the results (Resolved mass: 0.0 to 1.0). */
     accuracy: number;
     /** Complete diagnostic breakdown of all mass states. */

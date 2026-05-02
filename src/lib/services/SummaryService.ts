@@ -1,27 +1,26 @@
-import { ProbUtils } from '#utils/math/ProbUtils.js';
-import { ENGINE_LIMITS } from '#constants/engine.js';
-import { CalculationStats, PackedCombo } from '#types/index.js';
-import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
+import { ProbUtils, ComboUtils } from '#utils/index.js';
+import { ENGINE_LIMITS, PACKING_CONSTANTS } from '#constants/engine.js';
+import { CalculationStats, ConditionedSummaryRequest, PackedCombo, SummaryRequest } from '#types/index.js';
 import { ClueAnalysisService } from '#services/ClueAnalysisService.js';
 
 /**
- * Service for summarizing raw engine results into a standard JSON format.
+ * Service for summarizing search results into a standard JSON format.
  */
 export class SummaryService {
     /**
-     * Summarizes raw engine results into a CalculationStats object.
+     * Summarizes search results into a CalculationStats object.
      */
-    public static summarize(
-        combos: Map<PackedCombo, bigint>,
-        tracker: SearchStateTracker,
-        indexToEnchant: number[],
-        anyMass?: Map<number, bigint> | BigUint64Array,
-        rankMass?: Map<number, bigint> | BigUint64Array,
-        countMass?: Map<number, bigint> | BigUint64Array,
-        comboLimit: number = ENGINE_LIMITS.MAX_RESULTS_SUMMARY,
-        threshold: number = 0
-    ): CalculationStats {
-        const accounting = tracker.toPublic();
+    public static summarize(request: SummaryRequest): CalculationStats {
+        const {
+            combos,
+            tracker,
+            indexToEnchant,
+            comboLimit = ENGINE_LIMITS.MAX_RESULTS_SUMMARY,
+            threshold = 0,
+            frontiers = [],
+            isBook = false
+        } = request;
+        const accounting = tracker.mass.toPublic();
         const stats: CalculationStats = {
             ranks: {},
             any: {},
@@ -33,11 +32,13 @@ export class SummaryService {
             accounting
         };
 
-        if (anyMass) SummaryService.populateStats(stats.any, anyMass);
-        if (rankMass) SummaryService.populateStats(stats.ranks, rankMass);
-        if (countMass) SummaryService.populateStats(stats.count, countMass);
+        const derived = this.deriveAggregateMasses(combos, indexToEnchant, frontiers, isBook);
 
-        const clueMass = ClueAnalysisService.calculateClueMass(combos, indexToEnchant);
+        SummaryService.populateStats(stats.any, derived.any);
+        SummaryService.populateStats(stats.ranks, derived.ranks);
+        SummaryService.populateStats(stats.count, derived.count);
+
+        const clueMass = ClueAnalysisService.calculateClueMass(combos, indexToEnchant, frontiers);
         SummaryService.populateStats(stats.clues, clueMass);
 
         // Ensure we always return sorted results if a limit is set > 0
@@ -82,27 +83,30 @@ export class SummaryService {
 
     /**
      * Summarizes statistics under the condition that a specific clue is shown.
-     * 
-     * @param rawCombos Raw combination distribution.
+     *
+     * @param combos Combination distribution before clue conditioning.
      * @param tracker Original search manager (for metadata).
      * @param indexToEnchant Registry mapping.
      * @param targetClueId The observed clue ID.
      * @param comboLimit Result set limit.
      * @returns Conditioned calculation statistics.
      */
-    public static summarizeConditioned(
-        rawCombos: Map<PackedCombo, bigint>,
-        tracker: SearchStateTracker,
-        indexToEnchant: number[],
-        targetClueId: number,
-        comboLimit: number = ENGINE_LIMITS.MAX_RESULTS_SUMMARY
-    ): CalculationStats {
+    public static summarizeConditioned(request: ConditionedSummaryRequest): CalculationStats {
+        const {
+            combos,
+            tracker,
+            indexToEnchant,
+            targetClueId,
+            comboLimit = ENGINE_LIMITS.MAX_RESULTS_SUMMARY,
+            frontiers = [],
+            isBook = false
+        } = request;
         // 1. Get honest baseline stats (invariants, absolute accuracy)
-        const stats = SummaryService.summarize(rawCombos, tracker, indexToEnchant, undefined, undefined, undefined, 0);
+        const stats = SummaryService.summarize({ combos, tracker, indexToEnchant, comboLimit: 0, threshold: 0, frontiers, isBook });
 
         // 2. Perform Bayesian conditioning
-        const conditioned = ClueAnalysisService.conditionOnClue(rawCombos, targetClueId, indexToEnchant);
-        
+        const conditioned = ClueAnalysisService.conditionOnClue(combos, targetClueId, indexToEnchant);
+
         // 3. Update top-level accuracy and inject absolute clue mass
         stats.accounting.clueKnownSpace = ProbUtils.toNumber(conditioned.clueKnownSpace);
 
@@ -123,7 +127,7 @@ export class SummaryService {
         populatePlain(stats.any, conditioned.anyMass);
         populatePlain(stats.ranks, conditioned.rankMass);
         populatePlain(stats.count, conditioned.countMass);
-        
+
         // 5. Populate and rank conditioned combos
         let comboSource: [number, bigint][] = [];
         const compareProbDesc = (a: [any, bigint], b: [any, bigint]) => {
@@ -145,8 +149,70 @@ export class SummaryService {
         return stats;
     }
 
-    private static populateStats(target: { [key: number]: number }, source: Map<number, bigint> | BigUint64Array): void {
-        if (source instanceof BigUint64Array) {
+    public static deriveAggregateMasses(
+        combos: Map<PackedCombo, bigint>,
+        indexToEnchant: number[],
+        frontiers: { heap: import('../utils/collections/SearchHeap.js').SearchHeap, scale: bigint }[] = [],
+        isBook: boolean = false
+    ): { any: bigint[]; ranks: bigint[]; count: bigint[] } {
+        const any: bigint[] = [];
+        const ranks: bigint[] = [];
+        const count: bigint[] = [];
+
+        // 1. Add terminal combinations
+        for (const [packed, mass] of combos) {
+            const enchants = ComboUtils.unpack(packed, indexToEnchant);
+            const n = enchants.length;
+            count[n] = (count[n] ?? 0n) + mass;
+
+            for (const e of enchants) {
+                const id = e >> PACKING_CONSTANTS.ENCHANT_SHIFT;
+                any[id] = (any[id] ?? 0n) + mass;
+                ranks[e] = (ranks[e] ?? 0n) + mass;
+            }
+        }
+
+        // 2. Add pending mass from frontiers
+        for (const { heap, scale } of frontiers) {
+            heap.forEach((_meta, prob, packed) => {
+                const mass = ProbUtils.scale(prob, scale);
+                const enchants = ComboUtils.unpack(packed as PackedCombo, indexToEnchant);
+
+                // Count mass (pending nodes contribute to their current count)
+                // For books, if count > 1, it will eventually be reduced by 1 upon settling.
+                let n = enchants.length;
+                let anyScaleNum = 1n;
+                let anyScaleDen = 1n;
+
+                if (isBook && n > 1) {
+                    anyScaleNum = BigInt(n - 1);
+                    anyScaleDen = BigInt(n);
+                    n--;
+                }
+
+                count[n] = (count[n] ?? 0n) + mass;
+
+                for (const e of enchants) {
+                    const id = e >> PACKING_CONSTANTS.ENCHANT_SHIFT;
+                    const finalMass = (mass * anyScaleNum) / anyScaleDen;
+                    any[id] = (any[id] ?? 0n) + finalMass;
+                    ranks[e] = (ranks[e] ?? 0n) + finalMass;
+                }
+            });
+        }
+
+        return { any, ranks, count };
+    }
+
+    private static populateStats(target: { [key: number]: number }, source: Map<number, bigint> | BigUint64Array | bigint[]): void {
+        if (Array.isArray(source)) {
+            for (let i = 0; i < source.length; i++) {
+                const val = source[i];
+                if (val !== undefined && val > 0n) {
+                    target[i] = ProbUtils.toNumber(val);
+                }
+            }
+        } else if (source instanceof BigUint64Array) {
             for (const [i, mass] of source.entries()) {
                 if (mass > 0n) {
                     target[i] = ProbUtils.toNumber(mass);

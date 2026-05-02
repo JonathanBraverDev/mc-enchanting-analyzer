@@ -10,15 +10,15 @@ function analyzeProfile(filePath: string) {
         console.error(`File not found: ${filePath}`);
         return null;
     }
-    
+
     console.log(`\n--- Analysis for: ${path.basename(filePath)} ---`);
     const profile = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    
+
     // Build a map of nodeId -> { name, hitCount }
     const nodes: any[] = profile.nodes;
     const nameStats: Record<string, number> = {};
     let totalHits = 0;
-    
+
     for (const node of nodes) {
         const name = node.callFrame.functionName || '(anonymous)';
         const hits = node.hitCount || 0;
@@ -27,7 +27,7 @@ function analyzeProfile(filePath: string) {
     }
 
     console.log(`Total Samples (Total Hits): ${totalHits}`);
-    
+
     const targets = [
         // Current SearchHeap methods
         'pushOrMerge', 'popFast', 'pop', 'bubbleUp', 'sinkDown', 'getHash', 'hashSet', 'hashGet', 'hashDelete',

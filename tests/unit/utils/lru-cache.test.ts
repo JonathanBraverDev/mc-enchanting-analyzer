@@ -128,5 +128,3 @@ describe('LRUCache', () => {
         assert.strictEqual(cache.has(0), false, 'entry 0 should be evicted with maxEntries=5');
     });
 });
-
-

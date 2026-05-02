@@ -2,7 +2,7 @@ import { PRECISION, ProbUtils } from '#utils/index.js';
 import { ENGINE_LIMITS, MATH_CONSTANTS } from '#constants/engine.js';
 import { MINECRAFT_RULES } from '#constants/minecraft.js';
 import { RegistryState, LevelDistribution, EngineInstrumentation } from '#types/index.js';
-import { CacheManager } from '#services/CacheManager.js';
+import { CacheManager } from '#engine/cache/CacheManager.js';
 
 /**
  * Service for calculating the probability distribution of Modified Levels.
@@ -27,7 +27,7 @@ export class ModifiedLevelDistributionService {
     ): LevelDistribution {
         const mech = registry.mechanics;
         const key = this.createCacheKey(xp, enchantability, mech);
-        
+
         if (cache) {
             const cached = cache.getDist(registry.version, key);
             if (cached) return cached;
@@ -55,7 +55,7 @@ export class ModifiedLevelDistributionService {
         if (cache) {
             cache.setDist(registry.version, key, finalDist);
         }
-        
+
         if (instrumentation) {
             instrumentation.distCache = cache ? cache.getEngineMetrics().distCache : { hits: 0, misses: 0 };
         }
@@ -80,11 +80,11 @@ export class ModifiedLevelDistributionService {
             const bufVal = this.buffer[i];
             if (bufVal !== undefined) baseDistMap.set(base, bufVal);
         }
-        
+
         // Attribute sub-atomic remainder to the peak level
         const peakLevel = xp + N;
         ProbUtils.addItemMass(baseDistMap, peakLevel, baseRemainder);
-        
+
         return baseDistMap;
     }
 
@@ -107,7 +107,7 @@ export class ModifiedLevelDistributionService {
                 if (bufVal === undefined) continue;
                 finalDist[modVal] = (finalDist[modVal] || 0n) + bufVal;
             }
-            
+
             // Attribute remainder to the central peak
             const centralModVal = Math.max(1, ProbUtils.mcRound(base));
             finalDist[centralModVal] = (finalDist[centralModVal] || 0n) + modRemainder;

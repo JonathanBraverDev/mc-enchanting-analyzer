@@ -6,7 +6,7 @@ import { EngineFactory } from '#engine/factory.js';
 import { DATA } from '#data/index.js';
 import { TEST_DATA } from '#tests/infra/test-data.js';
 
-describe('EnchantEngine: Progressive Search', () => {
+describe('EnchantEngine: Sequential Checkpoint Search', () => {
 
     let cache: CacheManager;
     let engine: EnchantEngine;
@@ -17,63 +17,69 @@ describe('EnchantEngine: Progressive Search', () => {
         engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN, { cache });
     });
 
-    it('should improve accuracy monotonically across tiers', async () => {
+    it('should improve accuracy monotonically across checkpoints', async () => {
         const accuracies: number[] = [];
-        const tiers = [
+        const checkpoints = [
             { threshold: 0.1,   limit: 100 },
             { threshold: 0.01,  limit: 500 },
             { threshold: 0.001, limit: 1000 }
         ];
 
-        await engine.calculateProgressive(
-            TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND,
-            tiers,
-            (stats: any) => {
-                accuracies.push(stats.accuracy);
+        await engine.searchSequentialCheckpoints({
+            cat: TEST_DATA.ITEMS.SWORD,
+            xp: 30,
+            mat: TEST_DATA.MATERIALS.DIAMOND,
+            checkpoints,
+            onCheckpointComplete: (result) => {
+                accuracies.push(result.tracker.mass.toPublic().resolved);
             }
-        );
+        });
 
-        assert.strictEqual(accuracies.length, 3, 'Should have fired 3 tier callbacks');
+        assert.strictEqual(accuracies.length, 3, 'Should have fired 3 checkpoint callbacks');
         for (let i = 1; i < accuracies.length; i++) {
-            assert.ok((accuracies[i] ?? 0) >= (accuracies[i-1] ?? 0), `Accuracy should be monotonic. Tier ${i} (${accuracies[i]}) < Tier ${i-1} (${accuracies[i-1]})`);
+            assert.ok((accuracies[i] ?? 0) >= (accuracies[i-1] ?? 0), `Accuracy should be monotonic. Checkpoint ${i} (${accuracies[i]}) < checkpoint ${i-1} (${accuracies[i-1]})`);
         }
     });
 
     it('should respect the uncertainty threshold and stop early if possible', async () => {
-        let tierCount = 0;
-        const tiers = [
+        let checkpointCount = 0;
+        const checkpoints = [
             { threshold: 1e-10, limit: 5000 }, // Deep first pass
             { threshold: 0.1,   limit: 10 },    // Very shallow second pass
         ];
 
-        const stats = await engine.calculateProgressive(
-            TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND,
-            tiers,
-            () => {
-                tierCount++;
+        const finalResult = await engine.searchSequentialCheckpoints({
+            cat: TEST_DATA.ITEMS.SWORD,
+            xp: 30,
+            mat: TEST_DATA.MATERIALS.DIAMOND,
+            checkpoints,
+            onCheckpointComplete: () => {
+                checkpointCount++;
             }
-        );
+        });
 
-        assert.ok(tierCount >= 1);
-        assert.ok(stats.accuracy > 0.99);
+        assert.ok(checkpointCount >= 1);
+        assert.ok(finalResult.tracker.mass.toPublic().resolved > 0.99);
     });
 
-    it('should recover rounding residue between tiers (High Precision)', async () => {
+    it('should recover rounding residue between checkpoints (High Precision)', async () => {
         let roundingValues: number[] = [];
-        const tiers = [
+        const checkpoints = [
             { threshold: 0.1,   limit: 100 },
             { threshold: 0.01,  limit: 1000 }
         ];
 
-        await engine.calculateProgressive(
-            TEST_DATA.ITEMS.SWORD, 30, TEST_DATA.MATERIALS.DIAMOND,
-            tiers,
-            (stats: any) => {
-                roundingValues.push(stats.accounting.rounding);
+        await engine.searchSequentialCheckpoints({
+            cat: TEST_DATA.ITEMS.SWORD,
+            xp: 30,
+            mat: TEST_DATA.MATERIALS.DIAMOND,
+            checkpoints,
+            onCheckpointComplete: (result) => {
+                roundingValues.push(result.tracker.mass.toPublic().rounding);
             }
-        );
+        });
 
         assert.strictEqual(roundingValues.length, 2);
-        assert.ok((roundingValues[1] ?? 0) <= (roundingValues[0] ?? 0) + 1e-15, 'Rounding mass should not balloon between tiers');
+        assert.ok((roundingValues[1] ?? 0) <= (roundingValues[0] ?? 0) + 1e-15, 'Rounding mass should not balloon between checkpoints');
     });
 });

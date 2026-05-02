@@ -257,5 +257,3 @@ describe('Data integrity: material enchantability coverage', () => {
         assert.deepStrictEqual(bad, [], `Enchantability lookup failures:\n${bad.join('\n')}`);
     });
 });
-
-

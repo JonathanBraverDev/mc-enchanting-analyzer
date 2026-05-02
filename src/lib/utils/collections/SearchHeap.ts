@@ -263,6 +263,18 @@ export class SearchHeap {
         this.hashValues[currentHashIdx] = idx;
     }
 
+    public forEach(callback: (meta: bigint, prob: bigint, combo: number) => void): void {
+        for (let i = 0; i < this._size; i++) {
+            const dataId = this.heap[i]!;
+            const base = dataId << 2;
+            callback(
+                this.nodeBuffer[base]!,
+                this.nodeBuffer[base + 1]!,
+                Number(this.comboView[base + 2])
+            );
+        }
+    }
+
     private grow(): void {
         const oldCapacity = this.capacity;
         const newCapacity = oldCapacity * 2;

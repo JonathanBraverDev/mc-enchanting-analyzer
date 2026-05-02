@@ -1,5 +1,5 @@
 import { ChartManager } from '#ui/results-chart-manager.js';
-import { RegistryState, SweepData } from '#types/index.js';
+import { RegistryState, ChartCellView } from '#types/index.js';
 import { UI_DEFAULTS } from '#core/config.js';
 
 /**
@@ -26,7 +26,7 @@ export class ChartController {
      * @param sweep Aggregated results across XP levels.
      * @param registry Registry context for enchantment data lookups.
      */
-    public refresh(sweep: SweepData[], registry: RegistryState): void {
+    public refresh(sweep: ChartCellView[], registry: RegistryState): void {
         if (sweep.length > 0 && this.manager && this.metricEl) {
             const metric = this.metricEl.value;
             const datasets = this.manager.generateDatasets(sweep, metric, registry);

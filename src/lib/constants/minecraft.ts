@@ -8,11 +8,11 @@ export const MINECRAFT_RULES = {
     /** Maximum XP level for the enchanting table in legacy versions (pre-1.3). */
     XP_CAP_LEGACY: 50,
 
-    /** Divisor used for calculating the enchantability bonus in modern versions (1.3+). 
+    /** Divisor used for calculating the enchantability bonus in modern versions (1.3+).
      * Uses a triangular distribution (sum of two random calls). */
     ENCHANTABILITY_DIVISOR_MODERN: 4,
 
-    /** Divisor used for calculating the enchantability bonus in legacy versions (pre-1.1). 
+    /** Divisor used for calculating the enchantability bonus in legacy versions (pre-1.1).
      * Uses a flat distribution (single random call). */
     ENCHANTABILITY_DIVISOR_LEGACY: 2,
 
