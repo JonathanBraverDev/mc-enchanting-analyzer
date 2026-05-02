@@ -75,5 +75,5 @@ shell.onRun = async (msg: WorkerRequest, engine, signal) => {
 };
 
 workerScope.onmessage = async (e: MessageEvent<WorkerRequest>) => {
-    await shell.dispatch(e.data);
+    await shell.dispatchEvent(e);
 };
