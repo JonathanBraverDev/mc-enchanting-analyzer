@@ -171,12 +171,23 @@ export class SearchProcessor {
             // currentCount >= 1 is always true here (count-0 nodes take the processInitialNode path),
             // so the real invariant is the halving sequence: 2nd enchant sees level/2, 3rd sees level/4, etc.
             const nextLevel = currentCount >= 1 ? Math.floor(currentLevel / 2) : currentLevel;
+            const childMetas = new BigUint64Array(eligibleCount);
+            const childPackedCombos = new Float64Array(eligibleCount);
+            const nextLevelBits = BIGINT_CONSTANTS.LEVEL_LOOKUP[nextLevel]!;
+            for (let i = 0; i < eligibleCount; i++) {
+                const e = tempEligible[i]!;
+                const id = ComboUtils.getEnchantId(e);
+                childMetas[i] = ((currentBitset | BIGINT_CONSTANTS.ID_BIT_LOOKUP[id]!) << BIGINT_CONSTANTS.ENCHANT_SHIFT) | nextLevelBits;
+                childPackedCombos[i] = ComboUtils.packAppend(currentCombo, e, registry.enchantToIndex);
+            }
             const blueprint: ExpansionBlueprint = {
                 probContinue,
                 totalWeight,
                 eligibleCount,
                 eligibleEnchants: tempEligible,
                 eligibleWeights: new Int32Array(tempWeights),
+                childMetas,
+                childPackedCombos,
                 nextLevel,
                 currentCount,
                 currentCombo,

@@ -1,9 +1,9 @@
 import { MassBookkeeping } from '#types/mass.js';
 import { ExpansionBlueprint, ForwardingContext, PackedCombo, PackedEnchant, SearchState } from '#types/index.js';
-import { ProbUtils, ComboUtils, PRECISION } from '#utils/index.js';
+import { ProbUtils, PRECISION } from '#utils/index.js';
 
 import { DistributionBufferPool } from '#engine/distribution/DistributionBufferPool.js';
-import { ENGINE_LIMITS, SEARCH_CONSTANTS, BIGINT_CONSTANTS } from '#constants/engine.js';
+import { ENGINE_LIMITS, SEARCH_CONSTANTS } from '#constants/engine.js';
 import { ProbabilityMassAccountant } from '#engine/search/ProbabilityMassAccountant.js';
 import { SearchHeap } from '#utils/collections/SearchHeap.js';
 
@@ -119,7 +119,6 @@ export class SearchStateTracker {
             if (!blueprint) continue;
 
             const { registry, cat } = ctx;
-            const currentBitset = meta >> BIGINT_CONSTANTS.ENCHANT_SHIFT;
             const probContinue = blueprint.probContinue;
 
             // Split mass into stop vs forward
@@ -145,7 +144,7 @@ export class SearchStateTracker {
             }
 
             // Standard expansion path
-            const resolvedSub = this.processExpansionStep(probStop, probForward, remStop, scaleLoss, currentBitset, blueprint, ctx, depth, stack);
+            const resolvedSub = this.processExpansionStep(probStop, probForward, remStop, scaleLoss, blueprint, ctx, depth, stack);
             totalResolvedFromTrees += resolvedSub;
         }
 
@@ -197,13 +196,12 @@ export class SearchStateTracker {
         probForward: bigint,
         remStop: bigint,
         scaleLoss: bigint,
-        currentBitset: bigint,
         blueprint: ExpansionBlueprint,
         ctx: ForwardingContext,
         depth: number,
         stack: Array<{ mass: bigint, meta: bigint, combo: PackedCombo, depth: number }>
     ): bigint {
-        const { registry, instrumentation, queue } = ctx;
+        const { instrumentation, queue } = ctx;
 
         const eligibleCount = blueprint.eligibleCount;
         const splits = DistributionBufferPool.getBuffer(depth);
@@ -221,14 +219,15 @@ export class SearchStateTracker {
             if (instrumentation) instrumentation.roundingErrorEvents++;
         }
 
-        for (const [i, e] of blueprint.eligibleEnchants.entries()) {
-            if (i >= eligibleCount) break;
+        const childMetas = blueprint.childMetas;
+        const childPackedCombos = blueprint.childPackedCombos;
+
+        for (let i = 0; i < eligibleCount; i++) {
             const pNext = splits[i];
             if (pNext === undefined || pNext === 0n) continue;
 
-            const nextPacked = ComboUtils.packAppend(blueprint.currentCombo, e, registry.enchantToIndex) as PackedCombo;
-            const nextId = ComboUtils.getEnchantId(e);
-            const nextMeta = ((currentBitset | BIGINT_CONSTANTS.ID_BIT_LOOKUP[nextId]!) << BIGINT_CONSTANTS.ENCHANT_SHIFT) | BIGINT_CONSTANTS.LEVEL_LOOKUP[blueprint.nextLevel]!;
+            const nextMeta = childMetas[i]!;
+            const nextPacked = childPackedCombos[i]! as PackedCombo;
 
             // If the child is cached but we've reached max stack depth, fall back to the main queue
             // rather than recursing further. Mass is not lost — it enters 'pending' and the main

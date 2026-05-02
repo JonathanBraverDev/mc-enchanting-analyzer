@@ -37,6 +37,8 @@ describe('SearchStateTracker', () => {
             eligibleCount: 1,
             eligibleEnchants: [] as any,
             eligibleWeights: new Int32Array([100]),
+            childMetas: new BigUint64Array([1n]),
+            childPackedCombos: new Float64Array([1]),
             nextLevel: 30,
             currentCount: 0,
             currentCombo: 0 as any,
@@ -62,6 +64,8 @@ describe('SearchStateTracker', () => {
             eligibleCount: 2,
             eligibleEnchants: [1, 2] as any,
             eligibleWeights: weights,
+            childMetas: new BigUint64Array([1n, 2n]),
+            childPackedCombos: new Float64Array([1, 2]),
             nextLevel: 30,
             currentCount: 1,
             currentCombo: 0 as any,
@@ -80,7 +84,7 @@ describe('SearchStateTracker', () => {
 
         (tracker as any).processExpansionStep(
             0n, PRECISION, 0n, 0n, // probStop=0, probForward=PRECISION, remStop=0, scaleLoss=0
-            0n, blueprint,
+            blueprint,
             ctx,
             0, []
         );

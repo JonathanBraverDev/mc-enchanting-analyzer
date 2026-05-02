@@ -133,6 +133,8 @@ export interface ExpansionBlueprint {
     eligibleCount: number;
     eligibleEnchants: PackedEnchant[];
     eligibleWeights: Int32Array;
+    childMetas: BigUint64Array;
+    childPackedCombos: Float64Array;
     nextLevel: number;
     currentCount: number;
     currentCombo: PackedCombo;
