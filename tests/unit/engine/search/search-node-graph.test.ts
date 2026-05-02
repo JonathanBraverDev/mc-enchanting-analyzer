@@ -109,6 +109,20 @@ describe('SearchNodeGraph', () => {
         assert.strictEqual(graph.getLevel(numericNode), 30);
     });
 
+    it('finds existing numeric nodes without changing their stored combo', () => {
+        const graph = new SearchNodeGraph();
+        const highMaskHi = 2 ** (36 - 32);
+        const originalCombo = 17 as PackedCombo;
+        const ignoredCombo = 23 as PackedCombo;
+
+        const nodeId = graph.createNumericNode(0, highMaskHi, 30, originalCombo, 1);
+
+        assert.strictEqual(graph.getNumericNodeId(0, highMaskHi, 30), nodeId);
+        assert.strictEqual(graph.getOrCreateNumericNode(0, highMaskHi, 30, ignoredCombo, 2), nodeId);
+        assert.strictEqual(graph.getCombo(nodeId), originalCombo);
+        assert.strictEqual(graph.getCount(nodeId), 1);
+    });
+
     it('uses split masks for selected and conflicting high-id enchants', () => {
         const graph = new SearchNodeGraph();
         const ctx = makeHighIdContext(graph);

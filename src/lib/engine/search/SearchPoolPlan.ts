@@ -19,6 +19,7 @@ export class SearchPoolPlan {
     public readonly conflictMaskLo: Uint32Array;
     public readonly conflictMaskHi: Uint32Array;
     public readonly weights: Int32Array;
+    public readonly comboIndices: Uint8Array;
     public readonly initialMetas: BigUint64Array;
     public readonly singleCombos: Float64Array;
     public readonly initialTotalWeight: number;
@@ -35,6 +36,7 @@ export class SearchPoolPlan {
         this.conflictMaskLo = new Uint32Array(pool.length);
         this.conflictMaskHi = new Uint32Array(pool.length);
         this.weights = new Int32Array(pool.length);
+        this.comboIndices = new Uint8Array(pool.length);
         this.initialMetas = new BigUint64Array(pool.length);
         this.singleCombos = new Float64Array(pool.length);
         this.initialLevel = modLevel;
@@ -49,6 +51,7 @@ export class SearchPoolPlan {
             const idBit = BIGINT_CONSTANTS.ID_BIT_LOOKUP[id]!;
             const conflictBitset = registry.conflictBitsets[id] ?? 0n;
             const weight = registry.weightMap[id] ?? 0;
+            const comboIndex = registry.enchantToIndex.get(enchant) ?? 0;
 
             if (id > maxId) maxId = id;
             this.ids[i] = id;
@@ -59,8 +62,9 @@ export class SearchPoolPlan {
             this.conflictMaskLo[i] = Number(conflictBitset & SearchPoolPlan.LOW_MASK);
             this.conflictMaskHi[i] = Number((conflictBitset >> SearchPoolPlan.LOW_MASK_BITS) & SearchPoolPlan.LOW_MASK);
             this.weights[i] = weight;
+            this.comboIndices[i] = comboIndex;
             this.initialMetas[i] = (idBit << BIGINT_CONSTANTS.ENCHANT_SHIFT) | initialLevelBits;
-            this.singleCombos[i] = registry.enchantToIndex.get(enchant) ?? 0;
+            this.singleCombos[i] = comboIndex;
             initialTotalWeight += weight;
         }
 

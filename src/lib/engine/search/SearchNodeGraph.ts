@@ -43,6 +43,25 @@ export class SearchNodeGraph {
     }
 
     public getOrCreateNumericNode(maskLo: number, maskHi: number, level: number, combo: PackedCombo, count: number): number {
+        const existing = this.getNumericNodeId(maskLo, maskHi, level);
+        if (existing !== undefined) return existing;
+
+        return this.createNumericNode(maskLo, maskHi, level, combo, count);
+    }
+
+    public getNumericNodeId(maskLo: number, maskHi: number, level: number): number | undefined {
+        const normalizedMaskLo = maskLo >>> 0;
+        const normalizedMaskHi = maskHi >>> 0;
+        const numericKey = SearchNodeGraph.numericKey(normalizedMaskLo, normalizedMaskHi, level);
+
+        if (numericKey > Number.MAX_SAFE_INTEGER) {
+            return undefined;
+        }
+
+        return this.numericKeyToId.get(numericKey);
+    }
+
+    public createNumericNode(maskLo: number, maskHi: number, level: number, combo: PackedCombo, count: number): number {
         const normalizedMaskLo = maskLo >>> 0;
         const normalizedMaskHi = maskHi >>> 0;
         const numericKey = SearchNodeGraph.numericKey(normalizedMaskLo, normalizedMaskHi, level);
@@ -50,9 +69,6 @@ export class SearchNodeGraph {
         if (numericKey > Number.MAX_SAFE_INTEGER) {
             return this.getOrCreateNode(SearchNodeGraph.metaFromParts(normalizedMaskLo, normalizedMaskHi, level), combo, count);
         }
-
-        const existing = this.numericKeyToId.get(numericKey);
-        if (existing !== undefined) return existing;
 
         const nodeId = this.appendNode(undefined, normalizedMaskLo, normalizedMaskHi, level, combo, count);
         this.numericKeyToId.set(numericKey, nodeId);

@@ -166,15 +166,14 @@ export class SearchProcessor {
                 eligibleWeights[eligibleCount] = weight;
                 totalWeight += weight;
 
-                const enchant = poolPlan.pool[i]!;
-                const childCombo = ComboUtils.packAppend(currentCombo, enchant, registry.enchantToIndex);
-                childIds[eligibleCount] = ctx.graph.getOrCreateNumericNode(
-                    (currentMaskLo | idMaskLo) >>> 0,
-                    (currentMaskHi | idMaskHi) >>> 0,
-                    nextLevel,
-                    childCombo,
-                    currentCount + 1
-                );
+                const childMaskLo = (currentMaskLo | idMaskLo) >>> 0;
+                const childMaskHi = (currentMaskHi | idMaskHi) >>> 0;
+                let childId = ctx.graph.getNumericNodeId(childMaskLo, childMaskHi, nextLevel);
+                if (childId === undefined) {
+                    const childCombo = ComboUtils.packAppendIndex(currentCombo, poolPlan.comboIndices[i]!, currentCount);
+                    childId = ctx.graph.createNumericNode(childMaskLo, childMaskHi, nextLevel, childCombo, currentCount + 1);
+                }
+                childIds[eligibleCount] = childId;
                 eligibleCount++;
             }
         } else {

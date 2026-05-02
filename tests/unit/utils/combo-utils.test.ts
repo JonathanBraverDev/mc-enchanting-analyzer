@@ -63,6 +63,35 @@ describe('ComboUtils', () => {
         assert.strictEqual(ComboUtils.getCount(ComboUtils.pack([SHARP4, UNBR3, FIRE2], reg.enchantToIndex)), 3);
     });
 
+    it('packAppendIndex matches packAppend for empty, front, middle, and end insertion', () => {
+        const itemA = ((1 << 8) | 1) as PackedEnchant;
+        const itemB = ((2 << 8) | 1) as PackedEnchant;
+        const itemC = ((3 << 8) | 1) as PackedEnchant;
+        const itemD = ((4 << 8) | 1) as PackedEnchant;
+        const customMap = new Map<number, number>([
+            [itemA, 1],
+            [itemB, 3],
+            [itemC, 5],
+            [itemD, 7]
+        ]);
+
+        const cases: Array<{ existing: PackedEnchant[]; next: PackedEnchant }> = [
+            { existing: [], next: itemC },
+            { existing: [itemA, itemB], next: itemD },
+            { existing: [itemA, itemD], next: itemB },
+            { existing: [itemC, itemD], next: itemA }
+        ];
+
+        for (const testCase of cases) {
+            const existing = ComboUtils.pack(testCase.existing, customMap);
+            const nextIndex = customMap.get(testCase.next)!;
+            assert.strictEqual(
+                ComboUtils.packAppendIndex(existing, nextIndex, ComboUtils.getCount(existing)),
+                ComboUtils.packAppend(existing, testCase.next, customMap)
+            );
+        }
+    });
+
     // ── removeAdditional ──────────────────────────────────────────────────
 
     it('removeAdditional on single-enchant combo returns same combo', () => {

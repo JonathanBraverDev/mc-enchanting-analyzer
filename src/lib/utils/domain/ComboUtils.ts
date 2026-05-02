@@ -80,7 +80,14 @@ export class ComboUtils {
         if (newIdx === undefined) return existing;
 
         const count = this.getCount(existing);
+        return this.packAppendIndex(existing, newIdx, count);
+    }
 
+    static packAppendIndex(
+        existing: PackedCombo,
+        newIdx: number,
+        count: number
+    ): PackedCombo {
         if (count === 0) {
             return newIdx as PackedCombo;
         }
