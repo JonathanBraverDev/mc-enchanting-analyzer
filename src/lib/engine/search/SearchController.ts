@@ -1,9 +1,9 @@
 import { AsyncUtils, ProbUtils } from '#utils/index.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import { SearchState, SearchContext, ForwardingContext } from '#types/index.js';
-import { SearchProcessor } from '#engine/search/SearchProcessor.js';
 import { ComboUtils } from '#utils/index.js';
 import { PackedCombo } from '#types/index.js';
+import { MassForwardingEngine } from '#engine/search/MassForwardingEngine.js';
 
 /**
  * Orchestrates the Best-First Search loop.
@@ -77,11 +77,15 @@ export class SearchController {
             tracker.mass.subtract('pending', current.prob);
             const currentCount = ComboUtils.getCount(current.combo);
 
-            if (currentCount === 0) {
-                SearchProcessor.processInitialNode(current.prob, modLevel, ctx, tracker);
-            } else {
-                SearchProcessor.processSearchNode(current.prob, current.meta, current.combo, currentCount, ctx, tracker);
-            }
+            MassForwardingEngine.forwardNode({
+                currentProb: current.prob,
+                currentMeta: current.meta,
+                currentCombo: current.combo,
+                currentCount,
+                modLevel,
+                ctx,
+                tracker
+            });
 
             if (instrumentation && exploredTargets.length > 0) {
                 const exploredMass = tracker.mass.getExploredMass();

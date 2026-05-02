@@ -118,17 +118,14 @@ export class SearchProcessor {
     }
 
     /**
-     * Core expansion logic: determines eligibility for further enchantments,
-     * calculates continuous distribution probabilities, and forwards mass to children.
+     * Builds the cached structural expansion data for a non-initial search node.
      */
-    public static processSearchNode(
-        currentProb: bigint,
+    public static buildExpansionBlueprint(
         currentMeta: bigint,
         currentCombo: PackedCombo,
         currentCount: number,
-        ctx: ForwardingContext,
-        tracker: SearchStateTracker
-    ): void {
+        ctx: ForwardingContext
+    ): ExpansionBlueprint {
         const { registry, cat, pool } = ctx;
         const { indexToEnchant } = registry;
         const currentBitset = currentMeta >> BIGINT_CONSTANTS.ENCHANT_SHIFT;
@@ -146,57 +143,52 @@ export class SearchProcessor {
             ? 0n
             : (ProbUtils.PROB_CONTINUE_TABLE[currentLevel] || 0n);
 
-        if (!tracker.has(currentMeta)) {
-            const tempEligible: PackedEnchant[] = [];
-            const tempWeights: number[] = [];
-            let eligibleCount = 0;
-            let totalWeight = 0;
+        const tempEligible: PackedEnchant[] = [];
+        const tempWeights: number[] = [];
+        let eligibleCount = 0;
+        let totalWeight = 0;
 
-            for (const [i, e] of pool.entries()) {
-                const id = ComboUtils.getEnchantId(e);
-                if ((currentBitset & BIGINT_CONSTANTS.ID_BIT_LOOKUP[id]!) !== 0n) continue;
-                const conflictBitset = registry.conflictBitsets[id];
-                if (conflictBitset !== undefined && (currentBitset & conflictBitset) !== 0n) continue;
-                const weight = ctx.poolWeights[i];
-                if (weight === undefined) continue;
-                tempEligible.push(e);
-                tempWeights.push(weight);
-                eligibleCount++;
-                totalWeight += weight;
-            }
-
-            // Minecraft halves the effective level between additional enchant rolls, but it does not
-            // rebuild the eligible pool from that halved level. The pool stays frozen from the initial
-            // full modified level; this nextLevel only feeds the continuation roll for the next slot.
-            // currentCount >= 1 is always true here (count-0 nodes take the processInitialNode path),
-            // so the real invariant is the halving sequence: 2nd enchant sees level/2, 3rd sees level/4, etc.
-            const nextLevel = currentCount >= 1 ? Math.floor(currentLevel / 2) : currentLevel;
-            const childMetas = new BigUint64Array(eligibleCount);
-            const childPackedCombos = new Float64Array(eligibleCount);
-            const nextLevelBits = BIGINT_CONSTANTS.LEVEL_LOOKUP[nextLevel]!;
-            for (let i = 0; i < eligibleCount; i++) {
-                const e = tempEligible[i]!;
-                const id = ComboUtils.getEnchantId(e);
-                childMetas[i] = ((currentBitset | BIGINT_CONSTANTS.ID_BIT_LOOKUP[id]!) << BIGINT_CONSTANTS.ENCHANT_SHIFT) | nextLevelBits;
-                childPackedCombos[i] = ComboUtils.packAppend(currentCombo, e, registry.enchantToIndex);
-            }
-            const blueprint: ExpansionBlueprint = {
-                probContinue,
-                totalWeight,
-                eligibleCount,
-                eligibleEnchants: tempEligible,
-                eligibleWeights: new Int32Array(tempWeights),
-                childMetas,
-                childPackedCombos,
-                nextLevel,
-                currentCount,
-                currentCombo,
-                currentEnchants,
-                residue: 0n
-            };
-            tracker.registerExpansion(currentMeta, blueprint);
+        for (const [i, e] of pool.entries()) {
+            const id = ComboUtils.getEnchantId(e);
+            if ((currentBitset & BIGINT_CONSTANTS.ID_BIT_LOOKUP[id]!) !== 0n) continue;
+            const conflictBitset = registry.conflictBitsets[id];
+            if (conflictBitset !== undefined && (currentBitset & conflictBitset) !== 0n) continue;
+            const weight = ctx.poolWeights[i];
+            if (weight === undefined) continue;
+            tempEligible.push(e);
+            tempWeights.push(weight);
+            eligibleCount++;
+            totalWeight += weight;
         }
 
-        tracker.forwardMass(currentProb, currentMeta, currentCombo, ctx, SearchProcessor);
+        // Minecraft halves the effective level between additional enchant rolls, but it does not
+        // rebuild the eligible pool from that halved level. The pool stays frozen from the initial
+        // full modified level; this nextLevel only feeds the continuation roll for the next slot.
+        // currentCount >= 1 is always true here (count-0 nodes take the processInitialNode path),
+        // so the real invariant is the halving sequence: 2nd enchant sees level/2, 3rd sees level/4, etc.
+        const nextLevel = currentCount >= 1 ? Math.floor(currentLevel / 2) : currentLevel;
+        const childMetas = new BigUint64Array(eligibleCount);
+        const childPackedCombos = new Float64Array(eligibleCount);
+        const nextLevelBits = BIGINT_CONSTANTS.LEVEL_LOOKUP[nextLevel]!;
+        for (let i = 0; i < eligibleCount; i++) {
+            const e = tempEligible[i]!;
+            const id = ComboUtils.getEnchantId(e);
+            childMetas[i] = ((currentBitset | BIGINT_CONSTANTS.ID_BIT_LOOKUP[id]!) << BIGINT_CONSTANTS.ENCHANT_SHIFT) | nextLevelBits;
+            childPackedCombos[i] = ComboUtils.packAppend(currentCombo, e, registry.enchantToIndex);
+        }
+
+        return {
+            probContinue,
+            totalWeight,
+            eligibleCount,
+            eligibleEnchants: tempEligible,
+            eligibleWeights: new Int32Array(tempWeights),
+            childMetas,
+            childPackedCombos,
+            nextLevel,
+            currentCount,
+            currentCombo,
+            currentEnchants
+        };
     }
 }

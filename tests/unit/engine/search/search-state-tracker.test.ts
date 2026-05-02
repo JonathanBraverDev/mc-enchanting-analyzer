@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
+import { MassForwardingEngine } from '#engine/search/MassForwardingEngine.js';
 import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
 import { ExpansionBlueprint } from '#types/index.js';
 import { PRECISION } from '#utils/index.js';
@@ -42,8 +43,7 @@ describe('SearchStateTracker', () => {
             nextLevel: 30,
             currentCount: 0,
             currentCombo: 0 as any,
-            currentEnchants: [],
-            residue: 0n
+            currentEnchants: []
         };
         tracker.registerExpansion(1n, mockBlueprint);
         assert.ok(tracker.has(1n));
@@ -69,27 +69,23 @@ describe('SearchStateTracker', () => {
             nextLevel: 30,
             currentCount: 1,
             currentCombo: 0 as any,
-            currentEnchants: [],
-            residue: 15n // High residue from previous arrival
+            currentEnchants: []
         };
+        tracker.registerExpansion(99n, blueprint);
+        tracker.getForwardingResidue(99n).residue = 15n; // High residue from previous arrival
 
-        // We use string-index access for private method testing in node:test
         const ctx: any = {
-            registry: { enchantToIndex: new Map() },
+            registry: { enchantToIndex: new Map(), multiEnchantBooks: true },
             timing: {},
             resultsLimit: 100,
             queue: { pushOrMerge: () => {} },
-            instrumentation: {}
+            instrumentation: {},
+            cat: 'sword',
+            results: new Map()
         };
 
-        (tracker as any).processExpansionStep(
-            0n, PRECISION, 0n, 0n, // probStop=0, probForward=PRECISION, remStop=0, scaleLoss=0
-            blueprint,
-            ctx,
-            0, []
-        );
+        MassForwardingEngine.forwardMass(PRECISION, 99n, ctx, tracker);
 
-        // This is a bit hard to test via private methods, so I'll check the accountant state instead.
         const bk = tracker.mass.getBookkeeping();
         assert.ok(bk.recoveredRounding > 0n || bk.resolved > 0n, 'Should have accounted for recovered mass or resolved it');
     });
