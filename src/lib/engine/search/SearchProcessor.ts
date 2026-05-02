@@ -94,23 +94,22 @@ export class SearchProcessor {
      */
     public static processInitialNode(
         currentProb: bigint,
-        currentLevel: number,
+        _currentLevel: number,
         ctx: ForwardingContext,
         tracker: SearchStateTracker
     ): void {
-        const { registry, queue, graph, pool, poolWeights, initialTotalWeight } = ctx;
+        const { queue, graph, poolPlan } = ctx;
 
         const buffer = DistributionBufferPool.getBuffer(0);
-        const splitRemainder = ProbUtils.distributeDetailed(currentProb, poolWeights, initialTotalWeight, buffer);
+        const splitRemainder = ProbUtils.distributeDetailed(currentProb, poolPlan.weights, poolPlan.initialTotalWeight, buffer, poolPlan.length);
         tracker.mass.record('sieved', splitRemainder);
 
-        for (const [i, e] of pool.entries()) {
+        for (let i = 0; i < poolPlan.length; i++) {
             const pNext = buffer[i];
             if (pNext === undefined || pNext === 0n) continue;
 
-            const nextId = ComboUtils.getEnchantId(e);
-            const nextMeta = (BIGINT_CONSTANTS.ID_BIT_LOOKUP[nextId]! << BIGINT_CONSTANTS.ENCHANT_SHIFT) | BIGINT_CONSTANTS.LEVEL_LOOKUP[currentLevel]!;
-            const nextPacked = ComboUtils.pack([e], registry.enchantToIndex) as PackedCombo;
+            const nextMeta = poolPlan.initialMetas[i]!;
+            const nextPacked = poolPlan.singleCombos[i]! as PackedCombo;
             const nodeId = graph.getOrCreateNode(nextMeta, nextPacked, 1);
 
             tracker.mass.record('pending', pNext);
@@ -127,7 +126,7 @@ export class SearchProcessor {
         currentCount: number,
         ctx: ForwardingContext
     ): ExpansionBlueprint {
-        const { registry, cat, pool } = ctx;
+        const { registry, cat, poolPlan } = ctx;
         const { indexToEnchant } = registry;
         const currentBitset = currentMeta >> BIGINT_CONSTANTS.ENCHANT_SHIFT;
         const currentLevel = Number(currentMeta & BIGINT_CONSTANTS.RANK_MASK);
@@ -144,48 +143,36 @@ export class SearchProcessor {
             ? 0n
             : (ProbUtils.PROB_CONTINUE_TABLE[currentLevel] || 0n);
 
-        const tempEligible: PackedEnchant[] = [];
-        const tempWeights: number[] = [];
         let eligibleCount = 0;
         let totalWeight = 0;
 
-        for (const [i, e] of pool.entries()) {
-            const id = ComboUtils.getEnchantId(e);
-            if ((currentBitset & BIGINT_CONSTANTS.ID_BIT_LOOKUP[id]!) !== 0n) continue;
-            const conflictBitset = registry.conflictBitsets[id];
-            if (conflictBitset !== undefined && (currentBitset & conflictBitset) !== 0n) continue;
-            const weight = ctx.poolWeights[i];
-            if (weight === undefined) continue;
-            tempEligible.push(e);
-            tempWeights.push(weight);
-            eligibleCount++;
-            totalWeight += weight;
-        }
-
-        // Minecraft halves the effective level between additional enchant rolls, but it does not
-        // rebuild the eligible pool from that halved level. The pool stays frozen from the initial
-        // full modified level; this nextLevel only feeds the continuation roll for the next slot.
-        // currentCount >= 1 is always true here (count-0 nodes take the processInitialNode path),
-        // so the real invariant is the halving sequence: 2nd enchant sees level/2, 3rd sees level/4, etc.
         const nextLevel = currentCount >= 1 ? Math.floor(currentLevel / 2) : currentLevel;
-        const childIds = new Uint32Array(eligibleCount);
         const nextLevelBits = BIGINT_CONSTANTS.LEVEL_LOOKUP[nextLevel]!;
-        for (let i = 0; i < eligibleCount; i++) {
-            const e = tempEligible[i]!;
-            const id = ComboUtils.getEnchantId(e);
-            const childMeta = ((currentBitset | BIGINT_CONSTANTS.ID_BIT_LOOKUP[id]!) << BIGINT_CONSTANTS.ENCHANT_SHIFT) | nextLevelBits;
-            const childCombo = ComboUtils.packAppend(currentCombo, e, registry.enchantToIndex);
-            childIds[i] = ctx.graph.getOrCreateNode(childMeta, childCombo, currentCount + 1);
+        const eligibleWeights = new Int32Array(poolPlan.length);
+        const childIds = new Uint32Array(poolPlan.length);
+
+        for (let i = 0; i < poolPlan.length; i++) {
+            const idBit = poolPlan.idBits[i]!;
+            if ((currentBitset & idBit) !== 0n) continue;
+            const conflictBitset = poolPlan.conflictBitsets[i]!;
+            if ((currentBitset & conflictBitset) !== 0n) continue;
+            const weight = poolPlan.weights[i]!;
+            eligibleWeights[eligibleCount] = weight;
+            totalWeight += weight;
+
+            const enchant = poolPlan.pool[i]!;
+            const childMeta = ((currentBitset | idBit) << BIGINT_CONSTANTS.ENCHANT_SHIFT) | nextLevelBits;
+            const childCombo = ComboUtils.packAppend(currentCombo, enchant, registry.enchantToIndex);
+            childIds[eligibleCount] = ctx.graph.getOrCreateNode(childMeta, childCombo, currentCount + 1);
+            eligibleCount++;
         }
 
         return {
             probContinue,
             totalWeight,
             eligibleCount,
-            eligibleEnchants: tempEligible,
-            eligibleWeights: new Int32Array(tempWeights),
+            eligibleWeights,
             childIds,
-            nextLevel,
             currentCount,
             currentCombo,
             currentEnchants

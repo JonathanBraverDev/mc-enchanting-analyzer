@@ -38,10 +38,8 @@ describe('SearchStateTracker', () => {
             probContinue: 0n,
             totalWeight: 100,
             eligibleCount: 1,
-            eligibleEnchants: [] as any,
             eligibleWeights: new Int32Array([100]),
             childIds: new Uint32Array([nodeId]),
-            nextLevel: 30,
             currentCount: 0,
             currentCombo: 0 as any,
             currentEnchants: []
@@ -67,10 +65,8 @@ describe('SearchStateTracker', () => {
             probContinue: PRECISION, // 100% forward
             totalWeight: 20,
             eligibleCount: 2,
-            eligibleEnchants: [1, 2] as any,
             eligibleWeights: weights,
             childIds: new Uint32Array([childA, childB]),
-            nextLevel: 30,
             currentCount: 1,
             currentCombo: 0 as any,
             currentEnchants: []

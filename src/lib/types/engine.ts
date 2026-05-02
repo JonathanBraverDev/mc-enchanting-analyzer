@@ -1,5 +1,6 @@
 import { Enchantment, EnchantmentData } from '#types/domain.js';
 import { NodeIdSearchFrontier } from '#engine/search/NodeIdSearchFrontier.js';
+import { SearchPoolPlan } from '#engine/search/SearchPoolPlan.js';
 import { SearchNodeGraph } from '#engine/search/SearchNodeGraph.js';
 
 import { MassAccounting } from '#types/mass.js';
@@ -132,10 +133,8 @@ export interface ExpansionBlueprint {
     probContinue: bigint;
     totalWeight: number;
     eligibleCount: number;
-    eligibleEnchants: PackedEnchant[];
     eligibleWeights: Int32Array;
     childIds: Uint32Array;
-    nextLevel: number;
     currentCount: number;
     currentCombo: PackedCombo;
     currentEnchants: PackedEnchant[];
@@ -156,9 +155,7 @@ export interface ForwardingContext {
 
     // Search-global parameters
     cat: string;
-    pool: PackedEnchant[];
-    poolWeights: number[];
-    initialTotalWeight: number;
+    poolPlan: SearchPoolPlan;
 }
 
 

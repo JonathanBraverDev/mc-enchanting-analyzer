@@ -4,6 +4,7 @@ import { BIGINT_CONSTANTS } from '#constants/engine.js';
 import { SearchProcessor } from '#engine/search/SearchProcessor.js';
 import { NodeIdSearchFrontier } from '#engine/search/NodeIdSearchFrontier.js';
 import { SearchNodeGraph } from '#engine/search/SearchNodeGraph.js';
+import { SearchPoolPlan } from '#engine/search/SearchPoolPlan.js';
 import { ComboUtils } from '#utils/index.js';
 import { ForwardingContext, PackedCombo, PackedEnchant } from '#types/index.js';
 
@@ -11,8 +12,7 @@ const enchantA = ((1 << 8) | 1) as PackedEnchant;
 const enchantB = ((2 << 8) | 1) as PackedEnchant;
 
 function makeContext(graph: SearchNodeGraph): ForwardingContext {
-    return {
-        registry: {
+    const registry = {
             multiEnchantBooks: true,
             conflictBitsets: new BigUint64Array(64),
             enchantToIndex: new Map<number, number>([
@@ -21,15 +21,18 @@ function makeContext(graph: SearchNodeGraph): ForwardingContext {
             ]),
             indexToEnchant: [0, enchantA, enchantB],
             weightMap: new Uint32Array(64),
-        } as any,
+        } as any;
+    registry.weightMap[1] = 1;
+    registry.weightMap[2] = 1;
+
+    return {
+        registry,
         results: new Map(),
         queue: new NodeIdSearchFrontier(),
         graph,
         resultsLimit: 100,
         cat: 'sword',
-        pool: [enchantA, enchantB],
-        poolWeights: [1, 1],
-        initialTotalWeight: 2
+        poolPlan: new SearchPoolPlan(registry, [enchantA, enchantB], 30)
     };
 }
 
@@ -49,8 +52,8 @@ describe('SearchNodeGraph', () => {
         const fromA = SearchProcessor.buildExpansionBlueprint(metaA, comboA, 1, ctx);
         const fromB = SearchProcessor.buildExpansionBlueprint(metaB, comboB, 1, ctx);
 
-        assert.strictEqual(fromA.childIds.length, 1);
-        assert.strictEqual(fromB.childIds.length, 1);
+        assert.strictEqual(fromA.eligibleCount, 1);
+        assert.strictEqual(fromB.eligibleCount, 1);
         assert.strictEqual(fromA.childIds[0], fromB.childIds[0]);
         assert.strictEqual(graph.getCombo(fromA.childIds[0]!), graph.getCombo(fromB.childIds[0]!));
     });
@@ -63,10 +66,8 @@ describe('SearchNodeGraph', () => {
             probContinue: 1n,
             totalWeight: 1,
             eligibleCount: 1,
-            eligibleEnchants: [enchantB],
             eligibleWeights: new Int32Array([1]),
             childIds: new Uint32Array([childId]),
-            nextLevel: 1,
             currentCount: 1,
             currentCombo: 1 as PackedCombo,
             currentEnchants: []

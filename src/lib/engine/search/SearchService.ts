@@ -1,10 +1,11 @@
 import { AsyncUtils, KeyUtils, PRECISION, ProbUtils } from '#utils/index.js';
 import { getCategoryId, getEnchantability, getEligiblePool, getMaterialId } from '#core/registry.js';
-import { ENGINE_LIMITS, PACKING_CONSTANTS, UI_CONSTANTS } from '#constants/engine.js';
+import { ENGINE_LIMITS, UI_CONSTANTS } from '#constants/engine.js';
 import { CheckpointSearchContext, EngineInstrumentation, ModifiedLevelSearchContext, PackedCombo, RegistryState, SearchContext, SearchFrontierSnapshot, SearchResult, SearchState, ForwardingContext, SequentialCheckpointSearchContext } from '#types/index.js';
 import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
 import { SearchController } from '#engine/search/SearchController.js';
 import { NodeIdSearchFrontier } from '#engine/search/NodeIdSearchFrontier.js';
+import { SearchPoolPlan } from '#engine/search/SearchPoolPlan.js';
 import { SearchNodeGraph } from '#engine/search/SearchNodeGraph.js';
 import { CacheManager } from '#engine/cache/CacheManager.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
@@ -56,13 +57,11 @@ export class SearchService {
         // enchantments can appear in this run, so downstream search nodes must keep reusing this pool.
         const initialPool = getEligiblePool(registry, cat, modLevel, this.cache, registry.version);
 
-        const poolWeights: number[] = initialPool.map(e => registry.weightMap[e >> PACKING_CONSTANTS.ENCHANT_SHIFT] ?? 0);
-        const initialTotalWeight = poolWeights.reduce((a, b) => a + b, 0);
-
         if (initialPool.length === 0) {
             return this.handleEmptyPool(threshold);
         }
 
+        const poolPlan = new SearchPoolPlan(registry, initialPool, modLevel);
         const ctx: ForwardingContext = {
             registry,
             results,
@@ -72,9 +71,7 @@ export class SearchService {
             instrumentation: request.instrumentation,
             timing: timingResult ? { totalMs: 0, searchMs: 0 } : undefined,
             cat,
-            pool: initialPool,
-            poolWeights,
-            initialTotalWeight
+            poolPlan
         };
 
         await SearchController.run(state, ctx, modLevel, {
