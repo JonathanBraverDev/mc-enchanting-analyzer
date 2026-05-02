@@ -20,7 +20,7 @@ type WorkerName = 'top' | 'chart';
  *
  * Usage:
  *   const shell = new WorkerShell('top');
- *   workerScope.onmessage = async (e) => shell.dispatch(e.data);
+ *   workerScope.onmessage = async (e) => shell.dispatchEvent(e);
  *   shell.onInit = (msg) => { ... };
  *   shell.onRun  = async (msg, signal) => { ... };
  */
@@ -49,6 +49,15 @@ export class WorkerShell {
     }
 
     /**
+     * Accepts same-origin worker messages from the owning UI context.
+     * Dedicated worker messages may omit `origin`, so only a mismatched value is rejected.
+     */
+    public async dispatchEvent(event: MessageEvent<WorkerRequest>): Promise<void> {
+        if (!this.isTrustedMessage(event)) return;
+        await this.dispatch(event.data);
+    }
+
+    /**
      * Routes an incoming worker message to the correct handler.
      * Wraps all errors in a uniform error + terminal message pair.
      */
@@ -65,6 +74,13 @@ export class WorkerShell {
         } catch (err: any) {
             this.broadcastError(err);
         }
+    }
+
+    private isTrustedMessage(event: MessageEvent<WorkerRequest>): boolean {
+        const origin = event.origin;
+        const expectedOrigin = this.scope.location?.origin;
+
+        return !origin || !expectedOrigin || origin === expectedOrigin;
     }
 
     /**
