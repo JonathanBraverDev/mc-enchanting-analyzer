@@ -10,7 +10,8 @@ import {
   TopComboView,
   TopEnchantShareView,
   ChartBucketsView,
-  RefinementLevelName
+  RefinementLevelName,
+  SearchFrontierSnapshot
 } from '#types/index.js';
 import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
 import { ProbUtils, ComboUtils } from '#utils/index.js';
@@ -37,7 +38,7 @@ export class SnapshotService {
     tracker: SearchStateTracker,
     combos: Map<PackedCombo, bigint>,
     request: SnapshotRequest,
-    frontiers: { heap: import('#utils/collections/SearchHeap.js').SearchHeap, scale: bigint }[] = []
+    frontiers: SearchFrontierSnapshot[] = []
   ): TopRunView | ChartCellView {
     const { snapshotType, refinementLevel, clue, comboLimit } = request;
     const isBook = request.input.category === 'book';

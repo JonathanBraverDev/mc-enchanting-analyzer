@@ -1,4 +1,4 @@
-import { PackedCombo, PackedEnchant } from '#types/index.js';
+import { PackedCombo, PackedEnchant, SearchFrontierSnapshot } from '#types/index.js';
 import { ComboUtils, ProbUtils, PRECISION } from '#utils/index.js';
 
 /**
@@ -17,7 +17,7 @@ export class ClueAnalysisService {
     public static calculateClueMass(
         combos: Map<PackedCombo, bigint>,
         indexToEnchant: number[],
-        frontiers: { heap: import('../utils/collections/SearchHeap.js').SearchHeap, scale: bigint }[] = []
+        frontiers: SearchFrontierSnapshot[] = []
     ): Map<number, bigint> {
         const clueMass = new Map<number, bigint>();
 
@@ -43,9 +43,9 @@ export class ClueAnalysisService {
             addContribution(packed, prob);
         }
 
-        for (const { heap, scale } of frontiers) {
-            heap.forEach((_meta, prob, packed) => {
-                addContribution(packed as PackedCombo, ProbUtils.scale(prob, scale));
+        for (const { frontier, graph, scale } of frontiers) {
+            frontier.forEachNode((nodeId, prob) => {
+                addContribution(graph.getCombo(nodeId), ProbUtils.scale(prob, scale));
             });
         }
 
@@ -64,7 +64,7 @@ export class ClueAnalysisService {
         combos: Map<PackedCombo, bigint>,
         targetClueId: number,
         indexToEnchant: number[],
-        frontiers: { heap: import('../utils/collections/SearchHeap.js').SearchHeap, scale: bigint }[] = []
+        frontiers: SearchFrontierSnapshot[] = []
     ): {
         combos: Map<PackedCombo, bigint>,
         anyMass: Map<number, bigint>,
@@ -90,9 +90,9 @@ export class ClueAnalysisService {
             totalMass += this.processConditionedNode(packed, pCombo, targetClueId, pClue, indexToEnchant, conditionedCombos, anyMass, rankMass, countMass);
         }
 
-        for (const { heap, scale } of frontiers) {
-            heap.forEach((_meta, prob, packed) => {
-                totalMass += this.processConditionedNode(packed as PackedCombo, ProbUtils.scale(prob, scale), targetClueId, pClue, indexToEnchant, conditionedCombos, anyMass, rankMass, countMass);
+        for (const { frontier, graph, scale } of frontiers) {
+            frontier.forEachNode((nodeId, prob) => {
+                totalMass += this.processConditionedNode(graph.getCombo(nodeId), ProbUtils.scale(prob, scale), targetClueId, pClue, indexToEnchant, conditionedCombos, anyMass, rankMass, countMass);
             });
         }
 

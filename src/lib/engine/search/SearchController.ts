@@ -1,8 +1,6 @@
 import { AsyncUtils, ProbUtils } from '#utils/index.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import { SearchState, SearchContext, ForwardingContext } from '#types/index.js';
-import { ComboUtils } from '#utils/index.js';
-import { PackedCombo } from '#types/index.js';
 import { MassForwardingEngine } from '#engine/search/MassForwardingEngine.js';
 
 /**
@@ -33,7 +31,7 @@ export class SearchController {
             target,
             units: ProbUtils.toBigInt(target)
         })) ?? [];
-        const current = { meta: 0n, prob: 0n, level: 0, combo: 0 as any as PackedCombo };
+        const current = { nodeId: 0, prob: 0n };
 
         let aggregateStart = performance.now();
 
@@ -75,13 +73,10 @@ export class SearchController {
             if (!queue.popFast(current as any)) break;
 
             tracker.mass.subtract('pending', current.prob);
-            const currentCount = ComboUtils.getCount(current.combo);
 
             MassForwardingEngine.forwardNode({
                 currentProb: current.prob,
-                currentMeta: current.meta,
-                currentCombo: current.combo,
-                currentCount,
+                nodeId: current.nodeId,
                 modLevel,
                 ctx,
                 tracker

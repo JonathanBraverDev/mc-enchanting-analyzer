@@ -98,7 +98,7 @@ export class SearchProcessor {
         ctx: ForwardingContext,
         tracker: SearchStateTracker
     ): void {
-        const { registry, queue, pool, poolWeights, initialTotalWeight } = ctx;
+        const { registry, queue, graph, pool, poolWeights, initialTotalWeight } = ctx;
 
         const buffer = DistributionBufferPool.getBuffer(0);
         const splitRemainder = ProbUtils.distributeDetailed(currentProb, poolWeights, initialTotalWeight, buffer);
@@ -111,9 +111,10 @@ export class SearchProcessor {
             const nextId = ComboUtils.getEnchantId(e);
             const nextMeta = (BIGINT_CONSTANTS.ID_BIT_LOOKUP[nextId]! << BIGINT_CONSTANTS.ENCHANT_SHIFT) | BIGINT_CONSTANTS.LEVEL_LOOKUP[currentLevel]!;
             const nextPacked = ComboUtils.pack([e], registry.enchantToIndex) as PackedCombo;
+            const nodeId = graph.getOrCreateNode(nextMeta, nextPacked, 1);
 
             tracker.mass.record('pending', pNext);
-            queue.pushOrMerge(nextMeta, pNext, nextPacked);
+            queue.pushOrMerge(nodeId, pNext);
         }
     }
 
@@ -167,14 +168,14 @@ export class SearchProcessor {
         // currentCount >= 1 is always true here (count-0 nodes take the processInitialNode path),
         // so the real invariant is the halving sequence: 2nd enchant sees level/2, 3rd sees level/4, etc.
         const nextLevel = currentCount >= 1 ? Math.floor(currentLevel / 2) : currentLevel;
-        const childMetas = new BigUint64Array(eligibleCount);
-        const childPackedCombos = new Float64Array(eligibleCount);
+        const childIds = new Uint32Array(eligibleCount);
         const nextLevelBits = BIGINT_CONSTANTS.LEVEL_LOOKUP[nextLevel]!;
         for (let i = 0; i < eligibleCount; i++) {
             const e = tempEligible[i]!;
             const id = ComboUtils.getEnchantId(e);
-            childMetas[i] = ((currentBitset | BIGINT_CONSTANTS.ID_BIT_LOOKUP[id]!) << BIGINT_CONSTANTS.ENCHANT_SHIFT) | nextLevelBits;
-            childPackedCombos[i] = ComboUtils.packAppend(currentCombo, e, registry.enchantToIndex);
+            const childMeta = ((currentBitset | BIGINT_CONSTANTS.ID_BIT_LOOKUP[id]!) << BIGINT_CONSTANTS.ENCHANT_SHIFT) | nextLevelBits;
+            const childCombo = ComboUtils.packAppend(currentCombo, e, registry.enchantToIndex);
+            childIds[i] = ctx.graph.getOrCreateNode(childMeta, childCombo, currentCount + 1);
         }
 
         return {
@@ -183,8 +184,7 @@ export class SearchProcessor {
             eligibleCount,
             eligibleEnchants: tempEligible,
             eligibleWeights: new Int32Array(tempWeights),
-            childMetas,
-            childPackedCombos,
+            childIds,
             nextLevel,
             currentCount,
             currentCombo,

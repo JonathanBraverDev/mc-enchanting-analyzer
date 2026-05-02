@@ -1,6 +1,6 @@
 import { ProbUtils, ComboUtils } from '#utils/index.js';
 import { ENGINE_LIMITS, PACKING_CONSTANTS } from '#constants/engine.js';
-import { CalculationStats, ConditionedSummaryRequest, PackedCombo, SummaryRequest } from '#types/index.js';
+import { CalculationStats, ConditionedSummaryRequest, PackedCombo, SearchFrontierSnapshot, SummaryRequest } from '#types/index.js';
 import { ClueAnalysisService } from '#services/ClueAnalysisService.js';
 
 /**
@@ -152,7 +152,7 @@ export class SummaryService {
     public static deriveAggregateMasses(
         combos: Map<PackedCombo, bigint>,
         indexToEnchant: number[],
-        frontiers: { heap: import('../utils/collections/SearchHeap.js').SearchHeap, scale: bigint }[] = [],
+        frontiers: SearchFrontierSnapshot[] = [],
         isBook: boolean = false
     ): { any: bigint[]; ranks: bigint[]; count: bigint[] } {
         const any: bigint[] = [];
@@ -173,9 +173,10 @@ export class SummaryService {
         }
 
         // 2. Add pending mass from frontiers
-        for (const { heap, scale } of frontiers) {
-            heap.forEach((_meta, prob, packed) => {
+        for (const { frontier, graph, scale } of frontiers) {
+            frontier.forEachNode((nodeId, prob) => {
                 const mass = ProbUtils.scale(prob, scale);
+                const packed = graph.getCombo(nodeId);
                 const enchants = ComboUtils.unpack(packed as PackedCombo, indexToEnchant);
 
                 // Count mass (pending nodes contribute to their current count)

@@ -1,10 +1,11 @@
 import { AsyncUtils, KeyUtils, PRECISION, ProbUtils } from '#utils/index.js';
 import { getCategoryId, getEnchantability, getEligiblePool, getMaterialId } from '#core/registry.js';
 import { ENGINE_LIMITS, PACKING_CONSTANTS, UI_CONSTANTS } from '#constants/engine.js';
-import { CheckpointSearchContext, EngineInstrumentation, ModifiedLevelSearchContext, PackedCombo, RegistryState, SearchContext, SearchResult, SearchState, ForwardingContext, SequentialCheckpointSearchContext } from '#types/index.js';
+import { CheckpointSearchContext, EngineInstrumentation, ModifiedLevelSearchContext, PackedCombo, RegistryState, SearchContext, SearchFrontierSnapshot, SearchResult, SearchState, ForwardingContext, SequentialCheckpointSearchContext } from '#types/index.js';
 import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
 import { SearchController } from '#engine/search/SearchController.js';
-import { SearchHeap } from '#utils/collections/SearchHeap.js';
+import { NodeIdSearchFrontier } from '#engine/search/NodeIdSearchFrontier.js';
+import { SearchNodeGraph } from '#engine/search/SearchNodeGraph.js';
 import { CacheManager } from '#engine/cache/CacheManager.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { getSearchLimit } from '#engine/utils.js';
@@ -12,7 +13,7 @@ import { getSearchLimit } from '#engine/utils.js';
 interface CheckpointAccumulator {
     combos: Map<PackedCombo, bigint>;
     tracker: SearchStateTracker;
-    frontiers: { heap: SearchHeap, scale: bigint }[];
+    frontiers: SearchFrontierSnapshot[];
     processedMProb: bigint;
 }
 
@@ -48,7 +49,7 @@ export class SearchService {
         if (timingResult) startTime = performance.now();
 
         const state = SearchStateTracker.createState(modLevel, existingState ?? cached, threshold);
-        const { results, queue } = state;
+        const { results, queue, graph } = state;
 
         // Minecraft fixes the eligible enchant/rank pool from the initial full modified level once.
         // Later level halving affects only the chance to continue to another enchant slot, not which
@@ -66,6 +67,7 @@ export class SearchService {
             registry,
             results,
             queue,
+            graph,
             resultsLimit,
             instrumentation: request.instrumentation,
             timing: timingResult ? { totalMs: 0, searchMs: 0 } : undefined,
@@ -267,7 +269,7 @@ export class SearchService {
     private recordCheckpointLevel(accumulator: CheckpointAccumulator, result: SearchState, mProb: bigint): void {
         ProbUtils.addMapMass(accumulator.combos, result.results, mProb);
         accumulator.tracker.mass.addScaled(result.tracker.mass, mProb);
-        accumulator.frontiers.push({ heap: result.queue, scale: mProb });
+        accumulator.frontiers.push({ frontier: result.queue, graph: result.graph, scale: mProb });
         accumulator.processedMProb += mProb;
     }
 
@@ -303,7 +305,8 @@ export class SearchService {
         rootTracker.mass.record('resolved', PRECISION);
 
         return {
-            queue: new SearchHeap(),
+            queue: new NodeIdSearchFrontier(),
+            graph: new SearchNodeGraph(),
             results: new Map(),
             tracker: rootTracker,
             threshold,

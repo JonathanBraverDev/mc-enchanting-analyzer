@@ -1,13 +1,10 @@
 import { MassBookkeeping } from '#types/mass.js';
-import { ExpansionBlueprint, PackedCombo, SearchState } from '#types/index.js';
+import { PackedCombo, SearchState } from '#types/index.js';
 import { PRECISION } from '#utils/index.js';
 
+import { NodeIdSearchFrontier } from '#engine/search/NodeIdSearchFrontier.js';
 import { ProbabilityMassAccountant } from '#engine/search/ProbabilityMassAccountant.js';
-import { SearchHeap } from '#utils/collections/SearchHeap.js';
-
-interface ForwardingResidue {
-    residue: bigint;
-}
+import { SearchNodeGraph } from '#engine/search/SearchNodeGraph.js';
 
 /**
  * Unified state accountant for probability mass and expanded node blueprints.
@@ -15,17 +12,9 @@ interface ForwardingResidue {
  */
 export class SearchStateTracker {
     public readonly mass: ProbabilityMassAccountant;
-    private readonly expansionCache: Map<bigint, ExpansionBlueprint>;
-    private readonly forwardingResidues: Map<bigint, ForwardingResidue>;
 
-    constructor(
-        initialMass?: MassBookkeeping,
-        initialCache?: Map<bigint, ExpansionBlueprint>,
-        initialResidues?: Map<bigint, ForwardingResidue>
-    ) {
+    constructor(initialMass?: MassBookkeeping) {
         this.mass = new ProbabilityMassAccountant(initialMass);
-        this.expansionCache = initialCache || new Map();
-        this.forwardingResidues = initialResidues || new Map();
     }
 
     /**
@@ -40,6 +29,7 @@ export class SearchStateTracker {
         if (existing) {
             return {
                 queue: existing.queue.clone(),
+                graph: existing.graph.clone(),
                 results: new Map(existing.results),
                 tracker: existing.tracker.clone(),
                 threshold,
@@ -51,16 +41,19 @@ export class SearchStateTracker {
         }
 
         const results = new Map<PackedCombo, bigint>();
-        const queue = new SearchHeap();
+        const queue = new NodeIdSearchFrontier();
+        const graph = new SearchNodeGraph();
 
         // Always start from an empty generation state (0 packed, 0 bitset)
         const initialPacked = 0 as PackedCombo;
         const initialBitset = 0n;
+        const initialMeta = (initialBitset << 8n) | BigInt(modLevel);
+        const rootNodeId = graph.getOrCreateNode(initialMeta, initialPacked, 0);
 
-        queue.pushOrMerge((initialBitset << 8n) | BigInt(modLevel), PRECISION, initialPacked);
+        queue.pushOrMerge(rootNodeId, PRECISION);
 
         return {
-            queue, results,
+            queue, graph, results,
             tracker: new SearchStateTracker({
                 resolved: 0n,
                 pending: PRECISION,
@@ -78,38 +71,7 @@ export class SearchStateTracker {
         };
     }
 
-    // --- Expansion Caching ---
-
-    public registerExpansion(key: bigint, blueprint: ExpansionBlueprint): void {
-        this.expansionCache.set(key, blueprint);
-    }
-
-    public has(key: bigint): boolean {
-        return this.expansionCache.has(key);
-    }
-
-    public get(key: bigint): ExpansionBlueprint | undefined {
-        return this.expansionCache.get(key);
-    }
-
-    public getCacheSize(): number {
-        return this.expansionCache.size;
-    }
-
-    public getForwardingResidue(key: bigint): ForwardingResidue {
-        let state = this.forwardingResidues.get(key);
-        if (!state) {
-            state = { residue: 0n };
-            this.forwardingResidues.set(key, state);
-        }
-        return state;
-    }
-
     public clone(): SearchStateTracker {
-        const residues = new Map<bigint, ForwardingResidue>();
-        for (const [key, value] of this.forwardingResidues) {
-            residues.set(key, { residue: value.residue });
-        }
-        return new SearchStateTracker(this.mass.getBookkeeping(), new Map(this.expansionCache), residues);
+        return new SearchStateTracker(this.mass.getBookkeeping());
     }
 }

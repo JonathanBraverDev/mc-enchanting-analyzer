@@ -2,14 +2,12 @@ import { ENGINE_LIMITS, SEARCH_CONSTANTS } from '#constants/engine.js';
 import { DistributionBufferPool } from '#engine/distribution/DistributionBufferPool.js';
 import { SearchProcessor } from '#engine/search/SearchProcessor.js';
 import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
-import { ExpansionBlueprint, ForwardingContext, PackedCombo } from '#types/index.js';
+import { ExpansionBlueprint, ForwardingContext } from '#types/index.js';
 import { ProbUtils, PRECISION } from '#utils/index.js';
 
 interface ForwardingNodeRequest {
     currentProb: bigint;
-    currentMeta: bigint;
-    currentCombo: PackedCombo;
-    currentCount: number;
+    nodeId: number;
     modLevel: number;
     ctx: ForwardingContext;
     tracker: SearchStateTracker;
@@ -17,7 +15,7 @@ interface ForwardingNodeRequest {
 
 interface ForwardingStackEntry {
     mass: bigint;
-    meta: bigint;
+    nodeId: number;
     depth: number;
 }
 
@@ -28,39 +26,45 @@ export class MassForwardingEngine {
     private static readonly MAX_RECURSION_DEPTH = SEARCH_CONSTANTS.MAX_RECURSION_DEPTH;
 
     public static forwardNode(request: ForwardingNodeRequest): void {
-        const { currentProb, currentMeta, currentCombo, currentCount, modLevel, ctx, tracker } = request;
+        const { currentProb, nodeId, modLevel, ctx, tracker } = request;
+        const currentCount = ctx.graph.getCount(nodeId);
 
         if (currentCount === 0) {
             SearchProcessor.processInitialNode(currentProb, modLevel, ctx, tracker);
             return;
         }
 
-        if (!tracker.has(currentMeta)) {
-            tracker.registerExpansion(
-                currentMeta,
-                SearchProcessor.buildExpansionBlueprint(currentMeta, currentCombo, currentCount, ctx)
+        if (!ctx.graph.hasBlueprint(nodeId)) {
+            ctx.graph.setBlueprint(
+                nodeId,
+                SearchProcessor.buildExpansionBlueprint(
+                    ctx.graph.getMeta(nodeId),
+                    ctx.graph.getCombo(nodeId),
+                    currentCount,
+                    ctx
+                )
             );
         }
 
-        this.forwardMass(currentProb, currentMeta, ctx, tracker);
+        this.forwardMass(currentProb, nodeId, ctx, tracker);
     }
 
     public static forwardMass(
         initialMass: bigint,
-        initialMeta: bigint,
+        initialNodeId: number,
         ctx: ForwardingContext,
         tracker: SearchStateTracker
     ): bigint {
         const stack: ForwardingStackEntry[] = [
-            { mass: initialMass, meta: initialMeta, depth: 0 }
+            { mass: initialMass, nodeId: initialNodeId, depth: 0 }
         ];
 
         let totalResolvedFromTrees = 0n;
 
         while (stack.length > 0) {
-            const { mass: incomingMass, meta, depth } = stack.pop()!;
+            const { mass: incomingMass, nodeId, depth } = stack.pop()!;
 
-            const blueprint = tracker.get(meta);
+            const blueprint = ctx.graph.getBlueprint(nodeId);
             if (!blueprint) continue;
 
             const probContinue = blueprint.probContinue;
@@ -103,7 +107,7 @@ export class MassForwardingEngine {
             }
 
             totalResolvedFromTrees += this.processExpansionStep(
-                meta,
+                nodeId,
                 probStop,
                 probForward,
                 remStop,
@@ -159,7 +163,7 @@ export class MassForwardingEngine {
     }
 
     private static processExpansionStep(
-        meta: bigint,
+        nodeId: number,
         probStop: bigint,
         probForward: bigint,
         remStop: bigint,
@@ -181,7 +185,7 @@ export class MassForwardingEngine {
             blueprint.eligibleWeights,
             blueprint.totalWeight,
             splits,
-            tracker.getForwardingResidue(meta),
+            ctx.graph.getForwardingResidue(nodeId),
             eligibleCount
         );
 
@@ -191,24 +195,22 @@ export class MassForwardingEngine {
             if (ctx.instrumentation) ctx.instrumentation.roundingErrorEvents++;
         }
 
-        const childMetas = blueprint.childMetas;
-        const childPackedCombos = blueprint.childPackedCombos;
+        const childIds = blueprint.childIds;
 
         for (let i = 0; i < eligibleCount; i++) {
             const pNext = splits[i];
             if (pNext === undefined || pNext === 0n) continue;
 
-            const nextMeta = childMetas[i]!;
-            const nextPacked = childPackedCombos[i]! as PackedCombo;
+            const childId = childIds[i]!;
 
             // If the child is cached but we've reached max stack depth, fall back to the main queue
             // rather than recursing further. Mass is not lost: it enters pending and the main search
             // loop will re-process it through the same cache fast-path next iteration.
-            if (tracker.has(nextMeta) && depth < MassForwardingEngine.MAX_RECURSION_DEPTH) {
-                stack.push({ mass: pNext, meta: nextMeta, depth: depth + 1 });
+            if (ctx.graph.hasBlueprint(childId) && depth < MassForwardingEngine.MAX_RECURSION_DEPTH) {
+                stack.push({ mass: pNext, nodeId: childId, depth: depth + 1 });
             } else {
                 tracker.mass.record('pending', pNext);
-                ctx.queue.pushOrMerge(nextMeta, pNext, nextPacked);
+                ctx.queue.pushOrMerge(childId, pNext);
             }
         }
 
