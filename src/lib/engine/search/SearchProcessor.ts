@@ -108,9 +108,10 @@ export class SearchProcessor {
             const pNext = buffer[i];
             if (pNext === undefined || pNext === 0n) continue;
 
-            const nextMeta = poolPlan.initialMetas[i]!;
             const nextPacked = poolPlan.singleCombos[i]! as PackedCombo;
-            const nodeId = graph.getOrCreateNode(nextMeta, nextPacked, 1);
+            const nodeId = poolPlan.numericIdentitySupported
+                ? graph.getOrCreateNumericNode(poolPlan.idMaskLo[i]!, poolPlan.idMaskHi[i]!, poolPlan.initialLevel, nextPacked, 1)
+                : graph.getOrCreateNode(poolPlan.initialMetas[i]!, nextPacked, 1);
 
             tracker.mass.record('pending', pNext);
             queue.pushOrMerge(nodeId, pNext);
@@ -121,15 +122,14 @@ export class SearchProcessor {
      * Builds the cached structural expansion data for a non-initial search node.
      */
     public static buildExpansionBlueprint(
-        currentMeta: bigint,
-        currentCombo: PackedCombo,
-        currentCount: number,
+        nodeId: number,
         ctx: ForwardingContext
     ): ExpansionBlueprint {
         const { registry, cat, poolPlan } = ctx;
         const { indexToEnchant } = registry;
-        const currentBitset = currentMeta >> BIGINT_CONSTANTS.ENCHANT_SHIFT;
-        const currentLevel = Number(currentMeta & BIGINT_CONSTANTS.RANK_MASK);
+        const currentCombo = ctx.graph.getCombo(nodeId);
+        const currentCount = ctx.graph.getCount(nodeId);
+        const currentLevel = ctx.graph.getLevel(nodeId);
         const isBook = cat === "book";
 
         const currentEnchants = (isBook && currentCount > 1)
@@ -151,20 +151,50 @@ export class SearchProcessor {
         const eligibleWeights = new Int32Array(poolPlan.length);
         const childIds = new Uint32Array(poolPlan.length);
 
-        for (let i = 0; i < poolPlan.length; i++) {
-            const idBit = poolPlan.idBits[i]!;
-            if ((currentBitset & idBit) !== 0n) continue;
-            const conflictBitset = poolPlan.conflictBitsets[i]!;
-            if ((currentBitset & conflictBitset) !== 0n) continue;
-            const weight = poolPlan.weights[i]!;
-            eligibleWeights[eligibleCount] = weight;
-            totalWeight += weight;
+        if (poolPlan.numericIdentitySupported && ctx.graph.isNumericNode(nodeId)) {
+            const currentMaskLo = ctx.graph.getMaskLo(nodeId);
+            const currentMaskHi = ctx.graph.getMaskHi(nodeId);
 
-            const enchant = poolPlan.pool[i]!;
-            const childMeta = ((currentBitset | idBit) << BIGINT_CONSTANTS.ENCHANT_SHIFT) | nextLevelBits;
-            const childCombo = ComboUtils.packAppend(currentCombo, enchant, registry.enchantToIndex);
-            childIds[eligibleCount] = ctx.graph.getOrCreateNode(childMeta, childCombo, currentCount + 1);
-            eligibleCount++;
+            for (let i = 0; i < poolPlan.length; i++) {
+                const idMaskLo = poolPlan.idMaskLo[i]!;
+                const idMaskHi = poolPlan.idMaskHi[i]!;
+                if ((currentMaskLo & idMaskLo) !== 0 || (currentMaskHi & idMaskHi) !== 0) continue;
+                const conflictMaskLo = poolPlan.conflictMaskLo[i]!;
+                const conflictMaskHi = poolPlan.conflictMaskHi[i]!;
+                if ((currentMaskLo & conflictMaskLo) !== 0 || (currentMaskHi & conflictMaskHi) !== 0) continue;
+                const weight = poolPlan.weights[i]!;
+                eligibleWeights[eligibleCount] = weight;
+                totalWeight += weight;
+
+                const enchant = poolPlan.pool[i]!;
+                const childCombo = ComboUtils.packAppend(currentCombo, enchant, registry.enchantToIndex);
+                childIds[eligibleCount] = ctx.graph.getOrCreateNumericNode(
+                    (currentMaskLo | idMaskLo) >>> 0,
+                    (currentMaskHi | idMaskHi) >>> 0,
+                    nextLevel,
+                    childCombo,
+                    currentCount + 1
+                );
+                eligibleCount++;
+            }
+        } else {
+            const currentBitset = ctx.graph.getMeta(nodeId) >> BIGINT_CONSTANTS.ENCHANT_SHIFT;
+
+            for (let i = 0; i < poolPlan.length; i++) {
+                const idBit = poolPlan.idBits[i]!;
+                if ((currentBitset & idBit) !== 0n) continue;
+                const conflictBitset = poolPlan.conflictBitsets[i]!;
+                if ((currentBitset & conflictBitset) !== 0n) continue;
+                const weight = poolPlan.weights[i]!;
+                eligibleWeights[eligibleCount] = weight;
+                totalWeight += weight;
+
+                const enchant = poolPlan.pool[i]!;
+                const childMeta = ((currentBitset | idBit) << BIGINT_CONSTANTS.ENCHANT_SHIFT) | nextLevelBits;
+                const childCombo = ComboUtils.packAppend(currentCombo, enchant, registry.enchantToIndex);
+                childIds[eligibleCount] = ctx.graph.getOrCreateNode(childMeta, childCombo, currentCount + 1);
+                eligibleCount++;
+            }
         }
 
         return {

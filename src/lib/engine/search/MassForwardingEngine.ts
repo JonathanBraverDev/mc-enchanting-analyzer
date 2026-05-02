@@ -37,12 +37,7 @@ export class MassForwardingEngine {
         if (!ctx.graph.hasBlueprint(nodeId)) {
             ctx.graph.setBlueprint(
                 nodeId,
-                SearchProcessor.buildExpansionBlueprint(
-                    ctx.graph.getMeta(nodeId),
-                    ctx.graph.getCombo(nodeId),
-                    currentCount,
-                    ctx
-                )
+                SearchProcessor.buildExpansionBlueprint(nodeId, ctx)
             );
         }
 

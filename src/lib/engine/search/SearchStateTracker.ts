@@ -46,9 +46,7 @@ export class SearchStateTracker {
 
         // Always start from an empty generation state (0 packed, 0 bitset)
         const initialPacked = 0 as PackedCombo;
-        const initialBitset = 0n;
-        const initialMeta = (initialBitset << 8n) | BigInt(modLevel);
-        const rootNodeId = graph.getOrCreateNode(initialMeta, initialPacked, 0);
+        const rootNodeId = graph.getOrCreateNumericNode(0, 0, modLevel, initialPacked, 0);
 
         queue.pushOrMerge(rootNodeId, PRECISION);
 
