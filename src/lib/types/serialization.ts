@@ -13,7 +13,7 @@ export interface CompactStats {
     clueKeys: Uint32Array;
     clueProbs: Float64Array;
     counts: Float64Array;
-    
+
     accuracy: number;
     accounting: MassAccounting;
     threshold: number;

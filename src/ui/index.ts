@@ -1,15 +1,11 @@
-import { DATA } from '#data/index.js';
-import { EnchantEngine } from '#engine/index.js';
-import { EngineFactory } from '#engine/factory.js';
 import { UI_TEXTS } from '#core/config.js';
 import { WorkerClient } from '#ui/worker-client.js';
 import { ParamsView } from '#ui/views/ParamsView.js';
 import { ResultsView } from '#ui/views/ResultsView.js';
 import { ChartController } from '#ui/results-chart-controller.js';
 import { RefinementService } from '#ui/refinement.js';
-import { HumanizationService } from '#services/index.js';
-import { getEnchantability } from '#core/registry.js';
-import { EnchantInsights, CalculationStats, ResultSortMode } from '#types/index.js';
+import { UiMetadataService } from '#services/UiMetadataService.js';
+import { TopRunView } from '#types/index.js';
 
 /**
  * Main Web Application Controller.
@@ -20,11 +16,10 @@ class AppController {
     public results: ResultsView;
     public chart: ChartController;
     public refinement: RefinementService;
-    
-    public engine: EnchantEngine | null = null;
+
     private isWorkerReady: boolean = false;
     private runDebounceTimeout: number = 0;
-    private bestInsights: EnchantInsights | null = null;
+    private lastView: TopRunView | null = null;
 
     constructor() {
         this.params = new ParamsView(
@@ -46,21 +41,12 @@ class AppController {
             await WorkerClient.init(version);
             this.isWorkerReady = true;
 
-            this.params.updateConstraints(this.getEngine());
-            this.params.updateMaterials(this.getEngine());
+            this.params.updateConstraints();
+            this.params.updateMaterials();
             this.run();
         } catch (err) {
             this.showError(UI_TEXTS.STATUS_ERROR_LOADING, err);
         }
-    }
-
-    private getEngine(): EnchantEngine {
-        const { version } = this.params.getValues();
-        if (!this.engine || this.engine.registry.version !== version) {
-            if (this.engine) this.engine.destroy();
-            this.engine = EngineFactory.create(DATA, version);
-        }
-        return this.engine!;
     }
 
     private onParamsChange(type: string): void {
@@ -71,30 +57,30 @@ class AppController {
             this.isWorkerReady = false;
             WorkerClient.init(version).then(() => {
                 this.isWorkerReady = true;
-                const engine = this.getEngine();
-                this.params.updateConstraints(engine);
-                this.params.updateMaterials(engine);
-                this.params.updateClueTarget(engine);
+                this.params.updateConstraints();
+                this.params.updateMaterials();
+                this.params.updateClueTarget();
                 this.enqueueRun();
             }).catch(err => this.showError(UI_TEXTS.STATUS_ERROR_LOADING, err));
             return;
         }
 
-        const engine = this.getEngine();
-
         if (type === 'cat') {
             this.results.showPlaceholder(UI_TEXTS.STATUS_SWITCHING_CATEGORY);
-            this.params.updateMaterials(engine);
-            this.params.updateClueTarget(engine);
+            this.params.updateMaterials();
+            this.params.updateClueTarget();
         } else if (type === 'mat') {
-            this.params.updateClueTarget(engine);
+            this.params.updateClueTarget();
         } else if (type === 'chart-metric') {
-            this.chart.refresh(this.refinement.currentSweep, engine.registry);
+            const registry = UiMetadataService.getRegistry(version);
+            this.chart.refresh(this.refinement.currentSweep, registry);
             return;
         } else if (type === 'clue') {
             this.results.showPlaceholder(UI_TEXTS.STATUS_REFINING);
         } else if (type === 'combo-sort') {
-            this.updateInsightsFromRaw(this.lastRawStats, true);
+            if (this.lastView) {
+                this.updateInsightsFromView(this.lastView);
+            }
             return;
         }
 
@@ -102,12 +88,9 @@ class AppController {
     }
 
     private enqueueRun(): void {
-        this.bestInsights = null; // Clear latch to prevent stable-result blocking
         if (this.runDebounceTimeout) window.clearTimeout(this.runDebounceTimeout);
         this.runDebounceTimeout = window.setTimeout(() => this.run(), 50);
     }
-
-    private lastRawStats: CalculationStats | null = null;
 
     public get currentSweep() {
         return this.refinement.currentSweep;
@@ -119,23 +102,24 @@ class AppController {
 
     private async run(): Promise<void> {
         if (!this.isWorkerReady) return;
-        this.bestInsights = null;
 
         try {
-            const engine = this.getEngine();
-            this.params.updateClueTarget(engine);
-            
+            this.params.updateClueTarget();
+
             const vals = this.params.getValues();
-            this.params.setEnchantability(getEnchantability(engine.registry, vals.material, vals.category));
+            const ench = UiMetadataService.getEnchantability(vals.version, vals.material, vals.category);
+            this.params.setEnchantability(ench);
+
+            const registry = UiMetadataService.getRegistry(vals.version);
 
             await this.refinement.run(
                 { ...vals, category: vals.category },
-                engine.registry,
+                registry,
                 {
                     onStatus: (status, level) => this.results.setRefinementStatus(status, level),
                     onChartStatus: (status, progress) => this.results.setChartStatus(status, progress),
-                    onStats: (raw, isFinal) => this.updateInsightsFromRaw(raw, isFinal),
-                    onChart: (sweep) => this.chart.refresh(sweep, engine.registry)
+                    onStats: (view) => this.updateInsightsFromView(view),
+                    onChart: (sweep) => this.chart.refresh(sweep, registry)
                 }
             );
         } catch (err) {
@@ -144,23 +128,12 @@ class AppController {
         }
     }
 
-    private updateInsightsFromRaw(raw: CalculationStats | null, isFinal: boolean = false): void {
-        const engine = this.getEngine();
-        if (!raw) {
-            if (isFinal) this.results.showNoResults();
-            return;
-        }
-        
-        this.lastRawStats = raw;
+    private updateInsightsFromView(view: TopRunView): void {
+        this.lastView = view;
+        const { version } = this.params.getValues();
+        const registry = UiMetadataService.getRegistry(version);
 
-        const { sortMode } = this.params.getValues();
-        const insights = HumanizationService.humanize(raw, engine.registry, sortMode as ResultSortMode, DATA.constants.ROMAN_MAP);
-        
-        const pending = insights.accounting.pending;
-        if (isFinal || (this.bestInsights && pending < this.bestInsights.accounting.pending) || !this.bestInsights) {
-            this.bestInsights = insights;
-            this.results.update(insights, engine.registry);
-        }
+        this.results.updateV5(view, registry);
     }
 
     private showError(title: string, err: unknown): void {

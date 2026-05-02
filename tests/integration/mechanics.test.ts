@@ -11,13 +11,13 @@ describe('Minecraft Mechanics Integration Tests', () => {
     describe('Book Mechanics', () => {
         it('1.4.6: Books should remain single-enchantment', async () => {
             const engine146 = EngineFactory.create(DATA, '1.4.6');
-            const stats = await engine146.calculate('book', 30, 'book', { threshold: 0.001 });
+            const stats = await engine146.calculate({ cat: 'book', xp: 30, mat: 'book', threshold: 0.001 });
             assert.ok((stats.count[1] ?? 0) > 0.99, '1.4.6 books should only have 1 enchantment');
         });
 
         it('1.7.2+: Books SHOULD allow multi-enchantment', async () => {
             const engine172 = EngineFactory.create(DATA, '1.7.2');
-            const stats = await engine172.calculate('book', 30, 'book', { threshold: 0.0001 });
+            const stats = await engine172.calculate({ cat: 'book', xp: 30, mat: 'book', threshold: 0.0001 });
             assert.ok((stats.count[1] ?? 0) > 0.75, '1.7.2 books should still result in many single-enchant results');
             assert.ok((stats.count[2] ?? 0) > 0.10, '1.7.2 books should allow multiple enchants');
         });
@@ -34,23 +34,23 @@ describe('Minecraft Mechanics Integration Tests', () => {
     describe('Version-Specific Rules', () => {
         it('1.0: Level 50 should be possible and yield higher-tier results', async () => {
             const engine10 = EngineFactory.create(DATA, '1.0');
-            const stats50 = await engine10.calculate('sword', 50, 'diamond', { threshold: 0.001 });
+            const stats50 = await engine10.calculate({ cat: 'sword', xp: 50, mat: 'diamond', threshold: 0.001 });
             const sharpnessId = getEnchantId(engine10.registry,'Sharpness');
             const sharpVId = (sharpnessId << 8) | 5;
             assert.ok((stats50.ranks[sharpVId] || 0) > 0.05);
 
-            const stats30 = await engine10.calculate('sword', 30, 'diamond', { threshold: 0.001 });
+            const stats30 = await engine10.calculate({ cat: 'sword', xp: 30, mat: 'diamond', threshold: 0.001 });
             assert.ok((stats30.ranks[sharpVId] || 0) < (stats50.ranks[sharpVId] || 0));
         });
 
         it('1.3.1: Level 30 cap bonus range impact', async () => {
             const engine131 = EngineFactory.create(DATA, '1.3.1');
-            const stats30 = await engine131.calculate('sword', 30, 'diamond', { threshold: 0.001 });
+            const stats30 = await engine131.calculate({ cat: 'sword', xp: 30, mat: 'diamond', threshold: 0.001 });
             const sharpnessId = getEnchantId(engine131.registry,'Sharpness');
             const sharpIVId = (sharpnessId << 8) | 4;
-            
+
             const engine10 = EngineFactory.create(DATA, '1.0');
-            const stats30_10 = await engine10.calculate('sword', 30, 'diamond', { threshold: 0.001 });
+            const stats30_10 = await engine10.calculate({ cat: 'sword', xp: 30, mat: 'diamond', threshold: 0.001 });
             assert.ok((stats30.ranks[sharpIVId] || 0) < (stats30_10.ranks[sharpIVId] || 0));
         });
 
@@ -96,7 +96,7 @@ describe('Minecraft Mechanics Integration Tests', () => {
         it('1.14: Should ALLOW multi-protection (God Armor)', async () => {
             const engine114 = EngineFactory.create(DATA, '1.14');
             const human = await EngineTestUtils.getHumanStats(engine114, 'chestplate', 30, 'diamond');
-            
+
             const protNames = ["Protection", "Fire Protection", "Blast Protection", "Projectile Protection"];
             const multiProtFound = Object.keys(human.combos).some(combo => {
                 const partsClean = combo.split("+").map(p => p.trim().split(" "));
@@ -110,7 +110,7 @@ describe('Minecraft Mechanics Integration Tests', () => {
         it('1.14.3: Should BLOCK multi-protection (Normal & Conditioned)', async () => {
             const engine1143 = EngineFactory.create(DATA, '1.14.3');
             const protNames = ["Protection", "Fire Protection", "Blast Protection", "Projectile Protection"];
-            
+
             // Unconditioned
             const humanNormal = await EngineTestUtils.getHumanStats(engine1143, 'chestplate', 30, 'diamond');
             for (const combo of Object.keys(humanNormal.combos)) {
@@ -129,5 +129,3 @@ describe('Minecraft Mechanics Integration Tests', () => {
         });
     });
 });
-
-

@@ -1,14 +1,37 @@
 import { EnchantmentData } from '#types/index.js';
-import { global_enchantments, enchantment_groups } from '#data/enchantments.js';
-import { versions } from '#data/versions.js';
-import { material_values } from '#data/materials.js';
-import { constants, cosmetics } from '#data/cosmetics.js';
+import { RAW_DATA } from '#data/registry.js';
 
-export const DATA: EnchantmentData = {
-  global_enchantments: global_enchantments as unknown as EnchantmentData["global_enchantments"],
-  enchantment_groups: enchantment_groups as unknown as EnchantmentData["enchantment_groups"],
-  versions: versions as unknown as EnchantmentData["versions"],
-  material_values: material_values as unknown as EnchantmentData["material_values"],
-  constants: constants as unknown as EnchantmentData["constants"],
-  cosmetics: cosmetics as unknown as EnchantmentData["cosmetics"]
-};
+/**
+ * Smart Data Loader (Lazy Resolution).
+ * In standalone builds, we prefer the global ENCHANTING_DATA to avoid 3x duplication.
+ * We use a Proxy to ensure that even if the UI initializes before the global data
+ * is fully bound, we can still resolve it at the moment of first use.
+ */
+export const DATA: EnchantmentData = new Proxy({} as EnchantmentData, {
+  get(_, prop) {
+    // 1. Resolve target (Global or Local)
+    let target = (typeof globalThis !== 'undefined' && (globalThis as any).ENCHANTING_DATA) || RAW_DATA;
+
+    // 2. Unwrap ES Module if needed
+    if (target && typeof target === 'object' && 'RAW_DATA' in target) {
+      target = (target as any).RAW_DATA;
+    }
+
+    // 3. Return the requested property
+    return (target as any)[prop];
+  },
+  getOwnPropertyDescriptor(_, prop) {
+    let target = (typeof globalThis !== 'undefined' && (globalThis as any).ENCHANTING_DATA) || RAW_DATA;
+    if (target && typeof target === 'object' && 'RAW_DATA' in target) {
+      target = (target as any).RAW_DATA;
+    }
+    return Object.getOwnPropertyDescriptor(target, prop);
+  },
+  ownKeys() {
+    let target = (typeof globalThis !== 'undefined' && (globalThis as any).ENCHANTING_DATA) || RAW_DATA;
+    if (target && typeof target === 'object' && 'RAW_DATA' in target) {
+      target = (target as any).RAW_DATA;
+    }
+    return Object.keys(target || {});
+  }
+});

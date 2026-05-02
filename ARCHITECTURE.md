@@ -1,277 +1,130 @@
-# Architecture Map — Minecraft Enchantment Analyzer (v3)
-## Entry Points
+# Architecture Map - Minecraft Enchantment Analyzer (V5)
+
+## Entry Points
 
 | Entry point | Purpose |
 |---|---|
-| `src/lib/index.ts` | Public library API — re-exports engine, registry, data, types, utils |
-| `src/ui/index.ts` | Browser UI bundle entry — wires DOM, workers, chart, refinement |
-| `src/worker/worker.ts` | Web Worker entry — runs engine off the main thread |
-
----
+| `src/lib/index.ts` | Public library API: engine, registry, data, types, and utilities |
+| `src/ui/index.ts` | Browser UI entry: wires DOM controls, workers, refinement, and charts |
+| `src/worker/top-worker.ts` | Worker for the selected XP/top-results view |
+| `src/worker/chart-worker.ts` | Worker for XP sweep chart cells |
+| `src/worker/WorkerShell.ts` | Shared worker lifecycle, initialization, run cancellation, and error routing |
 
 ## Module Dependency Graph
 
-```
+```text
 src/lib/
-  constants/       ← Minecraft rules, XP caps, search limits (new)
-  data/            ← pure JSON-shaped data (no imports)
-  types/           ← type definitions only (no runtime deps)
-  utils/           ← stateless math, BinaryHeap, LRUCache, etc.
-  core/            ← RegistryFactory, builder logic
-  engine/          ← EnchantEngine, SearchStateTracker, SearchService, etc.
-  services/        ← CacheManager, SummaryService, HumanizationService, etc.
-  index.ts         ← Public library API (re-exports)
+  constants/       Minecraft rules, engine limits, UI defaults
+  data/            JSON-shaped version data
+  types/           Domain, engine, mass, and worker protocol types
+  utils/           Probability math, key packing, async helpers, heaps
+  core/            Registry construction, lookup helpers, clue validation
+  engine/          EnchantEngine, search services, state tracking, accounting
+  services/        Snapshot, summary, humanization, and refinement services
+  index.ts         Public library API
 
-src/ui/            ← UI layer only
-  index.ts         ← UI bundle entry
-  analyzer.html     ← Entry template
-  ... (ResultsView, ChartController, Refinement, etc.)
-
-src/worker/
-  worker.ts        ← Web Worker entry
-
-tests/             ← Root-level test suite
-  unit/            ← Logic isolation tests
-  integration/     ← Cross-module flow tests
-  snapshots/       ← Mathematical gold standards
-
-scripts/           ← Build, profiling, snapshot tools
-  ... (benchmark_engine.ts, update-snapshots.ts, etc.)
+src/ui/            Browser UI layer
+src/worker/        Dedicated worker entry points and protocol shell
+tests/             Unit, integration, diagnostics, and UI checks
+scripts/           Build, profiling, reporting, and snapshot tools
 ```
 
-Dependency direction: `lib/constants` ← `lib/data` ← `lib/types` ← `lib/utils` ← `lib/core` ← `lib/engine` ← `lib/services` ← `worker` ← `ui`
-(Each layer imports only from layers to its left, with one noted exception: `engine/aggregation/ProgressiveStatsAggregator.ts` imports `SummaryService` from `services` for inline progress callbacks.)
+Dependency direction is intentionally one way: data and types sit at the bottom, engine code owns search behavior, services translate engine output into UI/reporting shapes, workers isolate long-running calculations, and the UI consumes worker responses.
 
----
+## V5 Search Flow
 
-## Data Flow: Input → Engine → Worker → UI
+V5 centers the engine around checkpoint-capable searches. A normal calculation searches to one target checkpoint and summarizes the final result. UI refinement can instead search a sequence of checkpoints and stream a completed result each time a checkpoint is crossed.
 
-```
-User input (version, category, material, xp, guaranteedFirst)
-    │
-    ▼
-UI (src/ui/index.ts)
-  WorkerClient.request('getFullStats', payload)   ← sends message to Web Worker
-    │
-    ▼  [postMessage over structured clone]
-    ▼
-Worker (src/worker/worker.ts)
-  engine.getFullStats(cat, xp, mat, config)
-    │
-    ▼
-EnchantEngine.getFullStats (src/lib/engine/index.ts)
-  ├─ validates inputs (xp range, known category/material, guaranteed-first validity)
-  ├─ checks CacheManager (stats cache, threshold-aware hit detection)
-  └─ ProgressiveStatsAggregator.getFullStats(registry, cat, xp, mat, guaranteedFirst, config)
-        │
-        ├─ ModifiedLevelDistributionService.getModifiedLevelDist(version, xp, enchantability)
-        │    → bigint probability map  { modifiedLevel → P(level) }
-        │
-        └─ for each modifiedLevel (highest→lowest):
-             SearchService.calculateCombinations(registry, cat, ml, mat, ...)
-                ├─ CacheManager (combo/book cache hit/resumption detection)
-                ├─ FrontierFactory.create()   → initialises BinaryHeap + mass maps
-                ├─ SearchProcessor: high-speed search primitives
-                ├─ best-first search loop (using SearchStateTracker)
-                ├─ SearchProcessor.redistributeBookProb() → split prob for multi-enchant books
-                └─ returns SearchFrontier { results, anyMass, rankMass, countMass, accounting (ProbabilityMassBookkeeper) }
-
-        ↓ accumulate frontier results weighted by modLevel probabilities
-        SummaryService.summarize()   → CalculationStats { ..., accuracy, accounting, threshold }
-    │
-    ▼
-CacheManager.setStats(version, key, CalculationStats)
-    │
-    ▼
-SerializationService.serialize()   → CompactStats (TypedArrays for transferable transfer)
-    │
-    ▼  [postMessage + transferables]
-WorkerClient (src/ui/worker-client.ts)
-  SerializationService.deserialize() → CalculationStats
-    │
-    ├─ onProgress callback → intermediate UI update
-    └─ final result
-    │
-    ▼
-UI (HumanizationService.humanize + ResultsChartController + RefinementController)
+```text
+UI input
+  -> WorkerClient.startTopRun / startChartRun
+  -> top-worker or chart-worker
+  -> WorkerShell.dispatchEvent
+  -> EnchantEngine.searchSequentialCheckpoints or searchToCheckpoint
+  -> SearchService.searchModifiedLevel for each modified level
+  -> SearchController best-first expansion
+  -> SearchStateTracker and ProbabilityMassAccountant
+  -> SearchResult at each checkpoint
+  -> SnapshotService / SummaryService
+  -> worker response back to UI
 ```
 
----
+## Public Engine Calls
 
-## Key Function Signatures
-
-### `src/lib/engine/index.ts` — `EnchantEngine`
-| Signature | What it does |
+| API | Purpose |
 |---|---|
-| `constructor(data, version)` | Builds registry from DATA + version string; throws for invalid inputs |
-| `getFullStats(cat, xp, mat, config?) → Promise<CalculationStats>` | Main public API: validates inputs (non-starter check), aggregates stats |
-| `calculateCombinations(cat, modLevel, mat, guaranteedFirst?, threshold?, maxIterations?, resultsLimit?) → SearchFrontier` | Runs best-first search for a single modified level; wraps SearchService with cache |
-| `getModifiedLevelDist(xp, enchantability) → {[level]: bigint}` | Returns probability distribution over modified enchantment levels |
-| `getEligibleListNumeric(cat, level, mat, bitset?) → number[]` | Returns packed enchant IDs eligible at a level, excluding the given bitset |
-| `static clearAllCaches()` | Clears all caches across all live engines (keeps engine registry intact) |
-| `static clearAllEngines()` | Clears all caches AND removes all engine refs from the global tracking set |
-| `destroy()` | Clears caches and removes this engine from the global tracking set |
+| `calculate({ cat, xp, mat, ...config })` | Runs a standard calculation and returns summarized `CalculationStats` |
+| `searchToCheckpoint({ cat, xp, mat, ...config })` | Searches one target checkpoint and returns a `SearchResult` |
+| `searchSequentialCheckpoints({ cat, xp, mat, checkpoints, onCheckpointComplete, ...config })` | Searches multiple checkpoints in order and streams each completed `SearchResult` |
+| `searchModifiedLevel({ cat, modLevel, mat, ...config })` | Searches one modified level and returns its reusable `SearchState` |
+| `getModifiedLevelDist(xp, enchantability, instrumentation?)` | Returns the BigInt distribution over modified levels |
+| `getEligibleListNumeric(cat, level, bitset?)` | Returns packed eligible enchant/rank IDs for a category and level |
 
-### `src/lib/engine/aggregator.ts` — `ProgressiveStatsAggregator`
-| Signature | What it does |
+The public calls use request objects so callers can pass optional search, instrumentation, timing, clue, and abort options without positional argument drift.
+
+## Search Components
+
+| Component | Role |
 |---|---|
-| `static getFullStats(registry, cat, xp, mat, guaranteedFirst?, config?) → Promise<CalculationStats>` | Loops over all modified levels, runs search per level, accumulates weighted mass maps |
+| `EnchantEngine` | Validates requests, owns registry access, cache lookups, and public orchestration |
+| `SearchService` | Coordinates modified-level search, checkpoint aggregation, instrumentation, and cache reuse |
+| `SearchController` | Runs the best-first expansion loop until threshold, iteration, abort, or exhaustion |
+| `SearchProcessor` | Performs low-level node expansion and probability forwarding |
+| `SearchStateTracker` | Tracks search state and mass accounting for one modified level |
+| `ProbabilityMassAccountant` | Records resolved, pending, sieved, capped, overflow, and rounding mass |
+| `ModifiedLevelDistributionService` | Computes the BigInt distribution of modified enchantment levels |
+| `SummaryService` | Converts `SearchResult` maps and accounting into presented `CalculationStats` |
+| `SnapshotService` | Builds UI/reporting snapshots from `SearchResult` plus frontier state |
 
-### `src/lib/engine/distribution.ts` — `DistributionService`
-| Signature | What it does |
-|---|---|
-| `static getModifiedLevelDist(xp, enchantability, registry, cache?) → {[level]: bigint}` | Computes triangular distribution of modified levels using BigInt fixed-point arithmetic |
+## Checkpoint Aggregation
 
-### `src/lib/engine/search.ts` — `SearchService`
-| Signature | What it does |
-|---|---|
-| `static calculateCombinations(registry, cat, modLevel, mat, guaranteedFirst?, threshold?, limit, existingFrontier?, resultsLimit?, poolCache?, instrumentation?, floor?) → SearchFrontier` | Best-first iterative search; resumes from existing frontier if provided; uses ProbabilityMassBookkeeper for bookkeeping |
+`SearchResult` is the engine-native checkpoint output:
 
-### `src/lib/engine/frontier.ts` — `FrontierFactory`
-| Signature | What it does |
-|---|---|
-| `static create(registry, cat, modLevel, guaranteedFirst?, existing?, threshold?) → SearchFrontier` | Creates a fresh frontier (with guaranteed-first seed) or deep-clones an existing one |
-| `static getGuaranteedFirstId(registry, guaranteedFirst) → number \| null` | Resolves a "Name Rank" string to enchantment ID, returns null if unknown |
-
-### `src/lib/core/factory.ts` — `RegistryFactory`
-| Signature | What it does |
-|---|---|
-| `static build(data, version) → RegistryState` | Builds full registry by resolving version inheritance chain, applying overrides, building ID maps |
-
-### `src/lib/core/registry.ts` — lookup functions
-| Signature | What it does |
-|---|---|
-| `getCategoryId(state, cat) → number` | Returns numeric category ID, or UNKNOWN_CATEGORY_ID (63) if not found |
-| `getMaterialId(state, mat) → number` | Returns numeric material ID, or UNKNOWN_MATERIAL_ID (63) if not found |
-| `getEnchantId(state, name) → number` | Returns numeric enchantment ID, or UNKNOWN_ENCHANT_ID (255) if not found |
-| `isCategoryAvailable(state, cat) → boolean` | True if the category has any enchantments in this version's pool |
-| `getEligiblePool(state, cat, level, mat, cache?) → PackedEnchant[]` | Returns packed (id<<8\|rank) list of eligible enchants at the given level |
-| `isEnchantmentAchievable(state, fullName, cat, mat, levels, cache?) → boolean` | Checks if a named enchantment appears in any pool for the given levels |
-| `getEnchantability(state, mat, cat) → number` | Returns base enchantability value for a material+category combination |
-
-### `src/lib/services/SummaryService.ts`
-| Signature | What it does |
-|---|---|
-| `static summarize(combos, accountant, anyMass?, rankMass?, countMass?, comboLimit?) → CalculationStats` | Converts raw BigInt mass maps and ProbabilityMassBookkeeper into a number-based CalculationStats object |
-
-### `src/lib/services/HumanizationService.ts`
-| Signature | What it does |
-|---|---|
-| `static humanize(stats, resolver, sortMode?, romanMap?) → EnchantInsights` | Translates numeric IDs and hex combo keys into human-readable names |
-
-### `src/lib/services/SerializationService.ts`
-| Signature | What it does |
-|---|---|
-| `static serialize(stats) → { compact: CompactStats, transferables: Transferable[] }` | Packs CalculationStats into typed arrays for zero-copy postMessage transfer |
-| `static deserialize(compact) → CalculationStats` | Reconstructs CalculationStats from typed array representation |
-
-
-### `src/worker/client.ts` — `WorkerClient`
-| Signature | What it does |
-|---|---|
-| `init(version) → Promise<void>` | Spawns two Web Workers (main + chart) and initialises each with the given version |
-| `request(type, payload, onProgress?, workerTarget?) → Promise<WorkerResult>` | Sends a typed request to the chosen worker; resolves with final stats |
-
----
-
-## Key Constants (`src/lib/constants/*.ts`)
-
-| Constant | Source | Meaning |
-|---|---|---|
-| `MINECRAFT.MAX_XP_LEVEL` | `minecraft.ts` | Maximum XP level (modern 30, legacy 50) |
-| `ENGINE.MAX_RESULTS_SIZE` | `engine.ts` | Hard cap on combos stored in a SearchFrontier |
-| `ENGINE.CACHE_SIZE_STATS` | `engine.ts` | LRU size for the unified stats cache |
-
----
-
-## Caching Strategy (CacheManager)
-
-The engine uses a centralized, singleton `CacheManager` to manage memory and lifecycle. All cache keys are **version-prefixed** to prevent cross-version pollution.
-
-```mermaid
-graph TD
-    EE[EnchantEngine] --> CM[CacheManager]
-    PSA[ProgressiveStatsAggregator] --> CM
-    DS[DistributionService] --> CM
-    PS[PoolService] --> CM
-    
-    subgraph "CacheManager (Global Singleton)"
-        D[(Dist Cache)]
-        P[(Pool Cache)]
-        C[(Combo Cache)]
-        B[(Book Cache)]
-        S[(Stats Cache)]
-    end
-    
-    CM -.-> D
-    CM -.-> P
-    CM -.-> C
-    CM -.-> B
-    CM -.-> S
+```ts
+interface SearchResult {
+  combos: Map<PackedCombo, bigint>;
+  tracker: SearchStateTracker;
+  frontiers?: { heap: SearchHeap; scale: bigint }[];
+  instrumentation?: EngineInstrumentation;
+  timing?: SearchTiming;
+  threshold: number;
+}
 ```
 
-### Probability Accounting (ProbabilityMassBookkeeper)
+For each modified level, `SearchService` searches or resumes a `SearchState`, scales it by the modified-level probability, and records it into one checkpoint accumulator. The accumulator owns:
 
-The `ProbabilityMassBookkeeper` unifies mass tracking and residue harvesting into a single class, ensuring 100% mass conservation across the complex branching search.
+- global combo mass
+- aggregated mass tracker
+- frontier references for snapshot reporting
+- processed modified-level probability
+- timing and instrumentation snapshots
 
-```mermaid
-stateDiagram-v2
-    [*] --> Initial: 100% Pending
-    Initial --> Search: calculateCombinations
-    Search --> Resolved: Terminal Leaf (Success)
-    Search --> Pending: Still in Heap
-    Search --> Sieved: Below Resolution Threshold
-    Search --> Capped: Hit Resource Limits
-    Search --> Overflow: >6 Enchants (Game Limit)
-    
-    Resolved --> Aggregation: Weighted by ModLevel P(ml)
-    Pending --> Aggregation
-    Sieved --> Aggregation
-    Capped --> Aggregation
-    Overflow --> Aggregation
-    
-    Aggregation --> FinalStats: SummaryService.summarize()
-```
+If a sequential checkpoint run is aborted before any modified level is processed for the active checkpoint, the service returns the last completed checkpoint instead of replacing it with an empty result.
 
-### statsCache semantics
-- Key: `version:getStatsKey(catId, matId, xp, guaranteedId)`
-- **Threshold Awareness**: When retrieving from cache, the engine checks if `cached.threshold <= requested.threshold`. If the cached result was generated with *more* precision (lower threshold), it is returned. If not, it is ignored or used as a baseline for further refinement.
+## Worker Model
 
-## Search Termination & Invariants
+The browser uses two dedicated workers:
 
-The best-first search maintains strict invariants to ensure stability and accuracy:
-- **`floor < threshold`**: The engine maintains a system-level `floor` (lower limit) and a user-level `threshold`. Nodes are only branched if `prob > threshold`, but they may be settled into the results map even if below `threshold` as long as they are above `floor`. This ensures that guaranteed enchantments (which may have low probability branches) are still accounted for correctly.
-- **Mass Conservation**: Every call to `ProgressiveStatsAggregator.addScaled` ensures that the sum of all buckets matches the input probability, with discrepancies handled by `rounding`.
+| Worker | Purpose |
+|---|---|
+| `top-worker.ts` | Searches selected XP input through refinement checkpoints and streams top-result snapshots |
+| `chart-worker.ts` | Sweeps XP levels for chart cells at each refinement level |
 
-## Performance & Caching
+`WorkerShell` centralizes engine initialization, active run tracking, abort/supersede behavior, terminal messages, and error responses. Worker messages enter through `dispatchEvent`, which rejects mismatched origins when an origin is present.
 
-**comboCache / bookComboCache semantics**
-- Key: `getPackedKey(catId, matId, modLevel, guaranteedId)` — `limit` is NOT in the key, enabling cross-tier resumability (a deep tier can resume the frontier cached by a coarser tier)
-- Read: if `cached.threshold <= requested threshold`, return cached entry directly; otherwise pass as `existingFrontier` to continue the search
-- Write: always overwrite with the latest (more-explored) frontier
+## Caching Strategy
 
-### Probability Accounting
+`CacheManager` owns version-scoped caches:
 
-The engine uses a rigorous probability accounting system to ensure no probability mass is "lost" during the search. Every possible outcome is categorized into one of the following buckets:
+| Cache | Purpose |
+|---|---|
+| distribution cache | Modified-level distributions by version/xp/enchantability |
+| pool cache | Eligible enchant pools by version/category/level/material |
+| frontier cache | Reusable modified-level search states |
+| stats cache | Final `CalculationStats` summaries |
 
-- **Resolved**: Success! The search reached a natural leaf node.
-- **Pending**: Uncertain. These are nodes still in the search queue that haven't been processed yet.
-- **Sieved**: Discarded. These nodes had a probability below the minimum resolution threshold.
-- **Overflow**: Discarded by technical limits. These are outcomes that exceeded the 6-enchantment cap supported by the engine.
-- **Capped**: Discarded by engine limits. These are outcomes that were not explored because the results map or search queue reached their maximum allowed size (an engine-resource constraint).
-- **Rounding**: Compensation. This bucket tracks the cumulative rounding error from fixed-point (BigInt) arithmetic, ensuring the sum of all buckets is always exactly 1.0 (indexed to `10^12`).
+Search-state cache keys include version, category, material, modified level, and clue where relevant. Threshold-aware reads can reuse more precise cached state when it already satisfies the requested checkpoint.
 
-This categorization allows us to distinguish between losses due to game rules (`overflow`) and losses due to engine performance optimizations (`capped` and `sieved`), providing a clear "accuracy" metric (the `resolved` mass).
+## Release Documentation Rule
 
-The `ProbabilityMassBookkeeper` class manages these buckets and provides an `addScaled` method to combine results from multiple tiers or levels while maintaining perfect conservation.
-
----
-
-**Bit layout of packed keys**
-
-| Bits | Field | Key type |
-|------|-------|----------|
-| 0–5  | catId | both |
-| 6–11 | matId | both |
-| 12–19 | modLevel / xp | both |
-| 20–27 | guaranteedId | both |
+Major releases are expected to update this architecture map and at least one other top-level project document. Minor releases should update docs when behavior or workflows change. Patch releases are exempt unless the patch itself changes user-facing behavior or project process.

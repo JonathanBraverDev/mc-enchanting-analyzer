@@ -20,14 +20,14 @@ export const SnapshotUtils = {
 
         const cleanStats = this.sanitize(stats);
         const existing = JSON.parse(fs.readFileSync(snapshotPath, 'utf8'));
-        
+
         const summary = this.computeStatisticalSummary(cleanStats, existing);
         if (summary.hasMismatches) {
             const diffPath = path.join(snapshotDir, `${name}.actual.json`);
             fs.writeFileSync(diffPath, JSON.stringify(cleanStats, null, 2));
-            
+
             const errorMessage = `Snapshot mismatch for "${name}".\n${summary.report}\nActual result saved to ${diffPath}`;
-            
+
             const error = new Error(errorMessage);
             // Suppress the redundant stack trace
             error.stack = errorMessage;
@@ -81,20 +81,20 @@ export const SnapshotUtils = {
     compareAccounting(actual: any, expected: any) {
         let hasMismatches = false;
         const lines: string[] = ['Category [accounting]:'];
-        
+
         const buckets = ['resolved', 'pending', 'sieved', 'overflow', 'capped', 'rounding', 'recoveredRounding', 'recoveredSieved'];
         for (const bucket of buckets) {
             const aVal = actual[bucket] || 0;
             const eVal = expected[bucket] || 0;
             const delta = Math.abs(aVal - eVal);
-            
+
             // Allow microscopic drift in floating point reporting, but strictly check significant shifts
             if (delta > 1e-15) {
                 hasMismatches = true;
                 lines.push(`  - ${bucket}: exp ${eVal.toExponential(4)}, got ${aVal.toExponential(4)} (Δ ${delta.toExponential(2)})`);
             }
         }
-        
+
         // Deep bit-perfect comparison for units if available
         if (actual.units && expected.units) {
             for (const bucket of buckets) {
@@ -124,7 +124,7 @@ export const SnapshotUtils = {
         let maxDeltaKey = '';
         let sse = 0; // Sum of Squared Errors
         const outliers: { key: string; delta: number; expected: number; actual: number }[] = [];
-        
+
         const aKeys = Object.keys(actual);
         const eKeys = Object.keys(expected);
         const missing = eKeys.filter(k => !(k in actual));
@@ -136,7 +136,7 @@ export const SnapshotUtils = {
 
         for (const key of eKeys) {
             if (!(key in actual)) continue;
-            
+
             const aVal = actual[key];
             const eVal = expected[key];
             if (aVal === undefined || eVal === undefined) continue;
@@ -149,7 +149,7 @@ export const SnapshotUtils = {
                     maxDelta = delta;
                     maxDeltaKey = key;
                 }
-                
+
                 // Track top outliers
                 const lastOutlier = outliers[outliers.length - 1];
                 if (outliers.length < 5 || (lastOutlier !== undefined && delta > lastOutlier.delta)) {
@@ -165,7 +165,7 @@ export const SnapshotUtils = {
         const lines: string[] = [`Category [${name}]: ${eKeys.length} keys`];
         if (missing.length > 0) lines.push(`  - Missing: ${missing.length} keys (e.g., ${missing.slice(0, 3).join(', ')})`);
         if (extra.length > 0) lines.push(`  - Extra: ${extra.length} keys (e.g., ${extra.slice(0, 3).join(', ')})`);
-        
+
         if (maxDelta > 0) {
             lines.push(`  - Max Delta: ${maxDelta.toExponential(2)} (at "${maxDeltaKey}")`);
             lines.push(`  - RMSE: ${Math.sqrt(sse / eKeys.length).toExponential(2)}`);
@@ -208,7 +208,7 @@ export const SnapshotUtils = {
      */
     sanitize(stats: any): any {
         const round = (val: number) => Math.round(val * 1e12) / 1e12;
-        
+
         const sortMap = (obj: any) => {
             if (!obj) return {};
             const keys = Object.keys(obj);
@@ -221,7 +221,7 @@ export const SnapshotUtils = {
                 // Secondary: Key ascending (alphabetical)
                 return a.localeCompare(b);
             });
-            
+
             const res: any = {};
             for (const k of keys) {
                 res[k] = round(obj[k]);
@@ -251,8 +251,7 @@ export const EngineTestUtils = {
      * Performs a full enchantment simulation and returns human-readable results.
      */
     async getHumanStats(engine: EnchantEngine, cat: string, xp: number, mat: string, clue: string | null = null, threshold = 0.0001): Promise<any> {
-        const stats = await engine.calculate(cat, xp, mat, { clue, threshold });
+        const stats = await engine.calculate({ cat: cat, xp: xp, mat: mat, clue, threshold });
         return HumanizationService.humanize(stats, engine.registry);
     }
 };
-

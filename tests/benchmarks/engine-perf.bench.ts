@@ -14,9 +14,9 @@ async function runBenchmark() {
 
     for (const s of scenarios) {
         console.log(`\nScenario: ${s.name}`);
-        
+
         // Warmup
-        await engine.calculate(s.cat, s.xp, s.mat, { threshold: 0.001 });
+        await engine.calculate({ cat: s.cat, xp: s.xp, mat: s.mat, threshold: 0.001 });
         engine.resetCaches();
 
         const iterations = 5;
@@ -24,7 +24,7 @@ async function runBenchmark() {
 
         for (let i = 0; i < iterations; i++) {
             const start = performance.now();
-            await engine.calculate(s.cat, s.xp, s.mat, { threshold: 0.0001 });
+            await engine.calculate({ cat: s.cat, xp: s.xp, mat: s.mat, threshold: 0.0001 });
             const end = performance.now();
             totalMs += (end - start);
             engine.resetCaches();

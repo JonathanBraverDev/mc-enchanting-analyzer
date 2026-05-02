@@ -36,7 +36,7 @@ export class RegistryFactory {
 
         const resolvedVersion = this.resolveVersion(data, version);
         state.version = version;
-        
+
         const chain = this.getInheritanceChain(data, resolvedVersion);
 
         // 1. Apply inheritance chain
@@ -47,13 +47,13 @@ export class RegistryFactory {
 
         // 2. Finalize Registry data structure
         this.finalizeEnchantmentRegistry(state, data);
-        
+
         // 3. Initialize mapping lookups
         this.initializeIdMaps(state, data);
-        
+
         // 4. Filter based on version ranges
         this.filterMergedPools(state);
-        
+
         // 5. Initialize active version pool
         this.initializeVersionPool(state);
 
@@ -99,7 +99,7 @@ export class RegistryFactory {
         if (manifest.multi_enchant_books !== undefined) {
             state.multiEnchantBooks = manifest.multi_enchant_books;
         }
-        
+
         if (manifest.overrides) {
             for (const [ench, props] of Object.entries(manifest.overrides)) {
                 state.mergedOverrides[ench] = Object.assign(state.mergedOverrides[ench] || {}, props);
@@ -193,7 +193,7 @@ export class RegistryFactory {
         };
 
         Object.keys(data.enchantment_groups).forEach(cat => addId(state.catIdMap, cat));
-        
+
         const matValues = data.material_values;
         [...Object.keys(matValues.tools), ...Object.keys(matValues.armor)].forEach(mat => addId(state.matIdMap, mat));
 

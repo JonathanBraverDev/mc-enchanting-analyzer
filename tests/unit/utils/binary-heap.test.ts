@@ -136,5 +136,3 @@ describe('BinaryHeap', () => {
         assert.strictEqual(heap.size(), 0);
     });
 });
-
-

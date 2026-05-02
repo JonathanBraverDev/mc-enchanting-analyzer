@@ -15,7 +15,7 @@ A high-performance, real-time simulation tool for Minecraft's enchanting mechani
 ## 🚀 Getting Started
 
 ### 📥 Standalone HTML (Zero Install)
-The easiest way to use the analyzer is to download the **Standalone HTML** file from our [Releases Page](https://github.com/JonathanBraverDev/mc-enchanting-analyzer/releases). 
+The easiest way to use the analyzer is to download the **Standalone HTML** file from our [Releases Page](https://github.com/JonathanBraverDev/mc-enchanting-analyzer/releases).
 - **No install needed**: Just open the file in any modern web browser.
 - **Portable**: Everything (logic, styles, data) is contained in a single file.
 
@@ -32,7 +32,11 @@ To build your own standalone version, use: `npm run build:standalone`. The resul
 
 ## 🧠 The Engine
 
-This tool uses a progressive, tiered refinement search. It prioritizes the most likely outcomes first, allowing the UI to remain responsive even when calculating enchantments for complex items.
+This tool uses the V5 checkpoint search engine. It prioritizes the most likely outcomes first, reports useful intermediate checkpoints to the UI, and keeps every probability bucket accounted for while deeper searches continue.
+
+For implementation details, see:
+- `ARCHITECTURE.md` for the engine, worker, and checkpoint flow.
+- `MASS_HANDLING.md` for probability conservation and accounting.
 
 ---
 Created by **Jonathan Braver**

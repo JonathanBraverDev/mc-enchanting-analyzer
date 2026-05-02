@@ -4,7 +4,7 @@ import { SearchHeap } from '#utils/collections/SearchHeap.js';
 import { MassAccounting } from '#types/mass.js';
 
 /**
- * Raw calculation statistics from the search engine.
+ * Presented calculation statistics from the search engine.
  */
 export interface CalculationStats {
   /** Map of enchantment rank IDs to their total cumulative probability. Key is (enchantId << 8 | rank). */
@@ -17,14 +17,14 @@ export interface CalculationStats {
   combos: { [packed: string]: number };
   /** Map of enchantment rank IDs to their total probability of being the shown clue. Key is (enchantId << 8 | rank). */
   clues: { [idAndRank: number]: number };
-  
+
   /** The minimum probability threshold used for this search. */
   threshold: number;
   /** Normalized resolved mass (0.0 to 1.0). */
   accuracy: number;
   /** Detailed breakdown of where the total 1.0 probability mass settled. */
   accounting: MassAccounting;
-  
+
   instrumentation?: EngineInstrumentation | undefined;
   timing?: SearchTiming | undefined;
 }
@@ -43,23 +43,18 @@ export interface CacheConfig {
   poolSize: number;
 }
 
-export interface MassCheckpoint {
-  modLevel: number;
+export interface SearchCheckpoint {
   threshold: number;
-  mass: number;
-  iterations: number;
-  totalIterations: number;
+  limit: number;
 }
 
-export interface CheckpointSummary {
-  /** The mass target (e.g. 0.5, 0.9, 0.999) */
-  target: number;
-  /** Minimum threshold needed to reach this target — worst case across all modified levels */
-  worstCaseThreshold: number;
-  /** Maximum iterations needed to reach this target — worst case across all modified levels */
-  worstCaseIterations: number;
-  /** The modified level that was the bottleneck */
-  bottleneckLevel: number;
+export interface ExploredMassSample {
+  modLevel: number;
+  targetMass: number;
+  exploredMass: number;
+  frontierProbability: number;
+  iterations: number;
+  totalIterations: number;
 }
 
 export interface SearchTiming {
@@ -97,10 +92,11 @@ export interface EngineInstrumentation {
   /** Total results currently stored in ALL frontiers across the entire engine's LRU caches */
   globalCacheResults?: number | undefined;
 
-  /** Raw per-level checkpoints — one entry per modified level x checkpoint target crossed */
-  checkpoints: MassCheckpoint[];
-  /** Aggregated summary: worst-case threshold and iteration count per mass target across all levels */
-  checkpointSummary: CheckpointSummary[];
+  /** Optional script/diagnostic targets for recording explored mass crossings. */
+  exploredMassTargets?: number[] | undefined;
+  /** Diagnostic samples recorded when explored mass crosses configured targets. */
+  exploredMassSamples?: ExploredMassSample[] | undefined;
+
   exitReason?: EngineExitReason | undefined;
 
   /** Optional: If true, perform expensive global heap scans for cache nodes/results */
@@ -153,13 +149,10 @@ export interface ForwardingContext {
     registry: RegistryState;
     results: Map<PackedCombo, bigint>;
     queue: SearchHeap;
-    anyMass: BigUint64Array;
-    rankMass: BigUint64Array;
-    countMass: BigUint64Array;
     resultsLimit: number;
     instrumentation?: EngineInstrumentation | undefined;
     timing?: SearchTiming | undefined;
-    
+
     // Search-global parameters
     cat: string;
     pool: PackedEnchant[];
@@ -174,14 +167,10 @@ export interface ForwardingContext {
 export interface SearchState {
     queue: SearchHeap;
     results: Map<PackedCombo, bigint>;
-    anyMass: BigUint64Array;
-    rankMass: BigUint64Array;
-    countMass: BigUint64Array;
     tracker: import('../engine/search/SearchStateTracker.js').SearchStateTracker;
     threshold: bigint;
     iterations: number;
     nodesProcessed: number;
-    checkpoints: MassCheckpoint[];  // per-call output; not carried over on resume
     exitReason?: EngineExitReason | undefined;  // per-call output; not carried over on resume
 }
 
@@ -227,14 +216,48 @@ export interface SearchConfig {
     timing?: SearchTiming | undefined;
 }
 
-/**
- * Internal configuration used at the engine→aggregator boundary.
- * Extends SearchConfig with cache accessors that are internal implementation details.
- */
-export interface InternalSearchConfig extends SearchConfig {
-    getExtendedCache?: ((ml: number) => SearchState | undefined) | undefined;
-    setExtendedCache?: ((ml: number, frontier: SearchState) => void) | undefined;
-    getCacheMetrics?: (() => { cacheNodes: number; cacheResults: number }) | undefined;
+export interface CalculationRequest extends SearchConfig {
+    cat: string;
+    xp: number;
+    mat: string;
+}
+
+export interface ModifiedLevelSearchRequest {
+    cat: string;
+    modLevel: number;
+    mat: string;
+    threshold?: bigint | undefined;
+    maxIterations?: number | undefined;
+    resultsLimit?: number | undefined;
+    instrumentation?: EngineInstrumentation | undefined;
+}
+
+export interface CheckpointSearchRequest extends SearchConfig {
+    cat: string;
+    xp: number;
+    mat: string;
+}
+
+export interface SequentialCheckpointSearchRequest extends SearchConfig {
+    cat: string;
+    xp: number;
+    mat: string;
+    checkpoints: SearchCheckpoint[];
+    onCheckpointComplete: (result: SearchResult, checkpointIndex: number) => void;
+}
+
+export interface SummaryRequest {
+    combos: Map<PackedCombo, bigint>;
+    tracker: import('../engine/search/SearchStateTracker.js').SearchStateTracker;
+    indexToEnchant: number[];
+    comboLimit?: number | undefined;
+    threshold?: number | undefined;
+    frontiers?: { heap: import('../utils/collections/SearchHeap.js').SearchHeap, scale: bigint }[] | undefined;
+    isBook?: boolean | undefined;
+}
+
+export interface ConditionedSummaryRequest extends SummaryRequest {
+    targetClueId: number;
 }
 
 /**
@@ -256,15 +279,11 @@ export interface ProgressReporter {
   onProgress(update: ProgressUpdate): void;
 }
 
-/**
- * Raw results from an aggregation run before summarization.
- */
-export interface AggregationResult {
+/** Search results before presentation summarization. */
+export interface SearchResult {
     combos: Map<PackedCombo, bigint>;
     tracker: import('../engine/search/SearchStateTracker.js').SearchStateTracker;
-    anyMass: BigUint64Array;
-    rankMass: BigUint64Array;
-    countMass: BigUint64Array;
+    frontiers?: { heap: import('../utils/collections/SearchHeap.js').SearchHeap, scale: bigint }[] | undefined;
     instrumentation?: EngineInstrumentation | undefined;
     timing?: SearchTiming | undefined;
     threshold: number;
@@ -281,4 +300,25 @@ export interface SearchContext {
     signal?: AbortSignal | undefined;
     instrumentation?: EngineInstrumentation | undefined;
     timing?: SearchTiming | undefined;
+}
+
+export interface ModifiedLevelSearchContext extends SearchContext {
+    registry: RegistryState;
+    cat: string;
+    modLevel: number;
+    mat?: string | undefined;
+    existingState?: SearchState | undefined;
+    useCache?: boolean | undefined;
+}
+
+export interface CheckpointSearchContext extends SearchConfig {
+    registry: RegistryState;
+    cat: string;
+    xp: number;
+    mat: string;
+}
+
+export interface SequentialCheckpointSearchContext extends CheckpointSearchContext {
+    checkpoints: SearchCheckpoint[];
+    onCheckpointComplete: (result: SearchResult, checkpointIndex: number) => void;
 }

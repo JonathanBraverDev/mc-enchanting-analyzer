@@ -44,7 +44,7 @@ To avoid the binary-decimal drift of IEEE 754 floats, the engine uses `BigUint64
 - **Conversion**: Probabilities are converted to BigInt as early as possible (in `ProbUtils.toBigInt`) and returned to `number` only for final UI display.
 
 ### 2. Banker's Rounding (Statistically Neutral)
-The engine implements **Banker's Rounding** (Round-to-Nearest-Even) for scaling operations. 
+The engine implements **Banker's Rounding** (Round-to-Nearest-Even) for scaling operations.
 - **The Why**: Standard "round half up" introduces a positive bias over millions of operations. Banker's Rounding ensures that ties are rounded to the nearest even neighbor, neutralizing the cumulative drift across deep search trees.
 - **Implementation**: See `ProbUtils.roundDiv`.
 
@@ -54,13 +54,14 @@ Whenever `prob` is divided among $N$ branches (e.g., distributing mass across en
 - **Honest**: $5 / 2 = 2$. The remainder `1` is explicitly added to the `Rounding` bucket of the current `ProbabilityMassBookkeeper`.
 - **Atomic**: All additions to the results map and buckets happen within the same transition block.
 
-### Tiers of Aggregation
+### Checkpoint Aggregation
 
-1.  **Search Level**: `SearchService` populates a `SearchFrontier` with results and its own `ProbabilityMassBookkeeper`.
-2.  **Engine Level**: `ProgressiveStatsAggregator` combines multiple frontiers.
-    - Every `addItemMass` call ensures the specific enchantment stats are updated in sync with the global `ProbabilityMassBookkeeper`.
-    - After searching all modified levels $L$, the engine has a set of frontiers $\{F_L\}$.
-    - It uses `ProbabilityMassBookkeeper.addScaled(frontier, P(L))` to weight each frontier's contribution.
+1.  **Modified Level Search**: `SearchService.searchModifiedLevel` returns a reusable `SearchState` with combo results, a frontier heap, and a `SearchStateTracker`.
+2.  **Checkpoint Accumulation**: `SearchService.searchToCheckpoint` and `searchSequentialCheckpoints` scale each modified-level state by its probability `P(L)` and merge it into a checkpoint accumulator.
+    - Combo mass is merged into the checkpoint result map.
+    - `ProbabilityMassAccountant.addScaled` preserves bucket conservation while weighting each modified level.
+    - Frontier heaps are retained with their scale so snapshot reporting can describe what remains unexplored.
+3.  **Summary/Snapshot Reporting**: `SummaryService` turns the final checkpoint into public `CalculationStats`; `SnapshotService` turns intermediate checkpoints into UI/reporting snapshots.
 
 ---
 
@@ -84,13 +85,14 @@ If they were processed together, the total mass would be `10`, and $10/2 = 5$ wi
 
 ## Integration and Aggregation
 
-### SearchFrontier
-The `SearchFrontier` maintains the `MassBookkeeping` for a single search tier.
-- It provides `anyMass`, `rankMass`, and `countMass` maps which are themselves `BigUint64Array` buckets.
-- Every `addItemMass` call ensures the specific enchantment stats are updated in sync with the global `MassAccountant`.
+### SearchState
+`SearchState` maintains the bookkeeping for a single modified level.
+- `results` stores exact combo mass.
+- `queue` stores the remaining best-first frontier.
+- `tracker.mass` stores the bucketed probability accounting for that modified level.
 
-### StatAggregator
-Because Minecraft enchanting involves a triangular distribution of "Modified Levels," the `StatAggregator` combines multiple searches.
-- It calculates the probability $P(L)$ for each level.
-- It uses `MassAccountant.addScaled(frontier, P(L))` to weight each frontier's contribution.
-- The same "Atomic Accounting" applies here: the remainder of the tier-weighting multiplication is captured into the aggregate `Rounding` bucket.
+### SearchResult
+Because Minecraft enchanting uses a triangular distribution of modified levels, a checkpoint `SearchResult` combines many `SearchState` instances.
+- It calculates the probability $P(L)$ for each modified level.
+- It uses scaled mass accounting to weight each modified-level contribution.
+- The same atomic accounting applies here: the remainder of checkpoint weighting is captured into the aggregate `Rounding` bucket.
