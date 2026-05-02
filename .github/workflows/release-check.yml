@@ -58,7 +58,7 @@ jobs:
       - name: Validate SemVer Jump
         run: |
           git fetch origin main --tags || true
-          LATEST_TAG=$(git tag -l "v[0-9]*" --sort=v:refname | tail -n 1)
+          LATEST_TAG=$(git tag -l "v[0-9]*" --sort=v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | tail -n 1)
           PROPOSED_TAG="${{ steps.check_title.outputs.tag }}"
 
           if [ -n "$LATEST_TAG" ] && [ "$LATEST_TAG" != "$PROPOSED_TAG" ]; then
