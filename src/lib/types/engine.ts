@@ -1,5 +1,7 @@
 import { Enchantment, EnchantmentData } from '#types/domain.js';
-import { SearchHeap } from '#utils/collections/SearchHeap.js';
+import { NodeIdSearchFrontier } from '#engine/search/NodeIdSearchFrontier.js';
+import { SearchPoolPlan } from '#engine/search/SearchPoolPlan.js';
+import { SearchNodeGraph } from '#engine/search/SearchNodeGraph.js';
 
 import { MassAccounting } from '#types/mass.js';
 
@@ -58,8 +60,12 @@ export interface ExploredMassSample {
 }
 
 export interface SearchTiming {
+  /** Reported engine time, including search and post-processing phases. */
   totalMs: number;
+  /** Time spent in the active best-first search loop. */
   searchMs: number;
+  /** Time spent converting raw search results into public stats. */
+  postProcessingMs?: number | undefined;
 }
 
 export type EngineExitReason = 'threshold' | 'iterations' | 'mass' | 'aborted' | 'empty' | 'exhausted';
@@ -131,14 +137,9 @@ export interface ExpansionBlueprint {
     probContinue: bigint;
     totalWeight: number;
     eligibleCount: number;
-    eligibleEnchants: PackedEnchant[];
-    eligibleWeights: Int32Array;
-    nextLevel: number;
+    edgeStart: number;
     currentCount: number;
     currentCombo: PackedCombo;
-    currentEnchants: PackedEnchant[];
-    /** Rounding residue accumulated from previous arrivals at this node. */
-    residue: bigint;
 }
 
 /**
@@ -148,16 +149,15 @@ export interface ExpansionBlueprint {
 export interface ForwardingContext {
     registry: RegistryState;
     results: Map<PackedCombo, bigint>;
-    queue: SearchHeap;
+    queue: NodeIdSearchFrontier;
+    graph: SearchNodeGraph;
     resultsLimit: number;
     instrumentation?: EngineInstrumentation | undefined;
     timing?: SearchTiming | undefined;
 
     // Search-global parameters
     cat: string;
-    pool: PackedEnchant[];
-    poolWeights: number[];
-    initialTotalWeight: number;
+    poolPlan: SearchPoolPlan;
 }
 
 
@@ -165,13 +165,20 @@ export interface ForwardingContext {
  * State of a search for enchantment combinations.
  */
 export interface SearchState {
-    queue: SearchHeap;
+    queue: NodeIdSearchFrontier;
+    graph: SearchNodeGraph;
     results: Map<PackedCombo, bigint>;
     tracker: import('../engine/search/SearchStateTracker.js').SearchStateTracker;
     threshold: bigint;
     iterations: number;
     nodesProcessed: number;
     exitReason?: EngineExitReason | undefined;  // per-call output; not carried over on resume
+}
+
+export interface SearchFrontierSnapshot {
+    frontier: NodeIdSearchFrontier;
+    graph: SearchNodeGraph;
+    scale: bigint;
 }
 
 /**
@@ -252,7 +259,7 @@ export interface SummaryRequest {
     indexToEnchant: number[];
     comboLimit?: number | undefined;
     threshold?: number | undefined;
-    frontiers?: { heap: import('../utils/collections/SearchHeap.js').SearchHeap, scale: bigint }[] | undefined;
+    frontiers?: SearchFrontierSnapshot[] | undefined;
     isBook?: boolean | undefined;
 }
 
@@ -283,7 +290,7 @@ export interface ProgressReporter {
 export interface SearchResult {
     combos: Map<PackedCombo, bigint>;
     tracker: import('../engine/search/SearchStateTracker.js').SearchStateTracker;
-    frontiers?: { heap: import('../utils/collections/SearchHeap.js').SearchHeap, scale: bigint }[] | undefined;
+    frontiers?: SearchFrontierSnapshot[] | undefined;
     instrumentation?: EngineInstrumentation | undefined;
     timing?: SearchTiming | undefined;
     threshold: number;

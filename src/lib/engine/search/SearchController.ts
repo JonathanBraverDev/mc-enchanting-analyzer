@@ -1,9 +1,7 @@
 import { AsyncUtils, ProbUtils } from '#utils/index.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import { SearchState, SearchContext, ForwardingContext } from '#types/index.js';
-import { SearchProcessor } from '#engine/search/SearchProcessor.js';
-import { ComboUtils } from '#utils/index.js';
-import { PackedCombo } from '#types/index.js';
+import { MassForwardingEngine } from '#engine/search/MassForwardingEngine.js';
 
 /**
  * Orchestrates the Best-First Search loop.
@@ -33,7 +31,7 @@ export class SearchController {
             target,
             units: ProbUtils.toBigInt(target)
         })) ?? [];
-        const current = { meta: 0n, prob: 0n, level: 0, combo: 0 as any as PackedCombo };
+        const current = { nodeId: 0, prob: 0n };
 
         let aggregateStart = performance.now();
 
@@ -42,7 +40,7 @@ export class SearchController {
 
             if (iterations > 0 && iterations % 1000 === 0) {
                 if (timing) {
-                    timing.searchMs += performance.now() - aggregateStart;
+                    timing.searchMs = (timing.searchMs ?? 0) + performance.now() - aggregateStart;
                 }
                 if (instrumentation) {
                     instrumentation.queueSize = queue.size();
@@ -75,13 +73,14 @@ export class SearchController {
             if (!queue.popFast(current as any)) break;
 
             tracker.mass.subtract('pending', current.prob);
-            const currentCount = ComboUtils.getCount(current.combo);
 
-            if (currentCount === 0) {
-                SearchProcessor.processInitialNode(current.prob, modLevel, ctx, tracker);
-            } else {
-                SearchProcessor.processSearchNode(current.prob, current.meta, current.combo, currentCount, ctx, tracker);
-            }
+            MassForwardingEngine.forwardNode({
+                currentProb: current.prob,
+                nodeId: current.nodeId,
+                modLevel,
+                ctx,
+                tracker
+            });
 
             if (instrumentation && exploredTargets.length > 0) {
                 const exploredMass = tracker.mass.getExploredMass();
@@ -104,7 +103,7 @@ export class SearchController {
         }
 
         if (timing) {
-            timing.searchMs += performance.now() - aggregateStart;
+            timing.searchMs = (timing.searchMs ?? 0) + performance.now() - aggregateStart;
         }
 
         if (!state.exitReason) {

@@ -15,7 +15,7 @@ async function profile() {
     console.log(`Profiling ${version} search performance...`);
     const engine = EngineFactory.create(DATA, version);
 
-    const timing = { totalMs: 0, searchMs: 0 };
+    const timing = { totalMs: 0, searchMs: 0, postProcessingMs: 0 };
     console.time('TargetSnapshot');
     const stats = await engine.calculate({
             cat: 'book',
@@ -34,7 +34,8 @@ async function profile() {
     if (stats.timing) {
         const t = stats.timing;
         console.log(`Active Search Time: ${t.searchMs.toFixed(2)}ms`);
-        console.log(`Total Wall Time (incl. orchestration): ${t.totalMs.toFixed(2)}ms`);
+        console.log(`Post-processing Time: ${(t.postProcessingMs ?? 0).toFixed(2)}ms`);
+        console.log(`Reported Engine Total Time: ${t.totalMs.toFixed(2)}ms`);
     } else {
         console.log('No timing metrics captured.');
     }

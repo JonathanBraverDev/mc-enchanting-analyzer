@@ -31,6 +31,23 @@ describe('Enchantment Engine Test Suite', () => {
                                 Object.keys(h.ranks).some(r => r.includes('undefined'));
             assert.ok(!hasUndefined, '"undefined" should not appear in results');
         });
+
+        it('reports search and post-processing timing separately', async () => {
+            const timing = { totalMs: 0, searchMs: 0, postProcessingMs: 0 };
+            const stats = await engine.calculate({
+                cat: TEST_DATA.ITEMS.SWORD,
+                xp: 30,
+                mat: TEST_DATA.MATERIALS.DIAMOND,
+                threshold: 0.001,
+                useCache: false,
+                timing
+            });
+
+            assert.ok(stats.timing, 'expected timing output');
+            assert.ok(stats.timing.searchMs >= 0);
+            assert.ok((stats.timing.postProcessingMs ?? -1) >= 0);
+            assert.ok(stats.timing.totalMs >= stats.timing.searchMs + (stats.timing.postProcessingMs ?? 0));
+        });
     });
 
     describe('2. Version Compatibility & Search Logic', () => {
