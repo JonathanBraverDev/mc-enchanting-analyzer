@@ -2,6 +2,7 @@ import { Enchantment, EnchantmentData } from '#types/domain.js';
 import { NodeIdSearchFrontier } from '#engine/search/NodeIdSearchFrontier.js';
 import { SearchPoolPlan } from '#engine/search/SearchPoolPlan.js';
 import { SearchNodeGraph } from '#engine/search/SearchNodeGraph.js';
+import type { ClueSearchPolicy } from '#engine/search/ClueSearchPolicy.js';
 
 import { MassAccounting } from '#types/mass.js';
 
@@ -158,6 +159,7 @@ export interface ForwardingContext {
     // Search-global parameters
     cat: string;
     poolPlan: SearchPoolPlan;
+    cluePolicy?: ClueSearchPolicy | undefined;
 }
 
 
@@ -316,6 +318,7 @@ export interface ModifiedLevelSearchContext extends SearchContext {
     mat?: string | undefined;
     existingState?: SearchState | undefined;
     useCache?: boolean | undefined;
+    targetClueId?: number | undefined;
 }
 
 export interface CheckpointSearchContext extends SearchConfig {
@@ -323,6 +326,7 @@ export interface CheckpointSearchContext extends SearchConfig {
     cat: string;
     xp: number;
     mat: string;
+    targetClueId?: number | undefined;
 }
 
 export interface SequentialCheckpointSearchContext extends CheckpointSearchContext {

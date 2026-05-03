@@ -115,6 +115,8 @@ class NumericNodeIndex {
  * The frontier can use node IDs while this graph owns node metadata.
  */
 export class SearchNodeGraph {
+    public static readonly PRUNED_CHILD_ID = 0xFFFFFFFF;
+
     private static readonly MAX_SAFE_META = BigInt(Number.MAX_SAFE_INTEGER);
     private static readonly ENCHANT_SHIFT = 8n;
     private static readonly LOW_MASK_BITS = 32n;

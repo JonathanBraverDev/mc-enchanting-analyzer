@@ -180,6 +180,7 @@ export class EnchantEngine {
             cat,
             xp,
             mat,
+            targetClueId: packedClue ?? undefined,
             ...searchConfig
         });
 
