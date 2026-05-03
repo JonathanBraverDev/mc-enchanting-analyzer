@@ -7,6 +7,7 @@ import { SearchController } from '#engine/search/SearchController.js';
 import { NodeIdSearchFrontier } from '#engine/search/NodeIdSearchFrontier.js';
 import { SearchPoolPlan, type SearchIdentityMode } from '#engine/search/SearchPoolPlan.js';
 import { SearchNodeGraph } from '#engine/search/SearchNodeGraph.js';
+import { ClueSearchPolicy } from '#engine/search/ClueSearchPolicy.js';
 import { CacheManager } from '#engine/cache/CacheManager.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { getSearchLimit } from '#engine/utils.js';
@@ -44,11 +45,13 @@ export class SearchService {
             timing: timingResult,
             mat,
             existingState,
-            useCache = false
+            useCache = false,
+            targetClueId
         } = request;
 
         const cacheKey = mat !== undefined ? this.getPackedKey(registry, cat, modLevel, mat) : undefined;
-        const cached = useCache && cacheKey !== undefined
+        const canUseFrontierCache = useCache && targetClueId === undefined;
+        const cached = canUseFrontierCache && cacheKey !== undefined
             ? this.cache.getSearchState(cat, registry.version, cacheKey) as SearchState | undefined
             : undefined;
         let startTime = 0;
@@ -63,7 +66,17 @@ export class SearchService {
         const initialPool = getEligiblePool(registry, cat, modLevel, this.cache, registry.version);
 
         if (initialPool.length === 0) {
-            return this.handleEmptyPool(threshold);
+            return targetClueId === undefined
+                ? this.handleEmptyPool(threshold)
+                : this.handleClueIncompatiblePool(threshold);
+        }
+
+        const cluePolicy = targetClueId !== undefined
+            ? ClueSearchPolicy.create(registry, initialPool, targetClueId)
+            : undefined;
+
+        if (cluePolicy && !cluePolicy.isReachableInPool) {
+            return this.handleClueIncompatiblePool(threshold);
         }
 
         const poolPlan = new SearchPoolPlan(registry, initialPool, modLevel, {
@@ -78,7 +91,8 @@ export class SearchService {
             instrumentation: request.instrumentation,
             timing: timingResult ? { totalMs: 0, searchMs: 0, postProcessingMs: 0 } : undefined,
             cat,
-            poolPlan
+            poolPlan,
+            cluePolicy
         };
 
         await SearchController.run(state, ctx, modLevel, {
@@ -93,7 +107,7 @@ export class SearchService {
             timingResult.totalMs = (timingResult.totalMs ?? 0) + totalMs;
         }
 
-        if (useCache && cacheKey !== undefined) {
+        if (canUseFrontierCache && cacheKey !== undefined) {
             this.cache.setSearchState(cat, registry.version, cacheKey, state);
         }
 
@@ -145,7 +159,8 @@ export class SearchService {
                 resultsLimit,
                 signal,
                 instrumentation,
-                timing: request.timing
+                timing: request.timing,
+                targetClueId: request.targetClueId
             });
 
             if (instrumentation) {
@@ -307,6 +322,22 @@ export class SearchService {
     private handleEmptyPool(threshold: bigint): SearchState {
         const rootTracker = new SearchStateTracker();
         rootTracker.mass.record('resolved', PRECISION);
+
+        return {
+            queue: new NodeIdSearchFrontier(),
+            graph: new SearchNodeGraph(),
+            results: new Map(),
+            tracker: rootTracker,
+            threshold,
+            iterations: 0,
+            nodesProcessed: 0,
+            exitReason: 'empty'
+        };
+    }
+
+    private handleClueIncompatiblePool(threshold: bigint): SearchState {
+        const rootTracker = new SearchStateTracker();
+        rootTracker.mass.record('sieved', PRECISION);
 
         return {
             queue: new NodeIdSearchFrontier(),

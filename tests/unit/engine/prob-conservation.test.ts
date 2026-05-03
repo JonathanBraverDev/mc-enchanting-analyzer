@@ -93,7 +93,7 @@ describe('Probability Conservation', () => {
         }
     });
 
-    it('guaranteed enchant accuracy is 1.0 for bow (Power IV)', async () => {
+    it('guaranteed clue result remains complete for bow (Power IV)', async () => {
         const engine  = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
         const stats   = await engine.calculate({
             cat: 'bow',
@@ -103,9 +103,10 @@ describe('Probability Conservation', () => {
             threshold: TEST_DATA.THRESHOLDS.PROB_MIN,
         });
 
+        const compatibleProgress = stats.accounting.resolved + stats.accounting.sieved;
         assert.ok(
-            stats.accuracy >= 1.0 - TOLERANCE,
-            `Guaranteed enchant accuracy should be ≈ 1.0, got ${stats.accuracy}. Breakdown: ${JSON.stringify(stats.accounting)}`
+            compatibleProgress >= 1.0 - TOLERANCE,
+            `Guaranteed clue search should finish all compatible/incompatible space, got ${compatibleProgress}. Breakdown: ${JSON.stringify(stats.accounting)}`
         );
 
         const powerId = engine.registry.idMap.get('Power')!;
