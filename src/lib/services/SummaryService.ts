@@ -96,7 +96,9 @@ export class SummaryService {
             tracker,
             indexToEnchant,
             targetClueId,
-            comboLimit = ENGINE_LIMITS.MAX_RESULTS_SUMMARY
+            comboLimit = ENGINE_LIMITS.MAX_RESULTS_SUMMARY,
+            frontiers = [],
+            isBook = false
         } = request;
         const accounting = tracker.mass.toPublic();
         const stats: CalculationStats = {
@@ -111,7 +113,7 @@ export class SummaryService {
         };
 
         // 1. Perform Bayesian conditioning
-        const conditioned = ClueAnalysisService.conditionOnClue(combos, targetClueId, indexToEnchant);
+        const conditioned = ClueAnalysisService.conditionOnClue(combos, targetClueId, indexToEnchant, frontiers, isBook);
 
         // 2. Update top-level accuracy and inject absolute clue mass
         stats.accounting.clueKnownSpace = ProbUtils.toNumber(conditioned.clueKnownSpace);
