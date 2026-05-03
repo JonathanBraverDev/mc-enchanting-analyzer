@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## v5.1.1 (2026-05-03)
+
+### Fixed
+- **Enchanting table registry data**: Corrected modern enchantment data so calculations only include enchantments and ranks that can actually be rolled by the enchanting table.
+- **Modern spear and book results**: Updated Lunge and modern book behavior to match the current enchanting table data.
+- **Impossible table entries**: Excluded treasure-only enchantments and documented why Quick Charge III is not included despite appearing as an empty `52-50` range in vanilla data.
+
 ## v5.1.0 (2026-05-03)
 
 ### Improved

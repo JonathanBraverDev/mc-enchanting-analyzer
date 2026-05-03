@@ -33,7 +33,6 @@ export const cosmetics = {
     "Aqua Affinity": "hsl(180, 90%, 70%)",
     "Thorns": "hsl(340, 70%, 60%)",
     "Depth Strider": "hsl(220, 70%, 60%)",
-    "Frost Walker": "hsl(180, 40%, 80%)",
     "Loyalty": "hsl(45, 70%, 60%)",
     "Impaling": "hsl(190, 80%, 50%)",
     "Riptide": "hsl(200, 50%, 80%)",

@@ -2,19 +2,19 @@ export const global_enchantments = {
   "Sharpness": {
     "weight": 10,
     "levels": {"I": [1, 21], "II": [12, 32], "III": [23, 43], "IV": [34, 54], "V": [45, 65]},
-    "conflicts": ["Smite", "Bane of Arthropods", "Density", "Breach"],
+    "conflicts": ["Smite", "Bane of Arthropods", "Impaling", "Density", "Breach"],
     "valid_from": "1.0"
   },
   "Smite": {
     "weight": 5,
     "levels": {"I": [5, 25], "II": [13, 33], "III": [21, 41], "IV": [29, 49], "V": [37, 57]},
-    "conflicts": ["Bane of Arthropods", "Density", "Breach"],
+    "conflicts": ["Bane of Arthropods", "Impaling", "Density", "Breach"],
     "valid_from": "1.0"
   },
   "Bane of Arthropods": {
     "weight": 5,
     "levels": {"I": [5, 25], "II": [13, 33], "III": [21, 41], "IV": [29, 49], "V": [37, 57]},
-    "conflicts": ["Density", "Breach"],
+    "conflicts": ["Impaling", "Density", "Breach"],
     "valid_from": "1.0"
   },
   "Knockback": {
@@ -124,18 +124,12 @@ export const global_enchantments = {
   "Depth Strider": {
     "weight": 2,
     "levels": {"I": [10, 25], "II": [20, 35], "III": [30, 45]},
-    "conflicts": ["Frost Walker"],
     "valid_from": "1.8"
-  },
-  "Frost Walker": {
-    "weight": 2,
-    "levels": {"I": [10, 25], "II": [20, 35]},
-    "valid_from": "1.9",
-    "bookable": false
   },
   "Impaling": {
     "weight": 2,
     "levels": {"I": [1, 21], "II": [9, 29], "III": [17, 37], "IV": [25, 45], "V": [33, 53]},
+    "conflicts": ["Density", "Breach"],
     "valid_from": "1.13"
   },
   "Loyalty": {
@@ -157,7 +151,8 @@ export const global_enchantments = {
   },
   "Quick Charge": {
     "weight": 5,
-    "levels": {"I": [12, 50], "II": [32, 50], "III": [50, 52]},
+    // Vanilla data lists Quick Charge III as 52-50, an empty interval that the table can never roll.
+    "levels": {"I": [12, 50], "II": [32, 50]},
     "valid_from": "1.14"
   },
   "Multishot": {
@@ -184,19 +179,19 @@ export const global_enchantments = {
   "Density": {
     "weight": 5,
     "levels": {"I": [5, 25], "II": [13, 33], "III": [21, 41], "IV": [29, 49], "V": [37, 57]},
-    "conflicts": ["Breach"],
+    "conflicts": ["Impaling", "Breach"],
     "valid_from": "1.21"
   },
   "Breach": {
     "weight": 2,
     "levels": {"I": [15, 65], "II": [24, 74], "III": [33, 83], "IV": [42, 92]},
+    "conflicts": ["Impaling"],
     "valid_from": "1.21"
   },
   "Lunge": {
     "weight": 5,
-    "levels": {"I": [10, 25], "II": [20, 35], "III": [30, 45]},
-    "valid_from": "1.21.11",
-    "bookable": false
+    "levels": {"I": [5, 25], "II": [13, 33], "III": [21, 41]},
+    "valid_from": "1.21.11"
   }
 } as const;
 

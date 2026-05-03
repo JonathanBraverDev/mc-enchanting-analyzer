@@ -85,9 +85,8 @@ export class RegistryFactory {
             for (const [cat, content] of Object.entries(manifest.item_enchantments)) {
                 const resolved = content.flatMap(item => {
                     if (item === "book_pool") {
-                        return Object.entries(data.global_enchantments)
-                            .filter(([, e]) => (e as Enchantment).bookable !== false)
-                            .map(([name]) => name);
+                        // global_enchantments is the active table registry; treasure-only enchants are excluded from data.
+                        return Object.keys(data.global_enchantments);
                     }
                     return data.enchantment_groups[item] || [item];
                 });

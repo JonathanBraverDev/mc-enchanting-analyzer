@@ -70,10 +70,51 @@ describe('Data integrity: level ranges', () => {
         const bad: string[] = [];
         for (const [name, ench] of Object.entries(global_enchantments)) {
             for (const [roman, range] of Object.entries(ench.levels)) {
-                if (range[0] >= range[1]) bad.push(`${name} ${roman}: [${range[0]}, ${range[1]}]`);
+                const key = `${name} ${roman}`;
+                if (range[0] >= range[1]) {
+                    bad.push(`${key}: [${range[0]}, ${range[1]}]`);
+                }
             }
         }
         assert.deepStrictEqual(bad, [], `level ranges where min >= max: ${bad.join('; ')}`);
+    });
+});
+
+describe('Data integrity: latest vanilla 1.21.11 spot checks', () => {
+    const engine = EngineFactory.create(DATA, '1.21.11');
+    const reg = engine.registry;
+
+    it('Lunge uses vanilla 1.21.11 costs and remains table-book eligible', () => {
+        assert.deepStrictEqual(global_enchantments.Lunge.levels, {
+            I: [5, 25],
+            II: [13, 33],
+            III: [21, 41]
+        });
+        assert.ok(reg.versionPool.get('book')?.includes('Lunge'), 'Lunge should be in the book pool');
+    });
+
+    it('treasure-only enchantments are not active table registry entries', () => {
+        assert.ok(!('Frost Walker' in global_enchantments), 'Frost Walker should not be in the active table registry');
+        assert.ok(!reg.versionPool.get('book')?.includes('Frost Walker'), 'Frost Walker should be excluded from the book pool');
+    });
+
+    it('omits vanilla empty rank ranges that cannot be rolled by the table', () => {
+        assert.deepStrictEqual(global_enchantments['Quick Charge'].levels, {
+            I: [12, 50],
+            II: [32, 50]
+        });
+        assert.ok(!Object.hasOwn(global_enchantments['Quick Charge'].levels, 'III'), 'Quick Charge III is vanilla 52-50 and cannot be rolled');
+    });
+
+    it('Impaling participates in the 1.21.11 damage exclusive set', () => {
+        const damageNames = ['Sharpness', 'Smite', 'Bane of Arthropods', 'Density', 'Breach'];
+        const impalingId = getEnchantId(reg, 'Impaling');
+
+        for (const name of damageNames) {
+            const id = getEnchantId(reg, name);
+            assert.ok(hasConflict(reg, impalingId, id), `Impaling should conflict with ${name}`);
+            assert.ok(hasConflict(reg, id, impalingId), `${name} should conflict with Impaling`);
+        }
     });
 });
 
@@ -147,13 +188,6 @@ describe('Data integrity: conflict symmetry after RegistryFactory.build()', () =
         const silkId    = getEnchantId(reg, 'Silk Touch');
         assert.ok(hasConflict(reg, fortuneId, silkId), 'Fortune should conflict with Silk Touch');
         assert.ok(hasConflict(reg, silkId, fortuneId), 'Silk Touch should conflict with Fortune');
-    });
-
-    it('Depth Strider ↔ Frost Walker conflict is symmetric', () => {
-        const depthId = getEnchantId(reg, 'Depth Strider');
-        const frostId = getEnchantId(reg, 'Frost Walker');
-        assert.ok(hasConflict(reg, depthId, frostId));
-        assert.ok(hasConflict(reg, frostId, depthId));
     });
 
     it('Multishot ↔ Piercing conflict is symmetric', () => {

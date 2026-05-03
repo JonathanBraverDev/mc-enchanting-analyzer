@@ -32,7 +32,7 @@ To build your own standalone version, use: `npm run build:standalone`. The resul
 
 ## 🧠 The Engine
 
-This tool uses the V5 checkpoint search engine. It prioritizes the most likely outcomes first, reports useful intermediate checkpoints to the UI, and keeps every probability bucket accounted for while deeper searches continue. Internally, V5 uses a graph-backed node-ID frontier with a fast safe-number identity path for vanilla-sized registries and a BigInt identity path for larger supported registries, so repeated search states share canonical node data instead of carrying full metadata through every frontier operation.
+This tool uses the V5 checkpoint search engine. It prioritizes the most likely outcomes first, reports useful intermediate checkpoints to the UI, and keeps every probability bucket accounted for while deeper searches continue. The bundled registry models only enchantments reachable through the enchanting table, so treasure-only enchantments are excluded from the active search space. Internally, V5 uses a graph-backed node-ID frontier with a fast safe-number identity path for vanilla-sized registries and a BigInt identity path for larger supported registries, so repeated search states share canonical node data instead of carrying full metadata through every frontier operation.
 
 For implementation details, see:
 - `ARCHITECTURE.md` for the engine, worker, and checkpoint flow.
