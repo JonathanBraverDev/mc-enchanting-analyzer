@@ -17,7 +17,7 @@ src/lib/
   constants/       Minecraft rules, engine limits, UI defaults
   data/            JSON-shaped version data
   types/           Domain, engine, mass, and worker protocol types
-  utils/           Probability math, key packing, async helpers, heaps
+  utils/           Probability math, key packing, and async helpers
   core/            Registry construction, lookup helpers, clue validation
   engine/          EnchantEngine, search services, state tracking, accounting
   services/        Snapshot, summary, humanization, and refinement services
@@ -43,8 +43,10 @@ UI input
   -> EnchantEngine.searchSequentialCheckpoints or searchToCheckpoint
   -> SearchService.searchModifiedLevel for each modified level
   -> SearchController best-first expansion
+  -> NodeIdSearchFrontier + SearchNodeGraph + MassForwardingEngine
   -> SearchStateTracker and ProbabilityMassAccountant
   -> SearchResult at each checkpoint
+  -> SummaryAggregationService
   -> SnapshotService / SummaryService
   -> worker response back to UI
 ```
@@ -69,12 +71,17 @@ The public calls use request objects so callers can pass optional search, instru
 | `EnchantEngine` | Validates requests, owns registry access, cache lookups, and public orchestration |
 | `SearchService` | Coordinates modified-level search, checkpoint aggregation, instrumentation, and cache reuse |
 | `SearchController` | Runs the best-first expansion loop until threshold, iteration, abort, or exhaustion |
-| `SearchProcessor` | Performs low-level node expansion and probability forwarding |
-| `SearchStateTracker` | Tracks search state and mass accounting for one modified level |
+| `NodeIdSearchFrontier` | Stores pending node IDs and probability mass in best-first order |
+| `SearchNodeGraph` | Owns canonical node identity, optional split-mask node state, combo payloads, expansion blueprints, and forwarding residue |
+| `MassForwardingEngine` | Forwards mass through cached graph nodes and routes unresolved child mass back to the frontier |
+| `SearchProcessor` | Builds Minecraft-specific expansion blueprints, performs eligibility/conflict checks, and settles generated mass |
+| `SearchPoolPlan` | Precomputes fixed per-level pool metadata, identity mode, weights, masks, conflicts, and initial child payloads |
+| `SearchStateTracker` | Holds bucketed mass accounting for one modified level |
 | `ProbabilityMassAccountant` | Records resolved, pending, sieved, capped, overflow, and rounding mass |
 | `ModifiedLevelDistributionService` | Computes the BigInt distribution of modified enchantment levels |
-| `SummaryService` | Converts `SearchResult` maps and accounting into presented `CalculationStats` |
-| `SnapshotService` | Builds UI/reporting snapshots from `SearchResult` plus frontier state |
+| `SummaryAggregationService` | Scans resolved combos and pending frontiers once to derive shared any/rank/count/clue mass buckets |
+| `SummaryService` | Formats aggregated checkpoint masses into presented `CalculationStats` |
+| `SnapshotService` | Formats aggregated checkpoint masses into UI/reporting snapshots |
 
 ## Checkpoint Aggregation
 
@@ -84,14 +91,14 @@ The public calls use request objects so callers can pass optional search, instru
 interface SearchResult {
   combos: Map<PackedCombo, bigint>;
   tracker: SearchStateTracker;
-  frontiers?: { heap: SearchHeap; scale: bigint }[];
+  frontiers?: { frontier: NodeIdSearchFrontier; graph: SearchNodeGraph; scale: bigint }[];
   instrumentation?: EngineInstrumentation;
   timing?: SearchTiming;
   threshold: number;
 }
 ```
 
-For each modified level, `SearchService` searches or resumes a `SearchState`, scales it by the modified-level probability, and records it into one checkpoint accumulator. The accumulator owns:
+For each modified level, `SearchService` searches or resumes a `SearchState`, scales it by the modified-level probability, and records it into one checkpoint accumulator. `SearchState` stores the current node-ID frontier, the graph that resolves those IDs back to canonical combo nodes, exact combo results, and the mass tracker. The accumulator owns:
 
 - global combo mass
 - aggregated mass tracker
@@ -100,6 +107,26 @@ For each modified level, `SearchService` searches or resumes a `SearchState`, sc
 - timing and instrumentation snapshots
 
 If a sequential checkpoint run is aborted before any modified level is processed for the active checkpoint, the service returns the last completed checkpoint instead of replacing it with an empty result.
+
+## Reporting Aggregation
+
+`SummaryAggregationService` is the shared scanner for post-search reporting. It walks resolved combo maps and pending frontier nodes once, scales pending frontier mass once per node, and derives `any`, `ranks`, `count`, and `clues` buckets together. Pending book nodes preserve the existing book-adjusted `any`/`ranks`/`count` behavior while clue mass remains based on the packed frontier combo. `SummaryService` and `SnapshotService` then format those aggregate masses for public stats and UI snapshots.
+
+## Node-ID Frontier Model
+
+The V5 search path separates node identity from frontier priority:
+
+- `SearchNodeGraph` assigns each canonical `(enchant bitset << 8 | current level)` state a dense `nodeId`.
+- `SearchPoolPlan` selects the internal identity mode from the registry max enchant ID: `number53` for IDs `0..44`, `bigint64` for IDs `45..63`, and a clear unsupported-registry error above that range.
+- In `number53` mode, graph identity is stored as a safe packed number key plus split masks: `maskLo`, `maskHi`, and `level`.
+- In `bigint64` mode, graph identity stays on canonical BigInt meta keys while preserving the same node-ID frontier and result shape.
+- `SearchPoolPlan` precomputes matching low/high ID masks and conflict masks for each eligible enchant, so `number53` expansion can use numeric selected/conflict checks instead of rebuilding BigInt state.
+- The graph stores the node payload once: split masks, level, packed combo, enchant count, optional `ExpansionBlueprint`, and forwarding residue.
+- `NodeIdSearchFrontier` stores only `nodeId` and pending probability mass, using direct typed-array indexes for merge and heap-position lookups.
+- Expansion blueprints point to child node IDs, so cached-child checks are array lookups instead of BigInt heap/hash work.
+- `getMeta(nodeId)` remains available for compatibility and reporting; numeric nodes reconstruct the BigInt meta lazily only when a caller asks for it.
+
+This preserves the old best-first semantics: the highest-probability pending node still expands first, and `meta` remains the canonical state identity. The scaling improvement comes from removing repeated `BigInt meta + packed combo` traffic from frontier push/pop/merge operations.
 
 ## Worker Model
 

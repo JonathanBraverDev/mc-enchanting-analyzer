@@ -1,18 +1,24 @@
 import { AsyncUtils, KeyUtils, PRECISION, ProbUtils } from '#utils/index.js';
 import { getCategoryId, getEnchantability, getEligiblePool, getMaterialId } from '#core/registry.js';
-import { ENGINE_LIMITS, PACKING_CONSTANTS, UI_CONSTANTS } from '#constants/engine.js';
-import { CheckpointSearchContext, EngineInstrumentation, ModifiedLevelSearchContext, PackedCombo, RegistryState, SearchContext, SearchResult, SearchState, ForwardingContext, SequentialCheckpointSearchContext } from '#types/index.js';
+import { ENGINE_LIMITS, UI_CONSTANTS } from '#constants/engine.js';
+import { CheckpointSearchContext, EngineInstrumentation, ModifiedLevelSearchContext, PackedCombo, RegistryState, SearchContext, SearchFrontierSnapshot, SearchResult, SearchState, ForwardingContext, SequentialCheckpointSearchContext } from '#types/index.js';
 import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
 import { SearchController } from '#engine/search/SearchController.js';
-import { SearchHeap } from '#utils/collections/SearchHeap.js';
+import { NodeIdSearchFrontier } from '#engine/search/NodeIdSearchFrontier.js';
+import { SearchPoolPlan, type SearchIdentityMode } from '#engine/search/SearchPoolPlan.js';
+import { SearchNodeGraph } from '#engine/search/SearchNodeGraph.js';
 import { CacheManager } from '#engine/cache/CacheManager.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { getSearchLimit } from '#engine/utils.js';
 
+export interface SearchServiceOptions {
+    readonly identityModeOverride?: SearchIdentityMode | undefined;
+}
+
 interface CheckpointAccumulator {
     combos: Map<PackedCombo, bigint>;
     tracker: SearchStateTracker;
-    frontiers: { heap: SearchHeap, scale: bigint }[];
+    frontiers: SearchFrontierSnapshot[];
     processedMProb: bigint;
 }
 
@@ -23,7 +29,8 @@ interface CheckpointAccumulator {
 export class SearchService {
     constructor(
         private readonly cache: CacheManager,
-        private readonly distributionService: ModifiedLevelDistributionService = new ModifiedLevelDistributionService()
+        private readonly distributionService: ModifiedLevelDistributionService = new ModifiedLevelDistributionService(),
+        private readonly options: SearchServiceOptions = {}
     ) {}
 
     public async searchModifiedLevel(request: ModifiedLevelSearchContext): Promise<SearchState> {
@@ -48,31 +55,30 @@ export class SearchService {
         if (timingResult) startTime = performance.now();
 
         const state = SearchStateTracker.createState(modLevel, existingState ?? cached, threshold);
-        const { results, queue } = state;
+        const { results, queue, graph } = state;
 
         // Minecraft fixes the eligible enchant/rank pool from the initial full modified level once.
         // Later level halving affects only the chance to continue to another enchant slot, not which
         // enchantments can appear in this run, so downstream search nodes must keep reusing this pool.
         const initialPool = getEligiblePool(registry, cat, modLevel, this.cache, registry.version);
 
-        const poolWeights: number[] = initialPool.map(e => registry.weightMap[e >> PACKING_CONSTANTS.ENCHANT_SHIFT] ?? 0);
-        const initialTotalWeight = poolWeights.reduce((a, b) => a + b, 0);
-
         if (initialPool.length === 0) {
             return this.handleEmptyPool(threshold);
         }
 
+        const poolPlan = new SearchPoolPlan(registry, initialPool, modLevel, {
+            identityModeOverride: this.options.identityModeOverride
+        });
         const ctx: ForwardingContext = {
             registry,
             results,
             queue,
+            graph,
             resultsLimit,
             instrumentation: request.instrumentation,
-            timing: timingResult ? { totalMs: 0, searchMs: 0 } : undefined,
+            timing: timingResult ? { totalMs: 0, searchMs: 0, postProcessingMs: 0 } : undefined,
             cat,
-            pool: initialPool,
-            poolWeights,
-            initialTotalWeight
+            poolPlan
         };
 
         await SearchController.run(state, ctx, modLevel, {
@@ -84,7 +90,7 @@ export class SearchService {
 
         if (timingResult) {
             const totalMs = performance.now() - startTime;
-            timingResult.totalMs += totalMs;
+            timingResult.totalMs = (timingResult.totalMs ?? 0) + totalMs;
         }
 
         if (useCache && cacheKey !== undefined) {
@@ -267,7 +273,7 @@ export class SearchService {
     private recordCheckpointLevel(accumulator: CheckpointAccumulator, result: SearchState, mProb: bigint): void {
         ProbUtils.addMapMass(accumulator.combos, result.results, mProb);
         accumulator.tracker.mass.addScaled(result.tracker.mass, mProb);
-        accumulator.frontiers.push({ heap: result.queue, scale: mProb });
+        accumulator.frontiers.push({ frontier: result.queue, graph: result.graph, scale: mProb });
         accumulator.processedMProb += mProb;
     }
 
@@ -275,7 +281,7 @@ export class SearchService {
         accumulator: CheckpointAccumulator,
         threshold: number,
         instrumentation?: EngineInstrumentation,
-        timing?: { totalMs: number; searchMs: number }
+        timing?: { totalMs: number; searchMs: number; postProcessingMs?: number | undefined }
     ): SearchResult {
         const distRoundingError = PRECISION - accumulator.processedMProb;
         accumulator.tracker.mass.record('rounding', distRoundingError);
@@ -303,7 +309,8 @@ export class SearchService {
         rootTracker.mass.record('resolved', PRECISION);
 
         return {
-            queue: new SearchHeap(),
+            queue: new NodeIdSearchFrontier(),
+            graph: new SearchNodeGraph(),
             results: new Map(),
             tracker: rootTracker,
             threshold,

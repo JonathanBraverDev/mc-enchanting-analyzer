@@ -184,6 +184,7 @@ export class EnchantEngine {
         });
 
         const isBook = cat === "book";
+        const postProcessingStart = timing ? performance.now() : 0;
         const finalStats = packedClue
             ? SummaryService.summarizeConditioned({
                 combos: finalResult.combos,
@@ -205,7 +206,14 @@ export class EnchantEngine {
             });
 
         finalStats.instrumentation = finalResult.instrumentation;
-        finalStats.timing = finalResult.timing;
+        if (timing) {
+            const postProcessingMs = performance.now() - postProcessingStart;
+            timing.postProcessingMs = (timing.postProcessingMs ?? 0) + postProcessingMs;
+            timing.totalMs += postProcessingMs;
+            finalStats.timing = { ...timing };
+        } else {
+            finalStats.timing = finalResult.timing;
+        }
 
         const currentCached = this.cache.getStats(this.registry.version, cacheKey);
         if (!currentCached || finalStats.accuracy > currentCached.accuracy) {

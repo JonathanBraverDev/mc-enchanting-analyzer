@@ -10,7 +10,8 @@ import {
   TopComboView,
   TopEnchantShareView,
   ChartBucketsView,
-  RefinementLevelName
+  RefinementLevelName,
+  SearchFrontierSnapshot
 } from '#types/index.js';
 import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
 import { ProbUtils, ComboUtils } from '#utils/index.js';
@@ -18,7 +19,7 @@ import { ClueAnalysisService } from '#services/ClueAnalysisService.js';
 import { getFullEnchantName, getEnchantName } from '#core/registry.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import { ClueValidator } from '#core/clue.js';
-import { SummaryService } from '#services/SummaryService.js';
+import { SummaryAggregationService } from '#services/SummaryAggregationService.js';
 
 
 export class SnapshotService {
@@ -37,7 +38,7 @@ export class SnapshotService {
     tracker: SearchStateTracker,
     combos: Map<PackedCombo, bigint>,
     request: SnapshotRequest,
-    frontiers: { heap: import('#utils/collections/SearchHeap.js').SearchHeap, scale: bigint }[] = []
+    frontiers: SearchFrontierSnapshot[] = []
   ): TopRunView | ChartCellView {
     const { snapshotType, refinementLevel, clue, comboLimit } = request;
     const isBook = request.input.category === 'book';
@@ -67,7 +68,13 @@ export class SnapshotService {
       result = conditioned;
     } else {
       // Unconditioned views derive aggregate stats from combos + frontiers (SSoT)
-      const derived = SummaryService.deriveAggregateMasses(combos, state.indexToEnchant, frontiers, isBook);
+      const derived = SummaryAggregationService.aggregate({
+        combos,
+        indexToEnchant: state.indexToEnchant,
+        frontiers,
+        isBook,
+        includeClues: false
+      });
       result = {
         combos,
         anyMass: this.toMassMap(derived.any),

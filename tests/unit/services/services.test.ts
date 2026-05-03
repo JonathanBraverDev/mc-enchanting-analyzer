@@ -8,17 +8,30 @@ import { describe, it, before } from 'node:test';
 import assert from 'node:assert';
 import { PRECISION } from '#utils/math/ProbUtils.js';
 import { SummaryService } from '#services/SummaryService.js';
+import { SummaryAggregationService } from '#services/SummaryAggregationService.js';
 import { SerializationService } from '#services/SerializationService.js';
 import { HumanizationService } from '#services/HumanizationService.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { EngineFactory } from '#engine/factory.js';
 import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
+import { NodeIdSearchFrontier } from '#engine/search/NodeIdSearchFrontier.js';
+import { SearchNodeGraph } from '#engine/search/SearchNodeGraph.js';
 import { DATA } from '#data/index.js';
-import type { CalculationStats, MassAccounting, PackedCombo } from '#types/index.js';
+import { ComboUtils } from '#utils/domain/ComboUtils.js';
+import { ProbUtils } from '#utils/index.js';
+import type { CalculationStats, MassAccounting, PackedCombo, PackedEnchant } from '#types/index.js';
 
 // ── SummaryService ────────────────────────────────────────────────────────────
 
 describe('SummaryService', () => {
+    const makeFrontier = (combo: PackedCombo, count: number, prob: bigint = PRECISION, scale: bigint = PRECISION) => {
+        const frontier = new NodeIdSearchFrontier();
+        const graph = new SearchNodeGraph();
+        const nodeId = graph.createNumericNode(1, 0, 30, combo, count);
+        frontier.pushOrMerge(nodeId, prob);
+        return [{ frontier, graph, scale }];
+    };
+
     it('empty combos map yields empty combos output', () => {
         const tracker = new SearchStateTracker();
         const result = SummaryService.summarize({ combos: new Map(), tracker, indexToEnchant: [] });
@@ -43,6 +56,108 @@ describe('SummaryService', () => {
         assert.ok(Math.abs((result.any[5] ?? 0)         - 1.0)  < 1e-12);
         assert.ok(Math.abs((result.ranks[0x0501] ?? 0)  - 1.0)  < 1e-12);
         assert.ok(Math.abs((result.count[1] ?? 0)       - 1.0)  < 1e-10);
+    });
+
+    it('derives summary and clue masses like unpack-based aggregation', () => {
+        const enchantA = 0x0101 as PackedEnchant;
+        const enchantB = 0x0201 as PackedEnchant;
+        const enchantC = 0x0301 as PackedEnchant;
+        const enchantToIndex = new Map<number, number>([
+            [enchantA, 1],
+            [enchantB, 2],
+            [enchantC, 3]
+        ]);
+        const indexToEnchant = [0, enchantA, enchantB, enchantC];
+        const combos = new Map<PackedCombo, bigint>([
+            [ComboUtils.pack([enchantA, enchantB], enchantToIndex), PRECISION / 2n],
+            [ComboUtils.pack([enchantA, enchantC], enchantToIndex), PRECISION / 4n]
+        ]);
+        const tracker = new SearchStateTracker();
+        tracker.mass.record('resolved', (PRECISION * 3n) / 4n);
+
+        const stats = SummaryService.summarize({ combos, tracker, indexToEnchant, comboLimit: 0 });
+
+        assert.ok(Math.abs((stats.any[1] ?? 0) - 0.75) < 1e-12);
+        assert.ok(Math.abs((stats.any[2] ?? 0) - 0.5) < 1e-12);
+        assert.ok(Math.abs((stats.any[3] ?? 0) - 0.25) < 1e-12);
+        assert.ok(Math.abs((stats.ranks[enchantA] ?? 0) - 0.75) < 1e-12);
+        assert.ok(Math.abs((stats.count[2] ?? 0) - 0.75) < 1e-12);
+        assert.ok(Math.abs((stats.clues[enchantA] ?? 0) - 0.375) < 1e-12);
+        assert.ok(Math.abs((stats.clues[enchantB] ?? 0) - 0.25) < 1e-12);
+        assert.ok(Math.abs((stats.clues[enchantC] ?? 0) - 0.125) < 1e-12);
+    });
+
+    it('includes pending frontier mass in aggregate and clue stats', () => {
+        const enchantA = 0x0101 as PackedEnchant;
+        const enchantB = 0x0201 as PackedEnchant;
+        const enchantToIndex = new Map<number, number>([
+            [enchantA, 1],
+            [enchantB, 2]
+        ]);
+        const indexToEnchant = [0, enchantA, enchantB];
+        const packed = ComboUtils.pack([enchantA, enchantB], enchantToIndex);
+        const frontiers = makeFrontier(packed, 2, PRECISION / 2n, PRECISION / 2n);
+        const expectedMass = ProbUtils.scale(PRECISION / 2n, PRECISION / 2n);
+        const expectedClueMass = expectedMass / 2n;
+
+        const tracker = new SearchStateTracker();
+        const stats = SummaryService.summarize({ combos: new Map(), tracker, indexToEnchant, frontiers, comboLimit: 0 });
+
+        assert.ok(Math.abs((stats.any[1] ?? 0) - ProbUtils.toNumber(expectedMass)) < 1e-12);
+        assert.ok(Math.abs((stats.any[2] ?? 0) - ProbUtils.toNumber(expectedMass)) < 1e-12);
+        assert.ok(Math.abs((stats.ranks[enchantA] ?? 0) - ProbUtils.toNumber(expectedMass)) < 1e-12);
+        assert.ok(Math.abs((stats.count[2] ?? 0) - ProbUtils.toNumber(expectedMass)) < 1e-12);
+        assert.ok(Math.abs((stats.clues[enchantA] ?? 0) - ProbUtils.toNumber(expectedClueMass)) < 1e-12);
+        assert.ok(Math.abs((stats.clues[enchantB] ?? 0) - ProbUtils.toNumber(expectedClueMass)) < 1e-12);
+    });
+
+    it('keeps book pending aggregate adjustment separate from clue mass semantics', () => {
+        const enchantA = 0x0101 as PackedEnchant;
+        const enchantB = 0x0201 as PackedEnchant;
+        const enchantC = 0x0301 as PackedEnchant;
+        const enchantToIndex = new Map<number, number>([
+            [enchantA, 1],
+            [enchantB, 2],
+            [enchantC, 3]
+        ]);
+        const indexToEnchant = [0, enchantA, enchantB, enchantC];
+        const packed = ComboUtils.pack([enchantA, enchantB, enchantC], enchantToIndex);
+        const frontiers = makeFrontier(packed, 3);
+        const expectedAnyMass = (PRECISION * 2n) / 3n;
+        const clueQuotient = PRECISION / 3n;
+
+        const tracker = new SearchStateTracker();
+        const stats = SummaryService.summarize({ combos: new Map(), tracker, indexToEnchant, frontiers, isBook: true, comboLimit: 0 });
+
+        assert.ok(Math.abs((stats.count[2] ?? 0) - 1.0) < 1e-12);
+        assert.ok(Math.abs((stats.any[1] ?? 0) - ProbUtils.toNumber(expectedAnyMass)) < 1e-12);
+        assert.ok(Math.abs((stats.any[2] ?? 0) - ProbUtils.toNumber(expectedAnyMass)) < 1e-12);
+        assert.ok(Math.abs((stats.any[3] ?? 0) - ProbUtils.toNumber(expectedAnyMass)) < 1e-12);
+        assert.ok(Math.abs((stats.clues[enchantC] ?? 0) - ProbUtils.toNumber(clueQuotient + 1n)) < 1e-12);
+        assert.ok(Math.abs((stats.clues[enchantB] ?? 0) - ProbUtils.toNumber(clueQuotient)) < 1e-12);
+        assert.ok(Math.abs((stats.clues[enchantA] ?? 0) - ProbUtils.toNumber(clueQuotient)) < 1e-12);
+    });
+
+    it('distributes clue remainder by packed combo position', () => {
+        const enchantA = 0x0101 as PackedEnchant;
+        const enchantB = 0x0201 as PackedEnchant;
+        const enchantC = 0x0301 as PackedEnchant;
+        const enchantToIndex = new Map<number, number>([
+            [enchantA, 1],
+            [enchantB, 2],
+            [enchantC, 3]
+        ]);
+        const indexToEnchant = [0, enchantA, enchantB, enchantC];
+        const packed = ComboUtils.pack([enchantA, enchantB, enchantC], enchantToIndex);
+        const clueMass = SummaryAggregationService.aggregate({
+            combos: new Map([[packed, 5n]]),
+            indexToEnchant,
+            includeMasses: false
+        }).clues;
+
+        assert.strictEqual(clueMass.get(enchantC), 2n);
+        assert.strictEqual(clueMass.get(enchantB), 2n);
+        assert.strictEqual(clueMass.get(enchantA), 1n);
     });
 
     it('comboLimit=0 yields empty combos even when data is present', () => {

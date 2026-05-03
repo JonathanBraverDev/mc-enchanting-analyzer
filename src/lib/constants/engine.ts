@@ -63,7 +63,7 @@ export const POOL_CONSTANTS = {
     /** Buffer size for individual distribution calculations. */
     DIST_POOL_SLOT_SIZE: 128,
 
-    /** Initial capacity for the SearchHeap (TypedArrays). */
+    /** Initial capacity for search frontier typed arrays. */
     INITIAL_HEAP_CAPACITY: 131072,
 
     /** Max possible number of eligible enchantments in a single pool expansion. */

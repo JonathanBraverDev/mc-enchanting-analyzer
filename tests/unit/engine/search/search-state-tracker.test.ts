@@ -1,5 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
+import { MassForwardingEngine } from '#engine/search/MassForwardingEngine.js';
+import { SearchNodeGraph } from '#engine/search/SearchNodeGraph.js';
 import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
 import { ExpansionBlueprint } from '#types/index.js';
 import { PRECISION } from '#utils/index.js';
@@ -29,29 +31,34 @@ describe('SearchStateTracker', () => {
         assert.strictEqual(tracker.mass.toPublic().resolved, 0.25);
     });
 
-    it('should register and retrieve expansion blueprints', () => {
-        const tracker = new SearchStateTracker();
+    it('should register and retrieve graph expansion blueprints', () => {
+        const graph = new SearchNodeGraph();
+        const nodeId = graph.getOrCreateNode(1n, 0 as any, 0);
+        const edgeStart = graph.beginEdgeSpan();
+        graph.appendBlueprintEdge(nodeId, 100);
         const mockBlueprint: ExpansionBlueprint = {
             probContinue: 0n,
             totalWeight: 100,
             eligibleCount: 1,
-            eligibleEnchants: [] as any,
-            eligibleWeights: new Int32Array([100]),
-            nextLevel: 30,
+            edgeStart,
             currentCount: 0,
-            currentCombo: 0 as any,
-            currentEnchants: [],
-            residue: 0n
+            currentCombo: 0 as any
         };
-        tracker.registerExpansion(1n, mockBlueprint);
-        assert.ok(tracker.has(1n));
-        assert.deepStrictEqual(tracker.get(1n), mockBlueprint);
-        assert.strictEqual(tracker.getCacheSize(), 1);
+        graph.setBlueprint(nodeId, mockBlueprint);
+        assert.ok(graph.hasBlueprint(nodeId));
+        assert.deepStrictEqual(graph.getBlueprint(nodeId), mockBlueprint);
+        assert.strictEqual(graph.size, 1);
     });
 
     it('should recover rounding residue from blueprints during mass distribution', () => {
         const tracker = new SearchStateTracker();
-        const weights = new Int32Array([10, 10]);
+        const graph = new SearchNodeGraph();
+        const nodeId = graph.getOrCreateNode(99n, 0 as any, 1);
+        const childA = graph.getOrCreateNode(1n, 1 as any, 2);
+        const childB = graph.getOrCreateNode(2n, 2 as any, 2);
+        const edgeStart = graph.beginEdgeSpan();
+        graph.appendBlueprintEdge(childA, 10);
+        graph.appendBlueprintEdge(childB, 10);
         // With totalWeight 20, a prob of 15 would have individualRemainder 15.
         // If we have a residue of 5 already, then 15 + 5 = 20, which divides perfectly.
         // Recovered mass should be 15 (the remainder that was 'saved').
@@ -60,32 +67,26 @@ describe('SearchStateTracker', () => {
             probContinue: PRECISION, // 100% forward
             totalWeight: 20,
             eligibleCount: 2,
-            eligibleEnchants: [1, 2] as any,
-            eligibleWeights: weights,
-            nextLevel: 30,
+            edgeStart,
             currentCount: 1,
-            currentCombo: 0 as any,
-            currentEnchants: [],
-            residue: 15n // High residue from previous arrival
+            currentCombo: 0 as any
         };
+        graph.setBlueprint(nodeId, blueprint);
+        graph.getForwardingResidue(nodeId).residue = 15n; // High residue from previous arrival
 
-        // We use string-index access for private method testing in node:test
         const ctx: any = {
-            registry: { enchantToIndex: new Map() },
+            registry: { enchantToIndex: new Map(), multiEnchantBooks: true },
             timing: {},
             resultsLimit: 100,
             queue: { pushOrMerge: () => {} },
-            instrumentation: {}
+            graph,
+            instrumentation: {},
+            cat: 'sword',
+            results: new Map()
         };
 
-        (tracker as any).processExpansionStep(
-            0n, PRECISION, 0n, 0n, // probStop=0, probForward=PRECISION, remStop=0, scaleLoss=0
-            0n, blueprint,
-            ctx,
-            0, []
-        );
+        MassForwardingEngine.forwardMass(PRECISION, nodeId, ctx, tracker);
 
-        // This is a bit hard to test via private methods, so I'll check the accountant state instead.
         const bk = tracker.mass.getBookkeeping();
         assert.ok(bk.recoveredRounding > 0n || bk.resolved > 0n, 'Should have accounted for recovered mass or resolved it');
     });

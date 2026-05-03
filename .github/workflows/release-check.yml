@@ -23,14 +23,18 @@ jobs:
         run: npm install semver --no-save
 
       - name: Debug Information
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
-          echo "PR Title: '${{ github.event.pull_request.title }}'"
+          echo "PR Title: '$PR_TITLE'"
           git tag -l "v[0-9]*"
 
       - name: Check PR Title
         id: check_title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
-          TITLE="${{ github.event.pull_request.title }}"
+          TITLE="$PR_TITLE"
           if [[ ! "$TITLE" =~ ^Release:\ v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
             echo "::error::PR title must follow the pattern 'Release: vX.Y.Z' (current: '$TITLE')"
             exit 1
@@ -39,8 +43,10 @@ jobs:
           echo "tag=$TAG" >> $GITHUB_OUTPUT
 
       - name: Check PR Description
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
         run: |
-          BODY="${{ github.event.pull_request.body }}"
+          BODY="$PR_BODY"
           if [ -z "$BODY" ] || [ ${#BODY} -lt 10 ]; then
             echo "::error::PR description is too short or empty. Please provide release notes (minimum 10 characters)."
             exit 1
@@ -52,6 +58,24 @@ jobs:
           echo "Searching for entry for $PROPOSED_TAG in CHANGELOG.md..."
           if ! grep -q "## \[$PROPOSED_TAG\]" CHANGELOG.md && ! grep -q "## $PROPOSED_TAG" CHANGELOG.md; then
             echo "::error::CHANGELOG.md does not contain a header for $PROPOSED_TAG (expected '## [$PROPOSED_TAG]' or '## $PROPOSED_TAG')"
+            exit 1
+          fi
+
+      - name: Verify Package Version
+        run: |
+          PROPOSED_TAG="${{ steps.check_title.outputs.tag }}"
+          PROPOSED_VERSION="${PROPOSED_TAG#v}"
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          LOCK_VERSION=$(node -p "require('./package-lock.json').version")
+          LOCK_ROOT_VERSION=$(node -p "require('./package-lock.json').packages[''].version")
+
+          if [ "$PACKAGE_VERSION" != "$PROPOSED_VERSION" ]; then
+            echo "::error::package.json version $PACKAGE_VERSION does not match $PROPOSED_TAG"
+            exit 1
+          fi
+
+          if [ "$LOCK_VERSION" != "$PROPOSED_VERSION" ] || [ "$LOCK_ROOT_VERSION" != "$PROPOSED_VERSION" ]; then
+            echo "::error::package-lock.json versions do not match $PROPOSED_TAG"
             exit 1
           fi
 

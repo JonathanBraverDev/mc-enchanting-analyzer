@@ -125,7 +125,8 @@ export const ProbUtils = {
         totalWeight: number | bigint,
         outParts: bigint[] | BigUint64Array,
         context: { residue: bigint },
-        count?: number
+        count?: number,
+        offset: number = 0
     ): { recovered: bigint } => {
         const total = BigInt(totalWeight);
         const len = count ?? weights.length;
@@ -140,7 +141,7 @@ export const ProbUtils = {
 
         let rem = totalToDistribute;
         for (let i = 0; i < len; i++) {
-            const w = weights[i] as number | bigint;
+            const w = weights[i + offset] as number | bigint;
             const bigW = typeof w === 'bigint' ? w : BigInt(w!);
             const quotient = (totalToDistribute * bigW) / total;
             outParts[i] = quotient;
