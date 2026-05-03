@@ -55,6 +55,24 @@ jobs:
             exit 1
           fi
 
+      - name: Verify Package Version
+        run: |
+          PROPOSED_TAG="${{ steps.check_title.outputs.tag }}"
+          PROPOSED_VERSION="${PROPOSED_TAG#v}"
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          LOCK_VERSION=$(node -p "require('./package-lock.json').version")
+          LOCK_ROOT_VERSION=$(node -p "require('./package-lock.json').packages[''].version")
+
+          if [ "$PACKAGE_VERSION" != "$PROPOSED_VERSION" ]; then
+            echo "::error::package.json version $PACKAGE_VERSION does not match $PROPOSED_TAG"
+            exit 1
+          fi
+
+          if [ "$LOCK_VERSION" != "$PROPOSED_VERSION" ] || [ "$LOCK_ROOT_VERSION" != "$PROPOSED_VERSION" ]; then
+            echo "::error::package-lock.json versions do not match $PROPOSED_TAG"
+            exit 1
+          fi
+
       - name: Validate SemVer Jump
         run: |
           git fetch origin main --tags || true
