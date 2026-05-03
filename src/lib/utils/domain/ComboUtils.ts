@@ -66,6 +66,26 @@ export class ComboUtils {
         return out;
     }
 
+    static forEachEnchant(
+        packed: PackedCombo,
+        indexToEnchant: number[],
+        callback: (enchant: PackedEnchant, position: number) => void
+    ): number {
+        if (Number(packed) === 0) return 0;
+
+        let count = 0;
+        let mult = 1;
+        for (let i = 0; i < PACKING_CONSTANTS.MAX_COMBO_SLOTS; i++, mult *= PACKING_CONSTANTS.BYTE_BASIS) {
+            const idx = Math.floor(packed / mult) % PACKING_CONSTANTS.BYTE_BASIS;
+            if (idx === 0) break;
+            const enchant = indexToEnchant[idx];
+            if (enchant === undefined) break;
+            callback(enchant as PackedEnchant, count);
+            count++;
+        }
+        return count;
+    }
+
     /**
      * Appends a single enchant to an already-packed combo without creating an intermediate array.
      * The caller must ensure that newItem is not already present in existing.

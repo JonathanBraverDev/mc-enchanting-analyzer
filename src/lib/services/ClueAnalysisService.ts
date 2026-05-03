@@ -23,20 +23,18 @@ export class ClueAnalysisService {
 
         const addContribution = (packed: PackedCombo, prob: bigint) => {
             if (prob <= 0n) return;
-            const enchants = ComboUtils.unpack(packed, indexToEnchant);
-            const count = enchants.length;
+            const count = ComboUtils.getCount(packed);
             if (count === 0) return;
 
             const quotient = prob / BigInt(count);
             const remainder = prob % BigInt(count);
 
-            for (let i = 0; i < count; i++) {
-                const e = enchants[i]!;
+            ComboUtils.forEachEnchant(packed, indexToEnchant, (e, i) => {
                 const share = quotient + (BigInt(i) < remainder ? 1n : 0n);
                 if (share > 0n) {
                     clueMass.set(e, (clueMass.get(e) ?? 0n) + share);
                 }
-            }
+            });
         };
 
         for (const [packed, prob] of combos.entries()) {
@@ -106,14 +104,13 @@ export class ClueAnalysisService {
                 conditionedCombos.set(firstPacked, newProb);
 
                 // Also update aggregated mass to keep them in sync
-                const enchants = ComboUtils.unpack(firstPacked, indexToEnchant);
-                const count = enchants.length;
+                const count = ComboUtils.getCount(firstPacked);
                 ProbUtils.addItemMass(countMass, count, remainder);
-                for (const e of enchants) {
+                ComboUtils.forEachEnchant(firstPacked, indexToEnchant, e => {
                     const id = ComboUtils.getEnchantId(e as PackedEnchant);
                     ProbUtils.addItemMass(anyMass, id, remainder);
                     ProbUtils.addItemMass(rankMass, e as number, remainder);
-                }
+                });
             }
         }
 
@@ -137,9 +134,12 @@ export class ClueAnalysisService {
         rankMass: Map<number, bigint>,
         countMass: Map<number, bigint>
     ): bigint {
-        const enchants = ComboUtils.unpack(packed, indexToEnchant);
-        const n = BigInt(enchants.length);
-        const clueIndex = enchants.indexOf(targetClueId as any);
+        const count = ComboUtils.getCount(packed);
+        const n = BigInt(count);
+        let clueIndex = -1;
+        ComboUtils.forEachEnchant(packed, indexToEnchant, (e, i) => {
+            if (e === targetClueId) clueIndex = i;
+        });
         if (clueIndex === -1) return 0n;
 
         const share = (pOriginal / n) + (BigInt(clueIndex) < (pOriginal % n) ? 1n : 0n);
@@ -148,13 +148,12 @@ export class ClueAnalysisService {
             const existing = conditionedCombos.get(packed) ?? 0n;
             conditionedCombos.set(packed, existing + pConditioned);
 
-            const count = enchants.length;
             ProbUtils.addItemMass(countMass, count, pConditioned);
-            for (const e of enchants) {
+            ComboUtils.forEachEnchant(packed, indexToEnchant, e => {
                 const id = ComboUtils.getEnchantId(e as PackedEnchant);
                 ProbUtils.addItemMass(anyMass, id, pConditioned);
                 ProbUtils.addItemMass(rankMass, e as number, pConditioned);
-            }
+            });
             return pConditioned;
         }
         return 0n;

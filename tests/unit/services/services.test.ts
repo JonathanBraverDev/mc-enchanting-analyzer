@@ -14,7 +14,8 @@ import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedL
 import { EngineFactory } from '#engine/factory.js';
 import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
 import { DATA } from '#data/index.js';
-import type { CalculationStats, MassAccounting, PackedCombo } from '#types/index.js';
+import { ComboUtils } from '#utils/domain/ComboUtils.js';
+import type { CalculationStats, MassAccounting, PackedCombo, PackedEnchant } from '#types/index.js';
 
 // ── SummaryService ────────────────────────────────────────────────────────────
 
@@ -43,6 +44,35 @@ describe('SummaryService', () => {
         assert.ok(Math.abs((result.any[5] ?? 0)         - 1.0)  < 1e-12);
         assert.ok(Math.abs((result.ranks[0x0501] ?? 0)  - 1.0)  < 1e-12);
         assert.ok(Math.abs((result.count[1] ?? 0)       - 1.0)  < 1e-10);
+    });
+
+    it('derives summary and clue masses like unpack-based aggregation', () => {
+        const enchantA = 0x0101 as PackedEnchant;
+        const enchantB = 0x0201 as PackedEnchant;
+        const enchantC = 0x0301 as PackedEnchant;
+        const enchantToIndex = new Map<number, number>([
+            [enchantA, 1],
+            [enchantB, 2],
+            [enchantC, 3]
+        ]);
+        const indexToEnchant = [0, enchantA, enchantB, enchantC];
+        const combos = new Map<PackedCombo, bigint>([
+            [ComboUtils.pack([enchantA, enchantB], enchantToIndex), PRECISION / 2n],
+            [ComboUtils.pack([enchantA, enchantC], enchantToIndex), PRECISION / 4n]
+        ]);
+        const tracker = new SearchStateTracker();
+        tracker.mass.record('resolved', (PRECISION * 3n) / 4n);
+
+        const stats = SummaryService.summarize({ combos, tracker, indexToEnchant, comboLimit: 0 });
+
+        assert.ok(Math.abs((stats.any[1] ?? 0) - 0.75) < 1e-12);
+        assert.ok(Math.abs((stats.any[2] ?? 0) - 0.5) < 1e-12);
+        assert.ok(Math.abs((stats.any[3] ?? 0) - 0.25) < 1e-12);
+        assert.ok(Math.abs((stats.ranks[enchantA] ?? 0) - 0.75) < 1e-12);
+        assert.ok(Math.abs((stats.count[2] ?? 0) - 0.75) < 1e-12);
+        assert.ok(Math.abs((stats.clues[enchantA] ?? 0) - 0.375) < 1e-12);
+        assert.ok(Math.abs((stats.clues[enchantB] ?? 0) - 0.25) < 1e-12);
+        assert.ok(Math.abs((stats.clues[enchantC] ?? 0) - 0.125) < 1e-12);
     });
 
     it('comboLimit=0 yields empty combos even when data is present', () => {

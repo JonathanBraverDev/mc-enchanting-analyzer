@@ -92,6 +92,18 @@ describe('ComboUtils', () => {
         }
     });
 
+    it('forEachEnchant matches unpack order without allocating an array', () => {
+        const packed = ComboUtils.pack([SHARP4, UNBR3, FIRE2], reg.enchantToIndex);
+        const scanned: PackedEnchant[] = [];
+
+        const count = ComboUtils.forEachEnchant(packed, reg.indexToEnchant, enchant => {
+            scanned.push(enchant);
+        });
+
+        assert.strictEqual(count, ComboUtils.getCount(packed));
+        assert.deepStrictEqual(scanned, ComboUtils.unpack(packed, reg.indexToEnchant));
+    });
+
     // ── removeAdditional ──────────────────────────────────────────────────
 
     it('removeAdditional on single-enchant combo returns same combo', () => {

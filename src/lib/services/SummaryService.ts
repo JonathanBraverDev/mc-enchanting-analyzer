@@ -161,15 +161,14 @@ export class SummaryService {
 
         // 1. Add terminal combinations
         for (const [packed, mass] of combos) {
-            const enchants = ComboUtils.unpack(packed, indexToEnchant);
-            const n = enchants.length;
+            const n = ComboUtils.getCount(packed);
             count[n] = (count[n] ?? 0n) + mass;
 
-            for (const e of enchants) {
+            ComboUtils.forEachEnchant(packed, indexToEnchant, e => {
                 const id = e >> PACKING_CONSTANTS.ENCHANT_SHIFT;
                 any[id] = (any[id] ?? 0n) + mass;
                 ranks[e] = (ranks[e] ?? 0n) + mass;
-            }
+            });
         }
 
         // 2. Add pending mass from frontiers
@@ -177,11 +176,10 @@ export class SummaryService {
             frontier.forEachNode((nodeId, prob) => {
                 const mass = ProbUtils.scale(prob, scale);
                 const packed = graph.getCombo(nodeId);
-                const enchants = ComboUtils.unpack(packed as PackedCombo, indexToEnchant);
 
                 // Count mass (pending nodes contribute to their current count)
                 // For books, if count > 1, it will eventually be reduced by 1 upon settling.
-                let n = enchants.length;
+                let n = ComboUtils.getCount(packed as PackedCombo);
                 let anyScaleNum = 1n;
                 let anyScaleDen = 1n;
 
@@ -192,13 +190,13 @@ export class SummaryService {
                 }
 
                 count[n] = (count[n] ?? 0n) + mass;
+                const finalMass = anyScaleDen === 1n ? mass : (mass * anyScaleNum) / anyScaleDen;
 
-                for (const e of enchants) {
+                ComboUtils.forEachEnchant(packed as PackedCombo, indexToEnchant, e => {
                     const id = e >> PACKING_CONSTANTS.ENCHANT_SHIFT;
-                    const finalMass = (mass * anyScaleNum) / anyScaleDen;
                     any[id] = (any[id] ?? 0n) + finalMass;
                     ranks[e] = (ranks[e] ?? 0n) + finalMass;
-                }
+                });
             });
         }
 
