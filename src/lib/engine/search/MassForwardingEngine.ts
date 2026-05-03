@@ -71,7 +71,6 @@ export class MassForwardingEngine {
                 ctx.cat === "book",
                 blueprint.currentCount,
                 blueprint.currentCombo,
-                blueprint.currentEnchants,
                 probStop,
                 ctx.results
             );
@@ -132,7 +131,6 @@ export class MassForwardingEngine {
             ctx.cat === "book",
             blueprint.currentCount,
             blueprint.currentCombo,
-            blueprint.currentEnchants,
             probForward,
             ctx.results
         );

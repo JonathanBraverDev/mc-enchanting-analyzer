@@ -1,4 +1,4 @@
-import { ForwardingContext, PackedCombo, PackedEnchant, ExpansionBlueprint } from '#types/index.js';
+import { ForwardingContext, PackedCombo, ExpansionBlueprint } from '#types/index.js';
 import { ComboUtils, ProbUtils } from '#utils/index.js';
 import { ENGINE_LIMITS, BIGINT_CONSTANTS } from '#constants/engine.js';
 import { DistributionBufferPool } from '#engine/distribution/DistributionBufferPool.js';
@@ -40,12 +40,11 @@ export class SearchProcessor {
         isBook: boolean,
         currentCount: number,
         packedChosen: PackedCombo,
-        currentEnchants: PackedEnchant[],
         prob: bigint,
         results: Map<PackedCombo, bigint>
     ): bigint {
         if (isBook && currentCount > 1) {
-            const { rem } = this.redistributeBookProb(packedChosen, currentEnchants, prob, currentCount, results);
+            const { rem } = this.redistributeBookProb(packedChosen, prob, results);
             return rem;
         } else {
             ProbUtils.addItemMass(results, packedChosen, prob);
@@ -59,9 +58,7 @@ export class SearchProcessor {
      */
     public static redistributeBookProb(
         packedChosen: PackedCombo,
-        _originalEnchants: PackedEnchant[],
         prob: bigint,
-        _currentCount: number,
         results: Map<PackedCombo, bigint>
     ): { rem: bigint } {
         const redistributed = ComboUtils.removeAdditional(packedChosen) as PackedCombo[];
@@ -126,15 +123,10 @@ export class SearchProcessor {
         ctx: ForwardingContext
     ): ExpansionBlueprint {
         const { registry, cat, poolPlan } = ctx;
-        const { indexToEnchant } = registry;
         const currentCombo = ctx.graph.getCombo(nodeId);
         const currentCount = ctx.graph.getCount(nodeId);
         const currentLevel = ctx.graph.getLevel(nodeId);
         const isBook = cat === "book";
-
-        const currentEnchants = (isBook && currentCount > 1)
-            ? ComboUtils.unpack(currentCombo, indexToEnchant)
-            : [] as PackedEnchant[];
 
         // currentLevel only drives the probability of earning another enchant slot from this node.
         // Eligibility still comes from ctx.pool, which SearchService fixed from the initial full
@@ -203,8 +195,7 @@ export class SearchProcessor {
             eligibleWeights,
             childIds,
             currentCount,
-            currentCombo,
-            currentEnchants
+            currentCombo
         };
     }
 }

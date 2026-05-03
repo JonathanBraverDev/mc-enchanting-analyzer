@@ -137,7 +137,6 @@ export interface ExpansionBlueprint {
     childIds: Uint32Array;
     currentCount: number;
     currentCombo: PackedCombo;
-    currentEnchants: PackedEnchant[];
 }
 
 /**

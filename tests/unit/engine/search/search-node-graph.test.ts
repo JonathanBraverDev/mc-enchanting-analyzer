@@ -158,8 +158,7 @@ describe('SearchNodeGraph', () => {
             eligibleWeights: new Int32Array([1]),
             childIds: new Uint32Array([childId]),
             currentCount: 1,
-            currentCombo: 1 as PackedCombo,
-            currentEnchants: []
+            currentCombo: 1 as PackedCombo
         });
         graph.getForwardingResidue(nodeId).residue = 7n;
 

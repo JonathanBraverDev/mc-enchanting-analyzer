@@ -41,8 +41,7 @@ describe('SearchStateTracker', () => {
             eligibleWeights: new Int32Array([100]),
             childIds: new Uint32Array([nodeId]),
             currentCount: 0,
-            currentCombo: 0 as any,
-            currentEnchants: []
+            currentCombo: 0 as any
         };
         graph.setBlueprint(nodeId, mockBlueprint);
         assert.ok(graph.hasBlueprint(nodeId));
@@ -68,8 +67,7 @@ describe('SearchStateTracker', () => {
             eligibleWeights: weights,
             childIds: new Uint32Array([childA, childB]),
             currentCount: 1,
-            currentCombo: 0 as any,
-            currentEnchants: []
+            currentCombo: 0 as any
         };
         graph.setBlueprint(nodeId, blueprint);
         graph.getForwardingResidue(nodeId).residue = 15n; // High residue from previous arrival
