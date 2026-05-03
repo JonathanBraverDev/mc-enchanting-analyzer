@@ -1,7 +1,8 @@
-import { ProbUtils, ComboUtils } from '#utils/index.js';
-import { ENGINE_LIMITS, PACKING_CONSTANTS } from '#constants/engine.js';
-import { CalculationStats, ConditionedSummaryRequest, PackedCombo, SearchFrontierSnapshot, SummaryRequest } from '#types/index.js';
+import { ProbUtils } from '#utils/index.js';
+import { ENGINE_LIMITS } from '#constants/engine.js';
+import { CalculationStats, ConditionedSummaryRequest, SummaryRequest } from '#types/index.js';
 import { ClueAnalysisService } from '#services/ClueAnalysisService.js';
+import { SummaryAggregationService } from '#services/SummaryAggregationService.js';
 
 /**
  * Service for summarizing search results into a standard JSON format.
@@ -32,14 +33,12 @@ export class SummaryService {
             accounting
         };
 
-        const derived = this.deriveAggregateMasses(combos, indexToEnchant, frontiers, isBook);
+        const derived = SummaryAggregationService.aggregate({ combos, indexToEnchant, frontiers, isBook });
 
         SummaryService.populateStats(stats.any, derived.any);
         SummaryService.populateStats(stats.ranks, derived.ranks);
         SummaryService.populateStats(stats.count, derived.count);
-
-        const clueMass = ClueAnalysisService.calculateClueMass(combos, indexToEnchant, frontiers);
-        SummaryService.populateStats(stats.clues, clueMass);
+        SummaryService.populateStats(stats.clues, derived.clues);
 
         // Ensure we always return sorted results if a limit is set > 0
         let comboSource: Iterable<[number, bigint]> = [];
@@ -97,27 +96,27 @@ export class SummaryService {
             tracker,
             indexToEnchant,
             targetClueId,
-            comboLimit = ENGINE_LIMITS.MAX_RESULTS_SUMMARY,
-            frontiers = [],
-            isBook = false
+            comboLimit = ENGINE_LIMITS.MAX_RESULTS_SUMMARY
         } = request;
-        // 1. Get honest baseline stats (invariants, absolute accuracy)
-        const stats = SummaryService.summarize({ combos, tracker, indexToEnchant, comboLimit: 0, threshold: 0, frontiers, isBook });
+        const accounting = tracker.mass.toPublic();
+        const stats: CalculationStats = {
+            ranks: {},
+            any: {},
+            count: {},
+            combos: {},
+            clues: {},
+            threshold: 0,
+            accuracy: accounting.resolved,
+            accounting
+        };
 
-        // 2. Perform Bayesian conditioning
+        // 1. Perform Bayesian conditioning
         const conditioned = ClueAnalysisService.conditionOnClue(combos, targetClueId, indexToEnchant);
 
-        // 3. Update top-level accuracy and inject absolute clue mass
+        // 2. Update top-level accuracy and inject absolute clue mass
         stats.accounting.clueKnownSpace = ProbUtils.toNumber(conditioned.clueKnownSpace);
 
-        // Reset result maps for conditioned population
-        stats.any = {};
-        stats.ranks = {};
-        stats.count = {};
-        stats.combos = {};
-        stats.clues = {};
-
-        // 4. Populate result maps directly (now normalized to 1.0/100% certainty within the service)
+        // 3. Populate result maps directly (now normalized to 1.0/100% certainty within the service)
         const populatePlain = (target: Record<string, number>, source: Map<number, bigint>) => {
             for (const [key, prob] of source) {
                 target[key] = ProbUtils.toNumber(prob);
@@ -128,7 +127,7 @@ export class SummaryService {
         populatePlain(stats.ranks, conditioned.rankMass);
         populatePlain(stats.count, conditioned.countMass);
 
-        // 5. Populate and rank conditioned combos
+        // 4. Populate and rank conditioned combos
         let comboSource: [number, bigint][] = [];
         const compareProbDesc = (a: [any, bigint], b: [any, bigint]) => {
             if (a[1] !== b[1]) return a[1] > b[1] ? -1 : 1;
@@ -147,60 +146,6 @@ export class SummaryService {
         }
 
         return stats;
-    }
-
-    public static deriveAggregateMasses(
-        combos: Map<PackedCombo, bigint>,
-        indexToEnchant: number[],
-        frontiers: SearchFrontierSnapshot[] = [],
-        isBook: boolean = false
-    ): { any: bigint[]; ranks: bigint[]; count: bigint[] } {
-        const any: bigint[] = [];
-        const ranks: bigint[] = [];
-        const count: bigint[] = [];
-
-        // 1. Add terminal combinations
-        for (const [packed, mass] of combos) {
-            const n = ComboUtils.getCount(packed);
-            count[n] = (count[n] ?? 0n) + mass;
-
-            ComboUtils.forEachEnchant(packed, indexToEnchant, e => {
-                const id = e >> PACKING_CONSTANTS.ENCHANT_SHIFT;
-                any[id] = (any[id] ?? 0n) + mass;
-                ranks[e] = (ranks[e] ?? 0n) + mass;
-            });
-        }
-
-        // 2. Add pending mass from frontiers
-        for (const { frontier, graph, scale } of frontiers) {
-            frontier.forEachNode((nodeId, prob) => {
-                const mass = ProbUtils.scale(prob, scale);
-                const packed = graph.getCombo(nodeId);
-
-                // Count mass (pending nodes contribute to their current count)
-                // For books, if count > 1, it will eventually be reduced by 1 upon settling.
-                let n = ComboUtils.getCount(packed as PackedCombo);
-                let anyScaleNum = 1n;
-                let anyScaleDen = 1n;
-
-                if (isBook && n > 1) {
-                    anyScaleNum = BigInt(n - 1);
-                    anyScaleDen = BigInt(n);
-                    n--;
-                }
-
-                count[n] = (count[n] ?? 0n) + mass;
-                const finalMass = anyScaleDen === 1n ? mass : (mass * anyScaleNum) / anyScaleDen;
-
-                ComboUtils.forEachEnchant(packed as PackedCombo, indexToEnchant, e => {
-                    const id = e >> PACKING_CONSTANTS.ENCHANT_SHIFT;
-                    any[id] = (any[id] ?? 0n) + finalMass;
-                    ranks[e] = (ranks[e] ?? 0n) + finalMass;
-                });
-            });
-        }
-
-        return { any, ranks, count };
     }
 
     private static populateStats(target: { [key: number]: number }, source: Map<number, bigint> | BigUint64Array | bigint[]): void {

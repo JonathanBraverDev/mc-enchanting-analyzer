@@ -19,7 +19,7 @@ import { ClueAnalysisService } from '#services/ClueAnalysisService.js';
 import { getFullEnchantName, getEnchantName } from '#core/registry.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import { ClueValidator } from '#core/clue.js';
-import { SummaryService } from '#services/SummaryService.js';
+import { SummaryAggregationService } from '#services/SummaryAggregationService.js';
 
 
 export class SnapshotService {
@@ -68,7 +68,13 @@ export class SnapshotService {
       result = conditioned;
     } else {
       // Unconditioned views derive aggregate stats from combos + frontiers (SSoT)
-      const derived = SummaryService.deriveAggregateMasses(combos, state.indexToEnchant, frontiers, isBook);
+      const derived = SummaryAggregationService.aggregate({
+        combos,
+        indexToEnchant: state.indexToEnchant,
+        frontiers,
+        isBook,
+        includeClues: false
+      });
       result = {
         combos,
         anyMass: this.toMassMap(derived.any),

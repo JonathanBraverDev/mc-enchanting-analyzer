@@ -46,6 +46,7 @@ UI input
   -> NodeIdSearchFrontier + SearchNodeGraph + MassForwardingEngine
   -> SearchStateTracker and ProbabilityMassAccountant
   -> SearchResult at each checkpoint
+  -> SummaryAggregationService
   -> SnapshotService / SummaryService
   -> worker response back to UI
 ```
@@ -78,8 +79,9 @@ The public calls use request objects so callers can pass optional search, instru
 | `SearchStateTracker` | Holds bucketed mass accounting for one modified level |
 | `ProbabilityMassAccountant` | Records resolved, pending, sieved, capped, overflow, and rounding mass |
 | `ModifiedLevelDistributionService` | Computes the BigInt distribution of modified enchantment levels |
-| `SummaryService` | Converts `SearchResult` maps and accounting into presented `CalculationStats` |
-| `SnapshotService` | Builds UI/reporting snapshots from `SearchResult` plus frontier state |
+| `SummaryAggregationService` | Scans resolved combos and pending frontiers once to derive shared any/rank/count/clue mass buckets |
+| `SummaryService` | Formats aggregated checkpoint masses into presented `CalculationStats` |
+| `SnapshotService` | Formats aggregated checkpoint masses into UI/reporting snapshots |
 
 ## Checkpoint Aggregation
 
@@ -105,6 +107,10 @@ For each modified level, `SearchService` searches or resumes a `SearchState`, sc
 - timing and instrumentation snapshots
 
 If a sequential checkpoint run is aborted before any modified level is processed for the active checkpoint, the service returns the last completed checkpoint instead of replacing it with an empty result.
+
+## Reporting Aggregation
+
+`SummaryAggregationService` is the shared scanner for post-search reporting. It walks resolved combo maps and pending frontier nodes once, scales pending frontier mass once per node, and derives `any`, `ranks`, `count`, and `clues` buckets together. Pending book nodes preserve the existing book-adjusted `any`/`ranks`/`count` behavior while clue mass remains based on the packed frontier combo. `SummaryService` and `SnapshotService` then format those aggregate masses for public stats and UI snapshots.
 
 ## Node-ID Frontier Model
 

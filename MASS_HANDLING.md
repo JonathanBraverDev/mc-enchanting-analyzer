@@ -62,7 +62,7 @@ Whenever `prob` is divided among $N$ branches (e.g., distributing mass across en
     - Combo mass is merged into the checkpoint result map.
     - `ProbabilityMassAccountant.addScaled` preserves bucket conservation while weighting each modified level.
     - Frontier/graph pairs are retained with their scale so snapshot reporting can describe what remains unexplored.
-3.  **Summary/Snapshot Reporting**: `SummaryService` turns the final checkpoint into public `CalculationStats`; `SnapshotService` turns intermediate checkpoints into UI/reporting snapshots.
+3.  **Summary/Snapshot Reporting**: `SummaryAggregationService` scans resolved combos and scaled frontiers once to derive public mass buckets; `SummaryService` and `SnapshotService` format those buckets into `CalculationStats` and UI/reporting snapshots.
 
 ---
 

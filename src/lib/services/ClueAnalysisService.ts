@@ -1,55 +1,12 @@
 import { PackedCombo, PackedEnchant, SearchFrontierSnapshot } from '#types/index.js';
 import { ComboUtils, ProbUtils, PRECISION } from '#utils/index.js';
+import { SummaryAggregationService } from '#services/SummaryAggregationService.js';
 
 /**
  * Service for analyzing clue probabilities and performing clue-conditioned transforms.
  * Separates observation logic from the core generation engine.
  */
 export class ClueAnalysisService {
-    /**
-     * Calculates the probability of each enchantment being the shown clue.
-     * Derived from the final surviving list of enchantments after generation and transforms.
-     *
-     * @param combos Map of final combinations and their probabilities (as BigInt units).
-     * @param indexToEnchant Mapping from byte indices to packed enchantment IDs.
-     * @returns A map of packed enchantment IDs to their clue probabilities.
-     */
-    public static calculateClueMass(
-        combos: Map<PackedCombo, bigint>,
-        indexToEnchant: number[],
-        frontiers: SearchFrontierSnapshot[] = []
-    ): Map<number, bigint> {
-        const clueMass = new Map<number, bigint>();
-
-        const addContribution = (packed: PackedCombo, prob: bigint) => {
-            if (prob <= 0n) return;
-            const count = ComboUtils.getCount(packed);
-            if (count === 0) return;
-
-            const quotient = prob / BigInt(count);
-            const remainder = prob % BigInt(count);
-
-            ComboUtils.forEachEnchant(packed, indexToEnchant, (e, i) => {
-                const share = quotient + (BigInt(i) < remainder ? 1n : 0n);
-                if (share > 0n) {
-                    clueMass.set(e, (clueMass.get(e) ?? 0n) + share);
-                }
-            });
-        };
-
-        for (const [packed, prob] of combos.entries()) {
-            addContribution(packed, prob);
-        }
-
-        for (const { frontier, graph, scale } of frontiers) {
-            frontier.forEachNode((nodeId, prob) => {
-                addContribution(graph.getCombo(nodeId), ProbUtils.scale(prob, scale));
-            });
-        }
-
-        return clueMass;
-    }
-
     /**
      * Re-normalizes statistics based on a specific displayed clue.
      * Implements Bayesian conditioning: P(Combo | Clue) = P(Clue | Combo) * P(Combo) / P(Clue).
@@ -70,7 +27,12 @@ export class ClueAnalysisService {
         countMass: Map<number, bigint>,
         clueKnownSpace: bigint
     } {
-        const clueMasses = this.calculateClueMass(combos, indexToEnchant, frontiers);
+        const clueMasses = SummaryAggregationService.aggregate({
+            combos,
+            indexToEnchant,
+            frontiers,
+            includeMasses: false
+        }).clues;
         const pClue = clueMasses.get(targetClueId) ?? 0n;
 
         const conditionedCombos = new Map<PackedCombo, bigint>();
