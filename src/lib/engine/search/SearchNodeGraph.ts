@@ -4,6 +4,112 @@ interface ForwardingResidue {
     residue: bigint;
 }
 
+class NumericNodeIndex {
+    private static readonly INITIAL_CAPACITY = 131072;
+    private static readonly MAX_LOAD_FACTOR = 0.7;
+    private static readonly UINT32_SCALE = 0x100000000;
+
+    private keys: Float64Array;
+    private values: Int32Array;
+    private used: Uint8Array;
+    private mask: number;
+    private resizeAt: number;
+    private count = 0;
+
+    constructor(capacity: number = NumericNodeIndex.INITIAL_CAPACITY) {
+        const size = NumericNodeIndex.nextPowerOfTwo(capacity);
+        this.keys = new Float64Array(size);
+        this.values = new Int32Array(size);
+        this.values.fill(-1);
+        this.used = new Uint8Array(size);
+        this.mask = size - 1;
+        this.resizeAt = Math.floor(size * NumericNodeIndex.MAX_LOAD_FACTOR);
+    }
+
+    public get(key: number): number | undefined {
+        let idx = this.hash(key) & this.mask;
+
+        while (this.used[idx] !== 0) {
+            if (this.keys[idx] === key) {
+                const value = this.values[idx]!;
+                return value === -1 ? undefined : value;
+            }
+            idx = (idx + 1) & this.mask;
+        }
+
+        return undefined;
+    }
+
+    public set(key: number, value: number): void {
+        if (this.count >= this.resizeAt) this.grow();
+        this.insert(key, value);
+    }
+
+    public clone(): NumericNodeIndex {
+        const other = new NumericNodeIndex(this.keys.length);
+        other.keys.set(this.keys);
+        other.values.set(this.values);
+        other.used.set(this.used);
+        other.mask = this.mask;
+        other.resizeAt = this.resizeAt;
+        other.count = this.count;
+        return other;
+    }
+
+    private insert(key: number, value: number): void {
+        let idx = this.hash(key) & this.mask;
+
+        while (this.used[idx] !== 0) {
+            if (this.keys[idx] === key) {
+                this.values[idx] = value;
+                return;
+            }
+            idx = (idx + 1) & this.mask;
+        }
+
+        this.used[idx] = 1;
+        this.keys[idx] = key;
+        this.values[idx] = value;
+        this.count++;
+    }
+
+    private grow(): void {
+        const oldKeys = this.keys;
+        const oldValues = this.values;
+        const oldUsed = this.used;
+
+        const nextSize = oldKeys.length * 2;
+        this.keys = new Float64Array(nextSize);
+        this.values = new Int32Array(nextSize);
+        this.values.fill(-1);
+        this.used = new Uint8Array(nextSize);
+        this.mask = nextSize - 1;
+        this.resizeAt = Math.floor(nextSize * NumericNodeIndex.MAX_LOAD_FACTOR);
+        this.count = 0;
+
+        for (let i = 0; i < oldKeys.length; i++) {
+            if (oldUsed[i] !== 0) this.insert(oldKeys[i]!, oldValues[i]!);
+        }
+    }
+
+    private hash(key: number): number {
+        const low = key >>> 0;
+        const high = Math.floor(key / NumericNodeIndex.UINT32_SCALE) >>> 0;
+        let h = (low ^ Math.imul(high, 0x9E3779B1)) >>> 0;
+        h ^= h >>> 16;
+        h = Math.imul(h, 0x7FEB352D) >>> 0;
+        h ^= h >>> 15;
+        h = Math.imul(h, 0x846CA68B) >>> 0;
+        return (h ^ (h >>> 16)) >>> 0;
+    }
+
+    private static nextPowerOfTwo(value: number): number {
+        let size = 1;
+        while (size < value) size <<= 1;
+        return size;
+    }
+}
+
 /**
  * Dense graph of search nodes for one modified-level search.
  * The frontier can use node IDs while this graph owns node metadata.
@@ -17,7 +123,7 @@ export class SearchNodeGraph {
     private static readonly HI_MASK_SCALE = 0x100000000;
     private static readonly INITIAL_EDGE_CAPACITY = 1024;
 
-    private readonly numericKeyToId = new Map<number, number>();
+    private numericKeyToId = new NumericNodeIndex();
     private readonly bigintMetaToId = new Map<bigint, number>();
     private metas: Array<bigint | undefined> = [];
     private maskLos: number[] = [];
@@ -181,9 +287,7 @@ export class SearchNodeGraph {
         graph.edgeWeights = new Int32Array(this.edgeWeights.length);
         graph.edgeWeights.set(this.edgeWeights);
         graph.edgeCount = this.edgeCount;
-        for (const [meta, nodeId] of this.numericKeyToId) {
-            graph.numericKeyToId.set(meta, nodeId);
-        }
+        graph.numericKeyToId = this.numericKeyToId.clone();
         for (const [meta, nodeId] of this.bigintMetaToId) {
             graph.bigintMetaToId.set(meta, nodeId);
         }
