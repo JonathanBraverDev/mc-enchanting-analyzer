@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## v5.1.0 (2026-05-03)
+
+### Improved
+- **Faster complex book searches**: Modern book calculations, especially no-clue `1.21.11` searches, now complete much faster while keeping the same results.
+- **Quicker result reporting**: Large searches spend less time preparing summaries and snapshots after the search finishes.
+- **Clearer performance timing**: Profiling output now separates search time from result-processing time, making long runs easier to understand.
+
+### Developer Experience
+- **Profiling baselines**: Added repeatable CPU profiles for the modern book cases used to guide this optimization pass.
+- **Search frontier cleanup**: Reworked the V5 frontier and mass-forwarding internals around clearer ownership boundaries and lower-overhead node tracking.
+- **Reporting consolidation**: Combined repeated summary and snapshot scans into one shared aggregation path.
+- **Registry headroom**: Added an explicit fallback identity mode for larger supported enchantment registries.
+
+### Fixed
+- **Unsupported registry validation**: Added a clear error when a registry exceeds the current 64-enchantment internal model.
+
 ## v5.0.0 (2026-05-02)
 
 ### Added
