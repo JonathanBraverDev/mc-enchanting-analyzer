@@ -106,9 +106,9 @@ export class SearchProcessor {
             if (pNext === undefined || pNext === 0n) continue;
 
             const nextPacked = poolPlan.singleCombos[i]! as PackedCombo;
-            const nodeId = poolPlan.numericIdentitySupported
+            const nodeId = poolPlan.identityMode === 'number53'
                 ? graph.getOrCreateNumericNode(poolPlan.idMaskLo[i]!, poolPlan.idMaskHi[i]!, poolPlan.initialLevel, nextPacked, 1)
-                : graph.getOrCreateNode(poolPlan.initialMetas[i]!, nextPacked, 1);
+                : graph.getOrCreateBigIntNode(poolPlan.initialMetas[i]!, nextPacked, 1);
 
             tracker.mass.record('pending', pNext);
             queue.pushOrMerge(nodeId, pNext);
@@ -142,7 +142,7 @@ export class SearchProcessor {
         const nextLevelBits = BIGINT_CONSTANTS.LEVEL_LOOKUP[nextLevel]!;
         const edgeStart = ctx.graph.beginEdgeSpan();
 
-        if (poolPlan.numericIdentitySupported && ctx.graph.isNumericNode(nodeId)) {
+        if (poolPlan.identityMode === 'number53' && ctx.graph.isNumericNode(nodeId)) {
             const currentMaskLo = ctx.graph.getMaskLo(nodeId);
             const currentMaskHi = ctx.graph.getMaskHi(nodeId);
 
@@ -180,7 +180,7 @@ export class SearchProcessor {
                 const enchant = poolPlan.pool[i]!;
                 const childMeta = ((currentBitset | idBit) << BIGINT_CONSTANTS.ENCHANT_SHIFT) | nextLevelBits;
                 const childCombo = ComboUtils.packAppend(currentCombo, enchant, registry.enchantToIndex);
-                const childId = ctx.graph.getOrCreateNode(childMeta, childCombo, currentCount + 1);
+                const childId = ctx.graph.getOrCreateBigIntNode(childMeta, childCombo, currentCount + 1);
                 ctx.graph.appendBlueprintEdge(childId, weight);
                 eligibleCount++;
             }

@@ -71,10 +71,10 @@ The public calls use request objects so callers can pass optional search, instru
 | `SearchService` | Coordinates modified-level search, checkpoint aggregation, instrumentation, and cache reuse |
 | `SearchController` | Runs the best-first expansion loop until threshold, iteration, abort, or exhaustion |
 | `NodeIdSearchFrontier` | Stores pending node IDs and probability mass in best-first order |
-| `SearchNodeGraph` | Owns canonical node identity, split-mask node state, combo payloads, expansion blueprints, and forwarding residue |
+| `SearchNodeGraph` | Owns canonical node identity, optional split-mask node state, combo payloads, expansion blueprints, and forwarding residue |
 | `MassForwardingEngine` | Forwards mass through cached graph nodes and routes unresolved child mass back to the frontier |
 | `SearchProcessor` | Builds Minecraft-specific expansion blueprints, performs eligibility/conflict checks, and settles generated mass |
-| `SearchPoolPlan` | Precomputes fixed per-level pool metadata, weights, numeric masks, conflicts, and initial child payloads |
+| `SearchPoolPlan` | Precomputes fixed per-level pool metadata, identity mode, weights, masks, conflicts, and initial child payloads |
 | `SearchStateTracker` | Holds bucketed mass accounting for one modified level |
 | `ProbabilityMassAccountant` | Records resolved, pending, sieved, capped, overflow, and rounding mass |
 | `ModifiedLevelDistributionService` | Computes the BigInt distribution of modified enchantment levels |
@@ -111,13 +111,14 @@ If a sequential checkpoint run is aborted before any modified level is processed
 The V5 search path separates node identity from frontier priority:
 
 - `SearchNodeGraph` assigns each canonical `(enchant bitset << 8 | current level)` state a dense `nodeId`.
-- For current vanilla-sized registries, graph identity is stored as numeric split masks: `maskLo`, `maskHi`, and `level`.
-- `SearchPoolPlan` precomputes matching low/high ID masks and conflict masks for each eligible enchant, so expansion can use numeric selected/conflict checks instead of rebuilding BigInt state.
+- `SearchPoolPlan` selects the internal identity mode from the registry max enchant ID: `number53` for IDs `0..44`, `bigint64` for IDs `45..63`, and a clear unsupported-registry error above that range.
+- In `number53` mode, graph identity is stored as a safe packed number key plus split masks: `maskLo`, `maskHi`, and `level`.
+- In `bigint64` mode, graph identity stays on canonical BigInt meta keys while preserving the same node-ID frontier and result shape.
+- `SearchPoolPlan` precomputes matching low/high ID masks and conflict masks for each eligible enchant, so `number53` expansion can use numeric selected/conflict checks instead of rebuilding BigInt state.
 - The graph stores the node payload once: split masks, level, packed combo, enchant count, optional `ExpansionBlueprint`, and forwarding residue.
 - `NodeIdSearchFrontier` stores only `nodeId` and pending probability mass, using direct typed-array indexes for merge and heap-position lookups.
 - Expansion blueprints point to child node IDs, so cached-child checks are array lookups instead of BigInt heap/hash work.
 - `getMeta(nodeId)` remains available for compatibility and reporting; numeric nodes reconstruct the BigInt meta lazily only when a caller asks for it.
-- If a future registry exceeds the safe numeric graph range, the graph falls back to the BigInt meta identity path while preserving the same public result shape.
 
 This preserves the old best-first semantics: the highest-probability pending node still expands first, and `meta` remains the canonical state identity. The scaling improvement comes from removing repeated `BigInt meta + packed combo` traffic from frontier push/pop/merge operations.
 

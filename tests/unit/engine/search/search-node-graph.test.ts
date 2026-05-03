@@ -8,9 +8,35 @@ import { SearchPoolPlan } from '#engine/search/SearchPoolPlan.js';
 import { ComboUtils } from '#utils/index.js';
 import { ForwardingContext, PackedCombo, PackedEnchant } from '#types/index.js';
 
-const enchantA = ((1 << 8) | 1) as PackedEnchant;
-const enchantB = ((2 << 8) | 1) as PackedEnchant;
-const enchantHigh = ((36 << 8) | 1) as PackedEnchant;
+function makeEnchant(id: number): PackedEnchant {
+    return ((id << 8) | 1) as PackedEnchant;
+}
+
+const enchantA = makeEnchant(1);
+const enchantB = makeEnchant(2);
+const enchantHigh = makeEnchant(36);
+
+function makeRegistryWithIds(ids: number[]): any {
+    const maxId = Math.max(0, ...ids);
+    const registry = {
+        multiEnchantBooks: true,
+        conflictBitsets: new BigUint64Array(maxId + 1),
+        idMap: new Map<string, number>(),
+        enchantToIndex: new Map<number, number>(),
+        indexToEnchant: [0],
+        weightMap: new Uint32Array(maxId + 1),
+    } as any;
+
+    ids.forEach((id, index) => {
+        const enchant = makeEnchant(id);
+        registry.idMap.set(`enchant-${id}`, id);
+        registry.enchantToIndex.set(enchant, index + 1);
+        registry.indexToEnchant[index + 1] = enchant;
+        registry.weightMap[id] = 1;
+    });
+
+    return registry;
+}
 
 function makeContext(graph: SearchNodeGraph): ForwardingContext {
     const registry = {
@@ -41,24 +67,26 @@ function makeContext(graph: SearchNodeGraph): ForwardingContext {
     };
 }
 
-function makeHighIdContext(graph: SearchNodeGraph): ForwardingContext {
+function makeHighIdContext(graph: SearchNodeGraph, highId = 36): ForwardingContext {
+    const highEnchant = makeEnchant(highId);
+    const maxId = Math.max(64, highId + 1);
     const registry = {
             multiEnchantBooks: true,
-            conflictBitsets: new BigUint64Array(64),
+            conflictBitsets: new BigUint64Array(maxId),
             idMap: new Map<string, number>([
                 ['a', 1],
-                ['high', 36]
+                ['high', highId]
             ]),
             enchantToIndex: new Map<number, number>([
                 [enchantA, 1],
-                [enchantHigh, 2]
+                [highEnchant, 2]
             ]),
-            indexToEnchant: [0, enchantA, enchantHigh],
-            weightMap: new Uint32Array(64),
+            indexToEnchant: [0, enchantA, highEnchant],
+            weightMap: new Uint32Array(maxId),
         } as any;
-    registry.conflictBitsets[1] = 1n << 36n;
+    registry.conflictBitsets[1] = 1n << BigInt(highId);
     registry.weightMap[1] = 1;
-    registry.weightMap[36] = 1;
+    registry.weightMap[highId] = 1;
 
     return {
         registry,
@@ -67,11 +95,42 @@ function makeHighIdContext(graph: SearchNodeGraph): ForwardingContext {
         graph,
         resultsLimit: 100,
         cat: 'sword',
-        poolPlan: new SearchPoolPlan(registry, [enchantA, enchantHigh], 30)
+        poolPlan: new SearchPoolPlan(registry, [enchantA, highEnchant], 30)
     };
 }
 
 describe('SearchNodeGraph', () => {
+    it('selects the number53 identity mode through ID 44', () => {
+        const registry = makeRegistryWithIds([44]);
+        const plan = new SearchPoolPlan(registry, [makeEnchant(44)], 30);
+
+        assert.strictEqual(plan.identityMode, 'number53');
+    });
+
+    it('selects the BigInt64 identity mode starting at ID 45', () => {
+        const registry = makeRegistryWithIds([45]);
+        const plan = new SearchPoolPlan(registry, [makeEnchant(45)], 30);
+        const graph = new SearchNodeGraph();
+        const meta = ((1n << 45n) << 8n) | 30n;
+
+        const nodeA = graph.getOrCreateNode(meta, 1 as PackedCombo, 1);
+        const nodeB = graph.getOrCreateNode(meta, 2 as PackedCombo, 2);
+
+        assert.strictEqual(plan.identityMode, 'bigint64');
+        assert.strictEqual(nodeA, nodeB);
+        assert.strictEqual(graph.isNumericNode(nodeA), false);
+        assert.strictEqual(graph.getMeta(nodeA), meta);
+    });
+
+    it('rejects registries beyond the 64-enchant identity range', () => {
+        const registry = makeRegistryWithIds([64]);
+
+        assert.throws(
+            () => new SearchPoolPlan(registry, [makeEnchant(64)], 30),
+            /supports enchant IDs 0-63/
+        );
+    });
+
     it('deduplicates canonical nodes reached through different enchant orderings', () => {
         const graph = new SearchNodeGraph();
         const ctx = makeContext(graph);
@@ -134,6 +193,20 @@ describe('SearchNodeGraph', () => {
 
         const blueprint = SearchProcessor.buildExpansionBlueprint(nodeId, ctx);
 
+        assert.strictEqual(blueprint.eligibleCount, 0);
+    });
+
+    it('uses BigInt64 selected and conflict checks at the top supported ID', () => {
+        const graph = new SearchNodeGraph();
+        const ctx = makeHighIdContext(graph, 63);
+        const combo = ComboUtils.pack([makeEnchant(63)], ctx.registry.enchantToIndex) as PackedCombo;
+        const meta = ((1n << 63n) << 8n) | 30n;
+        const nodeId = graph.getOrCreateNode(meta, combo, 1);
+
+        const blueprint = SearchProcessor.buildExpansionBlueprint(nodeId, ctx);
+
+        assert.strictEqual(ctx.poolPlan.identityMode, 'bigint64');
+        assert.strictEqual(graph.isNumericNode(nodeId), false);
         assert.strictEqual(blueprint.eligibleCount, 0);
     });
 

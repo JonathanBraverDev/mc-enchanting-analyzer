@@ -42,7 +42,7 @@ These buckets are **non-additive**. They do not contribute to the 1.0 total mass
 To avoid the binary-decimal drift of IEEE 754 floats, the engine uses `BigUint64Array` and `bigint` for all internal mass storage.
 - **Scale**: $2^{60}$ (`PRECISION`). This provides roughly 18 decimal places of accuracy, far exceeding typical double-precision requirements.
 - **Conversion**: Probabilities are converted to BigInt as early as possible (in `ProbUtils.toBigInt`) and returned to `number` only for final UI display.
-- **Scope**: BigInt is required for probability mass. Search graph identity uses numeric split masks on current vanilla registries, with BigInt meta reconstruction kept as a compatibility and future-registry fallback path.
+- **Scope**: BigInt is required for probability mass. Search graph identity uses the `number53` path for current vanilla registries, with a `bigint64` path for registries whose enchant IDs no longer fit the safe-number key range.
 
 ### 2. Banker's Rounding (Statistically Neutral)
 The engine implements **Banker's Rounding** (Round-to-Nearest-Even) for scaling operations.
@@ -76,7 +76,7 @@ If they were processed together, the total mass would be `10`, and $10/2 = 5$ wi
 
 ### The Solution: Harvesting
 1. **Canonical Node Graph**: Every unique `(enchant bitset << 8 | current level)` node is assigned a dense node ID by `SearchNodeGraph`.
-2. **Numeric Identity Fast Path**: For current vanilla registries, `SearchNodeGraph` stores each node as `maskLo`, `maskHi`, and `level`; `SearchPoolPlan` provides matching low/high selected and conflict masks for expansion.
+2. **Registry-Selected Identity**: `SearchPoolPlan` chooses `number53` for enchant IDs `0..44` and `bigint64` for IDs `45..63`. The `number53` path stores safe numeric keys plus `maskLo`, `maskHi`, and `level`; the `bigint64` path keeps canonical BigInt meta identity.
 3. **Expansion Cache**: Each graph node can cache an `ExpansionBlueprint` with its child node IDs and settlement metadata.
 4. **Residue Accumulation**: The graph stores forwarding residue alongside the node, separate from the structural blueprint.
 5. **Immediate Forwarding**: When a duplicate path arrives at a cached node, it does not need to re-enter the best-first frontier. `MassForwardingEngine` forwards its mass through the cached blueprint.
@@ -92,7 +92,7 @@ If they were processed together, the total mass would be `10`, and $10/2 = 5$ wi
 `SearchState` maintains the bookkeeping for a single modified level.
 - `results` stores exact combo mass.
 - `queue` stores the remaining best-first frontier as node IDs plus probability mass.
-- `graph` resolves node IDs to split-mask node state, packed combos, cached blueprints, and forwarding residue. BigInt meta is reconstructed lazily only for compatibility/reporting callers.
+- `graph` resolves node IDs to identity state, packed combos, cached blueprints, and forwarding residue. In `number53` mode, BigInt meta is reconstructed lazily only for compatibility/reporting callers.
 - `tracker.mass` stores the bucketed probability accounting for that modified level.
 
 ### SearchResult

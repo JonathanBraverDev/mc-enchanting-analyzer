@@ -5,11 +5,15 @@ import { CheckpointSearchContext, EngineInstrumentation, ModifiedLevelSearchCont
 import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
 import { SearchController } from '#engine/search/SearchController.js';
 import { NodeIdSearchFrontier } from '#engine/search/NodeIdSearchFrontier.js';
-import { SearchPoolPlan } from '#engine/search/SearchPoolPlan.js';
+import { SearchPoolPlan, type SearchIdentityMode } from '#engine/search/SearchPoolPlan.js';
 import { SearchNodeGraph } from '#engine/search/SearchNodeGraph.js';
 import { CacheManager } from '#engine/cache/CacheManager.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { getSearchLimit } from '#engine/utils.js';
+
+export interface SearchServiceOptions {
+    readonly identityModeOverride?: SearchIdentityMode | undefined;
+}
 
 interface CheckpointAccumulator {
     combos: Map<PackedCombo, bigint>;
@@ -25,7 +29,8 @@ interface CheckpointAccumulator {
 export class SearchService {
     constructor(
         private readonly cache: CacheManager,
-        private readonly distributionService: ModifiedLevelDistributionService = new ModifiedLevelDistributionService()
+        private readonly distributionService: ModifiedLevelDistributionService = new ModifiedLevelDistributionService(),
+        private readonly options: SearchServiceOptions = {}
     ) {}
 
     public async searchModifiedLevel(request: ModifiedLevelSearchContext): Promise<SearchState> {
@@ -61,7 +66,9 @@ export class SearchService {
             return this.handleEmptyPool(threshold);
         }
 
-        const poolPlan = new SearchPoolPlan(registry, initialPool, modLevel);
+        const poolPlan = new SearchPoolPlan(registry, initialPool, modLevel, {
+            identityModeOverride: this.options.identityModeOverride
+        });
         const ctx: ForwardingContext = {
             registry,
             results,

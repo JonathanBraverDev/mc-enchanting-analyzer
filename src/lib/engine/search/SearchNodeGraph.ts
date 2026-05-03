@@ -138,11 +138,18 @@ export class SearchNodeGraph {
     private edgeCount = 0;
 
     public getOrCreateNode(meta: bigint, combo: PackedCombo, count: number): number {
+        const bigintExisting = this.bigintMetaToId.get(meta);
+        if (bigintExisting !== undefined) return bigintExisting;
+
         if (meta <= SearchNodeGraph.MAX_SAFE_META) {
             const parts = SearchNodeGraph.partsFromMeta(meta);
             return this.getOrCreateNumericNode(parts.maskLo, parts.maskHi, parts.level, combo, count);
         }
 
+        return this.getOrCreateBigIntNode(meta, combo, count);
+    }
+
+    public getOrCreateBigIntNode(meta: bigint, combo: PackedCombo, count: number): number {
         const existing = this.bigintMetaToId.get(meta);
         if (existing !== undefined) return existing;
 

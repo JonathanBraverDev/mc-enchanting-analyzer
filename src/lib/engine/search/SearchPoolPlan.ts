@@ -1,12 +1,19 @@
 import { BIGINT_CONSTANTS, PACKING_CONSTANTS } from '#constants/engine.js';
 import { PackedEnchant, RegistryState } from '#types/index.js';
 
+export type SearchIdentityMode = 'number53' | 'bigint64';
+
+export interface SearchPoolPlanOptions {
+    readonly identityModeOverride?: SearchIdentityMode | undefined;
+}
+
 /**
  * Per-modified-level expansion metadata derived from the fixed eligible pool.
  * The pool is frozen for the whole search, so node expansion can reuse these arrays.
  */
 export class SearchPoolPlan {
-    private static readonly NUMERIC_ID_LIMIT = 44;
+    private static readonly NUMBER53_ID_LIMIT = 44;
+    private static readonly BIGINT64_ID_LIMIT = 63;
     private static readonly LOW_MASK_BITS = 32n;
     private static readonly LOW_MASK = 0xFFFFFFFFn;
 
@@ -24,9 +31,14 @@ export class SearchPoolPlan {
     public readonly singleCombos: Float64Array;
     public readonly initialTotalWeight: number;
     public readonly initialLevel: number;
-    public readonly numericIdentitySupported: boolean;
+    public readonly identityMode: SearchIdentityMode;
 
-    constructor(registry: RegistryState, pool: PackedEnchant[], modLevel: number) {
+    constructor(
+        registry: RegistryState,
+        pool: PackedEnchant[],
+        modLevel: number,
+        options: SearchPoolPlanOptions = {}
+    ) {
         this.pool = pool;
         this.ids = new Uint8Array(pool.length);
         this.idBits = new BigUint64Array(pool.length);
@@ -44,10 +56,12 @@ export class SearchPoolPlan {
         const initialLevelBits = BIGINT_CONSTANTS.LEVEL_LOOKUP[modLevel]!;
         let initialTotalWeight = 0;
         let maxId = this.getMaxRegistryId(registry);
+        this.assertSupportedMaxId(maxId);
 
         for (let i = 0; i < pool.length; i++) {
             const enchant = pool[i]!;
             const id = enchant >> PACKING_CONSTANTS.ENCHANT_SHIFT;
+            this.assertSupportedId(id);
             const idBit = BIGINT_CONSTANTS.ID_BIT_LOOKUP[id]!;
             const conflictBitset = registry.conflictBitsets[id] ?? 0n;
             const weight = registry.weightMap[id] ?? 0;
@@ -69,7 +83,11 @@ export class SearchPoolPlan {
         }
 
         this.initialTotalWeight = initialTotalWeight;
-        this.numericIdentitySupported = maxId <= SearchPoolPlan.NUMERIC_ID_LIMIT;
+        const detectedMode = maxId <= SearchPoolPlan.NUMBER53_ID_LIMIT ? 'number53' : 'bigint64';
+        this.identityMode = options.identityModeOverride ?? detectedMode;
+        if (this.identityMode === 'number53' && maxId > SearchPoolPlan.NUMBER53_ID_LIMIT) {
+            throw new Error(`Search identity mode number53 supports enchant IDs 0-${SearchPoolPlan.NUMBER53_ID_LIMIT}; registry contains ID ${maxId}.`);
+        }
     }
 
     public get length(): number {
@@ -94,5 +112,17 @@ export class SearchPoolPlan {
 
     private static idMaskHi(id: number): number {
         return id >= 32 ? 2 ** (id - 32) : 0;
+    }
+
+    private assertSupportedMaxId(maxId: number): void {
+        if (maxId > SearchPoolPlan.BIGINT64_ID_LIMIT) {
+            throw new Error(`Search identity supports enchant IDs 0-${SearchPoolPlan.BIGINT64_ID_LIMIT}; registry contains ID ${maxId}.`);
+        }
+    }
+
+    private assertSupportedId(id: number): void {
+        if (id > SearchPoolPlan.BIGINT64_ID_LIMIT) {
+            throw new Error(`Search identity supports enchant IDs 0-${SearchPoolPlan.BIGINT64_ID_LIMIT}; eligible pool contains ID ${id}.`);
+        }
     }
 }
