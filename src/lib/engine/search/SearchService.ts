@@ -76,7 +76,7 @@ export class SearchService {
             graph,
             resultsLimit,
             instrumentation: request.instrumentation,
-            timing: timingResult ? { totalMs: 0, searchMs: 0 } : undefined,
+            timing: timingResult ? { totalMs: 0, searchMs: 0, postProcessingMs: 0 } : undefined,
             cat,
             poolPlan
         };
@@ -90,7 +90,7 @@ export class SearchService {
 
         if (timingResult) {
             const totalMs = performance.now() - startTime;
-            timingResult.totalMs += totalMs;
+            timingResult.totalMs = (timingResult.totalMs ?? 0) + totalMs;
         }
 
         if (useCache && cacheKey !== undefined) {
@@ -281,7 +281,7 @@ export class SearchService {
         accumulator: CheckpointAccumulator,
         threshold: number,
         instrumentation?: EngineInstrumentation,
-        timing?: { totalMs: number; searchMs: number }
+        timing?: { totalMs: number; searchMs: number; postProcessingMs?: number | undefined }
     ): SearchResult {
         const distRoundingError = PRECISION - accumulator.processedMProb;
         accumulator.tracker.mass.record('rounding', distRoundingError);

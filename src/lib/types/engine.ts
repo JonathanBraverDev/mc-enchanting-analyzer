@@ -60,8 +60,12 @@ export interface ExploredMassSample {
 }
 
 export interface SearchTiming {
+  /** Reported engine time, including search and post-processing phases. */
   totalMs: number;
+  /** Time spent in the active best-first search loop. */
   searchMs: number;
+  /** Time spent converting raw search results into public stats. */
+  postProcessingMs?: number | undefined;
 }
 
 export type EngineExitReason = 'threshold' | 'iterations' | 'mass' | 'aborted' | 'empty' | 'exhausted';

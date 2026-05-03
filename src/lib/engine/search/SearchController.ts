@@ -40,7 +40,7 @@ export class SearchController {
 
             if (iterations > 0 && iterations % 1000 === 0) {
                 if (timing) {
-                    timing.searchMs += performance.now() - aggregateStart;
+                    timing.searchMs = (timing.searchMs ?? 0) + performance.now() - aggregateStart;
                 }
                 if (instrumentation) {
                     instrumentation.queueSize = queue.size();
@@ -103,7 +103,7 @@ export class SearchController {
         }
 
         if (timing) {
-            timing.searchMs += performance.now() - aggregateStart;
+            timing.searchMs = (timing.searchMs ?? 0) + performance.now() - aggregateStart;
         }
 
         if (!state.exitReason) {

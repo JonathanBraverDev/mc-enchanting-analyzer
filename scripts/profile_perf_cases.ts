@@ -42,7 +42,7 @@ async function runCase(testCase: PerfCase) {
     const engine = EngineFactory.create(DATA, testCase.version);
     engine.resetCaches();
 
-    const timing = { totalMs: 0, searchMs: 0 };
+    const timing = { totalMs: 0, searchMs: 0, postProcessingMs: 0 };
     const wallStart = performance.now();
     const stats = await engine.calculate({
         cat: testCase.cat,
@@ -58,14 +58,19 @@ async function runCase(testCase: PerfCase) {
     });
     const wallMs = performance.now() - wallStart;
 
+    const searchMs = stats.timing?.searchMs ?? timing.searchMs;
+    const postProcessingMs = stats.timing?.postProcessingMs ?? timing.postProcessingMs;
+    const engineTotalMs = stats.timing?.totalMs ?? timing.totalMs;
+
     return {
         name: testCase.name,
         clue: testCase.clue ?? '',
         wallMs,
-        searchMs: stats.timing?.searchMs ?? timing.searchMs,
-        engineTotalMs: stats.timing?.totalMs ?? timing.totalMs,
-        outsideEngineMs: wallMs - (stats.timing?.totalMs ?? timing.totalMs),
-        summaryAndOrchestrationMs: (stats.timing?.totalMs ?? timing.totalMs) - (stats.timing?.searchMs ?? timing.searchMs),
+        searchMs,
+        postProcessingMs,
+        engineTotalMs,
+        outsideEngineMs: wallMs - engineTotalMs,
+        searchOverheadMs: engineTotalMs - searchMs - postProcessingMs,
         combos: Object.keys(stats.combos).length,
         accuracy: stats.accuracy,
         clueKnownSpace: stats.accounting.clueKnownSpace
@@ -101,8 +106,9 @@ async function main() {
         clue: row.clue,
         wallMs: row.wallMs.toFixed(2),
         searchMs: row.searchMs.toFixed(2),
+        postProcessingMs: row.postProcessingMs.toFixed(2),
         engineTotalMs: row.engineTotalMs.toFixed(2),
-        summaryMs: row.summaryAndOrchestrationMs.toFixed(2),
+        searchOverheadMs: row.searchOverheadMs.toFixed(2),
         outsideEngineMs: row.outsideEngineMs.toFixed(2),
         combos: row.combos,
         accuracy: row.accuracy.toFixed(12),
