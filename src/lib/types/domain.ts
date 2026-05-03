@@ -18,7 +18,6 @@ export interface EnchantmentLevels {
  * @property conflicts List of enchantment names that conflict with this one.
  * @property valid_from Earliest version where this enchantment is available.
  * @property valid_to Latest version where this enchantment is available.
- * @property bookable Whether this enchantment can appear on enchanted books.
  */
 export interface Enchantment {
   weight: number;
@@ -26,7 +25,6 @@ export interface Enchantment {
   conflicts?: string[];
   valid_from?: string;
   valid_to?: string;
-  bookable?: boolean;
 }
 
 /**
