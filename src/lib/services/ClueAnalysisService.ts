@@ -19,7 +19,8 @@ export class ClueAnalysisService {
         combos: Map<PackedCombo, bigint>,
         targetClueId: number,
         indexToEnchant: number[],
-        frontiers: SearchFrontierSnapshot[] = []
+        frontiers: SearchFrontierSnapshot[] = [],
+        _isBook = false
     ): {
         combos: Map<PackedCombo, bigint>,
         anyMass: Map<number, bigint>,
@@ -52,8 +53,8 @@ export class ClueAnalysisService {
 
         for (const { frontier, graph, scale } of frontiers) {
             frontier.forEachNode((nodeId, prob) => {
-                totalMass += this.processConditionedNode(graph.getCombo(nodeId), ProbUtils.scale(prob, scale), targetClueId, pClue, indexToEnchant, conditionedCombos, anyMass, rankMass, countMass);
-            });
+            totalMass += this.processConditionedNode(graph.getCombo(nodeId), ProbUtils.scale(prob, scale), targetClueId, pClue, indexToEnchant, conditionedCombos, anyMass, rankMass, countMass);
+        });
         }
 
         // Final normalization to exactly 1.0 (Bit-perfect PRECISION)
