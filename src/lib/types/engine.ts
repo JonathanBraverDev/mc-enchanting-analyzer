@@ -133,8 +133,7 @@ export interface ExpansionBlueprint {
     probContinue: bigint;
     totalWeight: number;
     eligibleCount: number;
-    eligibleWeights: Int32Array;
-    childIds: Uint32Array;
+    edgeStart: number;
     currentCount: number;
     currentCombo: PackedCombo;
 }

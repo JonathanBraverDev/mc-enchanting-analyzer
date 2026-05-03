@@ -15,6 +15,7 @@ export class SearchNodeGraph {
     private static readonly LOW_MASK = 0xFFFFFFFFn;
     private static readonly NUMERIC_META_STRIDE = 256;
     private static readonly HI_MASK_SCALE = 0x100000000;
+    private static readonly INITIAL_EDGE_CAPACITY = 1024;
 
     private readonly numericKeyToId = new Map<number, number>();
     private readonly bigintMetaToId = new Map<bigint, number>();
@@ -26,6 +27,9 @@ export class SearchNodeGraph {
     private counts: number[] = [];
     private blueprints: Array<ExpansionBlueprint | undefined> = [];
     private residues: Array<ForwardingResidue | undefined> = [];
+    private edgeChildIds = new Uint32Array(SearchNodeGraph.INITIAL_EDGE_CAPACITY);
+    private edgeWeights = new Int32Array(SearchNodeGraph.INITIAL_EDGE_CAPACITY);
+    private edgeCount = 0;
 
     public getOrCreateNode(meta: bigint, combo: PackedCombo, count: number): number {
         if (meta <= SearchNodeGraph.MAX_SAFE_META) {
@@ -136,6 +140,28 @@ export class SearchNodeGraph {
         return residue;
     }
 
+    public beginEdgeSpan(): number {
+        return this.edgeCount;
+    }
+
+    public appendBlueprintEdge(childId: number, weight: number): void {
+        this.ensureEdgeCapacity(this.edgeCount + 1);
+        this.edgeChildIds[this.edgeCount] = childId;
+        this.edgeWeights[this.edgeCount] = weight;
+        this.edgeCount++;
+    }
+
+    public getEdgeChildId(edgeIndex: number): number {
+        if (edgeIndex < 0 || edgeIndex >= this.edgeCount) {
+            throw new Error(`Unknown blueprint edge index ${edgeIndex}`);
+        }
+        return this.edgeChildIds[edgeIndex]!;
+    }
+
+    public getEdgeWeights(): Int32Array {
+        return this.edgeWeights;
+    }
+
     public get size(): number {
         return this.combos.length;
     }
@@ -150,6 +176,11 @@ export class SearchNodeGraph {
         graph.counts = [...this.counts];
         graph.blueprints = [...this.blueprints];
         graph.residues = this.residues.map(residue => residue ? { residue: residue.residue } : undefined);
+        graph.edgeChildIds = new Uint32Array(this.edgeChildIds.length);
+        graph.edgeChildIds.set(this.edgeChildIds);
+        graph.edgeWeights = new Int32Array(this.edgeWeights.length);
+        graph.edgeWeights.set(this.edgeWeights);
+        graph.edgeCount = this.edgeCount;
         for (const [meta, nodeId] of this.numericKeyToId) {
             graph.numericKeyToId.set(meta, nodeId);
         }
@@ -195,6 +226,21 @@ export class SearchNodeGraph {
     private static metaFromParts(maskLo: number, maskHi: number, level: number): bigint {
         const bitset = (BigInt(maskHi) << SearchNodeGraph.LOW_MASK_BITS) | BigInt(maskLo);
         return (bitset << SearchNodeGraph.ENCHANT_SHIFT) | BigInt(level);
+    }
+
+    private ensureEdgeCapacity(required: number): void {
+        if (required <= this.edgeChildIds.length) return;
+
+        let nextCapacity = this.edgeChildIds.length;
+        while (nextCapacity < required) nextCapacity *= 2;
+
+        const nextChildIds = new Uint32Array(nextCapacity);
+        nextChildIds.set(this.edgeChildIds);
+        this.edgeChildIds = nextChildIds;
+
+        const nextWeights = new Int32Array(nextCapacity);
+        nextWeights.set(this.edgeWeights);
+        this.edgeWeights = nextWeights;
     }
 
     private assertNode(nodeId: number): void {

@@ -168,6 +168,7 @@ export class MassForwardingEngine {
         stack: ForwardingStackEntry[]
     ): bigint {
         const eligibleCount = blueprint.eligibleCount;
+        const edgeStart = blueprint.edgeStart;
         const splits = DistributionBufferPool.getBuffer(depth);
 
         const individualRemainder = probForward % BigInt(blueprint.totalWeight);
@@ -175,11 +176,12 @@ export class MassForwardingEngine {
 
         const { recovered } = ProbUtils.distributeWithResidue(
             probForward,
-            blueprint.eligibleWeights,
+            ctx.graph.getEdgeWeights(),
             blueprint.totalWeight,
             splits,
             ctx.graph.getForwardingResidue(nodeId),
-            eligibleCount
+            eligibleCount,
+            edgeStart
         );
 
         if (recovered > 0n) {
@@ -188,13 +190,11 @@ export class MassForwardingEngine {
             if (ctx.instrumentation) ctx.instrumentation.roundingErrorEvents++;
         }
 
-        const childIds = blueprint.childIds;
-
         for (let i = 0; i < eligibleCount; i++) {
             const pNext = splits[i];
             if (pNext === undefined || pNext === 0n) continue;
 
-            const childId = childIds[i]!;
+            const childId = ctx.graph.getEdgeChildId(edgeStart + i);
 
             // If the child is cached but we've reached max stack depth, fall back to the main queue
             // rather than recursing further. Mass is not lost: it enters pending and the main search

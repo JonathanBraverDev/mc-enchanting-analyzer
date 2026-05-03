@@ -140,8 +140,7 @@ export class SearchProcessor {
 
         const nextLevel = currentCount >= 1 ? Math.floor(currentLevel / 2) : currentLevel;
         const nextLevelBits = BIGINT_CONSTANTS.LEVEL_LOOKUP[nextLevel]!;
-        const eligibleWeights = new Int32Array(poolPlan.length);
-        const childIds = new Uint32Array(poolPlan.length);
+        const edgeStart = ctx.graph.beginEdgeSpan();
 
         if (poolPlan.numericIdentitySupported && ctx.graph.isNumericNode(nodeId)) {
             const currentMaskLo = ctx.graph.getMaskLo(nodeId);
@@ -155,7 +154,6 @@ export class SearchProcessor {
                 const conflictMaskHi = poolPlan.conflictMaskHi[i]!;
                 if ((currentMaskLo & conflictMaskLo) !== 0 || (currentMaskHi & conflictMaskHi) !== 0) continue;
                 const weight = poolPlan.weights[i]!;
-                eligibleWeights[eligibleCount] = weight;
                 totalWeight += weight;
 
                 const childMaskLo = (currentMaskLo | idMaskLo) >>> 0;
@@ -165,7 +163,7 @@ export class SearchProcessor {
                     const childCombo = ComboUtils.packAppendIndex(currentCombo, poolPlan.comboIndices[i]!, currentCount);
                     childId = ctx.graph.createNumericNode(childMaskLo, childMaskHi, nextLevel, childCombo, currentCount + 1);
                 }
-                childIds[eligibleCount] = childId;
+                ctx.graph.appendBlueprintEdge(childId, weight);
                 eligibleCount++;
             }
         } else {
@@ -177,13 +175,13 @@ export class SearchProcessor {
                 const conflictBitset = poolPlan.conflictBitsets[i]!;
                 if ((currentBitset & conflictBitset) !== 0n) continue;
                 const weight = poolPlan.weights[i]!;
-                eligibleWeights[eligibleCount] = weight;
                 totalWeight += weight;
 
                 const enchant = poolPlan.pool[i]!;
                 const childMeta = ((currentBitset | idBit) << BIGINT_CONSTANTS.ENCHANT_SHIFT) | nextLevelBits;
                 const childCombo = ComboUtils.packAppend(currentCombo, enchant, registry.enchantToIndex);
-                childIds[eligibleCount] = ctx.graph.getOrCreateNode(childMeta, childCombo, currentCount + 1);
+                const childId = ctx.graph.getOrCreateNode(childMeta, childCombo, currentCount + 1);
+                ctx.graph.appendBlueprintEdge(childId, weight);
                 eligibleCount++;
             }
         }
@@ -192,8 +190,7 @@ export class SearchProcessor {
             probContinue,
             totalWeight,
             eligibleCount,
-            eligibleWeights,
-            childIds,
+            edgeStart,
             currentCount,
             currentCombo
         };

@@ -34,12 +34,13 @@ describe('SearchStateTracker', () => {
     it('should register and retrieve graph expansion blueprints', () => {
         const graph = new SearchNodeGraph();
         const nodeId = graph.getOrCreateNode(1n, 0 as any, 0);
+        const edgeStart = graph.beginEdgeSpan();
+        graph.appendBlueprintEdge(nodeId, 100);
         const mockBlueprint: ExpansionBlueprint = {
             probContinue: 0n,
             totalWeight: 100,
             eligibleCount: 1,
-            eligibleWeights: new Int32Array([100]),
-            childIds: new Uint32Array([nodeId]),
+            edgeStart,
             currentCount: 0,
             currentCombo: 0 as any
         };
@@ -55,7 +56,9 @@ describe('SearchStateTracker', () => {
         const nodeId = graph.getOrCreateNode(99n, 0 as any, 1);
         const childA = graph.getOrCreateNode(1n, 1 as any, 2);
         const childB = graph.getOrCreateNode(2n, 2 as any, 2);
-        const weights = new Int32Array([10, 10]);
+        const edgeStart = graph.beginEdgeSpan();
+        graph.appendBlueprintEdge(childA, 10);
+        graph.appendBlueprintEdge(childB, 10);
         // With totalWeight 20, a prob of 15 would have individualRemainder 15.
         // If we have a residue of 5 already, then 15 + 5 = 20, which divides perfectly.
         // Recovered mass should be 15 (the remainder that was 'saved').
@@ -64,8 +67,7 @@ describe('SearchStateTracker', () => {
             probContinue: PRECISION, // 100% forward
             totalWeight: 20,
             eligibleCount: 2,
-            eligibleWeights: weights,
-            childIds: new Uint32Array([childA, childB]),
+            edgeStart,
             currentCount: 1,
             currentCombo: 0 as any
         };

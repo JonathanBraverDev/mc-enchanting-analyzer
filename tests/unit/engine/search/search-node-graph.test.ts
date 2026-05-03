@@ -89,8 +89,10 @@ describe('SearchNodeGraph', () => {
 
         assert.strictEqual(fromA.eligibleCount, 1);
         assert.strictEqual(fromB.eligibleCount, 1);
-        assert.strictEqual(fromA.childIds[0], fromB.childIds[0]);
-        assert.strictEqual(graph.getCombo(fromA.childIds[0]!), graph.getCombo(fromB.childIds[0]!));
+        const childFromA = graph.getEdgeChildId(fromA.edgeStart);
+        const childFromB = graph.getEdgeChildId(fromB.edgeStart);
+        assert.strictEqual(childFromA, childFromB);
+        assert.strictEqual(graph.getCombo(childFromA), graph.getCombo(childFromB));
     });
 
     it('deduplicates numeric nodes with enchant IDs above 31', () => {
@@ -151,12 +153,13 @@ describe('SearchNodeGraph', () => {
         const graph = new SearchNodeGraph();
         const nodeId = graph.getOrCreateNode(1n, 1 as PackedCombo, 1);
         const childId = graph.getOrCreateNode(2n, 2 as PackedCombo, 2);
+        const edgeStart = graph.beginEdgeSpan();
+        graph.appendBlueprintEdge(childId, 1);
         graph.setBlueprint(nodeId, {
             probContinue: 1n,
             totalWeight: 1,
             eligibleCount: 1,
-            eligibleWeights: new Int32Array([1]),
-            childIds: new Uint32Array([childId]),
+            edgeStart,
             currentCount: 1,
             currentCombo: 1 as PackedCombo
         });
@@ -168,5 +171,6 @@ describe('SearchNodeGraph', () => {
         assert.strictEqual(graph.getForwardingResidue(nodeId).residue, 7n);
         assert.strictEqual(clone.getForwardingResidue(nodeId).residue, 11n);
         assert.deepStrictEqual(clone.getBlueprint(nodeId), graph.getBlueprint(nodeId));
+        assert.strictEqual(clone.getEdgeChildId(edgeStart), childId);
     });
 });
