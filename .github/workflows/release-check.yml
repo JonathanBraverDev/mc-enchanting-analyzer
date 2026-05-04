@@ -156,3 +156,26 @@ jobs:
           else
             echo "Minor release documentation updates found."
           fi
+
+      - name: Verify Release History Is Ready
+        if: ${{ success() }}
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          git fetch origin \
+            "+refs/heads/main:refs/remotes/origin/main" \
+            "+refs/heads/release-history:refs/remotes/origin/release-history" \
+            "pull/${PR_NUMBER}/head:refs/remotes/origin/release-check-head"
+
+          if ! git diff --quiet origin/main origin/release-history; then
+            echo "::error::origin/release-history must match origin/main before this release merges. The archive is missing a previous production state."
+            exit 1
+          fi
+
+          RELEASE_COMMIT_COUNT=$(git rev-list --count "${{ github.event.pull_request.base.sha }}..refs/remotes/origin/release-check-head")
+          if [ "$RELEASE_COMMIT_COUNT" -lt 2 ]; then
+            echo "::error::Release PRs should carry the full release branch history, not a pre-squashed single commit. Let the main PR squash happen at merge time."
+            exit 1
+          fi
+
+          echo "origin/release-history is current with main, and the release PR carries branch history."
