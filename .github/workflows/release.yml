@@ -18,6 +18,7 @@ jobs:
     outputs:
       tag: ${{ steps.version.outputs.tag }}
       should_release: ${{ steps.version.outputs.should_release }}
+      pr_number: ${{ steps.version.outputs.pr_number }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -29,6 +30,7 @@ jobs:
         run: |
           SUBJECT=$(git log -1 --pretty=%s)
           TAG=$(printf '%s\n' "$SUBJECT" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n 1 || true)
+          PR_NUMBER=$(printf '%s\n' "$SUBJECT" | grep -oE '#[0-9]+' | tail -n 1 | tr -d '#' || true)
 
           if [ -z "$TAG" ]; then
             echo "No semantic version found in main commit subject: $SUBJECT"
@@ -37,6 +39,7 @@ jobs:
           fi
 
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
           echo "should_release=true" >> "$GITHUB_OUTPUT"
 
       - name: Use Node.js 22.x
@@ -108,8 +111,8 @@ jobs:
               --verify-tag
           fi
 
-  sync-dev:
-    name: Sync Dev Branch
+  archive-release-history:
+    name: Archive Release History
     needs: release
     if: needs.release.outputs.should_release == 'true'
     runs-on: ubuntu-latest
@@ -119,7 +122,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: dev
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Configure Git
@@ -127,8 +129,29 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Merge main into dev
+      - name: Archive release branch head
         run: |
-          git fetch origin main dev
-          git merge origin/main -m "sync: auto-align dev with production milestone"
-          git push origin dev
+          TAG="${{ needs.release.outputs.tag }}"
+          PR_NUMBER="${{ needs.release.outputs.pr_number }}"
+
+          if [ -z "$PR_NUMBER" ]; then
+            echo "::error::Could not find the release PR number in the main squash commit subject."
+            exit 1
+          fi
+
+          git fetch origin \
+            "+refs/heads/release-history:refs/remotes/origin/release-history" \
+            "+refs/heads/main:refs/remotes/origin/main" \
+            "pull/${PR_NUMBER}/head:refs/remotes/origin/release-branch-head"
+
+          if ! git diff --quiet origin/main refs/remotes/origin/release-branch-head; then
+            echo "::error::Release branch head does not match the released main commit tree."
+            exit 1
+          fi
+
+          ARCHIVE_COMMIT=$(git commit-tree refs/remotes/origin/release-branch-head^{tree} \
+            -p origin/release-history \
+            -p refs/remotes/origin/release-branch-head \
+            -m "archive: record $TAG release history")
+
+          git push origin "$ARCHIVE_COMMIT:refs/heads/release-history"
