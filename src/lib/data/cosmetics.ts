@@ -6,7 +6,6 @@ export const constants = {
 } satisfies EnchantmentData["constants"];
 
 export const cosmetics = {
-  "RANK_LIGHTNESS_BOOST": { "I": 0, "II": 5, "III": 10, "IV": 15, "V": 20, "VI": 25, "VII": 30, "VIII": 35, "IX": 40, "X": 45 },
   "ENCHANT_COLORS": {
     "Efficiency": "hsl(196, 82%, 60%)",
     "Unbreaking": "hsl(220, 12%, 68%)",

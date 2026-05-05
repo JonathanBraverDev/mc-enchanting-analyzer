@@ -171,7 +171,6 @@ export interface EnchantmentData {
     MATERIAL_PRIORITY: string[];
   };
   cosmetics: {
-    RANK_LIGHTNESS_BOOST: { [rank: string]: number };
     ENCHANT_COLORS: { [enchantment: string]: string };
   };
 }
