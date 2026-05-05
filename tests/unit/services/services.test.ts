@@ -14,24 +14,15 @@ import { HumanizationService } from '#services/HumanizationService.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { EngineFactory } from '#engine/factory.js';
 import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
-import { NodeIdSearchFrontier } from '#engine/search/NodeIdSearchFrontier.js';
-import { SearchNodeGraph } from '#engine/search/SearchNodeGraph.js';
 import { DATA } from '#data/index.js';
 import { ComboUtils } from '#utils/domain/ComboUtils.js';
 import { ProbUtils } from '#utils/index.js';
+import { makeFrontierSnapshot } from '#tests/infra/frontier-test-utils.js';
 import type { CalculationStats, MassAccounting, PackedCombo, PackedEnchant } from '#types/index.js';
 
 // ── SummaryService ────────────────────────────────────────────────────────────
 
 describe('SummaryService', () => {
-    const makeFrontier = (combo: PackedCombo, count: number, prob: bigint = PRECISION, scale: bigint = PRECISION) => {
-        const frontier = new NodeIdSearchFrontier();
-        const graph = new SearchNodeGraph();
-        const nodeId = graph.createNumericNode(1, 0, 30, combo, count);
-        frontier.pushOrMerge(nodeId, prob);
-        return [{ frontier, graph, scale }];
-    };
-
     it('empty combos map yields empty combos output', () => {
         const tracker = new SearchStateTracker();
         const result = SummaryService.summarize({ combos: new Map(), tracker, indexToEnchant: [] });
@@ -96,7 +87,7 @@ describe('SummaryService', () => {
         ]);
         const indexToEnchant = [0, enchantA, enchantB];
         const packed = ComboUtils.pack([enchantA, enchantB], enchantToIndex);
-        const frontiers = makeFrontier(packed, 2, PRECISION / 2n, PRECISION / 2n);
+        const frontiers = makeFrontierSnapshot(packed, 2, PRECISION / 2n, PRECISION / 2n);
         const expectedMass = ProbUtils.scale(PRECISION / 2n, PRECISION / 2n);
         const expectedClueMass = expectedMass / 2n;
 
@@ -122,7 +113,7 @@ describe('SummaryService', () => {
         ]);
         const indexToEnchant = [0, enchantA, enchantB, enchantC];
         const packed = ComboUtils.pack([enchantA, enchantB, enchantC], enchantToIndex);
-        const frontiers = makeFrontier(packed, 3);
+        const frontiers = makeFrontierSnapshot(packed, 3);
         const expectedAnyMass = (PRECISION * 2n) / 3n;
         const clueQuotient = PRECISION / 3n;
 

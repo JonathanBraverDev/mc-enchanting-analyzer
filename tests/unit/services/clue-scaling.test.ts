@@ -3,23 +3,14 @@ import assert from 'node:assert';
 import { PRECISION } from '#utils/math/ProbUtils.js';
 import { SummaryService } from '#services/SummaryService.js';
 import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
-import { NodeIdSearchFrontier } from '#engine/search/NodeIdSearchFrontier.js';
-import { SearchNodeGraph } from '#engine/search/SearchNodeGraph.js';
 import { ComboUtils } from '#utils/domain/ComboUtils.js';
-import type { PackedCombo, PackedEnchant } from '#types/index.js';
+import { makeFrontierSnapshot } from '#tests/infra/frontier-test-utils.js';
+import type { PackedEnchant } from '#types/index.js';
 
 describe('Clue Conditioning Scaling diagnostics', () => {
     // Mock indexToEnchant: 1 -> Sharpness I, 2 -> Sharpness II
     const indexToEnchant = [0, 1, 2];
     const targetClueId = 1; // Sharpness I
-
-    const makeFrontier = (combo: PackedCombo, count: number, prob: bigint = PRECISION, scale: bigint = PRECISION) => {
-        const frontier = new NodeIdSearchFrontier();
-        const graph = new SearchNodeGraph();
-        const nodeId = graph.createNumericNode(1, 0, 30, combo, count);
-        frontier.pushOrMerge(nodeId, prob);
-        return [{ frontier, graph, scale }];
-    };
 
     it('handles zero-mass clue (no combos match)', () => {
         const rawCombos = new Map<number, bigint>();
@@ -92,7 +83,7 @@ describe('Clue Conditioning Scaling diagnostics', () => {
             [2, 2]
         ]);
         const packed = ComboUtils.pack([targetClueId as PackedEnchant, 2 as PackedEnchant], enchantToIndex);
-        const frontiers = makeFrontier(packed, 2, PRECISION / 2n);
+        const frontiers = makeFrontierSnapshot(packed, 2, PRECISION / 2n);
 
         const tracker = new SearchStateTracker();
         tracker.mass.record('pending', PRECISION / 2n);
@@ -118,7 +109,7 @@ describe('Clue Conditioning Scaling diagnostics', () => {
             [enchantC, 3]
         ]);
         const packed = ComboUtils.pack([targetClueId as PackedEnchant, 2 as PackedEnchant, enchantC], enchantToIndex);
-        const frontiers = makeFrontier(packed, 3, PRECISION);
+        const frontiers = makeFrontierSnapshot(packed, 3, PRECISION);
 
         const tracker = new SearchStateTracker();
         tracker.mass.record('pending', PRECISION);
