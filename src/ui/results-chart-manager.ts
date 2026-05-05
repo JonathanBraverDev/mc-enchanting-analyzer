@@ -96,13 +96,15 @@ export class ChartManager {
                 return (a & 0xFF) - (b & 0xFF);
             }).slice(0, 32).forEach(idAndRank => {
                 const fullName = getFullEnchantName(registry, idAndRank);
-                const color = ThemeManager.getEnchantColor(idAndRank, registry);
+                const style = ThemeManager.getRankLineStyle(idAndRank, registry);
                 datasets.push({
                     label: fullName,
                     data: sweep.map(x => (x && x.buckets && x.buckets.rankByIdAndRank[idAndRank] || 0) * 100),
-                    borderColor: color,
-                    backgroundColor: color.replace(')', ', 0.1)'),
-                    borderWidth: 2, tension: 0.1, pointRadius: 0
+                    borderColor: style.color,
+                    backgroundColor: style.color.replace(')', ', 0.1)'),
+                    borderWidth: style.borderWidth,
+                    borderDash: style.borderDash,
+                    tension: 0.1, pointRadius: 0
                 });
             });
         } else {
