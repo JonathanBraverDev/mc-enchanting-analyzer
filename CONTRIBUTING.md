@@ -4,19 +4,21 @@ Thank you for your interest in contributing! This document provides guidelines f
 
 ## Workflow & Branching Strategy
 
-We follow a specialized workflow to ensure a clean production history while maintaining granular development context.
+We follow a specialized workflow to keep production history clean while preserving the granular commits that explain each release.
 
-1.  **Development (`dev`)**: All active development happens here or on feature branches merged into `dev`.
-    *   Every PR to `dev` must pass the full test suite and security scan.
-2.  **Releases (`release/vX.Y.Z`)**: When preparing for a release, create a branch from `dev`.
+1.  **Production (`main`)**: This branch is the source of truth and contains only squash-merged milestone commits.
+    *   Start feature, performance, registry, and release branches from the current `main`.
+    *   Rebase long-lived work onto `main` before opening or updating a release PR.
+2.  **Release branches (`release/vX.Y.Z`)**: Prepare each version on a branch created from `main`.
+    *   Keep the normal commit history on the branch. Do not squash it before opening the PR.
     *   Update the `CHANGELOG.md` on this branch.
-    *   For major releases, update `ARCHITECTURE.md` and at least one other top-level project doc (`README.md`, `MASS_HANDLING.md`, or `CONTRIBUTING.md`).
+    *   For major releases, update `ARCHITECTURE.md`.
     *   For minor releases, update project docs when behavior, architecture, workflows, or user-facing capabilities changed.
-    *   Patch releases are exempt from release documentation checks unless the patch changes documented behavior.
-    *   PR the release branch into `main`.
-3.  **Production (`main`)**: This branch contains ONLY milestone commits.
-    *   Releases are merged into `main` using **Squash and Merge**.
-    *   Upon merge, `main` is automatically rebased back into `dev` to keep them synchronized.
+    *   PR the release branch into `main` and merge it using **Squash and Merge**.
+3.  **Release archive (`release-history`)**: This branch records the full commit history that produced each release.
+    *   The release workflow archives the original release PR head after the squash merge lands on `main`.
+    *   `release-history` must match the current `main` tree before each release PR merges.
+    *   Do not push to `release-history` manually; it is maintained by the release workflow.
 
 ## Development Principles
 

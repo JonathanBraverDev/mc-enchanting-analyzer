@@ -1,8 +1,8 @@
-name: Dev Testing Flow
+name: PR Testing Flow
 
 on:
   push:
-    branches: [ "dev", "main" ]
+    branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
 

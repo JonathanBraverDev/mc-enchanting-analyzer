@@ -133,7 +133,6 @@ jobs:
             exit 0
           fi
 
-          CORE_DOC_PATTERN='^(README|MASS_HANDLING|CONTRIBUTING)\.md$'
           PROJECT_DOC_PATTERN='^(ARCHITECTURE|README|MASS_HANDLING|CONTRIBUTING)\.md$'
 
           if [ "$BUMP" = "major" ]; then
@@ -142,12 +141,7 @@ jobs:
               exit 1
             fi
 
-            if ! printf '%s\n' "$CHANGED_FILES" | grep -Eq "$CORE_DOC_PATTERN"; then
-              echo "::error::Major releases must update at least one additional top-level project doc: README.md, MASS_HANDLING.md, or CONTRIBUTING.md."
-              exit 1
-            fi
-
-            echo "Major release documentation updates found."
+            echo "Major release architecture documentation update found."
             exit 0
           fi
 
@@ -157,7 +151,7 @@ jobs:
             echo "Minor release documentation updates found."
           fi
 
-      - name: Verify Release History Is Ready
+      - name: Verify Release Branch and Archive Readiness
         if: ${{ success() }}
         env:
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -172,10 +166,17 @@ jobs:
             exit 1
           fi
 
-          RELEASE_COMMIT_COUNT=$(git rev-list --count "${{ github.event.pull_request.base.sha }}..refs/remotes/origin/release-check-head")
+          CURRENT_MAIN=$(git rev-parse origin/main)
+          RELEASE_BASE=$(git merge-base origin/main refs/remotes/origin/release-check-head)
+          if [ "$RELEASE_BASE" != "$CURRENT_MAIN" ]; then
+            echo "::error::Release branches must be based on the current main branch. Rebase this branch onto origin/main before merging."
+            exit 1
+          fi
+
+          RELEASE_COMMIT_COUNT=$(git rev-list --count "origin/main..refs/remotes/origin/release-check-head")
           if [ "$RELEASE_COMMIT_COUNT" -lt 2 ]; then
             echo "::error::Release PRs should carry the full release branch history, not a pre-squashed single commit. Let the main PR squash happen at merge time."
             exit 1
           fi
 
-          echo "origin/release-history is current with main, and the release PR carries branch history."
+          echo "origin/release-history is current with main, and the release PR starts from main with branch history intact."
