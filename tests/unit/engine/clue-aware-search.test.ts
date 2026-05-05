@@ -4,72 +4,17 @@ import { EngineFactory } from '#engine/factory.js';
 import { SearchProcessor } from '#engine/search/SearchProcessor.js';
 import { ClueSearchPolicy } from '#engine/search/ClueSearchPolicy.js';
 import { DATA } from '#data/index.js';
-import { ClueValidator } from '#core/clue.js';
-import { SummaryService } from '#services/SummaryService.js';
 import { ComboUtils } from '#utils/domain/ComboUtils.js';
 import { TEST_DATA } from '#tests/infra/test-data.js';
+import {
+    calculateByFullSearchThenCondition,
+    calculateWithPruning,
+    compareConditionedMaps,
+    summarizeCheckpoint
+} from '#tests/infra/clue-test-utils.js';
 import type { CalculationStats, PackedCombo, PackedEnchant } from '#types/index.js';
 
 describe('Clue-aware search optimization', () => {
-    const compareConditionedMaps = (actual: Record<string, number>, expected: Record<string, number>, label: string) => {
-        const keys = new Set([...Object.keys(actual), ...Object.keys(expected)]);
-        for (const key of keys) {
-            const actualValue = actual[key] ?? 0;
-            const expectedValue = expected[key] ?? 0;
-            assert.ok(
-                Math.abs(actualValue - expectedValue) < 1e-8,
-                `${label}[${key}] expected ${expectedValue}, got ${actualValue}`
-            );
-        }
-    };
-
-    const calculateByFullSearchThenCondition = async (
-        cat: string,
-        mat: string,
-        clue: string,
-        threshold: number
-    ): Promise<CalculationStats> => {
-        const engine = EngineFactory.create(DATA, '1.21.11');
-        engine.resetCaches();
-        const targetClueId = ClueValidator.validate(engine.registry, cat, clue);
-        const fullSearch = await engine.searchToCheckpoint({
-            cat,
-            xp: 30,
-            mat,
-            threshold,
-            useCache: false
-        });
-
-        return SummaryService.summarizeConditioned({
-            combos: fullSearch.combos,
-            tracker: fullSearch.tracker,
-            indexToEnchant: engine.registry.indexToEnchant,
-            targetClueId,
-            frontiers: fullSearch.frontiers,
-            isBook: cat === TEST_DATA.ITEMS.BOOK,
-            comboLimit: 1000
-        });
-    };
-
-    const calculateWithPruning = async (
-        cat: string,
-        mat: string,
-        clue: string,
-        threshold: number
-    ): Promise<CalculationStats> => {
-        const engine = EngineFactory.create(DATA, '1.21.11');
-        engine.resetCaches();
-        return engine.calculate({
-            cat,
-            xp: 30,
-            mat,
-            clue,
-            threshold,
-            useCache: false,
-            summaryLimit: 1000
-        });
-    };
-
     const assertMatchesFullSearchConditioning = async (cat: string, mat: string, clue: string, threshold = 0.005) => {
         const baseline = await calculateByFullSearchThenCondition(cat, mat, clue, threshold);
         const optimized = await calculateWithPruning(cat, mat, clue, threshold);
@@ -92,6 +37,75 @@ describe('Clue-aware search optimization', () => {
     it('matches full-search conditioning for common and rare modern book clues', async () => {
         await assertMatchesFullSearchConditioning(TEST_DATA.ITEMS.BOOK, TEST_DATA.MATERIALS.BOOK, 'Protection III', 0.01);
         await assertMatchesFullSearchConditioning(TEST_DATA.ITEMS.BOOK, TEST_DATA.MATERIALS.BOOK, 'Projectile Protection IV', 0.01);
+    });
+
+    it('searchToCheckpoint forwards clue pruning through the public checkpoint API', async () => {
+        const cat = TEST_DATA.ITEMS.SWORD;
+        const mat = TEST_DATA.MATERIALS.DIAMOND;
+        const clue = 'Sharpness IV';
+        const threshold = 0.005;
+        const baseline = await calculateByFullSearchThenCondition(cat, mat, clue, threshold);
+        const engine = EngineFactory.create(DATA, '1.21.11');
+        engine.resetCaches();
+
+        const result = await engine.searchToCheckpoint({
+            cat,
+            xp: 30,
+            mat,
+            clue,
+            threshold,
+            useCache: false
+        });
+        const optimized = summarizeCheckpoint(engine, result, cat, clue);
+
+        assert.strictEqual(optimized.accounting.clueKnownSpace, baseline.accounting.clueKnownSpace);
+        compareConditionedMaps(optimized.any, baseline.any, `${clue} checkpoint any`);
+        compareConditionedMaps(optimized.ranks, baseline.ranks, `${clue} checkpoint ranks`);
+        compareConditionedMaps(optimized.count, baseline.count, `${clue} checkpoint count`);
+        compareConditionedMaps(optimized.combos, baseline.combos, `${clue} checkpoint combos`);
+        assert.ok(result.tracker.mass.toPublic().sieved > baseline.accounting.sieved);
+    });
+
+    it('searchSequentialCheckpoints forwards clue pruning for every streamed checkpoint', async () => {
+        const cat = TEST_DATA.ITEMS.BOOK;
+        const mat = TEST_DATA.MATERIALS.BOOK;
+        const clue = 'Protection III';
+        const checkpoints = [
+            { threshold: 0.05, limit: 15_000 },
+            { threshold: 0.01, limit: 40_000 }
+        ];
+        const baselines = await Promise.all(
+            checkpoints.map(checkpoint => calculateByFullSearchThenCondition(cat, mat, clue, checkpoint.threshold))
+        );
+        const engine = EngineFactory.create(DATA, '1.21.11');
+        engine.resetCaches();
+        const streamed: CalculationStats[] = [];
+        const rawSieved: number[] = [];
+
+        await engine.searchSequentialCheckpoints({
+            cat,
+            xp: 30,
+            mat,
+            clue,
+            checkpoints,
+            useCache: false,
+            onCheckpointComplete: (result) => {
+                streamed.push(summarizeCheckpoint(engine, result, cat, clue));
+                rawSieved.push(result.tracker.mass.toPublic().sieved);
+            }
+        });
+
+        assert.strictEqual(streamed.length, checkpoints.length);
+        for (let i = 0; i < checkpoints.length; i++) {
+            const optimized = streamed[i]!;
+            const baseline = baselines[i]!;
+            assert.strictEqual(optimized.accounting.clueKnownSpace, baseline.accounting.clueKnownSpace);
+            compareConditionedMaps(optimized.any, baseline.any, `${clue} sequential ${i} any`);
+            compareConditionedMaps(optimized.ranks, baseline.ranks, `${clue} sequential ${i} ranks`);
+            compareConditionedMaps(optimized.count, baseline.count, `${clue} sequential ${i} count`);
+            compareConditionedMaps(optimized.combos, baseline.combos, `${clue} sequential ${i} combos`);
+            assert.ok(rawSieved[i]! > baseline.accounting.sieved);
+        }
     });
 
     it('filters redistributed book outcomes that lost the clue', () => {

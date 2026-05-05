@@ -240,7 +240,8 @@ export class SearchService {
                     resultsLimit: request.resultsLimit ?? ENGINE_LIMITS.MAX_RESULTS_SIZE,
                     signal,
                     instrumentation,
-                    timing: request.timing
+                    timing: request.timing,
+                    targetClueId: request.targetClueId
                 });
 
                 stateMap.set(ml, result);
