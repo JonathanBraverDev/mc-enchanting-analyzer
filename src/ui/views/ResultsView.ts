@@ -312,7 +312,7 @@ export class ResultsView {
 
             const meta = document.createElement("div");
             meta.style.cssText = "grid-column: 1 / -1; font-size: 0.68rem; color: var(--text-muted);";
-            meta.textContent = `Shown ${UIUtils.formatPercent(recommendation.clueShare)} · joint ${UIUtils.formatPercent(recommendation.targetAndClueShare)}`;
+            meta.textContent = this.formatClueAdvisorMeta(recommendation);
 
             row.append(label, chance, meta);
             info.appendChild(row);
@@ -350,13 +350,25 @@ export class ResultsView {
 
             const meta = document.createElement("div");
             meta.style.cssText = "grid-column: 1 / -1; font-size: 0.68rem; color: var(--text-muted);";
-            meta.textContent = `Shown ${UIUtils.formatPercent(recommendation.clueShare)} · joint ${UIUtils.formatPercent(recommendation.targetAndClueShare)}`;
+            meta.textContent = this.formatClueAdvisorMeta(recommendation);
 
             row.append(label, chance, meta);
             info.appendChild(row);
         }
 
         fragment.appendChild(info);
+    }
+
+    private formatClueAdvisorMeta(recommendation: {
+        clueShare: number;
+        compatibleBaselineChance: number;
+        liftOverCompatibleBaseline: number;
+    }): string {
+        const lift = recommendation.liftOverCompatibleBaseline > 0
+            ? `${recommendation.liftOverCompatibleBaseline.toFixed(1)}x`
+            : 'n/a';
+
+        return `Shown ${UIUtils.formatPercent(recommendation.clueShare)} · compatible baseline ${UIUtils.formatPercent(recommendation.compatibleBaselineChance)} · ${lift}`;
     }
 
     private createTargetDiagnosticRow(labelText: string, share: number, count: number): HTMLElement {
