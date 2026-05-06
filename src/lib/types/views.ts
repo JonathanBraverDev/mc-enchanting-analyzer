@@ -1,4 +1,5 @@
 import { ProbabilityShare, TopInputSignature, RefinementLevelName, ChartInputSignature, PassId } from '#lib/types/protocol.js';
+import type { TargetDiagnosticsView } from '#lib/types/target.js';
 
 export interface NormalizationView {
   domain: 'resolved-mass' | 'clue-known-space';
@@ -42,6 +43,7 @@ export interface TopRunView {
   accounting: AccountingView;
   combos: TopComboView[];
   enchants: TopEnchantShareView[];
+  target?: TargetDiagnosticsView | undefined;
 }
 
 export interface ChartPassView {
@@ -79,4 +81,5 @@ export interface ChartCellView {
   normalization: NormalizationView;
   accounting?: AccountingView;
   buckets: ChartBucketsView;
+  target?: TargetDiagnosticsView | undefined;
 }

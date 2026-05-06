@@ -4,7 +4,8 @@ import {
   ChartCellView,
   RefinementLevelName,
   TopInputSignature,
-  ChartInputSignature
+  ChartInputSignature,
+  TargetRequirementInput
 } from '#types/index.js';
 import { UI_TEXTS, UI_DEFAULTS, RefinementStatusLevel, getSearchCheckpointForRefinement } from '#core/config.js';
 import { WorkerClient } from '#ui/worker-client.js';
@@ -15,6 +16,7 @@ export interface RefinementPayload {
     clue: string | null;
     xpLevel: number;
     version: string;
+    targets?: TargetRequirementInput[] | undefined;
 }
 
 export interface RefinementCallbacks {
@@ -61,14 +63,16 @@ export class RefinementService {
                 xpLevel: payload.xpLevel,
                 material: payload.material,
                 clue: payload.clue,
-                version: payload.version
+                version: payload.version,
+                targets: payload.targets
             };
 
             const chartInput: ChartInputSignature = {
                 category: payload.category,
                 material: payload.material,
                 clue: payload.clue,
-                version: payload.version
+                version: payload.version,
+                targets: payload.targets
             };
 
             const refinementLevels: RefinementLevelName[] = ['coarse', 'standard', 'deep', 'ultra'];
@@ -137,5 +141,58 @@ export class RefinementService {
                 this.isSweepRunning = false;
             }
         }
+    }
+
+    public async projectTop(
+        payload: RefinementPayload,
+        registry: RegistryState,
+        callbacks: RefinementCallbacks
+    ): Promise<void> {
+        const generation = this.activeRunGeneration;
+        this.isRefining = true;
+
+        const topInput: TopInputSignature = {
+            category: payload.category,
+            xpLevel: payload.xpLevel,
+            material: payload.material,
+            clue: payload.clue,
+            version: payload.version,
+            targets: payload.targets
+        };
+
+        const refinementLevels: RefinementLevelName[] = ['coarse', 'standard', 'deep', 'ultra'];
+        const isBook = payload.category === 'book';
+
+        WorkerClient.projectTopRun(
+            topInput,
+            refinementLevels,
+            (view) => {
+                if (this.activeRunGeneration !== generation) return;
+
+                const params = getSearchCheckpointForRefinement(view.refinementLevel, isBook);
+                callbacks.onStatus(params.status, view.refinementLevel);
+                callbacks.onStats(view, view.refinementLevel === 'ultra');
+            },
+            (status, error) => {
+                if (this.activeRunGeneration !== generation) return;
+
+                this.isRefining = false;
+                if (status === 'done') {
+                    callbacks.onStatus(UI_TEXTS.STATUS_COMPLETE, "done");
+                } else if (status === 'error') {
+                    console.warn("Top projection cache miss:", error);
+                    void this.run(payload, registry, callbacks);
+                }
+            }
+        );
+
+        await new Promise<void>((resolve) => {
+            const interval = setInterval(() => {
+                if (!this.isRefining || this.activeRunGeneration !== generation) {
+                    clearInterval(interval);
+                    resolve();
+                }
+            }, 100);
+        });
     }
 }

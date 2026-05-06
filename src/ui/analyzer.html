@@ -61,6 +61,15 @@
         </div>
 
         <div class="control-group">
+            <label for="target-select">Target Combination</label>
+            <div class="target-picker">
+                <select id="target-select"></select>
+                <button id="target-add" type="button" title="Add target">+</button>
+            </div>
+            <div id="target-list" class="target-list" aria-live="polite"></div>
+        </div>
+
+        <div class="control-group">
             <label for="lvl-range">Enchanting Level: <span id="lvl-val">30</span></label>
             <input type="range" id="lvl-range" min="1" max="30" value="30">
         </div>

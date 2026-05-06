@@ -11,7 +11,8 @@ import {
   TopEnchantShareView,
   ChartBucketsView,
   RefinementLevelName,
-  SearchFrontierSnapshot
+  SearchFrontierSnapshot,
+  TargetDiagnosticsView
 } from '#types/index.js';
 import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
 import { ProbUtils, ComboUtils } from '#utils/index.js';
@@ -20,6 +21,7 @@ import { getFullEnchantName, getEnchantName } from '#core/registry.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import { ClueValidator } from '#core/clue.js';
 import { SummaryAggregationService } from '#services/SummaryAggregationService.js';
+import { TargetAnalysisService } from '#services/TargetAnalysisService.js';
 
 
 export class SnapshotService {
@@ -82,6 +84,30 @@ export class SnapshotService {
       };
     }
 
+    const packedTargets = TargetAnalysisService.packTargets(state, request.input.category, request.input.targets);
+    const targetAnalysis = TargetAnalysisService.aggregate({
+      combos: result.combos,
+      indexToEnchant: state.indexToEnchant,
+      targets: packedTargets,
+      frontiers: isConditioned ? [] : frontiers,
+      comboLimit: snapshotType === 'top' ? comboLimit ?? ENGINE_LIMITS.MAX_RESULTS_SUMMARY : 0,
+      registry: state
+    });
+    const targetDiagnostics: TargetDiagnosticsView | undefined = targetAnalysis
+      ? {
+        labels: packedTargets.map(target => target.label),
+        matchShare: ProbUtils.toNumber(targetAnalysis.matchMass),
+        matchingComboCount: targetAnalysis.matchingComboCount,
+        nearMissShare: ProbUtils.toNumber(targetAnalysis.nearMissMass),
+        nearMissComboCount: targetAnalysis.nearMissComboCount,
+        blockedShare: ProbUtils.toNumber(targetAnalysis.blockedMass),
+        blockedComboCount: targetAnalysis.blockedComboCount
+      }
+      : undefined;
+    const displayResult = targetAnalysis
+      ? { ...result, combos: targetAnalysis.combos }
+      : result;
+
     const accounting = tracker.mass.toPublic();
     const normalization: NormalizationView = {
       domain: isConditioned ? 'clue-known-space' : 'resolved-mass',
@@ -96,8 +122,9 @@ export class SnapshotService {
         isConditioned,
         normalization,
         accounting,
-        result,
-        comboLimit ?? ENGINE_LIMITS.MAX_RESULTS_SUMMARY
+        displayResult,
+        comboLimit ?? ENGINE_LIMITS.MAX_RESULTS_SUMMARY,
+        targetDiagnostics
       );
     } else {
       return this.createChartCellView(
@@ -106,7 +133,8 @@ export class SnapshotService {
         isConditioned,
         normalization,
         accounting,
-        result
+        result,
+        targetDiagnostics
       );
     }
   }
@@ -130,7 +158,8 @@ export class SnapshotService {
     normalization: NormalizationView,
     accounting: AccountingView,
     result: { anyMass: Map<number, bigint>, rankMass: Map<number, bigint>, countMass: Map<number, bigint>, combos: Map<PackedCombo, bigint> },
-    comboLimit: number
+    comboLimit: number,
+    target?: TargetDiagnosticsView
   ): TopRunView {
     const combos: TopComboView[] = [];
     const entries = [...result.combos.entries()].sort((a, b) => b[1] > a[1] ? 1 : (b[1] < a[1] ? -1 : 0));
@@ -164,7 +193,8 @@ export class SnapshotService {
       normalization,
       accounting,
       combos,
-      enchants
+      enchants,
+      target
     };
   }
 
@@ -174,7 +204,8 @@ export class SnapshotService {
     clueConditioned: boolean,
     normalization: NormalizationView,
     accounting: AccountingView,
-    result: { anyMass: Map<number, bigint>, rankMass: Map<number, bigint>, countMass: Map<number, bigint> }
+    result: { anyMass: Map<number, bigint>, rankMass: Map<number, bigint>, countMass: Map<number, bigint> },
+    target?: TargetDiagnosticsView
   ): ChartCellView {
     const buckets: ChartBucketsView = {
       anyByEnchantId: {},
@@ -200,7 +231,8 @@ export class SnapshotService {
       clueConditioned,
       normalization,
       accounting,
-      buckets
+      buckets,
+      target
     };
   }
 }

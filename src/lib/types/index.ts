@@ -6,5 +6,6 @@ export * from './mass.js';
 export * from './protocol.js';
 export * from './views.js';
 export * from './snapshot.js';
+export * from './target.js';
 import { SearchState } from '#types/engine.js';
 export type SearchFrontier = SearchState;

@@ -3,6 +3,12 @@ import {
     WorkerRequest,
     TopUpdateResponse,
     RunAcceptedResponse,
+    SearchResult,
+    RefinementLevelName,
+    TopInputSignature,
+    RequestId,
+    RunId,
+    RegistryState
 } from '#types/index.js';
 import { SnapshotService } from '#services/SnapshotService.js';
 import { getSearchCheckpointForRefinement } from '#core/config.js';
@@ -11,23 +17,48 @@ import { ClueValidator } from '#core/clue.js';
 const workerScope = self as any;
 const shell = new WorkerShell('top', workerScope);
 
+interface CachedTopCheckpoint {
+    refinementLevel: RefinementLevelName;
+    result: SearchResult;
+}
+
+interface CachedTopRun {
+    baseKey: string;
+    checkpoints: CachedTopCheckpoint[];
+}
+
+let latestTopRun: CachedTopRun | null = null;
+
 shell.onRun = async (msg: WorkerRequest, engine, signal) => {
+    if (msg.type === 'topRunProject') {
+        const { requestId, runId, input, refinementLevels } = msg;
+        const baseKey = getProjectionBaseKey(input, refinementLevels);
+
+        if (input.clue) {
+            ClueValidator.validate(engine.registry, input.category, input.clue);
+        }
+
+        if (!latestTopRun || latestTopRun.baseKey !== baseKey || latestTopRun.checkpoints.length === 0) {
+            throw new Error('No compatible cached top result is available for target projection.');
+        }
+
+        postAccepted(requestId, runId, input);
+
+        for (const cached of latestTopRun.checkpoints) {
+            if (signal.aborted || shell.runId !== runId) return;
+            postTopSnapshot(runId, engine.registry, input, cached.refinementLevel, cached.result);
+        }
+        return;
+    }
+
     if (msg.type !== 'topRunStart') return;
 
     const { requestId, runId, input, refinementLevels } = msg;
     const isBook = input.category === 'book';
+    const baseKey = getProjectionBaseKey(input, refinementLevels);
+    const cachedCheckpoints: CachedTopCheckpoint[] = [];
 
-    // Notify UI that run is accepted
-    const accepted: RunAcceptedResponse = {
-        type: 'runAccepted',
-        requestId,
-        worker: 'top',
-        runId,
-        input,
-        state: 'calculating',
-        message: 'worker-handoff'
-    };
-    workerScope.postMessage(accepted);
+    postAccepted(requestId, runId, input);
 
     // Upfront clue validation
     if (input.clue) {
@@ -45,34 +76,72 @@ shell.onRun = async (msg: WorkerRequest, engine, signal) => {
             if (signal.aborted || shell.runId !== runId) return;
 
             const level = refinementLevels[checkpointIndex]!;
-
-            const view = SnapshotService.create(
-                engine.registry,
-                result.tracker,
-                result.combos,
-                {
-                    snapshotType: 'top',
-                    input,
-                    refinementLevel: level,
-                    clue: input.clue
-                },
-                result.frontiers
-            );
-
-            const response: TopUpdateResponse = {
-                type: 'topUpdate',
-                worker: 'top',
-                runId,
-                refinementLevel: level,
-                view: view as any
+            cachedCheckpoints[checkpointIndex] = { refinementLevel: level, result };
+            latestTopRun = {
+                baseKey,
+                checkpoints: cachedCheckpoints.filter(Boolean)
             };
-
-            workerScope.postMessage(response);
+            postTopSnapshot(runId, engine.registry, input, level, result);
         },
         clue: input.clue,
         signal
     });
 };
+
+function getProjectionBaseKey(input: TopInputSignature, refinementLevels: RefinementLevelName[]): string {
+    return JSON.stringify({
+        version: input.version,
+        category: input.category,
+        material: input.material,
+        xpLevel: input.xpLevel,
+        clue: input.clue,
+        refinementLevels
+    });
+}
+
+function postAccepted(requestId: RequestId, runId: RunId, input: TopInputSignature): void {
+    const accepted: RunAcceptedResponse = {
+        type: 'runAccepted',
+        requestId,
+        worker: 'top',
+        runId,
+        input,
+        state: 'calculating',
+        message: 'worker-handoff'
+    };
+    workerScope.postMessage(accepted);
+}
+
+function postTopSnapshot(
+    runId: RunId,
+    registry: RegistryState,
+    input: TopInputSignature,
+    refinementLevel: RefinementLevelName,
+    result: SearchResult
+): void {
+    const view = SnapshotService.create(
+        registry,
+        result.tracker,
+        result.combos,
+        {
+            snapshotType: 'top',
+            input,
+            refinementLevel,
+            clue: input.clue
+        },
+        result.frontiers
+    );
+
+    const response: TopUpdateResponse = {
+        type: 'topUpdate',
+        worker: 'top',
+        runId,
+        refinementLevel,
+        view: view as any
+    };
+
+    workerScope.postMessage(response);
+}
 
 workerScope.onmessage = async (e: MessageEvent<WorkerRequest>) => {
     await shell.dispatchEvent(e);

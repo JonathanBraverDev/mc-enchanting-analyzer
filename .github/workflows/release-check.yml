@@ -4,7 +4,7 @@ on:
   pull_request:
     branches:
       - main
-    types: [opened, edited, synchronize]
+    types: [opened, edited, synchronize, reopened, ready_for_review]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
@@ -35,12 +35,23 @@ jobs:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
           TITLE="$PR_TITLE"
-          if [[ ! "$TITLE" =~ ^Release:\ v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
-            echo "::error::PR title must follow the pattern 'Release: vX.Y.Z' (current: '$TITLE')"
+          if [[ ! "$TITLE" =~ ^Release:\ v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::PR title must exactly follow the pattern 'Release: vX.Y.Z' (current: '$TITLE')"
             exit 1
           fi
           TAG=$(echo "$TITLE" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)
           echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Verify Title Matches Package Metadata
+        run: |
+          PROPOSED_TAG="${{ steps.check_title.outputs.tag }}"
+          PROPOSED_VERSION="${PROPOSED_TAG#v}"
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+
+          if [ "$PACKAGE_VERSION" != "$PROPOSED_VERSION" ]; then
+            echo "::error::Release PR title $PROPOSED_TAG does not match package.json version $PACKAGE_VERSION."
+            exit 1
+          fi
 
       - name: Check PR Description
         env:
