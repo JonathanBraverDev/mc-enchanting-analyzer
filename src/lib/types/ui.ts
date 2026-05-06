@@ -56,4 +56,5 @@ export interface ChartDataset {
     pointRadius: number;
     borderDash?: number[];
     groupKey?: string;
+    rankLevel?: number;
 }

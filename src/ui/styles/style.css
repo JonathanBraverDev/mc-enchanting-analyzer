@@ -168,6 +168,63 @@ header h1 {
     position: relative;
 }
 
+.chart-custom-legend {
+    display: grid;
+    gap: 14px;
+    margin-top: 18px;
+}
+
+.chart-legend-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.chart-legend-title {
+    color: var(--text-muted);
+    font-size: 0.7rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.chart-legend-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.chart-legend-item {
+    align-items: center;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--glass-border);
+    border-radius: 999px;
+    color: var(--text);
+    cursor: pointer;
+    display: inline-flex;
+    font: inherit;
+    font-size: 0.75rem;
+    gap: 7px;
+    padding: 6px 10px;
+}
+
+.chart-legend-item.is-hidden {
+    color: var(--text-muted);
+    opacity: 0.45;
+}
+
+.chart-legend-swatch {
+    border-radius: 999px;
+    display: inline-block;
+    height: 10px;
+    width: 10px;
+}
+
+.chart-style-sample {
+    height: 4px;
+    width: 34px;
+}
+
 /* List Sections */
 .combo-list {
     display: flex;

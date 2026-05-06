@@ -34,9 +34,13 @@ export class ChartManager {
     private chart: ChartInstance | null = null;
     get chartInstance(): ChartInstance | null { return this.chart; }
     private canvas: HTMLCanvasElement | null = null;
+    private hiddenGroups = new Set<string>();
+    private legendEl: HTMLElement | null = null;
+    private legendSignature = '';
 
     constructor(canvasId: string) {
         this.canvas = document.getElementById(canvasId) as HTMLCanvasElement;
+        this.legendEl = document.getElementById('chart-custom-legend');
     }
 
     public destroy(): void {
@@ -52,6 +56,8 @@ export class ChartManager {
         if (this.chart) {
             this.chart.data.labels = labels;
             this.chart.data.datasets = datasets;
+            this.renderGroupedLegend(datasets);
+            if (datasets.some(dataset => dataset.groupKey)) this.applyGroupVisibility();
             this.chart.update('none'); // 'none' for performance during rapid updates
             return;
         }
@@ -62,6 +68,8 @@ export class ChartManager {
                 data: { labels, datasets },
                 options: this.getChartOptions()
             });
+            this.renderGroupedLegend(datasets);
+            if (datasets.some(dataset => dataset.groupKey)) this.applyGroupVisibility();
         } catch (e) {
             console.error("Failed to render chart:", e);
         }
@@ -138,6 +146,7 @@ export class ChartManager {
                 datasets.push({
                     label: fullName,
                     groupKey: baseName,
+                    rankLevel: idAndRank & 0xFF,
                     data: sweep.map(x => (x && x.buckets && x.buckets.rankByIdAndRank[idAndRank] || 0) * 100),
                     borderColor: style.color,
                     backgroundColor: ThemeManager.withAlpha(style.color, 0.1),
@@ -168,6 +177,134 @@ export class ChartManager {
     }
 
 
+    private applyGroupVisibility(): void {
+        if (!this.chart) return;
+
+        (this.chart.data.datasets as ChartDataset[]).forEach((dataset, index) => {
+            const shouldShow = !dataset.groupKey || !this.hiddenGroups.has(dataset.groupKey);
+            if (shouldShow) this.chart!.show(index);
+            else this.chart!.hide(index);
+        });
+    }
+
+
+    private renderGroupedLegend(datasets: ChartDataset[]): void {
+        if (!this.legendEl) return;
+
+        const groupedDatasets = datasets.filter(dataset => dataset.groupKey);
+        if (groupedDatasets.length === 0) {
+            this.legendEl.hidden = true;
+            this.legendEl.replaceChildren();
+            this.hiddenGroups.clear();
+            this.legendSignature = '';
+            return;
+        }
+
+        const signature = groupedDatasets
+            .map(dataset => `${dataset.groupKey}:${dataset.rankLevel}:${dataset.borderColor}:${dataset.borderDash?.join('.') || ''}`)
+            .join('|') + ` hidden=${Array.from(this.hiddenGroups).sort().join(',')}`;
+        if (signature === this.legendSignature) return;
+        this.legendSignature = signature;
+
+        this.legendEl.hidden = false;
+        this.legendEl.replaceChildren(
+            this.createEnchantLegend(groupedDatasets),
+            this.createRankStyleLegend(groupedDatasets)
+        );
+    }
+
+
+    private createEnchantLegend(datasets: ChartDataset[]): HTMLElement {
+        const section = document.createElement('div');
+        section.className = 'chart-legend-section';
+
+        const title = document.createElement('div');
+        title.className = 'chart-legend-title';
+        title.textContent = 'Enchantments';
+
+        const items = document.createElement('div');
+        items.className = 'chart-legend-items';
+
+        const groupMap = new Map<string, ChartDataset>();
+        datasets.forEach(dataset => {
+            if (dataset.groupKey && !groupMap.has(dataset.groupKey)) groupMap.set(dataset.groupKey, dataset);
+        });
+
+        Array.from(groupMap.entries()).sort(([a], [b]) => a.localeCompare(b)).forEach(([groupKey, dataset]) => {
+            const item = document.createElement('button');
+            item.type = 'button';
+            item.className = `chart-legend-item${this.hiddenGroups.has(groupKey) ? ' is-hidden' : ''}`;
+
+            const swatch = document.createElement('span');
+            swatch.className = 'chart-legend-swatch';
+            swatch.style.backgroundColor = dataset.borderColor;
+
+            const label = document.createElement('span');
+            label.textContent = groupKey;
+
+            item.append(swatch, label);
+            item.addEventListener('click', () => {
+                if (this.hiddenGroups.has(groupKey)) this.hiddenGroups.delete(groupKey);
+                else this.hiddenGroups.add(groupKey);
+                this.applyGroupVisibility();
+                this.renderGroupedLegend(this.chart?.data.datasets as ChartDataset[] || []);
+                this.chart?.update('none');
+            });
+            items.append(item);
+        });
+
+        section.append(title, items);
+        return section;
+    }
+
+
+    private createRankStyleLegend(datasets: ChartDataset[]): HTMLElement {
+        const section = document.createElement('div');
+        section.className = 'chart-legend-section';
+
+        const title = document.createElement('div');
+        title.className = 'chart-legend-title';
+        title.textContent = 'Level line styles';
+
+        const items = document.createElement('div');
+        items.className = 'chart-legend-items';
+
+        const ranks = Array.from(new Set(datasets.map(dataset => dataset.rankLevel).filter((rank): rank is number => rank !== undefined))).sort((a, b) => a - b);
+        ranks.forEach(rank => {
+            const sampleDataset = datasets.find(dataset => dataset.rankLevel === rank);
+            const item = document.createElement('div');
+            item.className = 'chart-legend-item';
+
+            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.setAttribute('class', 'chart-style-sample');
+            svg.setAttribute('viewBox', '0 0 34 4');
+            svg.setAttribute('aria-hidden', 'true');
+
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.setAttribute('x1', '1');
+            line.setAttribute('x2', '33');
+            line.setAttribute('y1', '2');
+            line.setAttribute('y2', '2');
+            line.setAttribute('stroke', sampleDataset?.borderColor || '#ccc');
+            line.setAttribute('stroke-width', '2');
+            line.setAttribute('stroke-linecap', 'round');
+            if (sampleDataset?.borderDash && sampleDataset.borderDash.length > 0) {
+                line.setAttribute('stroke-dasharray', sampleDataset.borderDash.join(' '));
+            }
+            svg.append(line);
+
+            const label = document.createElement('span');
+            label.textContent = RomanUtils.rankToRoman(rank, { I: 1, II: 2, III: 3, IV: 4, V: 5 });
+
+            item.append(svg, label);
+            items.append(item);
+        });
+
+        section.append(title, items);
+        return section;
+    }
+
+
     private getChartOptions(): Record<string, unknown> {
         return {
             responsive: true, maintainAspectRatio: false,
@@ -190,7 +327,16 @@ export class ChartManager {
             plugins: {
                 legend: {
                     position: 'bottom',
-                    labels: { color: '#ccc', font: { size: 10 }, boxWidth: 10 },
+                    labels: {
+                        color: '#ccc',
+                        font: { size: 10 },
+                        boxWidth: 10,
+                        filter: (legendItem: { datasetIndex?: number }, data: { datasets?: ChartDataset[] }) => {
+                            const datasetIndex = legendItem.datasetIndex;
+                            if (datasetIndex === undefined) return true;
+                            return !data.datasets?.[datasetIndex]?.groupKey;
+                        }
+                    },
                     onClick: (_event: unknown, legendItem: { datasetIndex?: number }, legend: { chart: ChartInstance }) => {
                         const datasetIndex = legendItem.datasetIndex;
                         if (datasetIndex === undefined) return;
