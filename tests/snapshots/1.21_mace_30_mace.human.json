@@ -92,9 +92,27 @@
     "Breach IV+Fire Aspect II": 0.000017951439,
     "Breach IV": 0.00001384375
   },
+  "shownClueDistribution": {
+    "Smite III": 0.001999553015,
+    "Smite IV": 0.123129306172,
+    "Smite V": 0.0253469227,
+    "Bane of Arthropods III": 0.001999553015,
+    "Bane of Arthropods IV": 0.123129306172,
+    "Bane of Arthropods V": 0.0253469227,
+    "Fire Aspect I": 0.006192128353,
+    "Fire Aspect II": 0.171363403639,
+    "Unbreaking III": 0.310826809593,
+    "Density III": 0.001999553015,
+    "Density IV": 0.123129306172,
+    "Density V": 0.0253469227,
+    "Breach II": 0.01845835828,
+    "Breach III": 0.041668216762,
+    "Breach IV": 0.000063737713
+  },
   "accuracy": 1,
   "accounting": {
     "resolved": 1,
+    "clueIncompatible": 0,
     "pending": 0,
     "sieved": 0,
     "overflow": 0,
@@ -102,18 +120,16 @@
     "rounding": 7.806255641895632e-18,
     "recoveredRounding": 3.209238430557093e-17,
     "recoveredSieved": 0,
-    "clueKnownSpace": 0,
     "units": {
       "resolved": "1152921504606846962",
+      "clueIncompatible": "0",
       "pending": "0",
       "sieved": "0",
       "overflow": "0",
       "capped": "0",
       "rounding": "9",
       "recoveredRounding": "37",
-      "recoveredSieved": "0",
-      "clueKnownSpace": "0"
+      "recoveredSieved": "0"
     }
-  },
-  "clues": {}
+  }
 }

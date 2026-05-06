@@ -4,7 +4,7 @@ import { SearchPoolPlan } from '#engine/search/SearchPoolPlan.js';
 import { SearchNodeGraph } from '#engine/search/SearchNodeGraph.js';
 import type { ClueSearchPolicy } from '#engine/search/ClueSearchPolicy.js';
 
-import { MassAccounting } from '#types/mass.js';
+import { MassAccountingBreakdown } from '#types/mass.js';
 
 /**
  * Presented calculation statistics from the search engine.
@@ -18,15 +18,21 @@ export interface CalculationStats {
   count: { [count: number]: number };
   /** Map of bit-packed hexadecimal combo strings to their joint probability. */
   combos: { [packed: string]: number };
-  /** Map of enchantment rank IDs to their total probability of being the shown clue. Key is (enchantId << 8 | rank). */
-  clues: { [idAndRank: number]: number };
-
+  /** Map of enchantment rank IDs to their total probability of being the shown table clue. Omitted for clue-conditioned stats. */
+  shownClueDistribution?: { [idAndRank: number]: number } | undefined;
   /** The minimum probability threshold used for this search. */
   threshold: number;
-  /** Normalized resolved mass (0.0 to 1.0). */
+  /** Normalized classified mass (resolved results plus exact clue-incompatible mass). */
   accuracy: number;
   /** Detailed breakdown of where the total 1.0 probability mass settled. */
-  accounting: MassAccounting;
+  accounting: MassAccountingBreakdown;
+  /** Observed displayed-clue diagnostics. Present only for clue-conditioned stats. */
+  clue?: {
+    /** Observed clue enchantment/rank ID, encoded as (enchantId << 8 | rank). */
+    idAndRank: number;
+    /** Absolute displayed-clue mass used for Bayesian conditioning. */
+    knownSpace: number;
+  } | undefined;
 
   instrumentation?: EngineInstrumentation | undefined;
   timing?: SearchTiming | undefined;

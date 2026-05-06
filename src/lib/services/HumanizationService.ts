@@ -21,9 +21,15 @@ export class HumanizationService {
             any: {},
             count: { ...stats.count },
             combos: {},
+            ...(stats.shownClueDistribution ? { shownClueDistribution: {} } : {}),
             accuracy: stats.accuracy,
             accounting: stats.accounting,
-            clues: {}
+            clue: stats.clue
+                ? {
+                    name: getFullEnchantName(resolver, stats.clue.idAndRank),
+                    knownSpace: stats.clue.knownSpace
+                }
+                : undefined
         };
 
         for (const [idAndRank, prob] of Object.entries(stats.ranks)) {
@@ -36,11 +42,9 @@ export class HumanizationService {
             human.any[name] = prob as number;
         }
 
-        if (stats.clues) {
-            for (const [idAndRank, prob] of Object.entries(stats.clues)) {
-                const name = getFullEnchantName(resolver, Number(idAndRank));
-                human.clues[name] = prob as number;
-            }
+        for (const [idAndRank, prob] of Object.entries(stats.shownClueDistribution ?? {})) {
+            const name = getFullEnchantName(resolver, Number(idAndRank));
+            human.shownClueDistribution![name] = prob as number;
         }
 
         const comboShares: Record<string, number> = {};

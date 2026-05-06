@@ -28,7 +28,7 @@
     "build:standalone": "npm run build && node scripts/inline-assets.js",
     "test": "npm run test:all",
     "test:all": "npm run build && npm run lint && npm run test:engine && npm run test:ui",
-    "test:engine": "tsx --test --test-concurrency=1 tests/unit/utils/*.test.ts tests/unit/core/*.test.ts tests/unit/services/*.test.ts tests/unit/engine/probability-mass-bookkeeper.test.ts tests/unit/engine/search/search-state-tracker.test.ts tests/unit/engine/progressive.test.ts tests/unit/engine/engine-checkpoint-search.test.ts tests/unit/engine/engine.test.ts tests/unit/engine/engine-invariants.test.ts tests/unit/engine/prob-conservation.test.ts tests/infra/*.test.ts tests/integration/mechanics.test.ts tests/integration/integration.test.ts tests/integration/refinement-chart.integration.test.ts tests/diagnostics/*.test.ts tests/unit/engine/engine.snapshots.test.ts",
+    "test:engine": "tsx --test --test-concurrency=1 tests/unit/utils/*.test.ts tests/unit/core/*.test.ts tests/unit/services/*.test.ts tests/unit/engine/probability-mass-accountant.test.ts tests/unit/engine/search/search-state-tracker.test.ts tests/unit/engine/progressive.test.ts tests/unit/engine/engine-checkpoint-search.test.ts tests/unit/engine/engine.test.ts tests/unit/engine/engine-invariants.test.ts tests/unit/engine/prob-conservation.test.ts tests/infra/*.test.ts tests/integration/mechanics.test.ts tests/integration/integration.test.ts tests/integration/refinement-chart.integration.test.ts tests/diagnostics/*.test.ts tests/unit/engine/engine.snapshots.test.ts",
     "test:snapshots": "tsx --test tests/unit/engine/engine.snapshots.test.ts",
     "test:ui": "playwright test tests/ui/playwright",
     "benchmark": "tsx scripts/profile_snapshot.ts",

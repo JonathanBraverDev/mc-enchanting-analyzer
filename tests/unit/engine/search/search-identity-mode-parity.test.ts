@@ -72,7 +72,7 @@ describe('Search identity mode parity', () => {
         assert.strictEqual(bigintState.graph.isNumericNode(1), false, 'forced BigInt64 mode should store non-root nodes as BigInt identity');
 
         assert.deepStrictEqual(sortedResults(bigintState), sortedResults(numberState));
-        assert.deepStrictEqual(bigintState.tracker.mass.getBookkeeping(), numberState.tracker.mass.getBookkeeping());
+        assert.deepStrictEqual(bigintState.tracker.mass.getBucketUnits(), numberState.tracker.mass.getBucketUnits());
         assert.deepStrictEqual(sortedFrontier(bigintState), sortedFrontier(numberState));
         assert.strictEqual(bigintState.exitReason, numberState.exitReason);
         assert.strictEqual(bigintState.threshold, numberState.threshold);

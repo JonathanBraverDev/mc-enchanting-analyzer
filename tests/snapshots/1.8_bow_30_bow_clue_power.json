@@ -47,27 +47,31 @@
     "19292b2d2e": 0.000421921848,
     "292b2d2e": 0.000256793238
   },
-  "accuracy": 0.44137285946,
+  "accuracy": 1,
   "accounting": {
     "resolved": 0.44137285945983445,
+    "clueIncompatible": 0.5586271405401655,
     "pending": 0,
-    "sieved": 0.5586271405401655,
+    "sieved": 0,
     "overflow": 0,
     "capped": 0,
     "rounding": 1.5612511283791264e-17,
     "recoveredRounding": 7.112366251504909e-17,
     "recoveredSieved": 0,
-    "clueKnownSpace": 0.2472811318053629,
     "units": {
       "resolved": "508868261221058747",
+      "clueIncompatible": "644053243385788210",
       "pending": "0",
-      "sieved": "644053243385788212",
+      "sieved": "0",
       "overflow": "0",
       "capped": "0",
       "rounding": "18",
       "recoveredRounding": "82",
-      "recoveredSieved": "0",
-      "clueKnownSpace": "0"
+      "recoveredSieved": "0"
     }
+  },
+  "clue": {
+    "idAndRank": 2820,
+    "knownSpace": 0.247281131805
   }
 }

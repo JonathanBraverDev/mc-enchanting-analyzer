@@ -1,4 +1,4 @@
-import { MassBookkeeping } from '#types/mass.js';
+import { MassBucketUnits } from '#types/mass.js';
 import { PackedCombo, SearchState } from '#types/index.js';
 import { PRECISION } from '#utils/index.js';
 
@@ -13,7 +13,7 @@ import { SearchNodeGraph } from '#engine/search/SearchNodeGraph.js';
 export class SearchStateTracker {
     public readonly mass: ProbabilityMassAccountant;
 
-    constructor(initialMass?: MassBookkeeping) {
+    constructor(initialMass?: MassBucketUnits) {
         this.mass = new ProbabilityMassAccountant(initialMass);
     }
 
@@ -54,14 +54,14 @@ export class SearchStateTracker {
             queue, graph, results,
             tracker: new SearchStateTracker({
                 resolved: 0n,
+                clueIncompatible: 0n,
                 pending: PRECISION,
                 sieved: 0n,
                 overflow: 0n,
                 capped: 0n,
                 rounding: 0n,
                 recoveredRounding: 0n,
-                recoveredSieved: 0n,
-                clueKnownSpace: 0n
+                recoveredSieved: 0n
             }),
             threshold,
             iterations: 0,
@@ -70,6 +70,6 @@ export class SearchStateTracker {
     }
 
     public clone(): SearchStateTracker {
-        return new SearchStateTracker(this.mass.getBookkeeping());
+        return new SearchStateTracker(this.mass.getBucketUnits());
     }
 }

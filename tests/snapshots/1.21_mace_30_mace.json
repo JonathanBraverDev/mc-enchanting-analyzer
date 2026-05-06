@@ -92,9 +92,27 @@
     "136e": 0.000017951439,
     "6e": 0.00001384375
   },
+  "shownClueDistribution": {
+    "259": 0.001999553015,
+    "260": 0.123129306172,
+    "261": 0.0253469227,
+    "515": 0.001999553015,
+    "516": 0.123129306172,
+    "517": 0.0253469227,
+    "1025": 0.006192128353,
+    "1026": 0.171363403639,
+    "1539": 0.310826809593,
+    "8451": 0.001999553015,
+    "8452": 0.123129306172,
+    "8453": 0.0253469227,
+    "8706": 0.01845835828,
+    "8707": 0.041668216762,
+    "8708": 0.000063737713
+  },
   "accuracy": 1,
   "accounting": {
     "resolved": 1,
+    "clueIncompatible": 0,
     "pending": 0,
     "sieved": 0,
     "overflow": 0,
@@ -102,17 +120,16 @@
     "rounding": 7.806255641895632e-18,
     "recoveredRounding": 3.209238430557093e-17,
     "recoveredSieved": 0,
-    "clueKnownSpace": 0,
     "units": {
       "resolved": "1152921504606846962",
+      "clueIncompatible": "0",
       "pending": "0",
       "sieved": "0",
       "overflow": "0",
       "capped": "0",
       "rounding": "9",
       "recoveredRounding": "37",
-      "recoveredSieved": "0",
-      "clueKnownSpace": "0"
+      "recoveredSieved": "0"
     }
   }
 }

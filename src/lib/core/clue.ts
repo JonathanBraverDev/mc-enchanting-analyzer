@@ -4,7 +4,7 @@ import { getEnchantId } from '#core/registry.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 
 /**
- * Centralized service for validating and parsing enchantment clues.
+ * Centralized service for validating and parsing enchantment clue input.
  * Ensures consistent behavior across the search engine and workers.
  */
 export class ClueValidator {
