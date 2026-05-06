@@ -12,12 +12,26 @@ interface ChartInstance {
     show(datasetIndex: number): void;
     update(mode: string): void;
 }
+interface TooltipDataset {
+    label?: string;
+    groupKey?: string;
+}
+interface TooltipItem {
+    dataset?: TooltipDataset;
+    formattedValue?: string;
+    parsed?: { y?: number };
+}
 interface ChartConstructor {
     new(ctx: CanvasRenderingContext2D | null, config: Record<string, unknown>): ChartInstance;
 }
 declare const Chart: ChartConstructor;
 
 const DEFAULT_VISIBLE_RANK_DATASET_LIMIT = 32;
+const TOOLTIP_GROUPING_CONFIG = {
+    maxDetailedItems: 16,
+    minValuePercent: 0.05,
+    mode: 'group-overflow' as 'group-overflow'
+};
 
 interface RankDatasetCandidate {
     idAndRank: number;
@@ -58,6 +72,7 @@ export class ChartManager {
         if (this.chart) {
             this.chart.data.labels = labels;
             this.chart.data.datasets = datasets;
+            if (datasets.some(dataset => dataset.groupKey)) this.syncDefaultGroupVisibility(datasets);
             this.renderGroupedLegend(datasets);
             if (datasets.some(dataset => dataset.groupKey)) this.applyGroupVisibility();
             this.chart.update('none'); // 'none' for performance during rapid updates
@@ -70,6 +85,7 @@ export class ChartManager {
                 data: { labels, datasets },
                 options: this.getChartOptions()
             });
+            if (datasets.some(dataset => dataset.groupKey)) this.syncDefaultGroupVisibility(datasets);
             this.renderGroupedLegend(datasets);
             if (datasets.some(dataset => dataset.groupKey)) this.applyGroupVisibility();
         } catch (e) {
@@ -188,7 +204,6 @@ export class ChartManager {
     private applyGroupVisibility(): void {
         if (!this.chart) return;
 
-        this.syncDefaultGroupVisibility(this.chart.data.datasets as ChartDataset[]);
         (this.chart.data.datasets as ChartDataset[]).forEach((dataset, index) => {
             const shouldShow = !dataset.groupKey
                 || (!this.hiddenGroups.has(dataset.groupKey) && !this.hiddenGroupRanks.has(this.getGroupRankKey(dataset.groupKey, dataset.rankLevel)));
@@ -241,9 +256,101 @@ export class ChartManager {
 
         this.legendEl.hidden = false;
         this.legendEl.replaceChildren(
+            this.createLegendSummary(groupedDatasets),
+            this.createLegendActions(groupedDatasets),
             this.createEnchantLegend(groupedDatasets),
             this.createRankStyleLegend(groupedDatasets)
         );
+    }
+
+
+    private createLegendSummary(datasets: ChartDataset[]): HTMLElement {
+        const summary = document.createElement('div');
+        summary.className = 'chart-legend-summary';
+
+        const visible = datasets.filter(dataset => dataset.groupKey
+            && !this.hiddenGroups.has(dataset.groupKey)
+            && !this.hiddenGroupRanks.has(this.getGroupRankKey(dataset.groupKey, dataset.rankLevel))).length;
+        const defaultVisible = datasets.filter(dataset => dataset.defaultVisible !== false).length;
+        const total = datasets.length;
+        const hiddenByDefault = Math.max(0, total - defaultVisible);
+
+        summary.textContent = hiddenByDefault > 0
+            ? `Showing ${visible} of ${total} rank lines. ${hiddenByDefault} lower-priority lines start hidden by default.`
+            : `Showing ${visible} of ${total} rank lines.`;
+        return summary;
+    }
+
+
+    private createLegendActions(datasets: ChartDataset[]): HTMLElement {
+        const actions = document.createElement('div');
+        actions.className = 'chart-legend-actions';
+
+        const groupKeys = Array.from(new Set(datasets.map(dataset => dataset.groupKey).filter((groupKey): groupKey is string => groupKey !== undefined)));
+        const buttons = [
+            { label: 'Recommended', action: () => this.showRecommendedLegendState(datasets) },
+            { label: 'All', action: () => this.showAllLegendState(groupKeys) },
+            { label: 'None', action: () => this.showNoLegendState(groupKeys) },
+            { label: 'Max only', action: () => this.showMaxOnlyLegendState(datasets, groupKeys) }
+        ];
+
+        buttons.forEach(({ label, action }) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'chart-legend-action';
+            button.textContent = label;
+            button.addEventListener('click', () => {
+                action();
+                this.applyGroupVisibility();
+                this.renderGroupedLegend(this.chart?.data.datasets as ChartDataset[] || []);
+                this.chart?.update('none');
+            });
+            actions.append(button);
+        });
+
+        return actions;
+    }
+
+
+    private showRecommendedLegendState(datasets: ChartDataset[]): void {
+        this.hiddenGroups.clear();
+        this.hiddenGroupRanks.clear();
+        this.userTouchedGroups.clear();
+        this.syncDefaultGroupVisibility(datasets);
+    }
+
+
+    private showAllLegendState(groupKeys: string[]): void {
+        this.hiddenGroups.clear();
+        this.hiddenGroupRanks.clear();
+        groupKeys.forEach(groupKey => this.userTouchedGroups.add(groupKey));
+    }
+
+
+    private showNoLegendState(groupKeys: string[]): void {
+        this.hiddenGroups = new Set(groupKeys);
+        this.hiddenGroupRanks.clear();
+        groupKeys.forEach(groupKey => this.userTouchedGroups.add(groupKey));
+    }
+
+
+    private showMaxOnlyLegendState(datasets: ChartDataset[], groupKeys: string[]): void {
+        this.hiddenGroups.clear();
+        this.hiddenGroupRanks.clear();
+        groupKeys.forEach(groupKey => this.userTouchedGroups.add(groupKey));
+
+        const maxRankByGroup = new Map<string, number>();
+        datasets.forEach(dataset => {
+            if (!dataset.groupKey || dataset.rankLevel === undefined) return;
+            maxRankByGroup.set(dataset.groupKey, Math.max(maxRankByGroup.get(dataset.groupKey) || 0, dataset.rankLevel));
+        });
+
+        datasets.forEach(dataset => {
+            if (!dataset.groupKey || dataset.rankLevel === undefined) return;
+            if (dataset.rankLevel < (maxRankByGroup.get(dataset.groupKey) || dataset.rankLevel)) {
+                this.hiddenGroupRanks.add(this.getGroupRankKey(dataset.groupKey, dataset.rankLevel));
+            }
+        });
     }
 
 
@@ -365,7 +472,46 @@ export class ChartManager {
     }
 
 
+    private shouldShowTooltipItem(item: TooltipItem): boolean {
+        const value = item.parsed?.y || 0;
+        return value >= TOOLTIP_GROUPING_CONFIG.minValuePercent;
+    }
+
+
+    private shouldGroupTooltip(items: TooltipItem[]): boolean {
+        return TOOLTIP_GROUPING_CONFIG.mode === 'group-overflow'
+            && items.filter(item => this.shouldShowTooltipItem(item)).length > TOOLTIP_GROUPING_CONFIG.maxDetailedItems;
+    }
+
+
+    private getGroupedTooltipLines(items: TooltipItem[]): string[] {
+        if (!this.shouldGroupTooltip(items)) return [];
+
+        const totals = new Map<string, number>();
+        items.filter(item => this.shouldShowTooltipItem(item)).forEach(item => {
+            const label = item.dataset?.groupKey || item.dataset?.label || 'Other';
+            totals.set(label, (totals.get(label) || 0) + (item.parsed?.y || 0));
+        });
+
+        return Array.from(totals.entries())
+            .sort(([, a], [, b]) => b - a)
+            .slice(0, TOOLTIP_GROUPING_CONFIG.maxDetailedItems)
+            .map(([label, value]) => `${label}: ${value.toFixed(2)}%`);
+    }
+
+
+    private getDetailedTooltipLabel(item: TooltipItem, dataPoints: TooltipItem[]): string | string[] {
+        if (this.shouldGroupTooltip(dataPoints)) return [];
+
+        const label = item.dataset?.label || '';
+        const value = item.formattedValue || `${(item.parsed?.y || 0).toFixed(2)}%`;
+        return `${label}: ${value}%`;
+    }
+
+
     private getChartOptions(): Record<string, unknown> {
+        const manager = this;
+
         return {
             responsive: true, maintainAspectRatio: false,
             animation: false, // Performance: Disable animations to enable Path2D caching
@@ -385,6 +531,16 @@ export class ChartManager {
             },
 
             plugins: {
+                tooltip: {
+                    filter: (item: TooltipItem) => this.shouldShowTooltipItem(item),
+                    itemSort: (a: TooltipItem, b: TooltipItem) => (b.parsed?.y || 0) - (a.parsed?.y || 0),
+                    callbacks: {
+                        beforeBody: (items: TooltipItem[]) => this.getGroupedTooltipLines(items),
+                        label(this: { dataPoints?: TooltipItem[] }, item: TooltipItem) {
+                            return manager.getDetailedTooltipLabel(item, this.dataPoints || []);
+                        }
+                    }
+                },
                 legend: {
                     position: 'bottom',
                     labels: {
