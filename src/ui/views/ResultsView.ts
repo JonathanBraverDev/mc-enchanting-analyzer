@@ -2,6 +2,14 @@ import { UIUtils, RomanUtils } from '#utils/index.js';
 import { UI_DEFAULTS, UI_TEXTS, REFINEMENT_LEVEL_COLORS, RefinementStatusLevel } from '#core/config.js';
 import { RegistryState, EnchantInsights, TopRunView } from '#types/index.js';
 
+export function getDisplayConfidence(view: Pick<TopRunView, 'normalization' | 'accounting'>): number {
+    if (view.normalization.domain === 'clue-known-space') {
+        return Math.min(1, view.accounting.resolved + view.accounting.clueIncompatible);
+    }
+
+    return view.accounting.resolved;
+}
+
 /**
  * View component for rendering enchantment combinations and ranks.
  */
@@ -186,7 +194,7 @@ export class ResultsView {
         const clueKnownSpace = view.normalization.domain === 'clue-known-space'
             ? view.normalization.clue?.knownSpace
             : undefined;
-        this.appendConfidenceItem(fragment, view.accounting.resolved, view.accounting, clueKnownSpace);
+        this.appendConfidenceItem(fragment, getDisplayConfidence(view), view.accounting, clueKnownSpace);
 
         // Atomic swap
         this.comboEl.replaceChildren(fragment);
