@@ -7,12 +7,24 @@ import { ENGINE_LIMITS } from '#constants/engine.js';
 interface ChartInstance {
     data: { labels: unknown[]; datasets: unknown[] };
     destroy(): void;
+    hide(datasetIndex: number): void;
+    isDatasetVisible(datasetIndex: number): boolean;
+    show(datasetIndex: number): void;
     update(mode: string): void;
 }
 interface ChartConstructor {
     new(ctx: CanvasRenderingContext2D | null, config: Record<string, unknown>): ChartInstance;
 }
 declare const Chart: ChartConstructor;
+
+const MAX_RANK_DATASETS = 32;
+
+interface RankDatasetCandidate {
+    idAndRank: number;
+    baseName: string;
+    rank: number;
+    peak: number;
+}
 
 
 /**
@@ -80,25 +92,52 @@ export class ChartManager {
                 });
             });
         } else if (metric === "ranks") {
-            const allRanks = new Set<number>();
+            const candidatesByRank = new Map<number, RankDatasetCandidate>();
             sweep.forEach(e => {
                 if(e && e.buckets && e.buckets.rankByIdAndRank) {
                     Object.entries(e.buckets.rankByIdAndRank).forEach(([idAndRankStr, p]) => {
-                        if (p > 0.01) allRanks.add(parseInt(idAndRankStr));
+                        if (p <= 0.01) return;
+
+                        const idAndRank = parseInt(idAndRankStr);
+                        const fullName = getFullEnchantName(registry, idAndRank);
+                        const baseName = RomanUtils.getBaseName(fullName, romanMap);
+                        const rank = idAndRank & 0xFF;
+                        const existing = candidatesByRank.get(idAndRank);
+
+                        candidatesByRank.set(idAndRank, {
+                            idAndRank,
+                            baseName,
+                            rank,
+                            peak: Math.max(existing?.peak || 0, p)
+                        });
                     });
                 }
             });
 
-            Array.from(allRanks).sort((a, b) => {
-                const na = getFullEnchantName(registry, a), nb = getFullEnchantName(registry, b);
-                const ba = RomanUtils.getBaseName(na, romanMap), bb = RomanUtils.getBaseName(nb, romanMap);
-                if (ba !== bb) return ba.localeCompare(bb);
-                return (a & 0xFF) - (b & 0xFF);
-            }).slice(0, 32).forEach(idAndRank => {
+            const groups = new Map<string, RankDatasetCandidate[]>();
+            candidatesByRank.forEach(candidate => {
+                const group = groups.get(candidate.baseName) || [];
+                group.push(candidate);
+                groups.set(candidate.baseName, group);
+            });
+
+            const selectedRanks: RankDatasetCandidate[] = [];
+            Array.from(groups.values()).sort((a, b) => {
+                const peakDelta = Math.max(...b.map(candidate => candidate.peak)) - Math.max(...a.map(candidate => candidate.peak));
+                if (peakDelta !== 0) return peakDelta;
+                return a[0]!.baseName.localeCompare(b[0]!.baseName);
+            }).forEach(group => {
+                const sortedGroup = group.sort((a, b) => a.rank - b.rank);
+                if (selectedRanks.length > 0 && selectedRanks.length + sortedGroup.length > MAX_RANK_DATASETS) return;
+                selectedRanks.push(...sortedGroup);
+            });
+
+            selectedRanks.forEach(({ idAndRank, baseName }) => {
                 const fullName = getFullEnchantName(registry, idAndRank);
                 const style = ThemeManager.getRankLineStyle(idAndRank, registry);
                 datasets.push({
                     label: fullName,
+                    groupKey: baseName,
                     data: sweep.map(x => (x && x.buckets && x.buckets.rankByIdAndRank[idAndRank] || 0) * 100),
                     borderColor: style.color,
                     backgroundColor: ThemeManager.withAlpha(style.color, 0.1),
@@ -151,7 +190,28 @@ export class ChartManager {
             plugins: {
                 legend: {
                     position: 'bottom',
-                    labels: { color: '#ccc', font: { size: 10 }, boxWidth: 10 }
+                    labels: { color: '#ccc', font: { size: 10 }, boxWidth: 10 },
+                    onClick: (_event: unknown, legendItem: { datasetIndex?: number }, legend: { chart: ChartInstance }) => {
+                        const datasetIndex = legendItem.datasetIndex;
+                        if (datasetIndex === undefined) return;
+
+                        const clickedDataset = legend.chart.data.datasets[datasetIndex] as ChartDataset | undefined;
+                        const groupKey = clickedDataset?.groupKey;
+                        if (!groupKey) {
+                            if (legend.chart.isDatasetVisible(datasetIndex)) legend.chart.hide(datasetIndex);
+                            else legend.chart.show(datasetIndex);
+                            return;
+                        }
+
+                        const groupedIndexes = (legend.chart.data.datasets as ChartDataset[])
+                            .map((dataset, index) => dataset.groupKey === groupKey ? index : -1)
+                            .filter(index => index >= 0);
+                        const shouldHide = groupedIndexes.some(index => legend.chart.isDatasetVisible(index));
+                        groupedIndexes.forEach(index => {
+                            if (shouldHide) legend.chart.hide(index);
+                            else legend.chart.show(index);
+                        });
+                    }
                 }
             }
         };

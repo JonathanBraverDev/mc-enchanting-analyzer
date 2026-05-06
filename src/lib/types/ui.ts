@@ -55,4 +55,5 @@ export interface ChartDataset {
     tension: number;
     pointRadius: number;
     borderDash?: number[];
+    groupKey?: string;
 }
