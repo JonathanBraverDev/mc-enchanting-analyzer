@@ -36,7 +36,7 @@ describe('Integration: RefinementService V5 Contract', () => {
                         refinementLevel: level,
                         clueConditioned: false,
                         normalization: { domain: 'resolved-mass' },
-                        accounting: { resolved: 0.9, pending: 0.1, sieved: 0, overflow: 0, capped: 0, rounding: 0 },
+                        accounting: { resolved: 0.9, clueIncompatible: 0, pending: 0.1, sieved: 0, overflow: 0, capped: 0, rounding: 0 },
                         combos: [],
                         enchants: []
                     } as any);
@@ -112,7 +112,7 @@ describe('Integration: Snapshot Integrity (Correction 4)', () => {
 });
 
 describe('Integration: Clue Validation (Correction 5)', () => {
-    it('should reject invalid clues consistently', async () => {
+    it('should reject invalid clue input consistently', async () => {
         const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
 
         // Unknown enchantment

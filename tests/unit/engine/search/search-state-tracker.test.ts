@@ -87,7 +87,7 @@ describe('SearchStateTracker', () => {
 
         MassForwardingEngine.forwardMass(PRECISION, nodeId, ctx, tracker);
 
-        const bk = tracker.mass.getBookkeeping();
+        const bk = tracker.mass.getBucketUnits();
         assert.ok(bk.recoveredRounding > 0n || bk.resolved > 0n, 'Should have accounted for recovered mass or resolved it');
     });
 });

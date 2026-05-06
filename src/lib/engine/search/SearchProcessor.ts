@@ -1,8 +1,15 @@
-import { ForwardingContext, PackedCombo, ExpansionBlueprint } from '#types/index.js';
+import { ForwardingContext, PackedCombo, ExpansionBlueprint, PackedEnchant } from '#types/index.js';
 import { ComboUtils, ProbUtils } from '#utils/index.js';
 import { ENGINE_LIMITS, BIGINT_CONSTANTS } from '#constants/engine.js';
 import { DistributionBufferPool } from '#engine/distribution/DistributionBufferPool.js';
+import { SearchNodeGraph } from '#engine/search/SearchNodeGraph.js';
 import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
+import { ClueSearchPolicy } from '#engine/search/ClueSearchPolicy.js';
+
+export interface SettlementMassResult {
+    rounding: bigint;
+    discarded: bigint;
+}
 
 /**
  * Low-level primitives for the enchantment search engine.
@@ -41,14 +48,18 @@ export class SearchProcessor {
         currentCount: number,
         packedChosen: PackedCombo,
         prob: bigint,
-        results: Map<PackedCombo, bigint>
-    ): bigint {
+        results: Map<PackedCombo, bigint>,
+        cluePolicy?: ClueSearchPolicy | undefined,
+        indexToEnchant?: readonly number[] | undefined
+    ): SettlementMassResult {
         if (isBook && currentCount > 1) {
-            const { rem } = this.redistributeBookProb(packedChosen, prob, results);
-            return rem;
+            return this.redistributeBookProb(packedChosen, prob, results, cluePolicy, indexToEnchant);
         } else {
+            if (cluePolicy && indexToEnchant && !cluePolicy.containsTargetClue(packedChosen, indexToEnchant)) {
+                return { rounding: 0n, discarded: prob };
+            }
             ProbUtils.addItemMass(results, packedChosen, prob);
-            return 0n;
+            return { rounding: 0n, discarded: 0n };
         }
     }
 
@@ -59,8 +70,10 @@ export class SearchProcessor {
     public static redistributeBookProb(
         packedChosen: PackedCombo,
         prob: bigint,
-        results: Map<PackedCombo, bigint>
-    ): { rem: bigint } {
+        results: Map<PackedCombo, bigint>,
+        cluePolicy?: ClueSearchPolicy | undefined,
+        indexToEnchant?: readonly number[] | undefined
+    ): SettlementMassResult {
         const redistributed = ComboUtils.removeAdditional(packedChosen) as PackedCombo[];
         const nOutcomes = redistributed.length;
 
@@ -72,17 +85,22 @@ export class SearchProcessor {
             splitRemainder = prob % bigN;
         }
 
-        for (const combo of redistributed) {
-            ProbUtils.addItemMass(results, combo, quotient);
-        }
-        const firstRedistributed = redistributed[0];
-        if (nOutcomes > 0 && splitRemainder > 0n && firstRedistributed !== undefined) {
-            ProbUtils.addItemMass(results, firstRedistributed, splitRemainder);
+        if (nOutcomes === 0) {
+            return { rounding: prob, discarded: 0n };
         }
 
-        // countMass tracking removed - derived in snapshots
+        let discarded = 0n;
+        for (let i = 0; i < redistributed.length; i++) {
+            const combo = redistributed[i]!;
+            const share = quotient + (i === 0 ? splitRemainder : 0n);
+            if (cluePolicy && indexToEnchant && !cluePolicy.containsTargetClue(combo, indexToEnchant)) {
+                discarded += share;
+                continue;
+            }
+            ProbUtils.addItemMass(results, combo, share);
+        }
 
-        return { rem: 0n };
+        return { rounding: 0n, discarded };
     }
 
     /**
@@ -96,6 +114,7 @@ export class SearchProcessor {
         tracker: SearchStateTracker
     ): void {
         const { queue, graph, poolPlan } = ctx;
+        const cluePolicy = ctx.cluePolicy;
 
         const buffer = DistributionBufferPool.getBuffer(0);
         const splitRemainder = ProbUtils.distributeDetailed(currentProb, poolPlan.weights, poolPlan.initialTotalWeight, buffer, poolPlan.length);
@@ -106,6 +125,10 @@ export class SearchProcessor {
             if (pNext === undefined || pNext === 0n) continue;
 
             const nextPacked = poolPlan.singleCombos[i]! as PackedCombo;
+            if (cluePolicy && !cluePolicy.canSelectChild(poolPlan.pool[i]! as PackedEnchant, false)) {
+                tracker.mass.record('clueIncompatible', pNext);
+                continue;
+            }
             const nodeId = poolPlan.identityMode === 'number53'
                 ? graph.getOrCreateNumericNode(poolPlan.idMaskLo[i]!, poolPlan.idMaskHi[i]!, poolPlan.initialLevel, nextPacked, 1)
                 : graph.getOrCreateBigIntNode(poolPlan.initialMetas[i]!, nextPacked, 1);
@@ -127,6 +150,8 @@ export class SearchProcessor {
         const currentCount = ctx.graph.getCount(nodeId);
         const currentLevel = ctx.graph.getLevel(nodeId);
         const isBook = cat === "book";
+        const cluePolicy = ctx.cluePolicy;
+        const targetAlreadySelected = cluePolicy?.containsTargetClue(currentCombo, registry.indexToEnchant) ?? false;
 
         // currentLevel only drives the probability of earning another enchant slot from this node.
         // Eligibility still comes from ctx.pool, which SearchService fixed from the initial full
@@ -154,7 +179,13 @@ export class SearchProcessor {
                 const conflictMaskHi = poolPlan.conflictMaskHi[i]!;
                 if ((currentMaskLo & conflictMaskLo) !== 0 || (currentMaskHi & conflictMaskHi) !== 0) continue;
                 const weight = poolPlan.weights[i]!;
+                const enchant = poolPlan.pool[i]! as PackedEnchant;
                 totalWeight += weight;
+                if (cluePolicy && !cluePolicy.canSelectChild(enchant, targetAlreadySelected)) {
+                    ctx.graph.appendBlueprintEdge(SearchNodeGraph.PRUNED_CHILD_ID, weight);
+                    eligibleCount++;
+                    continue;
+                }
 
                 const childMaskLo = (currentMaskLo | idMaskLo) >>> 0;
                 const childMaskHi = (currentMaskHi | idMaskHi) >>> 0;
@@ -175,9 +206,14 @@ export class SearchProcessor {
                 const conflictBitset = poolPlan.conflictBitsets[i]!;
                 if ((currentBitset & conflictBitset) !== 0n) continue;
                 const weight = poolPlan.weights[i]!;
+                const enchant = poolPlan.pool[i]! as PackedEnchant;
                 totalWeight += weight;
+                if (cluePolicy && !cluePolicy.canSelectChild(enchant, targetAlreadySelected)) {
+                    ctx.graph.appendBlueprintEdge(SearchNodeGraph.PRUNED_CHILD_ID, weight);
+                    eligibleCount++;
+                    continue;
+                }
 
-                const enchant = poolPlan.pool[i]!;
                 const childMeta = ((currentBitset | idBit) << BIGINT_CONSTANTS.ENCHANT_SHIFT) | nextLevelBits;
                 const childCombo = ComboUtils.packAppend(currentCombo, enchant, registry.enchantToIndex);
                 const childId = ctx.graph.getOrCreateBigIntNode(childMeta, childCombo, currentCount + 1);

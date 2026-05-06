@@ -4,24 +4,29 @@ This document details the mathematical framework used by the Enchantment Engine 
 
 ## The "Honest Accounting" Principle
 
-In most enchantment calculators, probability mass is "lost" due to early pruning or floating-point drift. This engine follows the principle of **Honest Accounting**: every single unit of probability mass introduced at the start of a search must be accounted for in one of six terminal buckets. No mass is ever deleted; it is only re-categorized.
+In most enchantment calculators, probability mass is "lost" due to early pruning or floating-point drift. This engine follows the principle of **Honest Accounting**: every single unit of probability mass introduced at the start of a search must be accounted for in one of seven terminal buckets. No mass is ever deleted; it is only re-categorized.
 
 ---
 
-## The Six Buckets of Mass
+## The Seven Buckets of Mass
 
 Every outcome of the enchantment simulation terminates in exactly one of these categories:
 
 | Bucket | Purpose | UI Designation |
 |:---|:---|:---|
 | **Resolved** | Successful leaf node. The exact combination reached via game rules. | **Accuracy** |
+| **Clue Incompatible** | Paths proven unable to match an observed clue during clue-aware searches. | **Classified** |
 | **Pending** | Nodes remaining in the Priority Queue, unexplored due to threshold or iteration limits. | **Uncertainty** |
 | **Sieved** | Nodes intentionally discarded because their probability fell below the `SYSTEM_THRESHOLD_FLOOR` (1e-10). | **Pruned** |
 | **Overflow** | Outcomes that are mathematically possible but exceed the engine's technical limit (6 enchantments). | **Limit Loss** |
 | **Capped** | Outcomes lost because a resource limit was hit (e.g., `resultsLimit` or `MAX_QUEUE_SIZE`). | **Limit Loss** |
 | **Rounding** | Cumulative compensation for integer division remainders and fixed-point conversion. | **Rounding** |
 
-**Invariant**: `Resolved + Pending + Sieved + Overflow + Capped + Rounding === 1.0` (precisely $2^{60}$).
+**Invariant**: `Resolved + Clue Incompatible + Pending + Sieved + Overflow + Capped + Rounding === 1.0` (precisely $2^{60}$).
+
+For unconditioned searches, reported accuracy is resolved mass. For clue-conditioned searches, reported accuracy is classified mass: resolved result mass plus exact clue-incompatible mass. The clue-incompatible bucket is not result probability; it is mass the engine has fully classified as unable to contribute to the clue-conditioned result set.
+
+`clue.knownSpace` is intentionally not an accounting bucket. It is a clue-conditioned reporting value computed during Bayesian post-processing from the displayed clue mass.
 
 ---
 
@@ -52,7 +57,7 @@ The engine implements **Banker's Rounding** (Round-to-Nearest-Even) for scaling 
 ### 3. Atomic Accounting (Remainder Capture)
 Whenever `prob` is divided among $N$ branches (e.g., distributing mass across enchantment weights), integer division inevitably produces a remainder.
 - **Traditional**: $5 / 2 = 2$ (remainder 1 lost).
-- **Honest**: $5 / 2 = 2$. The remainder `1` is explicitly added to the `Rounding` bucket of the current `ProbabilityMassBookkeeper`.
+- **Honest**: $5 / 2 = 2$. The remainder `1` is explicitly added to the `Rounding` bucket of the current `ProbabilityMassAccountant`.
 - **Atomic**: All additions to the results map and buckets happen within the same transition block.
 
 ### Checkpoint Aggregation
@@ -82,7 +87,7 @@ If they were processed together, the total mass would be `10`, and $10/2 = 5$ wi
 5. **Immediate Forwarding**: When a duplicate path arrives at a cached node, it does not need to re-enter the best-first frontier. `MassForwardingEngine` forwards its mass through the cached blueprint.
 6. **Residue Promotion**: The harvester adds incoming remainders to the node residue. When the accumulator exceeds the distribution divisor, it promotes the recovered units back into resolved outcomes.
 
-**This results in higher reported accuracy (`Resolved` mass) as the search deepens.**
+**This results in higher reported accuracy as the search deepens by increasing resolved mass, or classified mass in clue-conditioned searches.**
 
 ---
 

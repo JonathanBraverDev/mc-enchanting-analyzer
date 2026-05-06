@@ -1,4 +1,4 @@
-import type { MassAccounting } from '#types/mass.js';
+import type { MassAccountingBreakdown } from '#types/mass.js';
 
 /**
  * Compact representation of calculation statistics for efficient transfer.
@@ -15,6 +15,10 @@ export interface CompactStats {
     counts: Float64Array;
 
     accuracy: number;
-    accounting: MassAccounting;
+    accounting: MassAccountingBreakdown;
+    clue?: {
+        idAndRank: number;
+        knownSpace: number;
+    } | undefined;
     threshold: number;
 }

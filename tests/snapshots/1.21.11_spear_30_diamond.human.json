@@ -451,9 +451,27 @@
     "Lunge III+Unbreaking III+Looting II+Fire Aspect I+Knockback II+Bane of Arthropods III": 4.67994e-7,
     "Lunge III+Unbreaking III+Looting II+Fire Aspect I+Knockback II": 3.20537e-7
   },
+  "shownClueDistribution": {
+    "Sharpness III": 0.121702265309,
+    "Sharpness IV": 0.083660386361,
+    "Smite III": 0.002352931912,
+    "Smite IV": 0.09304911964,
+    "Smite V": 0.007279274284,
+    "Bane of Arthropods III": 0.002352931912,
+    "Bane of Arthropods IV": 0.09304911964,
+    "Bane of Arthropods V": 0.007279274284,
+    "Knockback II": 0.152921996629,
+    "Fire Aspect I": 0.004299542641,
+    "Fire Aspect II": 0.060954810744,
+    "Looting II": 0.027030847525,
+    "Looting III": 0.03822350586,
+    "Unbreaking III": 0.152921996629,
+    "Lunge III": 0.152921996629
+  },
   "accuracy": 0.999991349342,
   "accounting": {
     "resolved": 0.9999913493422391,
+    "clueIncompatible": 0,
     "pending": 0,
     "sieved": 0,
     "overflow": 0.00000865065776070855,
@@ -461,18 +479,16 @@
     "rounding": 1.465841337200402e-16,
     "recoveredRounding": 6.505213034913027e-16,
     "recoveredSieved": 0,
-    "clueKnownSpace": 0,
     "units": {
       "resolved": "1152911531077485487",
+      "clueIncompatible": "0",
       "pending": "0",
       "sieved": "0",
       "overflow": "9973529361315",
       "capped": "0",
       "rounding": "169",
       "recoveredRounding": "750",
-      "recoveredSieved": "0",
-      "clueKnownSpace": "0"
+      "recoveredSieved": "0"
     }
-  },
-  "clues": {}
+  }
 }

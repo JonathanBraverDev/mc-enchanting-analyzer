@@ -14,28 +14,30 @@ import { HumanizationService } from '#services/HumanizationService.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { EngineFactory } from '#engine/factory.js';
 import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
-import { NodeIdSearchFrontier } from '#engine/search/NodeIdSearchFrontier.js';
-import { SearchNodeGraph } from '#engine/search/SearchNodeGraph.js';
 import { DATA } from '#data/index.js';
 import { ComboUtils } from '#utils/domain/ComboUtils.js';
 import { ProbUtils } from '#utils/index.js';
-import type { CalculationStats, MassAccounting, PackedCombo, PackedEnchant } from '#types/index.js';
+import { makeFrontierSnapshot } from '#tests/infra/frontier-test-utils.js';
+import type { CalculationStats, MassAccountingBreakdown, PackedCombo, PackedEnchant } from '#types/index.js';
 
 // ── SummaryService ────────────────────────────────────────────────────────────
 
 describe('SummaryService', () => {
-    const makeFrontier = (combo: PackedCombo, count: number, prob: bigint = PRECISION, scale: bigint = PRECISION) => {
-        const frontier = new NodeIdSearchFrontier();
-        const graph = new SearchNodeGraph();
-        const nodeId = graph.createNumericNode(1, 0, 30, combo, count);
-        frontier.pushOrMerge(nodeId, prob);
-        return [{ frontier, graph, scale }];
-    };
-
     it('empty combos map yields empty combos output', () => {
         const tracker = new SearchStateTracker();
         const result = SummaryService.summarize({ combos: new Map(), tracker, indexToEnchant: [] });
         assert.deepStrictEqual(result.combos, {});
+    });
+
+    it('keeps clue-known space out of unconditioned accounting', () => {
+        const tracker = new SearchStateTracker();
+        const result = SummaryService.summarize({ combos: new Map(), tracker, indexToEnchant: [] });
+
+        assert.strictEqual(result.clue, undefined);
+        assert.strictEqual('clueKnownSpace' in result.accounting, false);
+        assert.strictEqual('clueKnownSpace' in (result.accounting.units ?? {}), false);
+        assert.strictEqual(result.accounting.clueIncompatible, 0);
+        assert.strictEqual(result.accounting.units?.clueIncompatible, '0');
     });
 
     it('converts pending mass bigint to float correctly', () => {
@@ -82,9 +84,9 @@ describe('SummaryService', () => {
         assert.ok(Math.abs((stats.any[3] ?? 0) - 0.25) < 1e-12);
         assert.ok(Math.abs((stats.ranks[enchantA] ?? 0) - 0.75) < 1e-12);
         assert.ok(Math.abs((stats.count[2] ?? 0) - 0.75) < 1e-12);
-        assert.ok(Math.abs((stats.clues[enchantA] ?? 0) - 0.375) < 1e-12);
-        assert.ok(Math.abs((stats.clues[enchantB] ?? 0) - 0.25) < 1e-12);
-        assert.ok(Math.abs((stats.clues[enchantC] ?? 0) - 0.125) < 1e-12);
+        assert.ok(Math.abs((stats.shownClueDistribution?.[enchantA] ?? 0) - 0.375) < 1e-12);
+        assert.ok(Math.abs((stats.shownClueDistribution?.[enchantB] ?? 0) - 0.25) < 1e-12);
+        assert.ok(Math.abs((stats.shownClueDistribution?.[enchantC] ?? 0) - 0.125) < 1e-12);
     });
 
     it('includes pending frontier mass in aggregate and clue stats', () => {
@@ -96,7 +98,7 @@ describe('SummaryService', () => {
         ]);
         const indexToEnchant = [0, enchantA, enchantB];
         const packed = ComboUtils.pack([enchantA, enchantB], enchantToIndex);
-        const frontiers = makeFrontier(packed, 2, PRECISION / 2n, PRECISION / 2n);
+        const frontiers = makeFrontierSnapshot(packed, 2, PRECISION / 2n, PRECISION / 2n);
         const expectedMass = ProbUtils.scale(PRECISION / 2n, PRECISION / 2n);
         const expectedClueMass = expectedMass / 2n;
 
@@ -107,8 +109,8 @@ describe('SummaryService', () => {
         assert.ok(Math.abs((stats.any[2] ?? 0) - ProbUtils.toNumber(expectedMass)) < 1e-12);
         assert.ok(Math.abs((stats.ranks[enchantA] ?? 0) - ProbUtils.toNumber(expectedMass)) < 1e-12);
         assert.ok(Math.abs((stats.count[2] ?? 0) - ProbUtils.toNumber(expectedMass)) < 1e-12);
-        assert.ok(Math.abs((stats.clues[enchantA] ?? 0) - ProbUtils.toNumber(expectedClueMass)) < 1e-12);
-        assert.ok(Math.abs((stats.clues[enchantB] ?? 0) - ProbUtils.toNumber(expectedClueMass)) < 1e-12);
+        assert.ok(Math.abs((stats.shownClueDistribution?.[enchantA] ?? 0) - ProbUtils.toNumber(expectedClueMass)) < 1e-12);
+        assert.ok(Math.abs((stats.shownClueDistribution?.[enchantB] ?? 0) - ProbUtils.toNumber(expectedClueMass)) < 1e-12);
     });
 
     it('keeps book pending aggregate adjustment separate from clue mass semantics', () => {
@@ -122,7 +124,7 @@ describe('SummaryService', () => {
         ]);
         const indexToEnchant = [0, enchantA, enchantB, enchantC];
         const packed = ComboUtils.pack([enchantA, enchantB, enchantC], enchantToIndex);
-        const frontiers = makeFrontier(packed, 3);
+        const frontiers = makeFrontierSnapshot(packed, 3);
         const expectedAnyMass = (PRECISION * 2n) / 3n;
         const clueQuotient = PRECISION / 3n;
 
@@ -133,9 +135,9 @@ describe('SummaryService', () => {
         assert.ok(Math.abs((stats.any[1] ?? 0) - ProbUtils.toNumber(expectedAnyMass)) < 1e-12);
         assert.ok(Math.abs((stats.any[2] ?? 0) - ProbUtils.toNumber(expectedAnyMass)) < 1e-12);
         assert.ok(Math.abs((stats.any[3] ?? 0) - ProbUtils.toNumber(expectedAnyMass)) < 1e-12);
-        assert.ok(Math.abs((stats.clues[enchantC] ?? 0) - ProbUtils.toNumber(clueQuotient + 1n)) < 1e-12);
-        assert.ok(Math.abs((stats.clues[enchantB] ?? 0) - ProbUtils.toNumber(clueQuotient)) < 1e-12);
-        assert.ok(Math.abs((stats.clues[enchantA] ?? 0) - ProbUtils.toNumber(clueQuotient)) < 1e-12);
+        assert.ok(Math.abs((stats.shownClueDistribution?.[enchantC] ?? 0) - ProbUtils.toNumber(clueQuotient + 1n)) < 1e-12);
+        assert.ok(Math.abs((stats.shownClueDistribution?.[enchantB] ?? 0) - ProbUtils.toNumber(clueQuotient)) < 1e-12);
+        assert.ok(Math.abs((stats.shownClueDistribution?.[enchantA] ?? 0) - ProbUtils.toNumber(clueQuotient)) < 1e-12);
     });
 
     it('distributes clue remainder by packed combo position', () => {
@@ -153,7 +155,7 @@ describe('SummaryService', () => {
             combos: new Map([[packed, 5n]]),
             indexToEnchant,
             includeMasses: false
-        }).clues;
+        }).shownClueDistribution;
 
         assert.strictEqual(clueMass.get(enchantC), 2n);
         assert.strictEqual(clueMass.get(enchantB), 2n);
@@ -210,23 +212,31 @@ describe('SerializationService', () => {
     const makeStats = (overrides: Partial<CalculationStats> = {}): CalculationStats => {
         const accuracy = overrides.accuracy ?? 1.0;
         const accounting = overrides.accounting ?? {
-            resolved: accuracy, pending: 0, sieved: 0, overflow: 0,
-            capped: 0, rounding: 0, recoveredRounding: 0, recoveredSieved: 0
+            resolved: accuracy, clueIncompatible: 0, pending: 0, sieved: 0,
+            overflow: 0, capped: 0, rounding: 0, recoveredRounding: 0, recoveredSieved: 0
         };
         return {
-            ranks: {}, any: {}, count: {}, combos: {}, clues: {},
+            ranks: {}, any: {}, count: {}, combos: {}, shownClueDistribution: {},
             accuracy, accounting, threshold: 0.1,
             ...overrides
         };
     };
 
     it('roundtrip preserves accuracy and accounting fields', () => {
-        const acc: MassAccounting = { resolved: 0.5, pending: 0.1, sieved: 0.2, overflow: 0.1, capped: 0, rounding: 0.1, recoveredRounding: 0, recoveredSieved: 0 };
+        const acc: MassAccountingBreakdown = { resolved: 0.5, clueIncompatible: 0, pending: 0.1, sieved: 0.2, overflow: 0.1, capped: 0, rounding: 0.1, recoveredRounding: 0, recoveredSieved: 0 };
         const stats = makeStats({ accuracy: 0.5, accounting: acc });
         const { compact } = SerializationService.serialize(stats);
         const recovered = SerializationService.deserialize(compact);
         assert.strictEqual(recovered.accuracy, 0.5);
         assert.deepStrictEqual(recovered.accounting, acc);
+    });
+
+    it('roundtrip preserves clue metadata', () => {
+        const stats = makeStats({ clue: { idAndRank: 0x0504, knownSpace: 0.25 } });
+        const { compact } = SerializationService.serialize(stats);
+        const recovered = SerializationService.deserialize(compact);
+        assert.strictEqual(recovered.clue?.idAndRank, 0x0504);
+        assert.strictEqual(recovered.clue?.knownSpace, 0.25);
     });
 
     it('roundtrip preserves combo entries (hex keys)', () => {
@@ -265,9 +275,9 @@ describe('HumanizationService', () => {
 
     it('resolves enchantment names in the any map', () => {
         const effId = reg.idMap.get('Efficiency')!;
-        const acc: MassAccounting = { resolved: 0.85, pending: 0.15, sieved: 0, overflow: 0, capped: 0, rounding: 0, recoveredRounding: 0, recoveredSieved: 0 };
+        const acc: MassAccountingBreakdown = { resolved: 0.85, clueIncompatible: 0, pending: 0.15, sieved: 0, overflow: 0, capped: 0, rounding: 0, recoveredRounding: 0, recoveredSieved: 0 };
         const rawStats: CalculationStats = {
-            ranks: {}, any: { [effId]: 0.85 }, count: {}, combos: {}, clues: {},
+            ranks: {}, any: { [effId]: 0.85 }, count: {}, combos: {}, shownClueDistribution: {},
             accuracy: 0.85, accounting: acc, threshold: 0.85
         };
         const result = HumanizationService.humanize(rawStats, reg, 'prob');
@@ -278,7 +288,7 @@ describe('HumanizationService', () => {
         const stats = {
             combos: { 'ff': 0.1 },
             count: { 1: 0.1 },
-            any: {}, ranks: {}, clues: {}, accuracy: 1, accounting: {}, threshold: 0
+            any: {}, ranks: {}, accuracy: 1, accounting: {}, threshold: 0
         } as any;
 
         const result = HumanizationService.humanize(stats, reg, 'count');
@@ -288,7 +298,7 @@ describe('HumanizationService', () => {
     it('sorting by "rank" correctly prioritizes high-tier ranks', () => {
         const stats = {
             combos: { 'ff': 0.1 },
-            count: {}, any: {}, ranks: {}, clues: {}, accuracy: 1, accounting: {}, threshold: 0
+            count: {}, any: {}, ranks: {}, accuracy: 1, accounting: {}, threshold: 0
         } as any;
         const result = HumanizationService.humanize(stats, reg, 'rank');
         assert.ok(result, 'Humanize should not crash with sortMode=rank');
@@ -336,6 +346,6 @@ describe('SearchStateTracker Accounting', () => {
         t1.mass.addScaled(t2.mass, PRECISION / 2n);
 
         // 100 + (200 * 0.5) = 200
-        assert.strictEqual(t1.mass.getBookkeeping().resolved, 200n);
+        assert.strictEqual(t1.mass.getBucketUnits().resolved, 200n);
     });
 });

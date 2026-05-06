@@ -8,14 +8,14 @@ export interface SummaryAggregationRequest {
     frontiers?: SearchFrontierSnapshot[] | undefined;
     isBook?: boolean | undefined;
     includeMasses?: boolean | undefined;
-    includeClues?: boolean | undefined;
+    includeShownClueDistribution?: boolean | undefined;
 }
 
 export interface SummaryAggregationResult {
     any: bigint[];
     ranks: bigint[];
     count: bigint[];
-    clues: Map<number, bigint>;
+    shownClueDistribution: Map<number, bigint>;
 }
 
 /**
@@ -29,24 +29,24 @@ export class SummaryAggregationService {
             frontiers = [],
             isBook = false,
             includeMasses = true,
-            includeClues = true
+            includeShownClueDistribution = true
         } = request;
 
         const result: SummaryAggregationResult = {
             any: [],
             ranks: [],
             count: [],
-            clues: new Map()
+            shownClueDistribution: new Map()
         };
 
         for (const [packed, mass] of combos) {
-            this.addContribution(result, packed, mass, indexToEnchant, false, isBook, includeMasses, includeClues);
+            this.addContribution(result, packed, mass, indexToEnchant, false, isBook, includeMasses, includeShownClueDistribution);
         }
 
         for (const { frontier, graph, scale } of frontiers) {
             frontier.forEachNode((nodeId, prob) => {
                 const mass = ProbUtils.scale(prob, scale);
-                this.addContribution(result, graph.getCombo(nodeId), mass, indexToEnchant, true, isBook, includeMasses, includeClues);
+                this.addContribution(result, graph.getCombo(nodeId), mass, indexToEnchant, true, isBook, includeMasses, includeShownClueDistribution);
             });
         }
 
@@ -61,7 +61,7 @@ export class SummaryAggregationService {
         isPending: boolean,
         isBook: boolean,
         includeMasses: boolean,
-        includeClues: boolean
+        includeShownClueDistribution: boolean
     ): void {
         if (mass <= 0n) return;
 
@@ -78,11 +78,11 @@ export class SummaryAggregationService {
             this.addArrayMass(result.count, displayCount, mass);
         }
 
-        const needsEnchantScan = count > 0 && (includeMasses || includeClues);
+        const needsEnchantScan = count > 0 && (includeMasses || includeShownClueDistribution);
         if (!needsEnchantScan) return;
 
-        const clueQuotient = includeClues ? mass / BigInt(count) : 0n;
-        const clueRemainder = includeClues ? Number(mass % BigInt(count)) : 0;
+        const clueQuotient = includeShownClueDistribution ? mass / BigInt(count) : 0n;
+        const clueRemainder = includeShownClueDistribution ? Number(mass % BigInt(count)) : 0;
 
         let mult = 1;
         for (let i = 0; i < count; i++, mult *= PACKING_CONSTANTS.BYTE_BASIS) {
@@ -96,10 +96,10 @@ export class SummaryAggregationService {
                 this.addArrayMass(result.ranks, enchant, aggregateMass);
             }
 
-            if (includeClues) {
+            if (includeShownClueDistribution) {
                 const share = clueQuotient + (i < clueRemainder ? 1n : 0n);
                 if (share > 0n) {
-                    result.clues.set(enchant, (result.clues.get(enchant) ?? 0n) + share);
+                    result.shownClueDistribution.set(enchant, (result.shownClueDistribution.get(enchant) ?? 0n) + share);
                 }
             }
         }

@@ -4,25 +4,27 @@ Thank you for your interest in contributing! This document provides guidelines f
 
 ## Workflow & Branching Strategy
 
-We follow a specialized workflow to ensure a clean production history while maintaining granular development context.
+We follow a specialized workflow to keep production history clean while preserving the granular commits that explain each release.
 
-1.  **Development (`dev`)**: All active development happens here or on feature branches merged into `dev`.
-    *   Every PR to `dev` must pass the full test suite and security scan.
-2.  **Releases (`release/vX.Y.Z`)**: When preparing for a release, create a branch from `dev`.
+1.  **Production (`main`)**: This branch is the source of truth and contains only squash-merged milestone commits.
+    *   Start feature, performance, registry, and release branches from the current `main`.
+    *   Rebase long-lived work onto `main` before opening or updating a release PR.
+2.  **Release branches (`release/vX.Y.Z`)**: Prepare each version on a branch created from `main`.
+    *   Keep the normal commit history on the branch. Do not squash it before opening the PR.
     *   Update the `CHANGELOG.md` on this branch.
-    *   For major releases, update `ARCHITECTURE.md` and at least one other top-level project doc (`README.md`, `MASS_HANDLING.md`, or `CONTRIBUTING.md`).
+    *   For major releases, update `ARCHITECTURE.md`.
     *   For minor releases, update project docs when behavior, architecture, workflows, or user-facing capabilities changed.
-    *   Patch releases are exempt from release documentation checks unless the patch changes documented behavior.
-    *   PR the release branch into `main`.
-3.  **Production (`main`)**: This branch contains ONLY milestone commits.
-    *   Releases are merged into `main` using **Squash and Merge**.
-    *   Upon merge, `main` is automatically rebased back into `dev` to keep them synchronized.
+    *   PR the release branch into `main` and merge it using **Squash and Merge**.
+3.  **Release archive (`release-history`)**: This branch records the full commit history that produced each release.
+    *   The release workflow archives the original release PR head after the squash merge lands on `main`.
+    *   `release-history` must match the current `main` tree before each release PR merges.
+    *   Do not push to `release-history` manually; it is maintained by the release workflow.
 
 ## Development Principles
 
-1.  **Strict Mass Conservation**: Every probability mass must be accounted for. Use `ProbabilityMassBookkeeper` for all search logic.
+1.  **Strict Mass Conservation**: Every probability mass must be accounted for. Use `ProbabilityMassAccountant` for all search logic.
 2.  **Version Isolation**: Use the `registry.version` when interacting with `CacheManager`. Never share caches between game versions.
-3.  **BigInt for Math**: Use high-precision `bigint` (scaled to `10^12`) for all core probability calculations. Only convert to `number` in the final `SummaryService`.
+3.  **BigInt for Math**: Use high-precision `bigint` (scaled to `2^60`) for all core probability calculations. Only convert to `number` in reporting and UI-facing services.
 4.  **Deterministic Results**: All engine logic must be deterministic. Avoid `Math.random()` or platform-specific floating point dependencies in the core.
 5.  **Subpath Imports**: Use `#` aliases for all internal library imports. Avoid direct relative paths (`../`, `./`) when an alias is available.
 
@@ -49,37 +51,42 @@ Before submitting any major engine refactor, run the snapshot regression suite t
 
 ## Performance Profiling
 
-Performance is critical for the "Standalone HTML" version. We use a dedicated benchmarking script to track execution time and cache efficiency.
+Performance is critical for the "Standalone HTML" version. We use dedicated profiling scripts to track search time, post-processing time, and cache behavior.
 
 ### Running the Benchmarks
 ```bash
-npx tsx scripts/benchmark_engine.ts
+npm run benchmark -- --version 1.21.11
 ```
 
-This script will:
-1. Initialize the engine for a specific version.
-2. Run a set of standard search queries (Book vs. Item).
-3. Report:
-    - **Time per query** (ms).
-    - **Cache hit rates** (via `cacheManager.getMetrics()`).
-    - **Memory footprint** (if available).
+For CPU profiles, use:
+```bash
+npm run benchmark:cpu -- --version 1.21.11
+```
+
+For the repeatable book clue/no-clue perf cases, use:
+```bash
+npx tsx scripts/profile_perf_cases.ts
+```
+
+These scripts report result counts, active search time, post-processing time, and total engine time. `scripts/benchmark_engine.ts` remains available for simple cold/warm cache smoke checks.
 
 ### Optimizing the Search
-- Use `SearchProcessor` for low-level loops.
-- Avoid object allocation in the hot loops (`processInitialNode`, `processSearchNode`).
-- Leverage bit-packing for keys and state.
+- Keep Minecraft rule logic in `SearchProcessor`, mass forwarding in `MassForwardingEngine`, and queue orchestration in `SearchController`.
+- Avoid object allocation in hot loops such as `processInitialNode`, `buildExpansionBlueprint`, and forwarding by node ID.
+- Prefer graph node IDs, packed combos, typed arrays, and precomputed pool metadata over repeated map/key reconstruction.
 
 ## Mass Conservation Invariants
 
 The engine maintains a system of "buckets" to track every atom of probability:
 - **Resolved**: Reached a terminal enchantment combo.
+- **Clue Incompatible**: Proven unable to match the observed clue in a clue-aware search.
 - **Pending**: Remaining in the frontier (incomplete search).
-- **Sieved**: Pruned because probability fell below `ENGINE.MIN_RESOLVE_THRESHOLD`.
-- **Capped**: Pruned because result limit or heap size was reached.
+- **Sieved**: Pruned because probability fell below `SEARCH_CONSTANTS.SYSTEM_THRESHOLD_FLOOR`.
 - **Overflow**: Discarded by engine limits (6+ enchants).
+- **Capped**: Pruned because result limit or heap size was reached.
 - **Rounding**: Compensation for fixed-point math adjustments.
 
-**Invariant**: `Resolved + Pending + Sieved + Capped + Overflow + Rounding === 10^12` (PRECISION)
+**Invariant**: `Resolved + Clue Incompatible + Pending + Sieved + Overflow + Capped + Rounding === 2^60` (PRECISION)
 
 ## Directory Structure
 

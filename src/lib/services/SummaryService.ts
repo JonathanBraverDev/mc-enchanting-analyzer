@@ -27,9 +27,9 @@ export class SummaryService {
             any: {},
             count: {},
             combos: {},
-            clues: {},
+            shownClueDistribution: {},
             threshold,
-            accuracy: accounting.resolved,
+            accuracy: accounting.resolved + accounting.clueIncompatible,
             accounting
         };
 
@@ -38,7 +38,7 @@ export class SummaryService {
         SummaryService.populateStats(stats.any, derived.any);
         SummaryService.populateStats(stats.ranks, derived.ranks);
         SummaryService.populateStats(stats.count, derived.count);
-        SummaryService.populateStats(stats.clues, derived.clues);
+        SummaryService.populateStats(stats.shownClueDistribution!, derived.shownClueDistribution);
 
         // Ensure we always return sorted results if a limit is set > 0
         let comboSource: Iterable<[number, bigint]> = [];
@@ -96,7 +96,9 @@ export class SummaryService {
             tracker,
             indexToEnchant,
             targetClueId,
-            comboLimit = ENGINE_LIMITS.MAX_RESULTS_SUMMARY
+            comboLimit = ENGINE_LIMITS.MAX_RESULTS_SUMMARY,
+            frontiers = [],
+            isBook = false
         } = request;
         const accounting = tracker.mass.toPublic();
         const stats: CalculationStats = {
@@ -104,17 +106,19 @@ export class SummaryService {
             any: {},
             count: {},
             combos: {},
-            clues: {},
             threshold: 0,
-            accuracy: accounting.resolved,
+            accuracy: accounting.resolved + accounting.clueIncompatible,
             accounting
         };
 
         // 1. Perform Bayesian conditioning
-        const conditioned = ClueAnalysisService.conditionOnClue(combos, targetClueId, indexToEnchant);
+        const conditioned = ClueAnalysisService.conditionOnClue(combos, targetClueId, indexToEnchant, frontiers, isBook);
 
-        // 2. Update top-level accuracy and inject absolute clue mass
-        stats.accounting.clueKnownSpace = ProbUtils.toNumber(conditioned.clueKnownSpace);
+        // 2. Preserve observed-clue diagnostics used for Bayesian conditioning.
+        stats.clue = {
+            idAndRank: targetClueId,
+            knownSpace: ProbUtils.toNumber(conditioned.knownSpace)
+        };
 
         // 3. Populate result maps directly (now normalized to 1.0/100% certainty within the service)
         const populatePlain = (target: Record<string, number>, source: Map<number, bigint>) => {

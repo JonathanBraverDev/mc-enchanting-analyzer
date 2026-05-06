@@ -49,25 +49,29 @@
   },
   "accuracy": 1,
   "accounting": {
-    "resolved": 1,
+    "resolved": 0.44137285945983445,
+    "clueIncompatible": 0.5586271405401655,
     "pending": 0,
     "sieved": 0,
     "overflow": 0,
     "capped": 0,
-    "rounding": 2.5153490401663703e-17,
-    "recoveredRounding": 1.0581813203458523e-16,
+    "rounding": 1.5612511283791264e-17,
+    "recoveredRounding": 7.112366251504909e-17,
     "recoveredSieved": 0,
-    "clueKnownSpace": 0.2472811318053629,
     "units": {
-      "resolved": "1152921504606846947",
+      "resolved": "508868261221058747",
+      "clueIncompatible": "644053243385788210",
       "pending": "0",
       "sieved": "0",
       "overflow": "0",
       "capped": "0",
-      "rounding": "29",
-      "recoveredRounding": "122",
-      "recoveredSieved": "0",
-      "clueKnownSpace": "0"
+      "rounding": "18",
+      "recoveredRounding": "82",
+      "recoveredSieved": "0"
     }
+  },
+  "clue": {
+    "idAndRank": 2820,
+    "knownSpace": 0.247281131805
   }
 }

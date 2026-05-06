@@ -1,19 +1,19 @@
-import { MassBookkeeping, MassAccounting, MassEventType } from '#types/mass.js';
+import { MassAccountingBreakdown, MassBucketName, MassBucketUnits } from '#types/mass.js';
 import { ProbUtils, PRECISION } from '#utils/index.js';
 
 /**
  * Internal index mapping for probability mass buckets.
  */
-const BUCKET_INDEX: Record<MassEventType, number> = {
+const BUCKET_INDEX: Record<MassBucketName, number> = {
     resolved: 0,
-    pending: 1,
-    sieved: 2,
-    overflow: 3,
-    capped: 4,
-    rounding: 5,
-    recoveredRounding: 6,
-    recoveredSieved: 7,
-    clueKnownSpace: 8
+    clueIncompatible: 1,
+    pending: 2,
+    sieved: 3,
+    overflow: 4,
+    capped: 5,
+    rounding: 6,
+    recoveredRounding: 7,
+    recoveredSieved: 8
 };
 const BUCKET_COUNT = 9;
 
@@ -24,10 +24,11 @@ const BUCKET_COUNT = 9;
 export class ProbabilityMassAccountant {
     private data: BigUint64Array;
 
-    constructor(initialMass?: MassBookkeeping) {
+    constructor(initialMass?: MassBucketUnits) {
         this.data = new BigUint64Array(BUCKET_COUNT);
         if (initialMass) {
             this.data[BUCKET_INDEX.resolved] = initialMass.resolved;
+            this.data[BUCKET_INDEX.clueIncompatible] = initialMass.clueIncompatible;
             this.data[BUCKET_INDEX.pending] = initialMass.pending;
             this.data[BUCKET_INDEX.sieved] = initialMass.sieved;
             this.data[BUCKET_INDEX.overflow] = initialMass.overflow;
@@ -35,21 +36,20 @@ export class ProbabilityMassAccountant {
             this.data[BUCKET_INDEX.rounding] = initialMass.rounding;
             this.data[BUCKET_INDEX.recoveredRounding] = initialMass.recoveredRounding;
             this.data[BUCKET_INDEX.recoveredSieved] = initialMass.recoveredSieved;
-            this.data[BUCKET_INDEX.clueKnownSpace] = initialMass.clueKnownSpace;
         }
     }
 
     /**
      * Records a positive mass event in the specified bucket.
      */
-    public record(type: MassEventType, prob: bigint): void {
+    public record(type: MassBucketName, prob: bigint): void {
         this.data[BUCKET_INDEX[type]!]! += prob;
     }
 
     /**
      * Subtracts mass from the specified bucket.
      */
-    public subtract(type: MassEventType, prob: bigint): void {
+    public subtract(type: MassBucketName, prob: bigint): void {
         this.data[BUCKET_INDEX[type]!]! -= prob;
     }
 
@@ -67,8 +67,8 @@ export class ProbabilityMassAccountant {
      */
     public getTotalMass(): bigint {
         const d = this.data;
-        // recoveredRounding (6), recoveredSieved (7), and clueKnownSpace (8) are diagnostic
-        return d[0]! + d[1]! + d[2]! + d[3]! + d[4]! + d[5]!;
+        // recoveredRounding (7) and recoveredSieved (8) are diagnostic
+        return d[0]! + d[1]! + d[2]! + d[3]! + d[4]! + d[5]! + d[6]!;
     }
 
     /**
@@ -81,43 +81,43 @@ export class ProbabilityMassAccountant {
         }
     }
 
-    public getBookkeeping(): MassBookkeeping {
+    public getBucketUnits(): MassBucketUnits {
         const d = this.data;
         return {
             resolved: d[0]!,
-            pending: d[1]!,
-            sieved: d[2]!,
-            overflow: d[3]!,
-            capped: d[4]!,
-            rounding: d[5]!,
-            recoveredRounding: d[6]!,
-            recoveredSieved: d[7]!,
-            clueKnownSpace: d[8]!
+            clueIncompatible: d[1]!,
+            pending: d[2]!,
+            sieved: d[3]!,
+            overflow: d[4]!,
+            capped: d[5]!,
+            rounding: d[6]!,
+            recoveredRounding: d[7]!,
+            recoveredSieved: d[8]!
         };
     }
 
-    public toPublic(): MassAccounting {
+    public toPublic(): MassAccountingBreakdown {
         const d = this.data;
         return {
             resolved: ProbUtils.toNumber(d[0]!),
-            pending: ProbUtils.toNumber(d[1]!),
-            sieved: ProbUtils.toNumber(d[2]!),
-            overflow: ProbUtils.toNumber(d[3]!),
-            capped: ProbUtils.toNumber(d[4]!),
-            rounding: ProbUtils.toNumber(d[5]!),
-            recoveredRounding: ProbUtils.toNumber(d[6]!),
-            recoveredSieved: ProbUtils.toNumber(d[7]!),
-            clueKnownSpace: ProbUtils.toNumber(d[8]!),
+            clueIncompatible: ProbUtils.toNumber(d[1]!),
+            pending: ProbUtils.toNumber(d[2]!),
+            sieved: ProbUtils.toNumber(d[3]!),
+            overflow: ProbUtils.toNumber(d[4]!),
+            capped: ProbUtils.toNumber(d[5]!),
+            rounding: ProbUtils.toNumber(d[6]!),
+            recoveredRounding: ProbUtils.toNumber(d[7]!),
+            recoveredSieved: ProbUtils.toNumber(d[8]!),
             units: {
                 resolved: d[0]!.toString(),
-                pending: d[1]!.toString(),
-                sieved: d[2]!.toString(),
-                overflow: d[3]!.toString(),
-                capped: d[4]!.toString(),
-                rounding: d[5]!.toString(),
-                recoveredRounding: d[6]!.toString(),
-                recoveredSieved: d[7]!.toString(),
-                clueKnownSpace: d[8]!.toString()
+                clueIncompatible: d[1]!.toString(),
+                pending: d[2]!.toString(),
+                sieved: d[3]!.toString(),
+                overflow: d[4]!.toString(),
+                capped: d[5]!.toString(),
+                rounding: d[6]!.toString(),
+                recoveredRounding: d[7]!.toString(),
+                recoveredSieved: d[8]!.toString()
             }
         };
     }
@@ -134,14 +134,14 @@ export class ProbabilityMassAccountant {
      */
     public getExploredMass(): bigint {
         const d = this.data;
-        return d[0]! + d[2]! + d[3]!;
+        return d[0]! + d[1]! + d[3]! + d[4]!;
     }
 
     /**
      * Returns the mass from frontiers that were discovered but not yet expanded.
      */
     public getUnexploredMass(): bigint {
-        return this.data[1]!;
+        return this.data[2]!;
     }
 
     /**
@@ -149,7 +149,7 @@ export class ProbabilityMassAccountant {
      */
     public getDiscardedMass(): bigint {
         const d = this.data;
-        return d[2]! + d[3]! + d[4]!;
+        return d[3]! + d[4]! + d[5]!;
     }
 
     public clone(): ProbabilityMassAccountant {

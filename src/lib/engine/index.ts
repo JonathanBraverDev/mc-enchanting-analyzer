@@ -109,10 +109,12 @@ export class EnchantEngine {
      */
     public async searchSequentialCheckpoints(request: SequentialCheckpointSearchRequest): Promise<SearchResult> {
         this.validateRequest(request);
+        const targetClueId = request.clue ? this.getPackedClue(request.cat, request.clue) : undefined;
 
         return this.searchService.searchSequentialCheckpoints({
             ...request,
-            registry: this.registry
+            registry: this.registry,
+            targetClueId
         });
     }
 
@@ -121,10 +123,12 @@ export class EnchantEngine {
      */
     public async searchToCheckpoint(request: CheckpointSearchRequest): Promise<SearchResult> {
         this.validateRequest(request);
+        const targetClueId = request.clue ? this.getPackedClue(request.cat, request.clue) : undefined;
 
         return this.searchService.searchToCheckpoint({
             ...request,
-            registry: this.registry
+            registry: this.registry,
+            targetClueId
         });
     }
 
@@ -180,6 +184,7 @@ export class EnchantEngine {
             cat,
             xp,
             mat,
+            targetClueId: packedClue ?? undefined,
             ...searchConfig
         });
 

@@ -19,20 +19,21 @@ export class ClueAnalysisService {
         combos: Map<PackedCombo, bigint>,
         targetClueId: number,
         indexToEnchant: number[],
-        frontiers: SearchFrontierSnapshot[] = []
+        frontiers: SearchFrontierSnapshot[] = [],
+        _isBook = false
     ): {
         combos: Map<PackedCombo, bigint>,
         anyMass: Map<number, bigint>,
         rankMass: Map<number, bigint>,
         countMass: Map<number, bigint>,
-        clueKnownSpace: bigint
+        knownSpace: bigint
     } {
         const clueMasses = SummaryAggregationService.aggregate({
             combos,
             indexToEnchant,
             frontiers,
             includeMasses: false
-        }).clues;
+        }).shownClueDistribution;
         const pClue = clueMasses.get(targetClueId) ?? 0n;
 
         const conditionedCombos = new Map<PackedCombo, bigint>();
@@ -41,7 +42,7 @@ export class ClueAnalysisService {
         const countMass = new Map<number, bigint>();
 
         if (pClue === 0n) {
-            return { combos: conditionedCombos, anyMass, rankMass, countMass, clueKnownSpace: 0n };
+            return { combos: conditionedCombos, anyMass, rankMass, countMass, knownSpace: 0n };
         }
 
         let totalMass = 0n;
@@ -52,8 +53,8 @@ export class ClueAnalysisService {
 
         for (const { frontier, graph, scale } of frontiers) {
             frontier.forEachNode((nodeId, prob) => {
-                totalMass += this.processConditionedNode(graph.getCombo(nodeId), ProbUtils.scale(prob, scale), targetClueId, pClue, indexToEnchant, conditionedCombos, anyMass, rankMass, countMass);
-            });
+            totalMass += this.processConditionedNode(graph.getCombo(nodeId), ProbUtils.scale(prob, scale), targetClueId, pClue, indexToEnchant, conditionedCombos, anyMass, rankMass, countMass);
+        });
         }
 
         // Final normalization to exactly 1.0 (Bit-perfect PRECISION)
@@ -81,7 +82,7 @@ export class ClueAnalysisService {
             anyMass,
             rankMass,
             countMass,
-            clueKnownSpace: pClue
+            knownSpace: pClue
         };
     }
 

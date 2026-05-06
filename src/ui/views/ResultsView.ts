@@ -104,7 +104,7 @@ export class ResultsView {
             fragment.appendChild(item);
         });
 
-        this.appendConfidenceItem(fragment, insights.accuracy, insights.accounting, insights.accounting.clueKnownSpace);
+        this.appendConfidenceItem(fragment, insights.accuracy, insights.accounting, insights.clue?.knownSpace);
 
         // Atomic swap
         this.comboEl.replaceChildren(fragment);
@@ -163,7 +163,7 @@ export class ResultsView {
         });
 
         const clueKnownSpace = view.normalization.domain === 'clue-known-space'
-            ? view.normalization.clueKnownSpace
+            ? view.normalization.clue?.knownSpace
             : undefined;
         this.appendConfidenceItem(fragment, view.accounting.resolved, view.accounting, clueKnownSpace);
 
@@ -210,7 +210,7 @@ export class ResultsView {
     private appendConfidenceItem(
         fragment: DocumentFragment,
         accuracy: number,
-        accounting: { resolved: number; pending: number; sieved: number; overflow: number; rounding: number },
+        accounting: { resolved: number; clueIncompatible: number; pending: number; sieved: number; overflow: number; rounding: number },
         clueKnownSpace?: number
     ): void {
         if (accuracy >= 0.999 && accounting.pending <= 0.001) return;
@@ -227,13 +227,13 @@ export class ResultsView {
                 <span style="color: ${color}">${UIUtils.formatPercent(accuracy)}</span>
             </div>
             ${accounting.pending > 0.1 ? `<div style="font-size: 0.7rem; color: #ffca28; margin-top: 3px;">High branching complexity - results approximated.</div>` : ''}
-            ${this.getClueDiagnosticHtml(clueKnownSpace)}
+            ${this.getClueDiagnosticHtml(clueKnownSpace, accounting.clueIncompatible)}
         `;
         fragment.appendChild(info);
     }
 
     private getAccountingTooltip(
-        accounting: { resolved: number; pending: number; sieved: number; overflow: number; rounding: number },
+        accounting: { resolved: number; clueIncompatible: number; pending: number; sieved: number; overflow: number; rounding: number },
         clueKnownSpace?: number
     ): string {
         const tooltip = [
@@ -247,12 +247,13 @@ export class ResultsView {
         if (clueKnownSpace !== undefined) {
             tooltip.push(`--- Posterior (Clue-Conditioned) ---`);
             tooltip.push(`Compatible Mass: ${UIUtils.formatPercent(clueKnownSpace)} of explored space`);
+            tooltip.push(`Incompatible Mass: ${UIUtils.formatPercent(accounting.clueIncompatible)}`);
         }
 
         return tooltip.join('\n');
     }
 
-    private getClueDiagnosticHtml(clueKnownSpace?: number): string {
+    private getClueDiagnosticHtml(clueKnownSpace?: number, clueIncompatible = 0): string {
         if (clueKnownSpace === undefined) return '';
 
         return `
@@ -260,6 +261,10 @@ export class ResultsView {
                 <div style="display: flex; justify-content: space-between;">
                     <span>Known compatible mass:</span>
                     <span>${UIUtils.formatPercent(clueKnownSpace)}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                    <span>Known incompatible mass:</span>
+                    <span>${UIUtils.formatPercent(clueIncompatible)}</span>
                 </div>
             </div>
         `;

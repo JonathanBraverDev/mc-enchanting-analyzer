@@ -3,6 +3,9 @@ import assert from 'node:assert';
 import { PRECISION } from '#utils/math/ProbUtils.js';
 import { SummaryService } from '#services/SummaryService.js';
 import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
+import { ComboUtils } from '#utils/domain/ComboUtils.js';
+import { makeFrontierSnapshot } from '#tests/infra/frontier-test-utils.js';
+import type { PackedEnchant } from '#types/index.js';
 
 describe('Clue Conditioning Scaling diagnostics', () => {
     // Mock indexToEnchant: 1 -> Sharpness I, 2 -> Sharpness II
@@ -18,7 +21,9 @@ describe('Clue Conditioning Scaling diagnostics', () => {
         tracker.mass.record('resolved', PRECISION);
         const stats = SummaryService.summarizeConditioned({ combos: rawCombos as any, tracker, indexToEnchant, targetClueId });
 
-        assert.strictEqual(stats.accounting.clueKnownSpace, 0);
+        assert.strictEqual(stats.clue?.knownSpace, 0);
+        assert.strictEqual(stats.clue?.idAndRank, targetClueId);
+        assert.strictEqual(stats.shownClueDistribution, undefined);
         assert.strictEqual(stats.accuracy, 1); // Search was 100% complete
         assert.strictEqual(Object.keys(stats.combos).length, 0); // But 0 results match
     });
@@ -33,7 +38,9 @@ describe('Clue Conditioning Scaling diagnostics', () => {
         const stats = SummaryService.summarizeConditioned({ combos: rawCombos as any, tracker, indexToEnchant, targetClueId });
 
         // pClue should be 1.0
-        assert.ok(Math.abs((stats.accounting.clueKnownSpace ?? 0) - 1.0) < 1e-12);
+        assert.ok(Math.abs((stats.clue?.knownSpace ?? 0) - 1.0) < 1e-12);
+        assert.strictEqual(stats.clue?.idAndRank, targetClueId);
+        assert.strictEqual(stats.shownClueDistribution, undefined);
         assert.strictEqual(stats.accuracy, 1);
         // combos should sum to 1.0
         assert.ok(Math.abs((stats.combos['1'] ?? 0) - 1.0) < 1e-12);
@@ -51,7 +58,9 @@ describe('Clue Conditioning Scaling diagnostics', () => {
         const stats = SummaryService.summarizeConditioned({ combos: rawCombos as any, tracker, indexToEnchant, targetClueId });
 
         // pClue = 0.5
-        assert.ok(Math.abs((stats.accounting.clueKnownSpace ?? 0) - 0.5) < 1e-12);
+        assert.ok(Math.abs((stats.clue?.knownSpace ?? 0) - 0.5) < 1e-12);
+        assert.strictEqual(stats.clue?.idAndRank, targetClueId);
+        assert.strictEqual(stats.shownClueDistribution, undefined);
         // stats.accuracy is 1.0, so combos should scale up to sum to 1.0
         assert.ok(Math.abs((stats.combos['1'] ?? 0) - 1.0) < 1e-12);
     });
@@ -67,10 +76,60 @@ describe('Clue Conditioning Scaling diagnostics', () => {
         const stats = SummaryService.summarizeConditioned({ combos: rawCombos as any, tracker, indexToEnchant, targetClueId });
 
         // pClue = 0.25 (Found 25% of absolute generation space)
-        assert.ok(Math.abs((stats.accounting.clueKnownSpace ?? 0) - 0.25) < 1e-12);
+        assert.ok(Math.abs((stats.clue?.knownSpace ?? 0) - 0.25) < 1e-12);
         // Search accuracy reflects 50% progress
         assert.strictEqual(stats.accuracy, 0.5);
         // BUT results target 1.0 (asserting 100% certainty that IF the clue is found, this is the combo)
         assert.ok(Math.abs((stats.combos['1'] ?? 0) - 1.0) < 1e-12);
+    });
+
+    it('includes pending frontier mass in clue-known space', () => {
+        const enchantToIndex = new Map<number, number>([
+            [targetClueId, 1],
+            [2, 2]
+        ]);
+        const packed = ComboUtils.pack([targetClueId as PackedEnchant, 2 as PackedEnchant], enchantToIndex);
+        const frontiers = makeFrontierSnapshot(packed, 2, PRECISION / 2n);
+
+        const tracker = new SearchStateTracker();
+        tracker.mass.record('pending', PRECISION / 2n);
+
+        const stats = SummaryService.summarizeConditioned({
+            combos: new Map(),
+            tracker,
+            indexToEnchant,
+            targetClueId,
+            frontiers
+        });
+
+        assert.ok(Math.abs((stats.clue?.knownSpace ?? 0) - 0.25) < 1e-12);
+        assert.ok(Math.abs(Number(stats.combos[packed.toString(16)] ?? 0) - 1.0) < 1e-12);
+    });
+
+    it('includes pending book frontier mass in clue-known space', () => {
+        const enchantC = 3 as PackedEnchant;
+        const bookIndexToEnchant = [0, targetClueId, 2, enchantC];
+        const enchantToIndex = new Map<number, number>([
+            [targetClueId, 1],
+            [2, 2],
+            [enchantC, 3]
+        ]);
+        const packed = ComboUtils.pack([targetClueId as PackedEnchant, 2 as PackedEnchant, enchantC], enchantToIndex);
+        const frontiers = makeFrontierSnapshot(packed, 3, PRECISION);
+
+        const tracker = new SearchStateTracker();
+        tracker.mass.record('pending', PRECISION);
+
+        const stats = SummaryService.summarizeConditioned({
+            combos: new Map(),
+            tracker,
+            indexToEnchant: bookIndexToEnchant,
+            targetClueId,
+            frontiers,
+            isBook: true
+        });
+
+        assert.ok(Math.abs((stats.clue?.knownSpace ?? 0) - (1 / 3)) < 1e-12);
+        assert.ok(Math.abs(Number(stats.combos[packed.toString(16)] ?? 0) - 1.0) < 1e-12);
     });
 });

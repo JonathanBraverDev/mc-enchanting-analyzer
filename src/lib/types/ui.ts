@@ -1,5 +1,5 @@
 import type { CalculationStats } from '#types/engine.js';
-import type { MassAccounting } from '#types/mass.js';
+import type { MassAccountingBreakdown } from '#types/mass.js';
 
 /**
  * Human-readable enchantment calculation statistics.
@@ -13,9 +13,16 @@ export interface EnchantInsights {
     /** Reliability of the results (Resolved mass: 0.0 to 1.0). */
     accuracy: number;
     /** Complete diagnostic breakdown of all mass states. */
-    accounting: MassAccounting;
-    /** Map of possible clue enchantments to their original unconditioned probabilities. */
-    clues: Record<string, number>;
+    accounting: MassAccountingBreakdown;
+    /** Observed displayed-clue diagnostics. Present only for clue-conditioned stats. */
+    clue?: {
+        /** Human-readable observed clue name, including rank. */
+        name: string;
+        /** Absolute displayed-clue mass used for Bayesian conditioning. */
+        knownSpace: number;
+    } | undefined;
+    /** Map of possible shown table clues to their original unconditioned probabilities. Omitted for clue-conditioned stats. */
+    shownClueDistribution?: Record<string, number> | undefined;
 }
 
 export interface NameResolver {
