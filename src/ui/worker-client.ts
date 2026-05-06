@@ -154,13 +154,17 @@ export const WorkerClient = {
         return this.startRun('top', 'topRunStart', input, refinementLevels, onUpdate, onTerminal);
     },
 
+    projectTopRun(input: TopInputSignature, refinementLevels: RefinementLevelName[], onUpdate: TopUpdateCallback, onTerminal: TerminalCallback): RunId {
+        return this.startRun('top', 'topRunProject', input, refinementLevels, onUpdate, onTerminal);
+    },
+
     startChartRun(input: ChartInputSignature, refinementLevels: RefinementLevelName[], onUpdate: ChartUpdateCallback, onTerminal: TerminalCallback): RunId {
         return this.startRun('chart', 'chartRunStart', input, refinementLevels, onUpdate, onTerminal);
     },
 
     startRun(
         kind: WorkerKind,
-        type: 'topRunStart' | 'chartRunStart',
+        type: 'topRunStart' | 'topRunProject' | 'chartRunStart',
         input: TopInputSignature | ChartInputSignature,
         refinementLevels: RefinementLevelName[],
         onUpdate: RunUpdateCallback,

@@ -1,3 +1,5 @@
+import type { TargetRequirementInput } from '#lib/types/target.js';
+
 export type WorkerKind = 'top' | 'chart';
 export type RunId = string & { readonly __brand: 'RunId' };
 export type PassId = string & { readonly __brand: 'PassId' };
@@ -14,6 +16,7 @@ export interface BaseInputSignature {
   category: string;
   material: string;
   clue: string | null;
+  targets?: TargetRequirementInput[] | undefined;
 }
 
 export interface TopInputSignature extends BaseInputSignature {
@@ -27,7 +30,8 @@ export interface ChartInputSignature extends BaseInputSignature {}
 export type WorkerRequest =
   | InitRequest
   | TopRunStartRequest
-  | ChartRunStartRequest;
+  | ChartRunStartRequest
+  | TopRunProjectRequest;
 
 export interface InitRequest {
   type: 'init';
@@ -38,6 +42,17 @@ export interface InitRequest {
 
 export interface TopRunStartRequest {
   type: 'topRunStart';
+  requestId: RequestId;
+  runId: RunId;
+  input: TopInputSignature;
+  refinementLevels: RefinementLevelName[];
+  view?: {
+    comboLimit?: number;
+  };
+}
+
+export interface TopRunProjectRequest {
+  type: 'topRunProject';
   requestId: RequestId;
   runId: RunId;
   input: TopInputSignature;

@@ -118,6 +118,50 @@ describe('Worker: Protocol Hardening (v5)', () => {
             assert.strictEqual(terminal.status, 'error');
             assert.match(terminal.error, /Unknown enchantment/);
         });
+
+        it('should re-project target-only top changes from the cached checkpoint result', async () => {
+            const baseRunId = 'run-target-base' as RunId;
+            const baseInput = {
+                category: TEST_DATA.ITEMS.SWORD,
+                xpLevel: 30,
+                material: TEST_DATA.MATERIALS.DIAMOND,
+                clue: null,
+                version: TEST_DATA.VERSIONS.MODERN
+            };
+
+            sendMessage({
+                type: 'topRunStart',
+                requestId: 4,
+                runId: baseRunId,
+                input: baseInput,
+                refinementLevels: ['coarse']
+            });
+            await waitForMessages(captured, 'topUpdate', 1);
+            await waitForTerminal(captured, baseRunId);
+            captured.length = 0;
+
+            const projectRunId = 'run-target-project' as RunId;
+            sendMessage({
+                type: 'topRunProject',
+                requestId: 5,
+                runId: projectRunId,
+                input: {
+                    ...baseInput,
+                    targets: [{ enchantment: 'Sharpness', rank: 1, rankMode: 'atLeast' }]
+                },
+                refinementLevels: ['coarse']
+            });
+
+            const updates = await waitForMessages(captured, 'topUpdate', 1) as any;
+            assert.strictEqual(updates[0].runId, projectRunId);
+            assert.ok(updates[0].view.target, 'projected view should include target diagnostics');
+            assert.strictEqual(updates[0].view.target.labels[0], 'Sharpness I+');
+            assert.ok(updates[0].view.target.matchShare > 0);
+            assert.ok(updates[0].view.combos.every((combo: any) => combo.enchants.some((name: string) => name.startsWith('Sharpness '))));
+
+            const terminal = await waitForTerminal(captured, projectRunId) as any;
+            assert.strictEqual(terminal.status, 'done');
+        });
     });
 
     describe('chart-worker protocol', () => {
@@ -152,6 +196,30 @@ describe('Worker: Protocol Hardening (v5)', () => {
             const updates = await waitForMessages(captured, 'chartUpdate', 1) as any;
             assert.strictEqual(updates[0].runId, runId);
             assert.ok(updates[0].cell, 'chartUpdate must carry a cell');
+
+            const terminal = await waitForTerminal(captured, runId) as any;
+            assert.strictEqual(terminal.status, 'done');
+        });
+
+        it('should include target diagnostics during normal chart runs', async () => {
+            const runId = 'run-chart-target' as RunId;
+            sendMessage({
+                type: 'chartRunStart',
+                requestId: 8,
+                runId,
+                input: {
+                    category: TEST_DATA.ITEMS.SWORD,
+                    material: TEST_DATA.MATERIALS.DIAMOND,
+                    clue: null,
+                    version: TEST_DATA.VERSIONS.MODERN,
+                    targets: [{ enchantment: 'Sharpness', rank: 1, rankMode: 'atLeast' }]
+                },
+                refinementLevels: ['coarse']
+            });
+
+            const updates = await waitForMessages(captured, 'chartUpdate', 1) as any;
+            assert.ok(updates[0].cell.target, 'chart cell should include target diagnostics');
+            assert.strictEqual(updates[0].cell.target.labels[0], 'Sharpness I+');
 
             const terminal = await waitForTerminal(captured, runId) as any;
             assert.strictEqual(terminal.status, 'done');
