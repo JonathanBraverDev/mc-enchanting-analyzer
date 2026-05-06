@@ -17,7 +17,7 @@ interface ChartConstructor {
 }
 declare const Chart: ChartConstructor;
 
-const MAX_RANK_DATASETS = 32;
+const DEFAULT_VISIBLE_RANK_DATASET_LIMIT = 32;
 
 interface RankDatasetCandidate {
     idAndRank: number;
@@ -36,6 +36,7 @@ export class ChartManager {
     private canvas: HTMLCanvasElement | null = null;
     private hiddenGroups = new Set<string>();
     private hiddenGroupRanks = new Set<string>();
+    private userTouchedGroups = new Set<string>();
     private legendEl: HTMLElement | null = null;
     private legendSignature = '';
 
@@ -130,24 +131,30 @@ export class ChartManager {
                 groups.set(candidate.baseName, group);
             });
 
-            const selectedRanks: RankDatasetCandidate[] = [];
+            const defaultVisibleRankIds = new Set<number>();
+            let defaultVisibleRankCount = 0;
             Array.from(groups.values()).sort((a, b) => {
                 const peakDelta = Math.max(...b.map(candidate => candidate.peak)) - Math.max(...a.map(candidate => candidate.peak));
                 if (peakDelta !== 0) return peakDelta;
                 return a[0]!.baseName.localeCompare(b[0]!.baseName);
             }).forEach(group => {
                 const sortedGroup = group.sort((a, b) => a.rank - b.rank);
-                if (selectedRanks.length > 0 && selectedRanks.length + sortedGroup.length > MAX_RANK_DATASETS) return;
-                selectedRanks.push(...sortedGroup);
+                if (defaultVisibleRankCount > 0 && defaultVisibleRankCount + sortedGroup.length > DEFAULT_VISIBLE_RANK_DATASET_LIMIT) return;
+                sortedGroup.forEach(candidate => defaultVisibleRankIds.add(candidate.idAndRank));
+                defaultVisibleRankCount += sortedGroup.length;
             });
 
-            selectedRanks.forEach(({ idAndRank, baseName }) => {
+            Array.from(candidatesByRank.values()).sort((a, b) => {
+                if (a.baseName !== b.baseName) return a.baseName.localeCompare(b.baseName);
+                return a.rank - b.rank;
+            }).forEach(({ idAndRank, baseName }) => {
                 const fullName = getFullEnchantName(registry, idAndRank);
                 const style = ThemeManager.getRankLineStyle(idAndRank, registry);
                 datasets.push({
                     label: fullName,
                     groupKey: baseName,
                     rankLevel: idAndRank & 0xFF,
+                    defaultVisible: defaultVisibleRankIds.has(idAndRank),
                     data: sweep.map(x => (x && x.buckets && x.buckets.rankByIdAndRank[idAndRank] || 0) * 100),
                     borderColor: style.color,
                     backgroundColor: ThemeManager.withAlpha(style.color, 0.1),
@@ -181,11 +188,26 @@ export class ChartManager {
     private applyGroupVisibility(): void {
         if (!this.chart) return;
 
+        this.syncDefaultGroupVisibility(this.chart.data.datasets as ChartDataset[]);
         (this.chart.data.datasets as ChartDataset[]).forEach((dataset, index) => {
             const shouldShow = !dataset.groupKey
                 || (!this.hiddenGroups.has(dataset.groupKey) && !this.hiddenGroupRanks.has(this.getGroupRankKey(dataset.groupKey, dataset.rankLevel)));
             if (shouldShow) this.chart!.show(index);
             else this.chart!.hide(index);
+        });
+    }
+
+
+    private syncDefaultGroupVisibility(datasets: ChartDataset[]): void {
+        const groupedDefaults = new Map<string, boolean>();
+        datasets.forEach(dataset => {
+            if (!dataset.groupKey || this.userTouchedGroups.has(dataset.groupKey)) return;
+            groupedDefaults.set(dataset.groupKey, (groupedDefaults.get(dataset.groupKey) || false) || dataset.defaultVisible !== false);
+        });
+
+        groupedDefaults.forEach((hasDefaultVisibleRank, groupKey) => {
+            if (hasDefaultVisibleRank) this.hiddenGroups.delete(groupKey);
+            else this.hiddenGroups.add(groupKey);
         });
     }
 
@@ -204,12 +226,13 @@ export class ChartManager {
             this.legendEl.replaceChildren();
             this.hiddenGroups.clear();
             this.hiddenGroupRanks.clear();
+            this.userTouchedGroups.clear();
             this.legendSignature = '';
             return;
         }
 
         const signature = groupedDatasets
-            .map(dataset => `${dataset.groupKey}:${dataset.rankLevel}:${dataset.borderColor}:${dataset.borderDash?.join('.') || ''}`)
+            .map(dataset => `${dataset.groupKey}:${dataset.rankLevel}:${dataset.defaultVisible}:${dataset.borderColor}:${dataset.borderDash?.join('.') || ''}`)
             .join('|')
             + ` hiddenGroups=${Array.from(this.hiddenGroups).sort().join(',')}`
             + ` hiddenRanks=${Array.from(this.hiddenGroupRanks).sort().join(',')}`;
@@ -260,6 +283,7 @@ export class ChartManager {
 
             groupButton.append(swatch, label);
             groupButton.addEventListener('click', () => {
+                this.userTouchedGroups.add(groupKey);
                 if (this.hiddenGroups.has(groupKey)) this.hiddenGroups.delete(groupKey);
                 else this.hiddenGroups.add(groupKey);
                 this.applyGroupVisibility();

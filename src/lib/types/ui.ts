@@ -57,4 +57,5 @@ export interface ChartDataset {
     borderDash?: number[];
     groupKey?: string;
     rankLevel?: number;
+    defaultVisible?: boolean;
 }
