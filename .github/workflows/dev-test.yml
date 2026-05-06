@@ -1,8 +1,6 @@
 name: PR Testing Flow
 
 on:
-  push:
-    branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
 

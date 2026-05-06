@@ -14,6 +14,7 @@ We follow a specialized workflow to keep production history clean while preservi
     *   Update the `CHANGELOG.md` on this branch.
     *   For major releases, update `ARCHITECTURE.md`.
     *   For minor releases, update project docs when behavior, architecture, workflows, or user-facing capabilities changed.
+    *   Lint, tests, CodeQL, and release-format checks must pass on the PR before merge.
     *   PR the release branch into `main` and merge it using **Squash and Merge**.
 3.  **Release archive (`release-history`)**: This branch records the full commit history that produced each release.
     *   The release workflow replays the original release PR commits after the squash merge lands on `main`.
