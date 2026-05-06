@@ -79,7 +79,7 @@ The public calls use request objects so callers can pass optional search, instru
 | `SearchProcessor` | Builds Minecraft-specific expansion blueprints, performs eligibility/conflict checks, and settles generated mass |
 | `SearchPoolPlan` | Precomputes fixed per-level pool metadata, identity mode, weights, masks, conflicts, and initial child payloads |
 | `SearchStateTracker` | Holds bucketed mass accounting for one modified level |
-| `ProbabilityMassAccountant` | Records resolved, pending, sieved, capped, overflow, and rounding mass |
+| `ProbabilityMassAccountant` | Records resolved, clue-incompatible, pending, sieved, capped, overflow, and rounding mass |
 | `ModifiedLevelDistributionService` | Computes the BigInt distribution of modified enchantment levels |
 | `SummaryAggregationService` | Scans resolved combos and pending frontiers once to derive shared any/rank/count/clue mass buckets |
 | `SummaryService` | Formats aggregated checkpoint masses into presented `CalculationStats` |
@@ -110,9 +110,11 @@ For each modified level, `SearchService` searches or resumes a `SearchState`, sc
 
 If a sequential checkpoint run is aborted before any modified level is processed for the active checkpoint, the service returns the last completed checkpoint instead of replacing it with an empty result.
 
+When a request includes a displayed clue, `EnchantEngine` validates the clue label and forwards the packed clue target into the search path. `ClueSearchPolicy` lets the search skip branches that select conflicting enchantments, select the same enchantment at the wrong rank, or settle without the displayed clue. That pruned mass is recorded as `clueIncompatible`; the Bayesian clue denominator is still derived later during reporting as `clue.knownSpace`.
+
 ## Reporting Aggregation
 
-`SummaryAggregationService` is the shared scanner for post-search reporting. It walks resolved combo maps and pending frontier nodes once, scales pending frontier mass once per node, and derives `any`, `ranks`, `count`, and `clues` buckets together. Pending book nodes preserve the existing book-adjusted `any`/`ranks`/`count` behavior while clue mass remains based on the packed frontier combo. `SummaryService` and `SnapshotService` then format those aggregate masses for public stats and UI snapshots.
+`SummaryAggregationService` is the shared scanner for post-search reporting. It walks resolved combo maps and pending frontier nodes once, scales pending frontier mass once per node, and derives `any`, `ranks`, `count`, and `shownClueDistribution` together. Pending book nodes preserve the existing book-adjusted `any`/`ranks`/`count` behavior while shown-clue mass remains based on the packed frontier combo. `SummaryService` and `SnapshotService` then format those aggregate masses for public stats and UI snapshots. For clue-conditioned output, `clue.knownSpace` is derived from displayed clue mass; it is not stored in engine mass accounting. Because clue-pruned searches no longer retain a full distribution for every possible displayed clue, conditioned output omits `shownClueDistribution`.
 
 ## Node-ID Frontier Model
 
@@ -156,4 +158,4 @@ Search-state cache keys include version, category, material, modified level, and
 
 ## Release Documentation Rule
 
-Major releases are expected to update this architecture map and at least one other top-level project document. Minor releases should update docs when behavior or workflows change. Patch releases are exempt unless the patch itself changes user-facing behavior or project process.
+Major releases are expected to update this architecture map. Minor releases should update docs when behavior or workflows change. Patch releases are exempt unless the patch itself changes user-facing behavior or project process.
