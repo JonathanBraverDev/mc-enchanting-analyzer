@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## v5.3.2 (2026-05-06)
+
+### Fixed
+- **Clue confidence display**: Fully resolved clue runs no longer look uncertain just because most of the search space cannot match the shown clue.
+
 ## v5.3.1 (2026-05-06)
 
 ### Fixed
