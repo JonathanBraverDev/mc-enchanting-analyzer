@@ -129,7 +129,9 @@ export class SnapshotService {
           label: recommendation.label,
           targetChance: ProbUtils.toNumber(recommendation.targetChanceMass),
           clueShare: ProbUtils.toNumber(recommendation.clueMass),
-          targetAndClueShare: ProbUtils.toNumber(recommendation.targetAndClueMass)
+          targetAndClueShare: ProbUtils.toNumber(recommendation.targetAndClueMass),
+          compatibleBaselineChance: ProbUtils.toNumber(recommendation.compatibleBaselineChanceMass),
+          liftOverCompatibleBaseline: recommendation.liftOverCompatibleBaseline
         }))
       }
       : undefined;

@@ -28,6 +28,8 @@ export interface TargetClueRecommendation {
     targetChanceMass: bigint;
     clueMass: bigint;
     targetAndClueMass: bigint;
+    compatibleBaselineChanceMass: bigint;
+    liftOverCompatibleBaseline: number;
 }
 
 export interface TargetClueAdvisorResult {
@@ -72,16 +74,20 @@ export class TargetClueAdvisorService {
             });
         }
 
+        const compatibleBaselineChanceMass = this.calculateCompatibleBaselineChance(buckets, targets, registry);
         const recommendations: TargetClueRecommendation[] = [];
         for (const [idAndRank, bucket] of buckets) {
             if (bucket.clueMass <= 0n || bucket.targetAndClueMass <= 0n) continue;
 
+            const targetChanceMass = this.divideMass(bucket.targetAndClueMass, bucket.clueMass);
             recommendations.push({
                 idAndRank,
                 label: getFullEnchantName(registry, idAndRank),
-                targetChanceMass: this.divideMass(bucket.targetAndClueMass, bucket.clueMass),
+                targetChanceMass,
                 clueMass: bucket.clueMass,
-                targetAndClueMass: bucket.targetAndClueMass
+                targetAndClueMass: bucket.targetAndClueMass,
+                compatibleBaselineChanceMass,
+                liftOverCompatibleBaseline: this.divideAsNumber(targetChanceMass, compatibleBaselineChanceMass)
             });
         }
 
@@ -187,10 +193,52 @@ export class TargetClueAdvisorService {
         return true;
     }
 
+    private static calculateCompatibleBaselineChance(
+        buckets: Map<number, MutableClueAdviceBucket>,
+        targets: PackedTargetRequirement[],
+        registry: RegistryState
+    ): bigint {
+        let clueMass = 0n;
+        let targetAndClueMass = 0n;
+
+        for (const [idAndRank, bucket] of buckets) {
+            if (!this.isCompatibleClue(idAndRank, targets, registry)) continue;
+            clueMass += bucket.clueMass;
+            targetAndClueMass += bucket.targetAndClueMass;
+        }
+
+        return this.divideMass(targetAndClueMass, clueMass);
+    }
+
+    private static isCompatibleClue(
+        idAndRank: number,
+        targets: PackedTargetRequirement[],
+        registry: RegistryState
+    ): boolean {
+        const enchantmentId = idAndRank >> PACKING_CONSTANTS.ENCHANT_SHIFT;
+        const rank = idAndRank & PACKING_CONSTANTS.RANK_MASK;
+
+        for (const target of targets) {
+            if (target.enchantmentId === enchantmentId) {
+                return rank >= target.rank;
+            }
+
+            const conflicts = registry.conflictBitsets[target.enchantmentId] ?? 0n;
+            if ((conflicts & (1n << BigInt(enchantmentId))) !== 0n) return false;
+        }
+
+        return true;
+    }
+
     private static divideMass(part: bigint, whole: bigint): bigint {
         if (whole <= 0n) return 0n;
         if (part >= whole) return PRECISION;
         return ProbUtils.roundScale(part, PRECISION, whole);
+    }
+
+    private static divideAsNumber(part: bigint, whole: bigint): number {
+        if (whole <= 0n) return 0;
+        return ProbUtils.toNumber(part) / ProbUtils.toNumber(whole);
     }
 
     private static compareRecommendation(a: TargetClueRecommendation, b: TargetClueRecommendation): number {

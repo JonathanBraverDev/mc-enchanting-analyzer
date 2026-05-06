@@ -65,6 +65,8 @@ describe('TargetClueAdvisorService', () => {
         assert.strictEqual(result?.recommendations[0]?.targetAndClueMass, PRECISION / 8n);
         assert.strictEqual(result?.recommendations[0]?.clueMass, PRECISION / 4n);
         assert.strictEqual(ProbUtils.toNumber(result!.recommendations[0]!.targetChanceMass), 0.5);
+        assert.strictEqual(ProbUtils.toNumber(result!.recommendations[0]!.compatibleBaselineChanceMass), 0.25);
+        assert.strictEqual(result!.recommendations[0]!.liftOverCompatibleBaseline, 2);
     });
 
     it('includes pending frontier mass in clue recommendations', () => {
@@ -100,7 +102,9 @@ describe('TargetClueAdvisorService', () => {
                         label: 'Efficiency V',
                         targetChance: 0.2,
                         clueShare: 0.4,
-                        targetAndClueShare: 0.08
+                        targetAndClueShare: 0.08,
+                        compatibleBaselineChance: 0.1,
+                        liftOverCompatibleBaseline: 2
                     }]
                 }
             },
@@ -116,7 +120,9 @@ describe('TargetClueAdvisorService', () => {
                         label: 'Fortune III',
                         targetChance: 0.5,
                         clueShare: 0.25,
-                        targetAndClueShare: 0.125
+                        targetAndClueShare: 0.125,
+                        compatibleBaselineChance: 0.25,
+                        liftOverCompatibleBaseline: 2
                     }]
                 }
             }
