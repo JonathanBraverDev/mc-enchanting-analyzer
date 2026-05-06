@@ -1,11 +1,15 @@
 import { PACKING_CONSTANTS } from '#constants/engine.js';
-import { getFullEnchantName } from '#core/registry.js';
+import { getEligiblePool, getEnchantability, getFullEnchantName } from '#core/registry.js';
+import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { TargetAnalysisService } from '#services/TargetAnalysisService.js';
 import type {
+    ChartCellView,
     PackedCombo,
     PackedTargetRequirement,
     RegistryState,
-    SearchFrontierSnapshot
+    SearchFrontierSnapshot,
+    TargetLevelClueAdvisorView,
+    TargetLevelClueRecommendationView
 } from '#types/index.js';
 import { ComboUtils, ProbUtils, PRECISION } from '#utils/index.js';
 
@@ -36,6 +40,8 @@ interface MutableClueAdviceBucket {
 }
 
 export class TargetClueAdvisorService {
+    private static readonly distributionService = new ModifiedLevelDistributionService();
+
     public static recommend(request: TargetClueAdvisorRequest): TargetClueAdvisorResult | undefined {
         const {
             combos,
@@ -85,6 +91,49 @@ export class TargetClueAdvisorService {
             : undefined;
     }
 
+    public static supportsTargetsAtXp(
+        registry: RegistryState,
+        category: string,
+        material: string,
+        xpLevel: number,
+        targets: PackedTargetRequirement[]
+    ): boolean {
+        if (targets.length === 0) return false;
+
+        const enchantability = getEnchantability(registry, material, category);
+        const distribution = this.distributionService.getModifiedLevelDist(registry, xpLevel, enchantability);
+
+        for (const modLevelText of Object.keys(distribution)) {
+            const pool = getEligiblePool(registry, category, Number(modLevelText));
+            if (this.poolSupportsTargets(pool, targets)) return true;
+        }
+
+        return false;
+    }
+
+    public static summarizeSweep(
+        sweep: ChartCellView[],
+        limit = 5
+    ): TargetLevelClueAdvisorView | undefined {
+        if (limit <= 0) return undefined;
+
+        const recommendations: TargetLevelClueRecommendationView[] = [];
+        for (const cell of sweep) {
+            if (!cell?.clueAdvisor) continue;
+            for (const recommendation of cell.clueAdvisor.recommendations) {
+                recommendations.push({
+                    ...recommendation,
+                    xpLevel: cell.xpLevel
+                });
+            }
+        }
+
+        recommendations.sort((a, b) => this.compareViewRecommendation(a, b));
+        return recommendations.length > 0
+            ? { recommendations: recommendations.slice(0, limit) }
+            : undefined;
+    }
+
     private static addComboContribution(
         buckets: Map<number, MutableClueAdviceBucket>,
         packed: PackedCombo,
@@ -121,6 +170,23 @@ export class TargetClueAdvisorService {
         }
     }
 
+    private static poolSupportsTargets(pool: readonly number[], targets: PackedTargetRequirement[]): boolean {
+        for (const target of targets) {
+            let found = false;
+            for (const candidate of pool) {
+                const enchantmentId = candidate >> PACKING_CONSTANTS.ENCHANT_SHIFT;
+                const rank = candidate & PACKING_CONSTANTS.RANK_MASK;
+                if (enchantmentId === target.enchantmentId && rank >= target.rank) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) return false;
+        }
+
+        return true;
+    }
+
     private static divideMass(part: bigint, whole: bigint): bigint {
         if (whole <= 0n) return 0n;
         if (part >= whole) return PRECISION;
@@ -131,6 +197,17 @@ export class TargetClueAdvisorService {
         if (a.targetChanceMass !== b.targetChanceMass) return a.targetChanceMass > b.targetChanceMass ? -1 : 1;
         if (a.targetAndClueMass !== b.targetAndClueMass) return a.targetAndClueMass > b.targetAndClueMass ? -1 : 1;
         if (a.clueMass !== b.clueMass) return a.clueMass > b.clueMass ? -1 : 1;
+        return a.label.localeCompare(b.label);
+    }
+
+    private static compareViewRecommendation(
+        a: TargetLevelClueRecommendationView,
+        b: TargetLevelClueRecommendationView
+    ): number {
+        if (a.targetChance !== b.targetChance) return b.targetChance - a.targetChance;
+        if (a.targetAndClueShare !== b.targetAndClueShare) return b.targetAndClueShare - a.targetAndClueShare;
+        if (a.clueShare !== b.clueShare) return b.clueShare - a.clueShare;
+        if (a.xpLevel !== b.xpLevel) return b.xpLevel - a.xpLevel;
         return a.label.localeCompare(b.label);
     }
 }

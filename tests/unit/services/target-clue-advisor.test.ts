@@ -7,7 +7,7 @@ import { TargetAnalysisService } from '#services/TargetAnalysisService.js';
 import { TargetClueAdvisorService } from '#services/TargetClueAdvisorService.js';
 import { ComboUtils, ProbUtils, PRECISION } from '#utils/index.js';
 import { makeFrontierSnapshot } from '#tests/infra/frontier-test-utils.js';
-import type { PackedCombo, PackedEnchant, PackedTargetRequirement, RegistryState } from '#types/index.js';
+import type { ChartCellView, PackedCombo, PackedEnchant, PackedTargetRequirement, RegistryState } from '#types/index.js';
 
 let registry: RegistryState;
 let indexToEnchant: number[];
@@ -84,5 +84,58 @@ describe('TargetClueAdvisorService', () => {
             assert.strictEqual(recommendation.targetAndClueMass, PRECISION / 4n);
             assert.strictEqual(recommendation.targetChanceMass, PRECISION);
         }
+    });
+
+    it('summarizes the best level and clue pairs across chart cells', () => {
+        const sweep = [
+            {
+                xpLevel: 20,
+                refinementLevel: 'ultra',
+                clueConditioned: false,
+                normalization: { domain: 'resolved-mass' },
+                buckets: { anyByEnchantId: {}, rankByIdAndRank: {}, countBySize: {} },
+                clueAdvisor: {
+                    recommendations: [{
+                        idAndRank: EFF_V,
+                        label: 'Efficiency V',
+                        targetChance: 0.2,
+                        clueShare: 0.4,
+                        targetAndClueShare: 0.08
+                    }]
+                }
+            },
+            {
+                xpLevel: 30,
+                refinementLevel: 'ultra',
+                clueConditioned: false,
+                normalization: { domain: 'resolved-mass' },
+                buckets: { anyByEnchantId: {}, rankByIdAndRank: {}, countBySize: {} },
+                clueAdvisor: {
+                    recommendations: [{
+                        idAndRank: FORT_III,
+                        label: 'Fortune III',
+                        targetChance: 0.5,
+                        clueShare: 0.25,
+                        targetAndClueShare: 0.125
+                    }]
+                }
+            }
+        ] as ChartCellView[];
+
+        const result = TargetClueAdvisorService.summarizeSweep(sweep, 1);
+
+        assert.strictEqual(result?.recommendations[0]?.xpLevel, 30);
+        assert.strictEqual(result?.recommendations[0]?.label, 'Fortune III');
+    });
+
+    it('filters out XP levels whose modified-level range cannot satisfy all targets', () => {
+        assert.strictEqual(
+            TargetClueAdvisorService.supportsTargetsAtXp(registry, 'pickaxe', 'diamond', 1, targets),
+            false
+        );
+        assert.strictEqual(
+            TargetClueAdvisorService.supportsTargetsAtXp(registry, 'pickaxe', 'diamond', 30, targets),
+            true
+        );
     });
 });

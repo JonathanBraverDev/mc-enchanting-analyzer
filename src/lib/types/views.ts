@@ -83,4 +83,5 @@ export interface ChartCellView {
   accounting?: AccountingView;
   buckets: ChartBucketsView;
   target?: TargetDiagnosticsView | undefined;
+  clueAdvisor?: TargetClueAdvisorView | undefined;
 }

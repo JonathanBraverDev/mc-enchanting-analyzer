@@ -106,7 +106,13 @@ export class SnapshotService {
         blockedComboCount: targetAnalysis.blockedComboCount
       }
       : undefined;
-    const clueAdvice = snapshotType === 'top' && !isConditioned
+    const clueAdvice = !isConditioned && TargetClueAdvisorService.supportsTargetsAtXp(
+      state,
+      request.input.category,
+      request.input.material,
+      request.input.xpLevel,
+      packedTargets
+    )
       ? TargetClueAdvisorService.recommend({
         combos,
         indexToEnchant: state.indexToEnchant,
@@ -158,7 +164,8 @@ export class SnapshotService {
         normalization,
         accounting,
         result,
-        targetDiagnostics
+        targetDiagnostics,
+        clueAdvisor
       );
     }
   }
@@ -231,7 +238,8 @@ export class SnapshotService {
     normalization: NormalizationView,
     accounting: AccountingView,
     result: { anyMass: Map<number, bigint>, rankMass: Map<number, bigint>, countMass: Map<number, bigint> },
-    target?: TargetDiagnosticsView
+    target?: TargetDiagnosticsView,
+    clueAdvisor?: TargetClueAdvisorView
   ): ChartCellView {
     const buckets: ChartBucketsView = {
       anyByEnchantId: {},
@@ -258,7 +266,8 @@ export class SnapshotService {
       normalization,
       accounting,
       buckets,
-      target
+      target,
+      clueAdvisor
     };
   }
 }
