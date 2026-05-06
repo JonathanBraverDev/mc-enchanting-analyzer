@@ -34,7 +34,8 @@ export class RefinementService {
     private sweep: ChartCellView[] = [];
     private isRefining: boolean = false;
     private isSweepRunning: boolean = false;
-    private activeRunGeneration: number = 0;
+    private activeTopGeneration: number = 0;
+    private activeChartGeneration: number = 0;
 
     public get currentSweep(): ChartCellView[] {
         return this.sweep;
@@ -49,7 +50,8 @@ export class RefinementService {
         registry: RegistryState,
         callbacks: RefinementCallbacks
     ): Promise<void> {
-        const generation = ++this.activeRunGeneration;
+        const topGeneration = ++this.activeTopGeneration;
+        const chartGeneration = ++this.activeChartGeneration;
 
         this.isRefining = true;
         this.isSweepRunning = true;
@@ -83,14 +85,14 @@ export class RefinementService {
                 topInput,
                 refinementLevels,
                 (view) => {
-                    if (this.activeRunGeneration !== generation) return;
+                    if (this.activeTopGeneration !== topGeneration) return;
 
                     const params = getSearchCheckpointForRefinement(view.refinementLevel, isBook);
                     callbacks.onStatus(params.status, view.refinementLevel);
                     callbacks.onStats(view, view.refinementLevel === 'ultra');
                 },
                 (status, error) => {
-                    if (this.activeRunGeneration !== generation) return;
+                    if (this.activeTopGeneration !== topGeneration) return;
 
                     this.isRefining = false;
                     if (status === 'done') {
@@ -106,7 +108,7 @@ export class RefinementService {
                 chartInput,
                 refinementLevels,
                 (cellView) => {
-                    if (this.activeRunGeneration !== generation) return;
+                    if (this.activeChartGeneration !== chartGeneration) return;
 
                     this.sweep[cellView.xpLevel - 1] = cellView;
                     callbacks.onChart(this.sweep);
@@ -115,7 +117,7 @@ export class RefinementService {
                     callbacks.onChartStatus?.(`${params.status} probabilities`, cellView.xpLevel / xpCap);
                 },
                 (status) => {
-                    if (this.activeRunGeneration !== generation) return;
+                    if (this.activeChartGeneration !== chartGeneration) return;
 
                     this.isSweepRunning = false;
                     if (status === 'done') {
@@ -128,7 +130,7 @@ export class RefinementService {
             // But we keep the promise active until terminal state if we want run() to represent the lifecycle.
             await new Promise<void>((resolve) => {
                 const interval = setInterval(() => {
-                    if (!this.isCalculating() || this.activeRunGeneration !== generation) {
+                    if (!this.isCalculating() || this.activeTopGeneration !== topGeneration || this.activeChartGeneration !== chartGeneration) {
                         clearInterval(interval);
                         resolve();
                     }
@@ -136,11 +138,62 @@ export class RefinementService {
             });
 
         } finally {
-            if (this.activeRunGeneration === generation) {
+            if (this.activeTopGeneration === topGeneration && this.activeChartGeneration === chartGeneration) {
                 this.isRefining = false;
                 this.isSweepRunning = false;
             }
         }
+    }
+
+    public async runTopOnly(
+        payload: RefinementPayload,
+        callbacks: RefinementCallbacks
+    ): Promise<void> {
+        const topGeneration = ++this.activeTopGeneration;
+        this.isRefining = true;
+
+        const topInput: TopInputSignature = {
+            category: payload.category,
+            xpLevel: payload.xpLevel,
+            material: payload.material,
+            clue: payload.clue,
+            version: payload.version,
+            targets: payload.targets
+        };
+
+        const refinementLevels: RefinementLevelName[] = ['coarse', 'standard', 'deep', 'ultra'];
+        const isBook = payload.category === 'book';
+
+        WorkerClient.startTopRun(
+            topInput,
+            refinementLevels,
+            (view) => {
+                if (this.activeTopGeneration !== topGeneration) return;
+
+                const params = getSearchCheckpointForRefinement(view.refinementLevel, isBook);
+                callbacks.onStatus(params.status, view.refinementLevel);
+                callbacks.onStats(view, view.refinementLevel === 'ultra');
+            },
+            (status, error) => {
+                if (this.activeTopGeneration !== topGeneration) return;
+
+                this.isRefining = false;
+                if (status === 'done') {
+                    callbacks.onStatus(UI_TEXTS.STATUS_COMPLETE, "done");
+                } else if (status === 'error') {
+                    console.error("Top run error:", error);
+                }
+            }
+        );
+
+        await new Promise<void>((resolve) => {
+            const interval = setInterval(() => {
+                if (!this.isRefining || this.activeTopGeneration !== topGeneration) {
+                    clearInterval(interval);
+                    resolve();
+                }
+            }, 100);
+        });
     }
 
     public async projectTop(
@@ -148,7 +201,7 @@ export class RefinementService {
         registry: RegistryState,
         callbacks: RefinementCallbacks
     ): Promise<void> {
-        const generation = this.activeRunGeneration;
+        const topGeneration = ++this.activeTopGeneration;
         this.isRefining = true;
 
         const topInput: TopInputSignature = {
@@ -167,14 +220,14 @@ export class RefinementService {
             topInput,
             refinementLevels,
             (view) => {
-                if (this.activeRunGeneration !== generation) return;
+                if (this.activeTopGeneration !== topGeneration) return;
 
                 const params = getSearchCheckpointForRefinement(view.refinementLevel, isBook);
                 callbacks.onStatus(params.status, view.refinementLevel);
                 callbacks.onStats(view, view.refinementLevel === 'ultra');
             },
             (status, error) => {
-                if (this.activeRunGeneration !== generation) return;
+                if (this.activeTopGeneration !== topGeneration) return;
 
                 this.isRefining = false;
                 if (status === 'done') {
@@ -188,7 +241,7 @@ export class RefinementService {
 
         await new Promise<void>((resolve) => {
             const interval = setInterval(() => {
-                if (!this.isRefining || this.activeRunGeneration !== generation) {
+                if (!this.isRefining || this.activeTopGeneration !== topGeneration) {
                     clearInterval(interval);
                     resolve();
                 }

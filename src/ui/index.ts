@@ -78,6 +78,10 @@ class AppController {
             return;
         } else if (type === 'clue') {
             this.results.showPlaceholder(UI_TEXTS.STATUS_REFINING);
+        } else if (type === 'lvl' || type === 'level-input') {
+            this.results.showPlaceholder(UI_TEXTS.STATUS_REFINING);
+            this.enqueueTopRun();
+            return;
         } else if (type === 'combo-sort') {
             if (this.lastView) {
                 this.updateInsightsFromView(this.lastView);
@@ -97,6 +101,11 @@ class AppController {
     private enqueueRun(): void {
         if (this.runDebounceTimeout) window.clearTimeout(this.runDebounceTimeout);
         this.runDebounceTimeout = window.setTimeout(() => this.run(), 50);
+    }
+
+    private enqueueTopRun(): void {
+        if (this.runDebounceTimeout) window.clearTimeout(this.runDebounceTimeout);
+        this.runDebounceTimeout = window.setTimeout(() => this.runTopOnly(), 50);
     }
 
     public get currentSweep() {
@@ -122,6 +131,33 @@ class AppController {
             await this.refinement.run(
                 { ...vals, category: vals.category },
                 registry,
+                {
+                    onStatus: (status, level) => this.results.setRefinementStatus(status, level),
+                    onChartStatus: (status, progress) => this.results.setChartStatus(status, progress),
+                    onStats: (view) => this.updateInsightsFromView(view),
+                    onChart: (sweep) => this.chart.refresh(sweep, registry)
+                }
+            );
+        } catch (err) {
+            if (err === 'Aborted' || (err instanceof Error && err.message === 'Aborted')) return;
+            this.showError(UI_TEXTS.STATUS_ERROR_CALC, err);
+        }
+    }
+
+    private async runTopOnly(): Promise<void> {
+        if (!this.isWorkerReady) return;
+
+        try {
+            this.params.updateClueTarget();
+
+            const vals = this.params.getValues();
+            const ench = UiMetadataService.getEnchantability(vals.version, vals.material, vals.category);
+            this.params.setEnchantability(ench);
+
+            const registry = UiMetadataService.getRegistry(vals.version);
+
+            await this.refinement.runTopOnly(
+                { ...vals, category: vals.category },
                 {
                     onStatus: (status, level) => this.results.setRefinementStatus(status, level),
                     onChartStatus: (status, progress) => this.results.setChartStatus(status, progress),
