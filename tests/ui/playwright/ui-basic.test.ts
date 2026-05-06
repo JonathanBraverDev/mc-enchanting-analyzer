@@ -36,6 +36,24 @@ test.describe('Basic UI Functionality', () => {
         await expect(analyzer.chartCanvas).toBeVisible();
     });
 
+    test('should set enchanting level when clicking the chart sweep', async () => {
+        await analyzer.waitForChartIdle();
+
+        const target = await analyzer.page.evaluate(() => {
+            const app = (window as any).App;
+            const chart = app.chartManager.chartInstance;
+            const canvas = document.getElementById('mainChart') as HTMLCanvasElement;
+            const bounds = canvas.getBoundingClientRect();
+            return {
+                x: bounds.left + chart.scales.x.getPixelForValue(14),
+                y: bounds.top + ((chart.chartArea.top + chart.chartArea.bottom) / 2)
+            };
+        });
+
+        await analyzer.page.mouse.click(target.x, target.y);
+        await expect(analyzer.levelValue).toHaveText('15');
+    });
+
     test('should display total enchantability', async () => {
         await analyzer.selectCategory(TEST_DATA.ITEMS.SWORD);
         await analyzer.selectMaterial(TEST_DATA.MATERIALS.DIAMOND);
