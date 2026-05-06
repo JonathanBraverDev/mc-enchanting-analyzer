@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## v5.2.2 (2026-05-06)
+
+### Fixed
+- **Code scanning highlights**: Removed unsafe HTML placeholder rendering and hardened changelog extraction against malformed version input.
+
 ## v5.2.1 (2026-05-06)
 
 ### Fixed
