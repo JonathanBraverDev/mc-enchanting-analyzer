@@ -16,8 +16,9 @@ We follow a specialized workflow to keep production history clean while preservi
     *   For minor releases, update project docs when behavior, architecture, workflows, or user-facing capabilities changed.
     *   PR the release branch into `main` and merge it using **Squash and Merge**.
 3.  **Release archive (`release-history`)**: This branch records the full commit history that produced each release.
-    *   The release workflow archives the original release PR head after the squash merge lands on `main`.
+    *   The release workflow replays the original release PR commits after the squash merge lands on `main`.
     *   `release-history` must match the current `main` tree before each release PR merges.
+    *   Release PR history must stay linear, because `release-history` rejects merge commits.
     *   Do not push to `release-history` manually; it is maintained by the release workflow.
 
 ## Development Principles

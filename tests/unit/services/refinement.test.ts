@@ -58,7 +58,7 @@ describe('RefinementService (V5 Hardened)', () => {
         WorkerClient.startChartRun = originalStartChart;
     });
 
-    it('Correction 1: should call startTopRun/startChartRun exactly once for a full run', async () => {
+    it('calls startTopRun/startChartRun exactly once for a full run', async () => {
         const payload = {
             category: 'sword',
             material: 'diamond',
@@ -77,7 +77,7 @@ describe('RefinementService (V5 Hardened)', () => {
         assert.strictEqual(chartCallCount, 1, 'startChartRun should be called once');
     });
 
-    it('Correction 3: should guard against stale callbacks using generations', async () => {
+    it('guards against stale callbacks using generations', async () => {
         const payload = {
             category: 'sword',
             material: 'diamond',

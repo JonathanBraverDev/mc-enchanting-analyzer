@@ -97,8 +97,7 @@ export class SummaryService {
             indexToEnchant,
             targetClueId,
             comboLimit = ENGINE_LIMITS.MAX_RESULTS_SUMMARY,
-            frontiers = [],
-            isBook = false
+            frontiers = []
         } = request;
         const accounting = tracker.mass.toPublic();
         const stats: CalculationStats = {
@@ -112,7 +111,7 @@ export class SummaryService {
         };
 
         // 1. Perform Bayesian conditioning
-        const conditioned = ClueAnalysisService.conditionOnClue(combos, targetClueId, indexToEnchant, frontiers, isBook);
+        const conditioned = ClueAnalysisService.conditionOnClue(combos, targetClueId, indexToEnchant, frontiers);
 
         // 2. Preserve observed-clue diagnostics used for Bayesian conditioning.
         stats.clue = {

@@ -19,8 +19,7 @@ export class ClueAnalysisService {
         combos: Map<PackedCombo, bigint>,
         targetClueId: number,
         indexToEnchant: number[],
-        frontiers: SearchFrontierSnapshot[] = [],
-        _isBook = false
+        frontiers: SearchFrontierSnapshot[] = []
     ): {
         combos: Map<PackedCombo, bigint>,
         anyMass: Map<number, bigint>,
@@ -57,7 +56,7 @@ export class ClueAnalysisService {
         });
         }
 
-        // Final normalization to exactly 1.0 (Bit-perfect PRECISION)
+        // Final normalization to exactly 1.0.
         const remainder = PRECISION - totalMass;
         if (remainder !== 0n && conditionedCombos.size > 0) {
             const [firstPacked] = conditionedCombos.keys();

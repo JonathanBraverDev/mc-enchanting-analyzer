@@ -31,7 +31,7 @@ export class SearchController {
             target,
             units: ProbUtils.toBigInt(target)
         })) ?? [];
-        const current = { nodeId: 0, prob: 0n };
+        const current: { nodeId: number; prob: bigint } = { nodeId: 0, prob: 0n };
 
         let aggregateStart = performance.now();
 
@@ -70,7 +70,7 @@ export class SearchController {
             iterations++;
             state.nodesProcessed++;
 
-            if (!queue.popFast(current as any)) break;
+            if (!queue.popFast(current)) break;
 
             tracker.mass.subtract('pending', current.prob);
 

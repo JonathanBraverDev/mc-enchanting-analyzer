@@ -43,7 +43,7 @@ export class SnapshotService {
     const { snapshotType, refinementLevel, clue, comboLimit } = request;
     const isBook = request.input.category === 'book';
 
-    // 1. Resolve clue if present (Correction 5: use centralized validation)
+    // Resolve clue here as a final guard against invalid worker or test input.
     let targetClueId: number | null = null;
     if (clue) {
       try {
@@ -61,13 +61,12 @@ export class SnapshotService {
     let knownSpace: number | undefined;
 
     if (isConditioned) {
-      // Conditioned views derive from top combos (representing the posterior)
-      // Note: frontiers are passed to conditionOnClue which now handles them
+      // Conditioned views derive from top combos and any pending frontier mass.
       const conditioned = ClueAnalysisService.conditionOnClue(combos, targetClueId!, state.indexToEnchant, frontiers);
       knownSpace = ProbUtils.toNumber(conditioned.knownSpace);
       result = conditioned;
     } else {
-      // Unconditioned views derive aggregate stats from combos + frontiers (SSoT)
+      // Unconditioned views derive aggregate stats from combos + frontiers.
       const derived = SummaryAggregationService.aggregate({
         combos,
         indexToEnchant: state.indexToEnchant,
