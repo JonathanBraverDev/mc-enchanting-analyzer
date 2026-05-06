@@ -22,7 +22,7 @@ We follow a specialized workflow to keep production history clean while preservi
 
 ## Development Principles
 
-1.  **Strict Mass Conservation**: Every probability mass must be accounted for. Use `ProbabilityMassBookkeeper` for all search logic.
+1.  **Strict Mass Conservation**: Every probability mass must be accounted for. Use `ProbabilityMassAccountant` for all search logic.
 2.  **Version Isolation**: Use the `registry.version` when interacting with `CacheManager`. Never share caches between game versions.
 3.  **BigInt for Math**: Use high-precision `bigint` (scaled to `10^12`) for all core probability calculations. Only convert to `number` in the final `SummaryService`.
 4.  **Deterministic Results**: All engine logic must be deterministic. Avoid `Math.random()` or platform-specific floating point dependencies in the core.
@@ -81,7 +81,7 @@ The engine maintains a system of "buckets" to track every atom of probability:
 - **Overflow**: Discarded by engine limits (6+ enchants).
 - **Rounding**: Compensation for fixed-point math adjustments.
 
-**Invariant**: `Resolved + Pending + Sieved + Capped + Overflow + Rounding === 10^12` (PRECISION)
+**Invariant**: `Resolved + Clue Incompatible + Pending + Sieved + Capped + Overflow + Rounding === 10^12` (PRECISION)
 
 ## Directory Structure
 
