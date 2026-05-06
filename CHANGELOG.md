@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## v5.4.0 (2026-05-06)
+
+### Added
+- **Target clue advisor**: Target combo searches can now recommend the best enchanting level and shown clue to click, with a dedicated advisor view alongside the existing results.
+- **Recommendation context**: Advisor results show how often a clue appears, how much it improves the target odds, and how it compares with compatible and random clicks.
+- **Impossible target feedback**: Target combinations that cannot coexist are called out directly, so the advisor can explain why no recommendation is available.
+- **High-roll guidance**: When no target combo is selected, the advisor highlights clues that tend to signal stronger modified-level rolls.
+
 ## v5.3.2 (2026-05-06)
 
 ### Fixed
