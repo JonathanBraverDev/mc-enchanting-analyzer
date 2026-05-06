@@ -19,7 +19,6 @@ export class SearchStateTracker {
 
     /**
      * Initializes a new SearchState or clones an existing one.
-     * Replaces the legacy StateFactory.
      */
     public static createState(
         modLevel: number,
