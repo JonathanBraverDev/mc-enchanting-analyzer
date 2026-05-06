@@ -91,6 +91,17 @@ test.describe('Basic UI Functionality', () => {
         await expect(analyzer.comboList).toContainText('Fortune');
     });
 
+    test('should show high-roll clue signals when advisor mode has no target', async () => {
+        await analyzer.selectCategory('boots');
+        await analyzer.waitForRefinementComplete();
+
+        await analyzer.selectComboSort('advisor');
+
+        await expect(analyzer.comboList).toContainText('Best High-Roll Clues');
+        await expect(analyzer.comboList).toContainText('avg ML');
+        await expect(analyzer.comboList).toContainText('Best Level + High-Roll Clue');
+    });
+
     test('should hide target options that conflict with selected targets', async () => {
         await analyzer.waitForRefinementComplete();
 
@@ -99,5 +110,21 @@ test.describe('Basic UI Functionality', () => {
         await expect(analyzer.targetChips).toContainText(['Sharpness I+']);
         await expect(analyzer.targetSelect.locator('option', { hasText: 'Smite I+' })).toHaveCount(0);
         await expect(analyzer.targetSelect.locator('option', { hasText: 'Bane of Arthropods I+' })).toHaveCount(0);
+    });
+
+    test('should explain target sets that no modified level can roll together', async () => {
+        await analyzer.selectCategory('boots');
+        await analyzer.waitForRefinementComplete();
+
+        await analyzer.triggerAndAwaitRefinement(async () => {
+            await analyzer.addTarget('Feather Falling IV+');
+        });
+        await analyzer.triggerAndAwaitRefinement(async () => {
+            await analyzer.addTarget('Depth Strider III+');
+        });
+
+        await expect(analyzer.comboList).toContainText('Target Match (Depth Strider III+ + Feather Falling IV+)');
+        await expect(analyzer.comboList).toContainText('Impossible at this level');
+        await expect(analyzer.comboList).toContainText('no modified enchantment level can roll all selected target ranks together');
     });
 });

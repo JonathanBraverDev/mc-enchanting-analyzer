@@ -110,6 +110,43 @@ test.describe('UI Performance & Stability', () => {
         expect(updateCount, 'Advisor target changes should not repaint the chart').toBe(0);
     });
 
+    test('should refresh advisor level changes from the existing sweep', async ({ page }) => {
+        await analyzer.selectCategory('pickaxe');
+        await analyzer.waitForRefinementComplete();
+        await analyzer.waitForChartIdle();
+
+        await analyzer.selectComboSort('advisor');
+        await analyzer.triggerAndAwaitRefinement(async () => {
+            await analyzer.addTarget('Efficiency I+');
+        });
+        await analyzer.waitForChartIdle();
+
+        await page.evaluate(() => {
+            const refinement = (window as any).App?.refinement;
+            (window as any).__advisorRunCount = 0;
+            if (!refinement || refinement.__advisorLevelPatchInstalled) return;
+
+            const originalRun = refinement.run.bind(refinement);
+            const originalTopOnly = refinement.runTopOnly.bind(refinement);
+            refinement.run = (...args: unknown[]) => {
+                (window as any).__advisorRunCount++;
+                return originalRun(...args);
+            };
+            refinement.runTopOnly = (...args: unknown[]) => {
+                (window as any).__advisorRunCount++;
+                return originalTopOnly(...args);
+            };
+            refinement.__advisorLevelPatchInstalled = true;
+        });
+
+        await analyzer.setLevel(25);
+        await expect(analyzer.levelValue).toHaveText('25');
+        await expect(analyzer.comboList).toContainText('Best Shown Clues');
+
+        const runCount = await page.evaluate(() => (window as any).__advisorRunCount ?? 0);
+        expect(runCount, 'Advisor XP changes should reuse the existing sweep cell').toBe(0);
+    });
+
     test('should maintain chart metric if changed mid-calculation', async () => {
         await analyzer.selectCategory('book');
 

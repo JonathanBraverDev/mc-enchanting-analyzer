@@ -5,8 +5,10 @@ import { ResultsView } from '#ui/views/ResultsView.js';
 import { ChartController } from '#ui/results-chart-controller.js';
 import { RefinementService } from '#ui/refinement.js';
 import { TargetClueAdvisorService } from '#services/TargetClueAdvisorService.js';
+import { ClueSignalAdvisorService } from '#services/ClueSignalAdvisorService.js';
 import { UiMetadataService } from '#services/UiMetadataService.js';
-import { TopRunView } from '#types/index.js';
+import { getEnchantName } from '#core/registry.js';
+import { ChartCellView, RegistryState, TopRunView } from '#types/index.js';
 
 /**
  * Main Web Application Controller.
@@ -81,6 +83,9 @@ class AppController {
         } else if (type === 'clue') {
             this.results.showPlaceholder(UI_TEXTS.STATUS_REFINING);
         } else if (type === 'lvl' || type === 'level-input') {
+            if (this.params.getValues().sortMode === 'advisor' && this.tryRefreshAdvisorFromSweepForCurrentLevel()) {
+                return;
+            }
             this.results.showPlaceholder(UI_TEXTS.STATUS_REFINING);
             this.enqueueTopRun();
             return;
@@ -229,6 +234,14 @@ class AppController {
             view,
             registry,
             sortMode === 'advisor' ? TargetClueAdvisorService.summarizeSweep(this.refinement.currentSweep) : undefined,
+            sortMode === 'advisor' && !view.target
+                ? ClueSignalAdvisorService.summarizeLevels(
+                    registry,
+                    view.input.category,
+                    view.input.material,
+                    UiMetadataService.getXpCap(version)
+                )
+                : undefined,
             sortMode
         );
     }
@@ -237,6 +250,63 @@ class AppController {
         if (!this.lastView) return;
         if (this.params.getValues().sortMode !== 'advisor') return;
         this.updateInsightsFromView(this.lastView);
+    }
+
+    private tryRefreshAdvisorFromSweepForCurrentLevel(): boolean {
+        this.params.updateClueTarget();
+
+        const vals = this.params.getValues();
+        const registry = UiMetadataService.getRegistry(vals.version);
+        const ench = UiMetadataService.getEnchantability(vals.version, vals.material, vals.category);
+        this.params.setEnchantability(ench);
+
+        const cell = this.refinement.currentSweep[vals.xpLevel - 1];
+        if (!cell || (!cell.target && !cell.clueAdvisor)) return false;
+
+        this.updateInsightsFromView(this.createAdvisorTopViewFromChartCell(cell, registry));
+        return true;
+    }
+
+    private createAdvisorTopViewFromChartCell(cell: ChartCellView, registry: RegistryState): TopRunView {
+        const vals = this.params.getValues();
+        const enchants = Object.entries(cell.buckets.anyByEnchantId)
+            .map(([id, share]) => {
+                const enchantId = Number(id);
+                return {
+                    enchantId,
+                    label: getEnchantName(registry, enchantId),
+                    share
+                };
+            })
+            .sort((a, b) => b.share - a.share);
+
+        return {
+            input: {
+                category: vals.category,
+                material: vals.material,
+                clue: vals.clue,
+                xpLevel: vals.xpLevel,
+                version: vals.version,
+                targets: vals.targets
+            },
+            refinementLevel: cell.refinementLevel,
+            clueConditioned: cell.clueConditioned,
+            normalization: cell.normalization,
+            accounting: cell.accounting ?? {
+                resolved: 0,
+                clueIncompatible: 0,
+                pending: 0,
+                sieved: 0,
+                overflow: 0,
+                capped: 0,
+                rounding: 0
+            },
+            combos: [],
+            enchants,
+            target: cell.target,
+            clueAdvisor: cell.clueAdvisor,
+            clueSignalAdvisor: cell.clueSignalAdvisor
+        };
     }
 
     private showError(title: string, err: unknown): void {
