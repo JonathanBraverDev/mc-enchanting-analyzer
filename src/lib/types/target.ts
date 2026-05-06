@@ -44,6 +44,14 @@ export interface TargetClueAdvisorView {
   recommendations: TargetClueRecommendationView[];
 }
 
+export interface TargetLevelClueRecommendationView extends TargetClueRecommendationView {
+  xpLevel: number;
+}
+
+export interface TargetLevelClueAdvisorView {
+  recommendations: TargetLevelClueRecommendationView[];
+}
+
 export interface TargetAnalysisResult {
   matchMass: bigint;
   matchingComboCount: number;

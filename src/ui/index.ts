@@ -4,6 +4,7 @@ import { ParamsView } from '#ui/views/ParamsView.js';
 import { ResultsView } from '#ui/views/ResultsView.js';
 import { ChartController } from '#ui/results-chart-controller.js';
 import { RefinementService } from '#ui/refinement.js';
+import { TargetClueAdvisorService } from '#services/TargetClueAdvisorService.js';
 import { UiMetadataService } from '#services/UiMetadataService.js';
 import { TopRunView } from '#types/index.js';
 
@@ -135,7 +136,10 @@ class AppController {
                     onStatus: (status, level) => this.results.setRefinementStatus(status, level),
                     onChartStatus: (status, progress) => this.results.setChartStatus(status, progress),
                     onStats: (view) => this.updateInsightsFromView(view),
-                    onChart: (sweep) => this.chart.refresh(sweep, registry)
+                    onChart: (sweep) => {
+                        this.chart.refresh(sweep, registry);
+                        this.refreshLastView();
+                    }
                 }
             );
         } catch (err) {
@@ -162,7 +166,10 @@ class AppController {
                     onStatus: (status, level) => this.results.setRefinementStatus(status, level),
                     onChartStatus: (status, progress) => this.results.setChartStatus(status, progress),
                     onStats: (view) => this.updateInsightsFromView(view),
-                    onChart: (sweep) => this.chart.refresh(sweep, registry)
+                    onChart: (sweep) => {
+                        this.chart.refresh(sweep, registry);
+                        this.refreshLastView();
+                    }
                 }
             );
         } catch (err) {
@@ -185,7 +192,10 @@ class AppController {
                     onStatus: (status, level) => this.results.setRefinementStatus(status, level),
                     onChartStatus: (status, progress) => this.results.setChartStatus(status, progress),
                     onStats: (view) => this.updateInsightsFromView(view),
-                    onChart: (sweep) => this.chart.refresh(sweep, registry)
+                    onChart: (sweep) => {
+                        this.chart.refresh(sweep, registry);
+                        this.refreshLastView();
+                    }
                 }
             );
         } catch (err) {
@@ -199,7 +209,12 @@ class AppController {
         const { version } = this.params.getValues();
         const registry = UiMetadataService.getRegistry(version);
 
-        this.results.updateV5(view, registry);
+        this.results.updateV5(view, registry, TargetClueAdvisorService.summarizeSweep(this.refinement.currentSweep));
+    }
+
+    private refreshLastView(): void {
+        if (!this.lastView) return;
+        this.updateInsightsFromView(this.lastView);
     }
 
     private showError(title: string, err: unknown): void {

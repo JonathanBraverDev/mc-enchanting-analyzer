@@ -1,6 +1,6 @@
 import { UIUtils, RomanUtils } from '#utils/index.js';
 import { UI_DEFAULTS, UI_TEXTS, REFINEMENT_LEVEL_COLORS, RefinementStatusLevel } from '#core/config.js';
-import { RegistryState, EnchantInsights, TopRunView } from '#types/index.js';
+import { RegistryState, EnchantInsights, TargetLevelClueAdvisorView, TopRunView } from '#types/index.js';
 
 export function getDisplayConfidence(view: Pick<TopRunView, 'normalization' | 'accounting'>): number {
     if (view.normalization.domain === 'clue-known-space') {
@@ -69,9 +69,13 @@ export class ResultsView {
     /**
      * V5 update path using the pre-projected TopRunView.
      */
-    public updateV5(view: TopRunView, registry: RegistryState): void {
-        if (view.combos.length > 0 || view.target || view.clueAdvisor) {
-            this.renderCombosV5(view, registry);
+    public updateV5(
+        view: TopRunView,
+        registry: RegistryState,
+        levelClueAdvisor?: TargetLevelClueAdvisorView | undefined
+    ): void {
+        if (view.combos.length > 0 || view.target || view.clueAdvisor || levelClueAdvisor) {
+            this.renderCombosV5(view, registry, levelClueAdvisor);
             this.renderEnchantsV5(view, registry);
         } else {
             this.showNoResults();
@@ -159,7 +163,11 @@ export class ResultsView {
         this.rankEl.replaceChildren(fragment);
     }
 
-    private renderCombosV5(view: TopRunView, _registry: RegistryState): void {
+    private renderCombosV5(
+        view: TopRunView,
+        _registry: RegistryState,
+        levelClueAdvisor?: TargetLevelClueAdvisorView | undefined
+    ): void {
         if (!this.comboEl) return;
 
         const fragment = document.createDocumentFragment();
@@ -191,6 +199,7 @@ export class ResultsView {
 
         if (view.target) this.appendTargetItem(fragment, view.target);
         if (view.clueAdvisor) this.appendClueAdvisorItem(fragment, view.clueAdvisor);
+        if (levelClueAdvisor) this.appendLevelClueAdvisorItem(fragment, levelClueAdvisor);
 
         const clueKnownSpace = view.normalization.domain === 'clue-known-space'
             ? view.normalization.clue?.knownSpace
@@ -270,6 +279,44 @@ export class ResultsView {
             const label = document.createElement("span");
             label.style.cssText = "font-size: 0.8rem; overflow-wrap: anywhere;";
             label.textContent = recommendation.label;
+
+            const chance = document.createElement("span");
+            chance.style.cssText = "font-size: 0.8rem; font-weight: 800; color: var(--accent);";
+            chance.textContent = UIUtils.formatPercent(recommendation.targetChance);
+
+            const meta = document.createElement("div");
+            meta.style.cssText = "grid-column: 1 / -1; font-size: 0.68rem; color: var(--text-muted);";
+            meta.textContent = `Shown ${UIUtils.formatPercent(recommendation.clueShare)} · joint ${UIUtils.formatPercent(recommendation.targetAndClueShare)}`;
+
+            row.append(label, chance, meta);
+            info.appendChild(row);
+        }
+
+        fragment.appendChild(info);
+    }
+
+    private appendLevelClueAdvisorItem(
+        fragment: DocumentFragment,
+        advisor: TargetLevelClueAdvisorView
+    ): void {
+        if (advisor.recommendations.length === 0) return;
+
+        const info = document.createElement("div");
+        info.className = "combo-item";
+        info.style.cssText = "border-top: 1px solid rgba(255,255,255,0.05); margin-top: 10px; padding-top: 10px; opacity: 0.92;";
+
+        const title = document.createElement("div");
+        title.style.cssText = "font-size: 0.85rem; font-weight: 800; margin-bottom: 6px;";
+        title.textContent = "Best Level + Clue";
+        info.appendChild(title);
+
+        for (const recommendation of advisor.recommendations) {
+            const row = document.createElement("div");
+            row.style.cssText = "display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: baseline; margin-top: 5px;";
+
+            const label = document.createElement("span");
+            label.style.cssText = "font-size: 0.8rem; overflow-wrap: anywhere;";
+            label.textContent = `Level ${recommendation.xpLevel} · ${recommendation.label}`;
 
             const chance = document.createElement("span");
             chance.style.cssText = "font-size: 0.8rem; font-weight: 800; color: var(--accent);";
