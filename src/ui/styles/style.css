@@ -213,6 +213,38 @@ header h1 {
     opacity: 0.45;
 }
 
+.chart-legend-group {
+    align-items: center;
+    display: inline-flex;
+    gap: 4px;
+}
+
+.chart-legend-rank-items {
+    display: inline-flex;
+    gap: 2px;
+}
+
+.chart-legend-rank-toggle {
+    align-items: center;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--glass-border);
+    border-radius: 999px;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: inline-flex;
+    font: inherit;
+    font-size: 0.65rem;
+    height: 26px;
+    justify-content: center;
+    min-width: 26px;
+    padding: 0 6px;
+}
+
+.chart-legend-rank-toggle.is-hidden {
+    opacity: 0.35;
+    text-decoration: line-through;
+}
+
 .chart-legend-swatch {
     border-radius: 999px;
     display: inline-block;

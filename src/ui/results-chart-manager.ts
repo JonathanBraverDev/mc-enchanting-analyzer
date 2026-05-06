@@ -35,6 +35,7 @@ export class ChartManager {
     get chartInstance(): ChartInstance | null { return this.chart; }
     private canvas: HTMLCanvasElement | null = null;
     private hiddenGroups = new Set<string>();
+    private hiddenGroupRanks = new Set<string>();
     private legendEl: HTMLElement | null = null;
     private legendSignature = '';
 
@@ -181,10 +182,16 @@ export class ChartManager {
         if (!this.chart) return;
 
         (this.chart.data.datasets as ChartDataset[]).forEach((dataset, index) => {
-            const shouldShow = !dataset.groupKey || !this.hiddenGroups.has(dataset.groupKey);
+            const shouldShow = !dataset.groupKey
+                || (!this.hiddenGroups.has(dataset.groupKey) && !this.hiddenGroupRanks.has(this.getGroupRankKey(dataset.groupKey, dataset.rankLevel)));
             if (shouldShow) this.chart!.show(index);
             else this.chart!.hide(index);
         });
+    }
+
+
+    private getGroupRankKey(groupKey: string, rankLevel: number | undefined): string {
+        return `${groupKey}:${rankLevel ?? 'unknown'}`;
     }
 
 
@@ -196,13 +203,16 @@ export class ChartManager {
             this.legendEl.hidden = true;
             this.legendEl.replaceChildren();
             this.hiddenGroups.clear();
+            this.hiddenGroupRanks.clear();
             this.legendSignature = '';
             return;
         }
 
         const signature = groupedDatasets
             .map(dataset => `${dataset.groupKey}:${dataset.rankLevel}:${dataset.borderColor}:${dataset.borderDash?.join('.') || ''}`)
-            .join('|') + ` hidden=${Array.from(this.hiddenGroups).sort().join(',')}`;
+            .join('|')
+            + ` hiddenGroups=${Array.from(this.hiddenGroups).sort().join(',')}`
+            + ` hiddenRanks=${Array.from(this.hiddenGroupRanks).sort().join(',')}`;
         if (signature === this.legendSignature) return;
         this.legendSignature = signature;
 
@@ -225,31 +235,57 @@ export class ChartManager {
         const items = document.createElement('div');
         items.className = 'chart-legend-items';
 
-        const groupMap = new Map<string, ChartDataset>();
+        const groupMap = new Map<string, { sample: ChartDataset; ranks: Set<number> }>();
         datasets.forEach(dataset => {
-            if (dataset.groupKey && !groupMap.has(dataset.groupKey)) groupMap.set(dataset.groupKey, dataset);
+            if (!dataset.groupKey) return;
+            const group = groupMap.get(dataset.groupKey) || { sample: dataset, ranks: new Set<number>() };
+            if (dataset.rankLevel !== undefined) group.ranks.add(dataset.rankLevel);
+            groupMap.set(dataset.groupKey, group);
         });
 
-        Array.from(groupMap.entries()).sort(([a], [b]) => a.localeCompare(b)).forEach(([groupKey, dataset]) => {
-            const item = document.createElement('button');
-            item.type = 'button';
-            item.className = `chart-legend-item${this.hiddenGroups.has(groupKey) ? ' is-hidden' : ''}`;
+        Array.from(groupMap.entries()).sort(([a], [b]) => a.localeCompare(b)).forEach(([groupKey, group]) => {
+            const item = document.createElement('div');
+            item.className = 'chart-legend-group';
+
+            const groupButton = document.createElement('button');
+            groupButton.type = 'button';
+            groupButton.className = `chart-legend-item chart-legend-group-toggle${this.hiddenGroups.has(groupKey) ? ' is-hidden' : ''}`;
 
             const swatch = document.createElement('span');
             swatch.className = 'chart-legend-swatch';
-            swatch.style.backgroundColor = dataset.borderColor;
+            swatch.style.backgroundColor = group.sample.borderColor;
 
             const label = document.createElement('span');
             label.textContent = groupKey;
 
-            item.append(swatch, label);
-            item.addEventListener('click', () => {
+            groupButton.append(swatch, label);
+            groupButton.addEventListener('click', () => {
                 if (this.hiddenGroups.has(groupKey)) this.hiddenGroups.delete(groupKey);
                 else this.hiddenGroups.add(groupKey);
                 this.applyGroupVisibility();
                 this.renderGroupedLegend(this.chart?.data.datasets as ChartDataset[] || []);
                 this.chart?.update('none');
             });
+
+            const rankItems = document.createElement('div');
+            rankItems.className = 'chart-legend-rank-items';
+            Array.from(group.ranks).sort((a, b) => a - b).forEach(rank => {
+                const rankKey = this.getGroupRankKey(groupKey, rank);
+                const rankButton = document.createElement('button');
+                rankButton.type = 'button';
+                rankButton.className = `chart-legend-rank-toggle${this.hiddenGroupRanks.has(rankKey) ? ' is-hidden' : ''}`;
+                rankButton.textContent = RomanUtils.rankToRoman(rank, { I: 1, II: 2, III: 3, IV: 4, V: 5 });
+                rankButton.addEventListener('click', () => {
+                    if (this.hiddenGroupRanks.has(rankKey)) this.hiddenGroupRanks.delete(rankKey);
+                    else this.hiddenGroupRanks.add(rankKey);
+                    this.applyGroupVisibility();
+                    this.renderGroupedLegend(this.chart?.data.datasets as ChartDataset[] || []);
+                    this.chart?.update('none');
+                });
+                rankItems.append(rankButton);
+            });
+
+            item.append(groupButton, rankItems);
             items.append(item);
         });
 
