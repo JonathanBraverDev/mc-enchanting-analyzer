@@ -1,12 +1,14 @@
 import { DATA } from '#data/index.js';
-import { RegistryState } from '#types/index.js';
+import { RegistryState, TargetOptionView, TargetRequirementInput } from '#types/index.js';
 import {
   getEligibleMaterials,
   getEnchantability,
+  getEnchantId,
   getFullEnchantName,
   getEligiblePool
 } from '#core/registry.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
+import { TargetAnalysisService } from '#services/TargetAnalysisService.js';
 
 import { RegistryFactory } from '#core/factory.js';
 
@@ -67,5 +69,59 @@ export class UiMetadataService {
     }
 
     return Array.from(allPossible).sort();
+  }
+
+  /**
+   * Gets all minimum-rank target options that can appear somewhere in this table setup.
+   */
+  public static getTargetOptions(version: string, category: string, material: string, xpLevel: number): TargetOptionView[] {
+    if (!material) return [];
+
+    const registry = this.getRegistry(version);
+    const ench = getEnchantability(registry, material, category);
+    const dist = this.distributionService.getModifiedLevelDist(registry, xpLevel, ench);
+    const byKey = new Map<string, TargetRequirementInput>();
+
+    for (const mlStr of Object.keys(dist)) {
+      const ml = parseInt(mlStr);
+      const pool = getEligiblePool(registry, category, ml);
+      for (const packed of pool) {
+        const option = TargetAnalysisService.makeTargetInput(registry, packed);
+        for (let rank = 1; rank <= option.rank; rank++) {
+          const target = { ...option, rank };
+          byKey.set(`${target.enchantment}|${rank}`, target);
+        }
+      }
+    }
+
+    return [...byKey.values()]
+      .map(target => ({
+        ...target,
+        label: TargetAnalysisService.getTargetOptionLabel(registry, target)
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }
+
+  public static isTargetCompatible(
+    version: string,
+    candidate: Pick<TargetRequirementInput, 'enchantment'>,
+    selectedTargets: TargetRequirementInput[]
+  ): boolean {
+    const registry = this.getRegistry(version);
+    const candidateId = getEnchantId(registry, candidate.enchantment);
+
+    for (const selected of selectedTargets) {
+      const selectedId = getEnchantId(registry, selected.enchantment);
+      if (candidateId === selectedId) continue;
+      if (TargetAnalysisService.targetsConflict(
+        registry,
+        { enchantmentId: candidateId },
+        { enchantmentId: selectedId }
+      )) {
+        return false;
+      }
+    }
+
+    return true;
   }
 }
