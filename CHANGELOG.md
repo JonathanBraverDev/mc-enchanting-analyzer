@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## v5.2.0 (2026-05-05)
+
+### Improved
+- **Faster shown-enchantment searches**: Searches with a table clue now skip impossible branches earlier, which especially helps rare clues and complex book calculations.
+- **Clearer clue confidence**: Clue runs now separate exact clue mismatches from low-probability pruning, so progress reflects how much of the search has truly been classified.
+
+### Developer Experience
+- **Clue-aware checkpoints**: Wired clue targets through checkpoint searches and covered them against full-search conditioning.
+- **Stats schema cleanup**: Moved clue-known-space to `clue.knownSpace`, made shown-clue distributions conditional, and kept clue-incompatible mass as conserved accounting.
+- **Maintenance cleanup**: Tightened snapshot parity, shared test helpers, and release-history workflow docs.
+
 ## v5.1.1 (2026-05-03)
 
 ### Fixed

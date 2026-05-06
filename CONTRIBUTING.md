@@ -24,7 +24,7 @@ We follow a specialized workflow to keep production history clean while preservi
 
 1.  **Strict Mass Conservation**: Every probability mass must be accounted for. Use `ProbabilityMassAccountant` for all search logic.
 2.  **Version Isolation**: Use the `registry.version` when interacting with `CacheManager`. Never share caches between game versions.
-3.  **BigInt for Math**: Use high-precision `bigint` (scaled to `10^12`) for all core probability calculations. Only convert to `number` in the final `SummaryService`.
+3.  **BigInt for Math**: Use high-precision `bigint` (scaled to `2^60`) for all core probability calculations. Only convert to `number` in reporting and UI-facing services.
 4.  **Deterministic Results**: All engine logic must be deterministic. Avoid `Math.random()` or platform-specific floating point dependencies in the core.
 5.  **Subpath Imports**: Use `#` aliases for all internal library imports. Avoid direct relative paths (`../`, `./`) when an alias is available.
 
@@ -51,37 +51,42 @@ Before submitting any major engine refactor, run the snapshot regression suite t
 
 ## Performance Profiling
 
-Performance is critical for the "Standalone HTML" version. We use a dedicated benchmarking script to track execution time and cache efficiency.
+Performance is critical for the "Standalone HTML" version. We use dedicated profiling scripts to track search time, post-processing time, and cache behavior.
 
 ### Running the Benchmarks
 ```bash
-npx tsx scripts/benchmark_engine.ts
+npm run benchmark -- --version 1.21.11
 ```
 
-This script will:
-1. Initialize the engine for a specific version.
-2. Run a set of standard search queries (Book vs. Item).
-3. Report:
-    - **Time per query** (ms).
-    - **Cache hit rates** (via `cacheManager.getMetrics()`).
-    - **Memory footprint** (if available).
+For CPU profiles, use:
+```bash
+npm run benchmark:cpu -- --version 1.21.11
+```
+
+For the repeatable book clue/no-clue perf cases, use:
+```bash
+npx tsx scripts/profile_perf_cases.ts
+```
+
+These scripts report result counts, active search time, post-processing time, and total engine time. `scripts/benchmark_engine.ts` remains available for simple cold/warm cache smoke checks.
 
 ### Optimizing the Search
-- Use `SearchProcessor` for low-level loops.
-- Avoid object allocation in the hot loops (`processInitialNode`, `processSearchNode`).
-- Leverage bit-packing for keys and state.
+- Keep Minecraft rule logic in `SearchProcessor`, mass forwarding in `MassForwardingEngine`, and queue orchestration in `SearchController`.
+- Avoid object allocation in hot loops such as `processInitialNode`, `buildExpansionBlueprint`, and forwarding by node ID.
+- Prefer graph node IDs, packed combos, typed arrays, and precomputed pool metadata over repeated map/key reconstruction.
 
 ## Mass Conservation Invariants
 
 The engine maintains a system of "buckets" to track every atom of probability:
 - **Resolved**: Reached a terminal enchantment combo.
+- **Clue Incompatible**: Proven unable to match the observed clue in a clue-aware search.
 - **Pending**: Remaining in the frontier (incomplete search).
-- **Sieved**: Pruned because probability fell below `ENGINE.MIN_RESOLVE_THRESHOLD`.
-- **Capped**: Pruned because result limit or heap size was reached.
+- **Sieved**: Pruned because probability fell below `SEARCH_CONSTANTS.SYSTEM_THRESHOLD_FLOOR`.
 - **Overflow**: Discarded by engine limits (6+ enchants).
+- **Capped**: Pruned because result limit or heap size was reached.
 - **Rounding**: Compensation for fixed-point math adjustments.
 
-**Invariant**: `Resolved + Clue Incompatible + Pending + Sieved + Capped + Overflow + Rounding === 10^12` (PRECISION)
+**Invariant**: `Resolved + Clue Incompatible + Pending + Sieved + Overflow + Capped + Rounding === 2^60` (PRECISION)
 
 ## Directory Structure
 
