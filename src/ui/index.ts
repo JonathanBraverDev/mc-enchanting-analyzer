@@ -21,6 +21,7 @@ class AppController {
     private isWorkerReady: boolean = false;
     private runDebounceTimeout: number = 0;
     private lastView: TopRunView | null = null;
+    private suppressNextChartRefresh: boolean = false;
 
     constructor() {
         this.params = new ParamsView(
@@ -87,6 +88,7 @@ class AppController {
             const vals = this.params.getValues();
             if (vals.sortMode === 'advisor' && vals.targets.length > 0) {
                 this.results.showPlaceholder(UI_TEXTS.STATUS_REFINING);
+                this.suppressNextChartRefresh = true;
                 this.enqueueRun();
                 return;
             }
@@ -97,6 +99,7 @@ class AppController {
         } else if (type === 'target') {
             this.results.showPlaceholder(UI_TEXTS.STATUS_REFINING);
             if (this.params.getValues().sortMode === 'advisor') {
+                this.suppressNextChartRefresh = true;
                 this.enqueueRun();
                 return;
             }
@@ -130,6 +133,8 @@ class AppController {
     private async run(): Promise<void> {
         if (!this.isWorkerReady) return;
         this.lastView = null;
+        const suppressChartRefresh = this.suppressNextChartRefresh;
+        this.suppressNextChartRefresh = false;
 
         try {
             this.params.updateClueTarget();
@@ -145,10 +150,12 @@ class AppController {
                 registry,
                 {
                     onStatus: (status, level) => this.results.setRefinementStatus(status, level),
-                    onChartStatus: (status, progress) => this.results.setChartStatus(status, progress),
+                    onChartStatus: (status, progress) => {
+                        if (!suppressChartRefresh) this.results.setChartStatus(status, progress);
+                    },
                     onStats: (view) => this.updateInsightsFromView(view),
                     onChart: (sweep) => {
-                        this.chart.refresh(sweep, registry);
+                        if (!suppressChartRefresh) this.chart.refresh(sweep, registry);
                         this.refreshLastViewIfAdvisorMode();
                     }
                 }
@@ -170,16 +177,13 @@ class AppController {
             const ench = UiMetadataService.getEnchantability(vals.version, vals.material, vals.category);
             this.params.setEnchantability(ench);
 
-            const registry = UiMetadataService.getRegistry(vals.version);
-
             await this.refinement.runTopOnly(
                 { ...vals, category: vals.category },
                 {
                     onStatus: (status, level) => this.results.setRefinementStatus(status, level),
                     onChartStatus: (status, progress) => this.results.setChartStatus(status, progress),
                     onStats: (view) => this.updateInsightsFromView(view),
-                    onChart: (sweep) => {
-                        this.chart.refresh(sweep, registry);
+                    onChart: () => {
                         this.refreshLastViewIfAdvisorMode();
                     }
                 }
@@ -202,10 +206,9 @@ class AppController {
                 registry,
                 {
                     onStatus: (status, level) => this.results.setRefinementStatus(status, level),
-                    onChartStatus: (status, progress) => this.results.setChartStatus(status, progress),
+                    onChartStatus: () => {},
                     onStats: (view) => this.updateInsightsFromView(view),
-                    onChart: (sweep) => {
-                        this.chart.refresh(sweep, registry);
+                    onChart: () => {
                         this.refreshLastViewIfAdvisorMode();
                     }
                 }

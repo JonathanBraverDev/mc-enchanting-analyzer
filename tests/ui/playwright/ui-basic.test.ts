@@ -68,7 +68,6 @@ test.describe('Basic UI Functionality', () => {
         await expect(analyzer.comboList).toContainText('Best Shown Clues');
         await expect(analyzer.comboList).toContainText('any');
         await expect(analyzer.comboList).toContainText('compatible');
-        await analyzer.waitForChartIdle(60000);
         await expect(analyzer.comboList).toContainText('Best Level + Clue');
     });
 
@@ -88,7 +87,6 @@ test.describe('Basic UI Functionality', () => {
         await analyzer.triggerAndAwaitRefinement(async () => {
             await analyzer.addTarget('Fortune I+');
         });
-        await analyzer.waitForChartIdle(60000);
         await expect(analyzer.comboList).toContainText('Target Match (Efficiency I+ + Fortune I+)');
         await expect(analyzer.comboList).toContainText('Fortune');
     });
