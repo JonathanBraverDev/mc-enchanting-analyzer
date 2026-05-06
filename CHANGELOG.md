@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## v5.2.1 (2026-05-06)
+
+### Fixed
+- **Release history archiving**: Fixed the release archive workflow so patch releases can preserve their full branch history without violating the `release-history` branch rules.
+
+### Developer Experience
+- **Patch cleanup**: Removed stale correction labels and a small unused clue-conditioning argument.
+
 ## v5.2.0 (2026-05-05)
 
 ### Improved
