@@ -56,5 +56,24 @@ export const ThemeManager = {
             borderDash: RANK_LINE_DASHES[rank] || RANK_LINE_DASHES[5] || [],
             borderWidth: 2
         };
+    },
+
+    /**
+     * Returns a translucent variant of a theme color for chart fills.
+     */
+    withAlpha: (color: string, alpha: number): string => {
+        if (color.startsWith('hsl')) {
+            const parts = color.match(/\d+(?:\.\d+)?/g);
+            if (parts && parts.length >= 3) {
+                const [h = '', s = '', l = ''] = parts;
+                return `hsla(${h}, ${s}%, ${l}%, ${alpha})`;
+            }
+        }
+
+        if (color.startsWith('rgb(')) {
+            return color.replace(/^rgb\((.*)\)$/u, `rgba($1, ${alpha})`);
+        }
+
+        return color;
     }
 };

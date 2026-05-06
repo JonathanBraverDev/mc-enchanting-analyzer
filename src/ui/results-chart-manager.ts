@@ -75,7 +75,7 @@ export class ChartManager {
                     label: name,
                     data: sweep.map(x => (x && x.buckets && x.buckets.anyByEnchantId[id] || 0) * 100),
                     borderColor: color,
-                    backgroundColor: color.replace(')', ', 0.1)'),
+                    backgroundColor: ThemeManager.withAlpha(color, 0.1),
                     borderWidth: 2, tension: 0.1, pointRadius: 0
                 });
             });
@@ -101,7 +101,7 @@ export class ChartManager {
                     label: fullName,
                     data: sweep.map(x => (x && x.buckets && x.buckets.rankByIdAndRank[idAndRank] || 0) * 100),
                     borderColor: style.color,
-                    backgroundColor: style.color.replace(')', ', 0.1)'),
+                    backgroundColor: ThemeManager.withAlpha(style.color, 0.1),
                     borderWidth: style.borderWidth,
                     borderDash: style.borderDash,
                     tension: 0.1, pointRadius: 0
@@ -120,7 +120,7 @@ export class ChartManager {
                     label: `${c} Enchant${c > 1 ? 's' : ''}`,
                     data: sweep.map(x => (x && x.buckets && x.buckets.countBySize[c] || 0) * 100),
                     borderColor: color,
-                    backgroundColor: color.replace(')', ', 0.1)'),
+                    backgroundColor: ThemeManager.withAlpha(color, 0.1),
                     borderWidth: 2, tension: 0.1, pointRadius: 0
                 });
             }
