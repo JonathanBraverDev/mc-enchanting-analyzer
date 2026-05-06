@@ -1,6 +1,12 @@
 import { UIUtils, RomanUtils } from '#utils/index.js';
 import { UI_DEFAULTS, UI_TEXTS, REFINEMENT_LEVEL_COLORS, RefinementStatusLevel } from '#core/config.js';
-import { RegistryState, EnchantInsights, TargetLevelClueAdvisorView, TopRunView } from '#types/index.js';
+import {
+    LevelClueSignalAdvisorView,
+    RegistryState,
+    EnchantInsights,
+    TargetLevelClueAdvisorView,
+    TopRunView
+} from '#types/index.js';
 
 export function getDisplayConfidence(view: Pick<TopRunView, 'normalization' | 'accounting'>): number {
     if (view.normalization.domain === 'clue-known-space') {
@@ -75,13 +81,24 @@ export class ResultsView {
         view: TopRunView,
         registry: RegistryState,
         levelClueAdvisor?: TargetLevelClueAdvisorView | undefined,
+        levelClueSignalAdvisor?: LevelClueSignalAdvisorView | undefined,
         displayMode = 'prob'
     ): void {
         const advisorMode = displayMode === 'advisor';
         this.setResultsTitle(advisorMode ? 'Best Clues' : 'Top Combinations');
 
-        if (view.combos.length > 0 || view.target || (advisorMode && (view.clueAdvisor || levelClueAdvisor))) {
-            this.renderCombosV5(view, registry, advisorMode ? levelClueAdvisor : undefined, advisorMode);
+        if (
+            view.combos.length > 0
+            || view.target
+            || (advisorMode && (view.clueAdvisor || levelClueAdvisor || view.clueSignalAdvisor || levelClueSignalAdvisor))
+        ) {
+            this.renderCombosV5(
+                view,
+                registry,
+                advisorMode ? levelClueAdvisor : undefined,
+                advisorMode ? levelClueSignalAdvisor : undefined,
+                advisorMode
+            );
             this.renderEnchantsV5(view, registry);
         } else {
             this.showNoResults();
@@ -173,6 +190,7 @@ export class ResultsView {
         view: TopRunView,
         _registry: RegistryState,
         levelClueAdvisor?: TargetLevelClueAdvisorView | undefined,
+        levelClueSignalAdvisor?: LevelClueSignalAdvisorView | undefined,
         advisorMode = false
     ): void {
         if (!this.comboEl) return;
@@ -181,9 +199,14 @@ export class ResultsView {
 
         if (advisorMode) {
             if (view.target) this.appendTargetItem(fragment, view.target);
-            if (view.clueAdvisor) this.appendClueAdvisorItem(fragment, view.clueAdvisor);
-            if (levelClueAdvisor) this.appendLevelClueAdvisorItem(fragment, levelClueAdvisor);
-            if (!view.target) this.appendAdvisorPlaceholder(fragment);
+            if (view.target) {
+                if (view.clueAdvisor) this.appendClueAdvisorItem(fragment, view.clueAdvisor);
+                if (levelClueAdvisor) this.appendLevelClueAdvisorItem(fragment, levelClueAdvisor);
+            } else {
+                if (view.clueSignalAdvisor) this.appendClueSignalAdvisorItem(fragment, view.clueSignalAdvisor);
+                if (levelClueSignalAdvisor) this.appendLevelClueSignalAdvisorItem(fragment, levelClueSignalAdvisor);
+                if (!view.clueSignalAdvisor && !levelClueSignalAdvisor) this.appendAdvisorPlaceholder(fragment);
+            }
         } else {
             view.combos.slice(0, UI_DEFAULTS.MAX_TOP_COMBOS_DISPLAY).forEach((combo) => {
                 const item = document.createElement("div");
@@ -249,7 +272,9 @@ export class ResultsView {
 
         const count = document.createElement("div");
         count.style.cssText = "font-size: 0.7rem; color: var(--text-muted); margin-top: 3px;";
-        count.textContent = `${target.matchingComboCount} matching combinations`;
+        count.textContent = target.tablePossibleAtLevel
+            ? `${target.matchingComboCount} matching combinations`
+            : "Impossible at this level: no modified enchantment level can roll all selected target ranks together.";
 
         row.append(label, value);
         info.append(row, count);
@@ -321,6 +346,29 @@ export class ResultsView {
         fragment.appendChild(info);
     }
 
+    private appendClueSignalAdvisorItem(
+        fragment: DocumentFragment,
+        clueSignalAdvisor: NonNullable<TopRunView['clueSignalAdvisor']>
+    ): void {
+        if (clueSignalAdvisor.recommendations.length === 0) return;
+
+        const info = document.createElement("div");
+        info.className = "combo-item";
+        info.style.cssText = "border-top: 1px solid rgba(255,255,255,0.05); margin-top: 10px; padding-top: 10px; opacity: 0.92;";
+
+        const title = document.createElement("div");
+        title.style.cssText = "font-size: 0.85rem; font-weight: 800; margin-bottom: 6px;";
+        title.textContent = "Best High-Roll Clues";
+        info.appendChild(title);
+
+        for (const recommendation of clueSignalAdvisor.recommendations) {
+            const row = this.createClueSignalRow(recommendation.label, recommendation);
+            info.appendChild(row);
+        }
+
+        fragment.appendChild(info);
+    }
+
     private appendLevelClueAdvisorItem(
         fragment: DocumentFragment,
         advisor: TargetLevelClueAdvisorView
@@ -342,7 +390,7 @@ export class ResultsView {
 
             const label = document.createElement("span");
             label.style.cssText = "font-size: 0.8rem; overflow-wrap: anywhere;";
-            label.textContent = `Level ${recommendation.xpLevel} · ${recommendation.label}`;
+            label.textContent = `Level ${recommendation.xpLevel} | ${recommendation.label}`;
 
             const chance = document.createElement("span");
             chance.style.cssText = "font-size: 0.8rem; font-weight: 800; color: var(--accent);";
@@ -359,6 +407,57 @@ export class ResultsView {
         fragment.appendChild(info);
     }
 
+    private appendLevelClueSignalAdvisorItem(
+        fragment: DocumentFragment,
+        advisor: LevelClueSignalAdvisorView
+    ): void {
+        if (advisor.recommendations.length === 0) return;
+
+        const info = document.createElement("div");
+        info.className = "combo-item";
+        info.style.cssText = "border-top: 1px solid rgba(255,255,255,0.05); margin-top: 10px; padding-top: 10px; opacity: 0.92;";
+
+        const title = document.createElement("div");
+        title.style.cssText = "font-size: 0.85rem; font-weight: 800; margin-bottom: 6px;";
+        title.textContent = "Best Level + High-Roll Clue";
+        info.appendChild(title);
+
+        for (const recommendation of advisor.recommendations) {
+            const row = this.createClueSignalRow(`Level ${recommendation.xpLevel} | ${recommendation.label}`, recommendation);
+            info.appendChild(row);
+        }
+
+        fragment.appendChild(info);
+    }
+
+    private createClueSignalRow(
+        labelText: string,
+        recommendation: {
+            clueShare: number;
+            averageModifiedLevel: number;
+            baselineModifiedLevel: number;
+            modifiedLevelLift: number;
+        }
+    ): HTMLElement {
+        const row = document.createElement("div");
+        row.style.cssText = "display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: baseline; margin-top: 5px;";
+
+        const label = document.createElement("span");
+        label.style.cssText = "font-size: 0.8rem; overflow-wrap: anywhere;";
+        label.textContent = labelText;
+
+        const lift = document.createElement("span");
+        lift.style.cssText = "font-size: 0.8rem; font-weight: 800; color: var(--accent);";
+        lift.textContent = `+${recommendation.modifiedLevelLift.toFixed(1)} ML`;
+
+        const meta = document.createElement("div");
+        meta.style.cssText = "grid-column: 1 / -1; font-size: 0.68rem; color: var(--text-muted);";
+        meta.textContent = `Shown ${UIUtils.formatPercent(recommendation.clueShare)} | avg ML ${recommendation.averageModifiedLevel.toFixed(1)} | baseline ${recommendation.baselineModifiedLevel.toFixed(1)}`;
+
+        row.append(label, lift, meta);
+        return row;
+    }
+
     private formatClueAdvisorMeta(recommendation: {
         clueShare: number;
         anyBaselineChance: number;
@@ -369,7 +468,7 @@ export class ResultsView {
             ? `${recommendation.liftOverCompatibleBaseline.toFixed(1)}x`
             : 'n/a';
 
-        return `Shown ${UIUtils.formatPercent(recommendation.clueShare)} · any ${UIUtils.formatPercent(recommendation.anyBaselineChance)} · compatible ${UIUtils.formatPercent(recommendation.compatibleBaselineChance)} · ${lift}`;
+        return `Shown ${UIUtils.formatPercent(recommendation.clueShare)} | any ${UIUtils.formatPercent(recommendation.anyBaselineChance)} | compatible ${UIUtils.formatPercent(recommendation.compatibleBaselineChance)} | ${lift}`;
     }
 
     private createTargetDiagnosticRow(labelText: string, share: number, count: number): HTMLElement {
