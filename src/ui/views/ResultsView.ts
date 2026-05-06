@@ -62,7 +62,7 @@ export class ResultsView {
      * V5 update path using the pre-projected TopRunView.
      */
     public updateV5(view: TopRunView, registry: RegistryState): void {
-        if (view.combos.length > 0) {
+        if (view.combos.length > 0 || view.target) {
             this.renderCombosV5(view, registry);
             this.renderEnchantsV5(view, registry);
         } else {
@@ -171,6 +171,18 @@ export class ResultsView {
             fragment.appendChild(item);
         });
 
+        if (view.target && view.combos.length === 0) {
+            const empty = document.createElement("div");
+            empty.className = "combo-placeholder";
+            empty.textContent = "No matching combinations found at this checkpoint.";
+            empty.style.opacity = "0.5";
+            empty.style.padding = "15px";
+            empty.style.fontSize = "0.85rem";
+            fragment.appendChild(empty);
+        }
+
+        if (view.target) this.appendTargetItem(fragment, view.target);
+
         const clueKnownSpace = view.normalization.domain === 'clue-known-space'
             ? view.normalization.clue?.knownSpace
             : undefined;
@@ -178,6 +190,67 @@ export class ResultsView {
 
         // Atomic swap
         this.comboEl.replaceChildren(fragment);
+    }
+
+    private appendTargetItem(
+        fragment: DocumentFragment,
+        target: NonNullable<TopRunView['target']>
+    ): void {
+        const info = document.createElement("div");
+        info.className = "combo-item";
+        info.style.cssText = "border-top: 1px solid rgba(255,255,255,0.05); margin-top: 10px; padding-top: 10px; opacity: 0.9;";
+
+        const row = document.createElement("div");
+        row.style.cssText = "display: flex; justify-content: space-between; gap: 12px; font-size: 0.85rem;";
+
+        const label = document.createElement("span");
+        label.textContent = target.labels.length > 0
+            ? `Target Match (${target.labels.join(' + ')})`
+            : "Target Match";
+
+        const value = document.createElement("span");
+        value.style.color = "var(--accent)";
+        value.style.fontWeight = "800";
+        value.textContent = UIUtils.formatPercent(target.matchShare);
+
+        const count = document.createElement("div");
+        count.style.cssText = "font-size: 0.7rem; color: var(--text-muted); margin-top: 3px;";
+        count.textContent = `${target.matchingComboCount} matching combinations`;
+
+        row.append(label, value);
+        info.append(row, count);
+
+        if (target.nearMissComboCount > 0) {
+            info.appendChild(this.createTargetDiagnosticRow(
+                "One target short",
+                target.nearMissShare,
+                target.nearMissComboCount
+            ));
+        }
+
+        if (target.blockedComboCount > 0) {
+            info.appendChild(this.createTargetDiagnosticRow(
+                "Blocked by conflicts",
+                target.blockedShare,
+                target.blockedComboCount
+            ));
+        }
+
+        fragment.appendChild(info);
+    }
+
+    private createTargetDiagnosticRow(labelText: string, share: number, count: number): HTMLElement {
+        const row = document.createElement("div");
+        row.style.cssText = "display: flex; justify-content: space-between; gap: 12px; margin-top: 3px; font-size: 0.7rem; color: var(--text-muted);";
+
+        const label = document.createElement("span");
+        label.textContent = labelText;
+
+        const value = document.createElement("span");
+        value.textContent = `${UIUtils.formatPercent(share)} across ${count}`;
+
+        row.append(label, value);
+        return row;
     }
 
     private renderEnchantsV5(view: TopRunView, registry: RegistryState): void {

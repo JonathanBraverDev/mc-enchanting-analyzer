@@ -47,4 +47,28 @@ test.describe('Basic UI Functionality', () => {
         await analyzer.selectMaterial(TEST_DATA.MATERIALS.DIAMOND);
         await expect(analyzer.enchantabilityValue).toHaveText('10');
     });
+
+    test('should filter top combinations by selected targets', async () => {
+        await analyzer.waitForRefinementComplete();
+
+        await analyzer.triggerAndAwaitRefinement(async () => {
+            await analyzer.addTarget('Sharpness I+');
+        });
+
+        await expect(analyzer.targetChips).toContainText(['Sharpness I+']);
+        await expect(analyzer.comboList).toContainText('Target Match (Sharpness I+)');
+
+        const comboNames = analyzer.page.locator('#combo-list .combo-names');
+        await expect(comboNames.first()).toContainText('Sharpness');
+    });
+
+    test('should hide target options that conflict with selected targets', async () => {
+        await analyzer.waitForRefinementComplete();
+
+        await analyzer.addTarget('Sharpness I+');
+
+        await expect(analyzer.targetChips).toContainText(['Sharpness I+']);
+        await expect(analyzer.targetSelect.locator('option', { hasText: 'Smite I+' })).toHaveCount(0);
+        await expect(analyzer.targetSelect.locator('option', { hasText: 'Bane of Arthropods I+' })).toHaveCount(0);
+    });
 });

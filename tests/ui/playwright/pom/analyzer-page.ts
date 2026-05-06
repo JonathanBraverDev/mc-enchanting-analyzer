@@ -10,6 +10,9 @@ export class AnalyzerPage {
     readonly categorySelect: Locator;
     readonly materialSelect: Locator;
     readonly clueSelect: Locator;
+    readonly targetSelect: Locator;
+    readonly targetAddButton: Locator;
+    readonly targetChips: Locator;
     readonly levelSlider: Locator;
     readonly levelValue: Locator;
     readonly enchantabilityValue: Locator;
@@ -32,6 +35,9 @@ export class AnalyzerPage {
         this.categorySelect = page.getByLabel('Item Category');
         this.materialSelect = page.getByLabel('Material');
         this.clueSelect = page.getByLabel('Shown in Table');
+        this.targetSelect = page.getByLabel('Target Combination');
+        this.targetAddButton = page.locator('#target-add');
+        this.targetChips = page.locator('#target-list .target-chip');
 
         // Level slider label contains dynamic text, so we use the slider role or specific text
         this.levelSlider = page.getByRole('slider');
@@ -68,6 +74,11 @@ export class AnalyzerPage {
 
     async selectClue(enchantment: string) {
         await this.clueSelect.selectOption(enchantment);
+    }
+
+    async addTarget(label: string) {
+        await this.targetSelect.selectOption({ label });
+        await this.targetAddButton.click();
     }
 
     async setLevel(level: number) {
