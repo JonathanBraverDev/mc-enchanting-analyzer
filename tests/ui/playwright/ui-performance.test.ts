@@ -80,6 +80,36 @@ test.describe('UI Performance & Stability', () => {
         expect(chartRedraws, 'XP slider changes should not restart chart progress').toEqual([]);
     });
 
+    test('should not redraw the visible chart when advisor targets change', async ({ page }) => {
+        await analyzer.selectCategory('pickaxe');
+        await analyzer.waitForRefinementComplete();
+        await analyzer.waitForChartIdle();
+
+        await analyzer.triggerAndAwaitRefinement(async () => {
+            await analyzer.selectComboSort('advisor');
+        });
+        await analyzer.waitForChartIdle();
+
+        await page.evaluate(() => {
+            const manager = (window as any).App?.chartManager;
+            (window as any).__chartUpdateCount = 0;
+            if (!manager?.update || manager.__targetPatchInstalled) return;
+            const original = manager.update.bind(manager);
+            manager.update = (...args: unknown[]) => {
+                (window as any).__chartUpdateCount++;
+                return original(...args);
+            };
+            manager.__targetPatchInstalled = true;
+        });
+
+        await analyzer.triggerAndAwaitRefinement(async () => {
+            await analyzer.addTarget('Efficiency I+');
+        });
+
+        const updateCount = await page.evaluate(() => (window as any).__chartUpdateCount ?? 0);
+        expect(updateCount, 'Advisor target changes should not repaint the chart').toBe(0);
+    });
+
     test('should maintain chart metric if changed mid-calculation', async () => {
         await analyzer.selectCategory('book');
 
