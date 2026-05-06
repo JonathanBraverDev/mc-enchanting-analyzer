@@ -130,6 +130,8 @@ export class SnapshotService {
           targetChance: ProbUtils.toNumber(recommendation.targetChanceMass),
           clueShare: ProbUtils.toNumber(recommendation.clueMass),
           targetAndClueShare: ProbUtils.toNumber(recommendation.targetAndClueMass),
+          anyBaselineChance: ProbUtils.toNumber(recommendation.anyBaselineChanceMass),
+          liftOverAnyBaseline: recommendation.liftOverAnyBaseline,
           compatibleBaselineChance: ProbUtils.toNumber(recommendation.compatibleBaselineChanceMass),
           liftOverCompatibleBaseline: recommendation.liftOverCompatibleBaseline
         }))

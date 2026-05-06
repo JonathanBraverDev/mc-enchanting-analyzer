@@ -38,6 +38,8 @@ export interface TargetClueRecommendationView {
   targetChance: number;
   clueShare: number;
   targetAndClueShare: number;
+  anyBaselineChance: number;
+  liftOverAnyBaseline: number;
   compatibleBaselineChance: number;
   liftOverCompatibleBaseline: number;
 }

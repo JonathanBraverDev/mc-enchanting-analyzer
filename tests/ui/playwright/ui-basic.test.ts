@@ -66,7 +66,8 @@ test.describe('Basic UI Functionality', () => {
             await analyzer.selectComboSort('advisor');
         });
         await expect(analyzer.comboList).toContainText('Best Shown Clues');
-        await expect(analyzer.comboList).toContainText('compatible baseline');
+        await expect(analyzer.comboList).toContainText('any');
+        await expect(analyzer.comboList).toContainText('compatible');
         await analyzer.waitForChartIdle(60000);
         await expect(analyzer.comboList).toContainText('Best Level + Clue');
     });
