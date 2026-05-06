@@ -70,7 +70,7 @@ export class ResultsView {
      * V5 update path using the pre-projected TopRunView.
      */
     public updateV5(view: TopRunView, registry: RegistryState): void {
-        if (view.combos.length > 0 || view.target) {
+        if (view.combos.length > 0 || view.target || view.clueAdvisor) {
             this.renderCombosV5(view, registry);
             this.renderEnchantsV5(view, registry);
         } else {
@@ -190,6 +190,7 @@ export class ResultsView {
         }
 
         if (view.target) this.appendTargetItem(fragment, view.target);
+        if (view.clueAdvisor) this.appendClueAdvisorItem(fragment, view.clueAdvisor);
 
         const clueKnownSpace = view.normalization.domain === 'clue-known-space'
             ? view.normalization.clue?.knownSpace
@@ -242,6 +243,44 @@ export class ResultsView {
                 target.blockedShare,
                 target.blockedComboCount
             ));
+        }
+
+        fragment.appendChild(info);
+    }
+
+    private appendClueAdvisorItem(
+        fragment: DocumentFragment,
+        clueAdvisor: NonNullable<TopRunView['clueAdvisor']>
+    ): void {
+        if (clueAdvisor.recommendations.length === 0) return;
+
+        const info = document.createElement("div");
+        info.className = "combo-item";
+        info.style.cssText = "border-top: 1px solid rgba(255,255,255,0.05); margin-top: 10px; padding-top: 10px; opacity: 0.92;";
+
+        const title = document.createElement("div");
+        title.style.cssText = "font-size: 0.85rem; font-weight: 800; margin-bottom: 6px;";
+        title.textContent = "Best Shown Clues";
+        info.appendChild(title);
+
+        for (const recommendation of clueAdvisor.recommendations) {
+            const row = document.createElement("div");
+            row.style.cssText = "display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: baseline; margin-top: 5px;";
+
+            const label = document.createElement("span");
+            label.style.cssText = "font-size: 0.8rem; overflow-wrap: anywhere;";
+            label.textContent = recommendation.label;
+
+            const chance = document.createElement("span");
+            chance.style.cssText = "font-size: 0.8rem; font-weight: 800; color: var(--accent);";
+            chance.textContent = UIUtils.formatPercent(recommendation.targetChance);
+
+            const meta = document.createElement("div");
+            meta.style.cssText = "grid-column: 1 / -1; font-size: 0.68rem; color: var(--text-muted);";
+            meta.textContent = `Shown ${UIUtils.formatPercent(recommendation.clueShare)} · joint ${UIUtils.formatPercent(recommendation.targetAndClueShare)}`;
+
+            row.append(label, chance, meta);
+            info.appendChild(row);
         }
 
         fragment.appendChild(info);
