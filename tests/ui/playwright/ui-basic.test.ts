@@ -57,12 +57,38 @@ test.describe('Basic UI Functionality', () => {
 
         await expect(analyzer.targetChips).toContainText(['Sharpness I+']);
         await expect(analyzer.comboList).toContainText('Target Match (Sharpness I+)');
-        await expect(analyzer.comboList).toContainText('Best Shown Clues');
-        await analyzer.waitForChartIdle(60000);
-        await expect(analyzer.comboList).toContainText('Best Level + Clue');
+        await expect(analyzer.comboList).not.toContainText('Best Shown Clues');
 
         const comboNames = analyzer.page.locator('#combo-list .combo-names');
         await expect(comboNames.first()).toContainText('Sharpness');
+
+        await analyzer.triggerAndAwaitRefinement(async () => {
+            await analyzer.selectComboSort('advisor');
+        });
+        await expect(analyzer.comboList).toContainText('Best Shown Clues');
+        await analyzer.waitForChartIdle(60000);
+        await expect(analyzer.comboList).toContainText('Best Level + Clue');
+    });
+
+    test('should refresh advisor recommendations for multiple targets', async () => {
+        await analyzer.selectCategory(TEST_DATA.ITEMS.PICKAXE);
+        await analyzer.waitForRefinementComplete();
+
+        await analyzer.triggerAndAwaitRefinement(async () => {
+            await analyzer.selectComboSort('advisor');
+        });
+
+        await analyzer.triggerAndAwaitRefinement(async () => {
+            await analyzer.addTarget('Efficiency I+');
+        });
+        await expect(analyzer.comboList).toContainText('Target Match (Efficiency I+)');
+
+        await analyzer.triggerAndAwaitRefinement(async () => {
+            await analyzer.addTarget('Fortune I+');
+        });
+        await analyzer.waitForChartIdle(60000);
+        await expect(analyzer.comboList).toContainText('Target Match (Efficiency I+ + Fortune I+)');
+        await expect(analyzer.comboList).toContainText('Fortune');
     });
 
     test('should hide target options that conflict with selected targets', async () => {

@@ -18,12 +18,14 @@ export class ResultsView {
     private rankEl: HTMLElement | null;
     private statusEl: HTMLElement | null;
     private chartStatusEl: HTMLElement | null;
+    private resultsTitleEl: HTMLElement | null;
 
     constructor() {
         this.comboEl = document.getElementById("combo-list");
         this.rankEl = document.getElementById("rank-section");
         this.statusEl = document.getElementById("refinement-status");
         this.chartStatusEl = document.getElementById("chart-status");
+        this.resultsTitleEl = document.getElementById("results-title");
     }
 
     public showPlaceholder(text: string): void {
@@ -72,10 +74,14 @@ export class ResultsView {
     public updateV5(
         view: TopRunView,
         registry: RegistryState,
-        levelClueAdvisor?: TargetLevelClueAdvisorView | undefined
+        levelClueAdvisor?: TargetLevelClueAdvisorView | undefined,
+        displayMode = 'prob'
     ): void {
-        if (view.combos.length > 0 || view.target || view.clueAdvisor || levelClueAdvisor) {
-            this.renderCombosV5(view, registry, levelClueAdvisor);
+        const advisorMode = displayMode === 'advisor';
+        this.setResultsTitle(advisorMode ? 'Best Clues' : 'Top Combinations');
+
+        if (view.combos.length > 0 || view.target || (advisorMode && (view.clueAdvisor || levelClueAdvisor))) {
+            this.renderCombosV5(view, registry, advisorMode ? levelClueAdvisor : undefined, advisorMode);
             this.renderEnchantsV5(view, registry);
         } else {
             this.showNoResults();
@@ -166,40 +172,46 @@ export class ResultsView {
     private renderCombosV5(
         view: TopRunView,
         _registry: RegistryState,
-        levelClueAdvisor?: TargetLevelClueAdvisorView | undefined
+        levelClueAdvisor?: TargetLevelClueAdvisorView | undefined,
+        advisorMode = false
     ): void {
         if (!this.comboEl) return;
 
         const fragment = document.createDocumentFragment();
 
-        view.combos.slice(0, UI_DEFAULTS.MAX_TOP_COMBOS_DISPLAY).forEach((combo) => {
-            const item = document.createElement("div");
-            item.className = "combo-item";
+        if (advisorMode) {
+            if (view.target) this.appendTargetItem(fragment, view.target);
+            if (view.clueAdvisor) this.appendClueAdvisorItem(fragment, view.clueAdvisor);
+            if (levelClueAdvisor) this.appendLevelClueAdvisorItem(fragment, levelClueAdvisor);
+            if (!view.target) this.appendAdvisorPlaceholder(fragment);
+        } else {
+            view.combos.slice(0, UI_DEFAULTS.MAX_TOP_COMBOS_DISPLAY).forEach((combo) => {
+                const item = document.createElement("div");
+                item.className = "combo-item";
 
-            if (combo.tooltip) item.title = combo.tooltip;
+                if (combo.tooltip) item.title = combo.tooltip;
 
-            item.innerHTML = `
-                <div style="display: flex; justify-content: space-between;">
-                    <span class="combo-names">${combo.enchants.join(' + ')}</span>
-                    <span class="combo-prob">${UIUtils.formatPercent(combo.share)}</span>
-                </div>
-            `;
-            fragment.appendChild(item);
-        });
+                item.innerHTML = `
+                    <div style="display: flex; justify-content: space-between;">
+                        <span class="combo-names">${combo.enchants.join(' + ')}</span>
+                        <span class="combo-prob">${UIUtils.formatPercent(combo.share)}</span>
+                    </div>
+                `;
+                fragment.appendChild(item);
+            });
 
-        if (view.target && view.combos.length === 0) {
-            const empty = document.createElement("div");
-            empty.className = "combo-placeholder";
-            empty.textContent = "No matching combinations found at this checkpoint.";
-            empty.style.opacity = "0.5";
-            empty.style.padding = "15px";
-            empty.style.fontSize = "0.85rem";
-            fragment.appendChild(empty);
+            if (view.target && view.combos.length === 0) {
+                const empty = document.createElement("div");
+                empty.className = "combo-placeholder";
+                empty.textContent = "No matching combinations found at this checkpoint.";
+                empty.style.opacity = "0.5";
+                empty.style.padding = "15px";
+                empty.style.fontSize = "0.85rem";
+                fragment.appendChild(empty);
+            }
+
+            if (view.target) this.appendTargetItem(fragment, view.target);
         }
-
-        if (view.target) this.appendTargetItem(fragment, view.target);
-        if (view.clueAdvisor) this.appendClueAdvisorItem(fragment, view.clueAdvisor);
-        if (levelClueAdvisor) this.appendLevelClueAdvisorItem(fragment, levelClueAdvisor);
 
         const clueKnownSpace = view.normalization.domain === 'clue-known-space'
             ? view.normalization.clue?.knownSpace
@@ -208,6 +220,10 @@ export class ResultsView {
 
         // Atomic swap
         this.comboEl.replaceChildren(fragment);
+    }
+
+    private setResultsTitle(text: string): void {
+        if (this.resultsTitleEl) this.resultsTitleEl.textContent = text;
     }
 
     private appendTargetItem(
@@ -255,6 +271,16 @@ export class ResultsView {
         }
 
         fragment.appendChild(info);
+    }
+
+    private appendAdvisorPlaceholder(fragment: DocumentFragment): void {
+        const placeholder = document.createElement("div");
+        placeholder.className = "combo-placeholder";
+        placeholder.textContent = "Select a target combination to compare shown clues.";
+        placeholder.style.opacity = "0.5";
+        placeholder.style.padding = "15px";
+        placeholder.style.fontSize = "0.85rem";
+        fragment.appendChild(placeholder);
     }
 
     private appendClueAdvisorItem(

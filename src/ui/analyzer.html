@@ -107,13 +107,14 @@
             <div class="card">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                     <div style="display: flex; align-items: center; gap: 8px;">
-                        <h2 style="font-size: 1.1rem; margin: 0;">Top Combinations</h2>
+                        <h2 id="results-title" style="font-size: 1.1rem; margin: 0;">Top Combinations</h2>
                         <span id="refinement-status" style="font-size: 0.65rem; font-weight: 800; padding: 2px 6px; border-radius: 4px; background: rgba(255,255,255,0.05); color: var(--text-muted); transition: all 0.3s; opacity: 0; text-transform: uppercase; letter-spacing: 0.05em;">Coarse</span>
                     </div>
                     <select id="combo-sort" style="width: auto; padding-right: 35px; font-size: 0.75rem;">
                         <option value="prob">Highest Probability</option>
                         <option value="count">Most Enchantments</option>
                         <option value="rank">Highest Total Rank</option>
+                        <option value="advisor">Best Clues</option>
                     </select>
                 </div>
                 <div id="combo-list" class="combo-list">
