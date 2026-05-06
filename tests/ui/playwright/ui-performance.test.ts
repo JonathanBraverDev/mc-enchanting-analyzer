@@ -65,6 +65,21 @@ test.describe('UI Performance & Stability', () => {
         }
     });
 
+    test('should not redraw the chart when only the enchanting level slider changes', async () => {
+        await analyzer.selectCategory('pickaxe');
+        await analyzer.waitForRefinementComplete();
+        await analyzer.waitForChartIdle();
+
+        await analyzer.startMonitoringProgress();
+        await analyzer.triggerAndAwaitRefinement(async () => {
+            await analyzer.setLevel(25);
+        });
+
+        const log = await analyzer.getObservedProgress();
+        const chartRedraws = log.filter(text => /\(\d+%\)/.test(text));
+        expect(chartRedraws, 'XP slider changes should not restart chart progress').toEqual([]);
+    });
+
     test('should maintain chart metric if changed mid-calculation', async () => {
         await analyzer.selectCategory('book');
 

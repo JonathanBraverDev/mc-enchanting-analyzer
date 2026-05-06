@@ -135,4 +135,27 @@ describe('RefinementService (V5 Hardened)', () => {
 
         assert.strictEqual(finalCount, 1, 'Only the final refinement checkpoint (ultra) should be marked as final');
     });
+
+    it('runs selected-level refinement without restarting the chart sweep', async () => {
+        const payload = {
+            category: 'sword',
+            material: 'diamond',
+            clue: null,
+            xpLevel: 25,
+            version: '1.21'
+        };
+
+        let statsCalls = 0;
+        await service.runTopOnly(payload, {
+            onStatus: () => {},
+            onStats: () => { statsCalls++; },
+            onChart: () => {
+                assert.fail('top-only refinement should not update the chart');
+            }
+        });
+
+        assert.strictEqual(topCallCount, 1, 'startTopRun should be called once');
+        assert.strictEqual(chartCallCount, 0, 'startChartRun should not be called for top-only refinement');
+        assert.strictEqual(statsCalls, 4, 'top-only refinement should still stream all top checkpoints');
+    });
 });

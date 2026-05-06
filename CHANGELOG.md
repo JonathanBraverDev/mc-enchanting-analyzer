@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## v5.3.1 (2026-05-06)
+
+### Fixed
+- **Stable probability chart**: Moving the enchanting-level slider now refreshes only the selected-level results and no longer clears or redraws the XP sweep chart.
+
 ## v5.3.0 (2026-05-06)
 
 ### Added
