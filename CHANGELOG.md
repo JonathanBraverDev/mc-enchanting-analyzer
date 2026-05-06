@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## v5.4.1 (2026-05-06)
+
+### Fixed
+- **Modern Thorns table results**: Thorns III is no longer included in enchanting-table results, because its vanilla modified-level range starts above reachable table rolls.
+
+### Developer Experience
+- **Stable human snapshots**: Human snapshot output now uses stable tie ordering for equal-probability combinations.
+- **Release workflow cleanup**: Release checks now gate PRs before merge, while release creation focuses on publishing, archiving, and cleaning up the release branch.
+
 ## v5.4.0 (2026-05-06)
 
 ### Added
