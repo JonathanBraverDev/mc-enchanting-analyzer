@@ -4,8 +4,11 @@ import { ParamsView } from '#ui/views/ParamsView.js';
 import { ResultsView } from '#ui/views/ResultsView.js';
 import { ChartController } from '#ui/results-chart-controller.js';
 import { RefinementService } from '#ui/refinement.js';
+import { TargetClueAdvisorService } from '#services/TargetClueAdvisorService.js';
+import { ClueSignalAdvisorService } from '#services/ClueSignalAdvisorService.js';
 import { UiMetadataService } from '#services/UiMetadataService.js';
-import { TopRunView } from '#types/index.js';
+import { getEnchantName } from '#core/registry.js';
+import { ChartCellView, RegistryState, TopRunView } from '#types/index.js';
 
 /**
  * Main Web Application Controller.
@@ -20,6 +23,7 @@ class AppController {
     private isWorkerReady: boolean = false;
     private runDebounceTimeout: number = 0;
     private lastView: TopRunView | null = null;
+    private suppressNextChartRefresh: boolean = false;
 
     constructor() {
         this.params = new ParamsView(
@@ -79,16 +83,31 @@ class AppController {
         } else if (type === 'clue') {
             this.results.showPlaceholder(UI_TEXTS.STATUS_REFINING);
         } else if (type === 'lvl' || type === 'level-input') {
+            if (this.params.getValues().sortMode === 'advisor' && this.tryRefreshAdvisorFromSweepForCurrentLevel()) {
+                return;
+            }
             this.results.showPlaceholder(UI_TEXTS.STATUS_REFINING);
             this.enqueueTopRun();
             return;
         } else if (type === 'combo-sort') {
+            const vals = this.params.getValues();
+            if (vals.sortMode === 'advisor' && vals.targets.length > 0) {
+                this.results.showPlaceholder(UI_TEXTS.STATUS_REFINING);
+                this.suppressNextChartRefresh = true;
+                this.enqueueRun();
+                return;
+            }
             if (this.lastView) {
                 this.updateInsightsFromView(this.lastView);
             }
             return;
         } else if (type === 'target') {
             this.results.showPlaceholder(UI_TEXTS.STATUS_REFINING);
+            if (this.params.getValues().sortMode === 'advisor') {
+                this.suppressNextChartRefresh = true;
+                this.enqueueRun();
+                return;
+            }
             if (!this.refinement.isCalculating() && this.lastView) {
                 void this.projectTargets();
                 return;
@@ -118,6 +137,9 @@ class AppController {
 
     private async run(): Promise<void> {
         if (!this.isWorkerReady) return;
+        this.lastView = null;
+        const suppressChartRefresh = this.suppressNextChartRefresh;
+        this.suppressNextChartRefresh = false;
 
         try {
             this.params.updateClueTarget();
@@ -133,9 +155,14 @@ class AppController {
                 registry,
                 {
                     onStatus: (status, level) => this.results.setRefinementStatus(status, level),
-                    onChartStatus: (status, progress) => this.results.setChartStatus(status, progress),
+                    onChartStatus: (status, progress) => {
+                        if (!suppressChartRefresh) this.results.setChartStatus(status, progress);
+                    },
                     onStats: (view) => this.updateInsightsFromView(view),
-                    onChart: (sweep) => this.chart.refresh(sweep, registry)
+                    onChart: (sweep) => {
+                        if (!suppressChartRefresh) this.chart.refresh(sweep, registry);
+                        this.refreshLastViewIfAdvisorMode();
+                    }
                 }
             );
         } catch (err) {
@@ -146,6 +173,7 @@ class AppController {
 
     private async runTopOnly(): Promise<void> {
         if (!this.isWorkerReady) return;
+        this.lastView = null;
 
         try {
             this.params.updateClueTarget();
@@ -154,15 +182,15 @@ class AppController {
             const ench = UiMetadataService.getEnchantability(vals.version, vals.material, vals.category);
             this.params.setEnchantability(ench);
 
-            const registry = UiMetadataService.getRegistry(vals.version);
-
             await this.refinement.runTopOnly(
                 { ...vals, category: vals.category },
                 {
                     onStatus: (status, level) => this.results.setRefinementStatus(status, level),
                     onChartStatus: (status, progress) => this.results.setChartStatus(status, progress),
                     onStats: (view) => this.updateInsightsFromView(view),
-                    onChart: (sweep) => this.chart.refresh(sweep, registry)
+                    onChart: () => {
+                        this.refreshLastViewIfAdvisorMode();
+                    }
                 }
             );
         } catch (err) {
@@ -183,9 +211,11 @@ class AppController {
                 registry,
                 {
                     onStatus: (status, level) => this.results.setRefinementStatus(status, level),
-                    onChartStatus: (status, progress) => this.results.setChartStatus(status, progress),
+                    onChartStatus: () => {},
                     onStats: (view) => this.updateInsightsFromView(view),
-                    onChart: (sweep) => this.chart.refresh(sweep, registry)
+                    onChart: () => {
+                        this.refreshLastViewIfAdvisorMode();
+                    }
                 }
             );
         } catch (err) {
@@ -198,8 +228,85 @@ class AppController {
         this.lastView = view;
         const { version } = this.params.getValues();
         const registry = UiMetadataService.getRegistry(version);
+        const sortMode = this.params.getValues().sortMode;
 
-        this.results.updateV5(view, registry);
+        this.results.updateV5(
+            view,
+            registry,
+            sortMode === 'advisor' ? TargetClueAdvisorService.summarizeSweep(this.refinement.currentSweep) : undefined,
+            sortMode === 'advisor' && !view.target
+                ? ClueSignalAdvisorService.summarizeLevels(
+                    registry,
+                    view.input.category,
+                    view.input.material,
+                    UiMetadataService.getXpCap(version)
+                )
+                : undefined,
+            sortMode
+        );
+    }
+
+    private refreshLastViewIfAdvisorMode(): void {
+        if (!this.lastView) return;
+        if (this.params.getValues().sortMode !== 'advisor') return;
+        this.updateInsightsFromView(this.lastView);
+    }
+
+    private tryRefreshAdvisorFromSweepForCurrentLevel(): boolean {
+        this.params.updateClueTarget();
+
+        const vals = this.params.getValues();
+        const registry = UiMetadataService.getRegistry(vals.version);
+        const ench = UiMetadataService.getEnchantability(vals.version, vals.material, vals.category);
+        this.params.setEnchantability(ench);
+
+        const cell = this.refinement.currentSweep[vals.xpLevel - 1];
+        if (!cell || (!cell.target && !cell.clueAdvisor)) return false;
+
+        this.updateInsightsFromView(this.createAdvisorTopViewFromChartCell(cell, registry));
+        return true;
+    }
+
+    private createAdvisorTopViewFromChartCell(cell: ChartCellView, registry: RegistryState): TopRunView {
+        const vals = this.params.getValues();
+        const enchants = Object.entries(cell.buckets.anyByEnchantId)
+            .map(([id, share]) => {
+                const enchantId = Number(id);
+                return {
+                    enchantId,
+                    label: getEnchantName(registry, enchantId),
+                    share
+                };
+            })
+            .sort((a, b) => b.share - a.share);
+
+        return {
+            input: {
+                category: vals.category,
+                material: vals.material,
+                clue: vals.clue,
+                xpLevel: vals.xpLevel,
+                version: vals.version,
+                targets: vals.targets
+            },
+            refinementLevel: cell.refinementLevel,
+            clueConditioned: cell.clueConditioned,
+            normalization: cell.normalization,
+            accounting: cell.accounting ?? {
+                resolved: 0,
+                clueIncompatible: 0,
+                pending: 0,
+                sieved: 0,
+                overflow: 0,
+                capped: 0,
+                rounding: 0
+            },
+            combos: [],
+            enchants,
+            target: cell.target,
+            clueAdvisor: cell.clueAdvisor,
+            clueSignalAdvisor: cell.clueSignalAdvisor
+        };
     }
 
     private showError(title: string, err: unknown): void {

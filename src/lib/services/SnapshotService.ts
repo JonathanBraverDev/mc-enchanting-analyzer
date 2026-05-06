@@ -12,6 +12,8 @@ import {
   ChartBucketsView,
   RefinementLevelName,
   SearchFrontierSnapshot,
+  ClueSignalAdvisorView,
+  TargetClueAdvisorView,
   TargetDiagnosticsView
 } from '#types/index.js';
 import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
@@ -22,6 +24,8 @@ import { ENGINE_LIMITS } from '#constants/engine.js';
 import { ClueValidator } from '#core/clue.js';
 import { SummaryAggregationService } from '#services/SummaryAggregationService.js';
 import { TargetAnalysisService } from '#services/TargetAnalysisService.js';
+import { TargetClueAdvisorService } from '#services/TargetClueAdvisorService.js';
+import { ClueSignalAdvisorService } from '#services/ClueSignalAdvisorService.js';
 
 
 export class SnapshotService {
@@ -85,6 +89,13 @@ export class SnapshotService {
     }
 
     const packedTargets = TargetAnalysisService.packTargets(state, request.input.category, request.input.targets);
+    const targetsPossibleAtLevel = packedTargets.length === 0 || TargetClueAdvisorService.supportsTargetsAtXp(
+      state,
+      request.input.category,
+      request.input.material,
+      request.input.xpLevel,
+      packedTargets
+    );
     const targetAnalysis = TargetAnalysisService.aggregate({
       combos: result.combos,
       indexToEnchant: state.indexToEnchant,
@@ -96,6 +107,7 @@ export class SnapshotService {
     const targetDiagnostics: TargetDiagnosticsView | undefined = targetAnalysis
       ? {
         labels: packedTargets.map(target => target.label),
+        tablePossibleAtLevel: targetsPossibleAtLevel,
         matchShare: ProbUtils.toNumber(targetAnalysis.matchMass),
         matchingComboCount: targetAnalysis.matchingComboCount,
         nearMissShare: ProbUtils.toNumber(targetAnalysis.nearMissMass),
@@ -103,6 +115,40 @@ export class SnapshotService {
         blockedShare: ProbUtils.toNumber(targetAnalysis.blockedMass),
         blockedComboCount: targetAnalysis.blockedComboCount
       }
+      : undefined;
+    const clueAdvice = !isConditioned && targetsPossibleAtLevel && packedTargets.length > 0
+      ? TargetClueAdvisorService.recommend({
+        combos,
+        indexToEnchant: state.indexToEnchant,
+        targets: packedTargets,
+        registry: state,
+        frontiers,
+        limit: 5
+      })
+      : undefined;
+    const clueAdvisor: TargetClueAdvisorView | undefined = clueAdvice
+      ? {
+        recommendations: clueAdvice.recommendations.map(recommendation => ({
+          idAndRank: recommendation.idAndRank,
+          label: recommendation.label,
+          targetChance: ProbUtils.toNumber(recommendation.targetChanceMass),
+          clueShare: ProbUtils.toNumber(recommendation.clueMass),
+          targetAndClueShare: ProbUtils.toNumber(recommendation.targetAndClueMass),
+          anyBaselineChance: ProbUtils.toNumber(recommendation.anyBaselineChanceMass),
+          liftOverAnyBaseline: recommendation.liftOverAnyBaseline,
+          compatibleBaselineChance: ProbUtils.toNumber(recommendation.compatibleBaselineChanceMass),
+          liftOverCompatibleBaseline: recommendation.liftOverCompatibleBaseline
+        }))
+      }
+      : undefined;
+    const clueSignalAdvisor: ClueSignalAdvisorView | undefined = !isConditioned && packedTargets.length === 0
+      ? ClueSignalAdvisorService.recommend(
+        state,
+        request.input.category,
+        request.input.material,
+        request.input.xpLevel,
+        5
+      )
       : undefined;
     const displayResult = targetAnalysis
       ? { ...result, combos: targetAnalysis.combos }
@@ -124,7 +170,9 @@ export class SnapshotService {
         accounting,
         displayResult,
         comboLimit ?? ENGINE_LIMITS.MAX_RESULTS_SUMMARY,
-        targetDiagnostics
+        targetDiagnostics,
+        clueAdvisor,
+        clueSignalAdvisor
       );
     } else {
       return this.createChartCellView(
@@ -134,7 +182,9 @@ export class SnapshotService {
         normalization,
         accounting,
         result,
-        targetDiagnostics
+        targetDiagnostics,
+        clueAdvisor,
+        clueSignalAdvisor
       );
     }
   }
@@ -159,7 +209,9 @@ export class SnapshotService {
     accounting: AccountingView,
     result: { anyMass: Map<number, bigint>, rankMass: Map<number, bigint>, countMass: Map<number, bigint>, combos: Map<PackedCombo, bigint> },
     comboLimit: number,
-    target?: TargetDiagnosticsView
+    target?: TargetDiagnosticsView,
+    clueAdvisor?: TargetClueAdvisorView,
+    clueSignalAdvisor?: ClueSignalAdvisorView
   ): TopRunView {
     const combos: TopComboView[] = [];
     const entries = [...result.combos.entries()].sort((a, b) => b[1] > a[1] ? 1 : (b[1] < a[1] ? -1 : 0));
@@ -194,7 +246,9 @@ export class SnapshotService {
       accounting,
       combos,
       enchants,
-      target
+      target,
+      clueAdvisor,
+      clueSignalAdvisor
     };
   }
 
@@ -205,7 +259,9 @@ export class SnapshotService {
     normalization: NormalizationView,
     accounting: AccountingView,
     result: { anyMass: Map<number, bigint>, rankMass: Map<number, bigint>, countMass: Map<number, bigint> },
-    target?: TargetDiagnosticsView
+    target?: TargetDiagnosticsView,
+    clueAdvisor?: TargetClueAdvisorView,
+    clueSignalAdvisor?: ClueSignalAdvisorView
   ): ChartCellView {
     const buckets: ChartBucketsView = {
       anyByEnchantId: {},
@@ -232,7 +288,9 @@ export class SnapshotService {
       normalization,
       accounting,
       buckets,
-      target
+      target,
+      clueAdvisor,
+      clueSignalAdvisor
     };
   }
 }

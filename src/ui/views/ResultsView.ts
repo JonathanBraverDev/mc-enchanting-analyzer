@@ -1,6 +1,12 @@
 import { UIUtils, RomanUtils } from '#utils/index.js';
 import { UI_DEFAULTS, UI_TEXTS, REFINEMENT_LEVEL_COLORS, RefinementStatusLevel } from '#core/config.js';
-import { RegistryState, EnchantInsights, TopRunView } from '#types/index.js';
+import {
+    LevelClueSignalAdvisorView,
+    RegistryState,
+    EnchantInsights,
+    TargetLevelClueAdvisorView,
+    TopRunView
+} from '#types/index.js';
 
 export function getDisplayConfidence(view: Pick<TopRunView, 'normalization' | 'accounting'>): number {
     if (view.normalization.domain === 'clue-known-space') {
@@ -18,12 +24,14 @@ export class ResultsView {
     private rankEl: HTMLElement | null;
     private statusEl: HTMLElement | null;
     private chartStatusEl: HTMLElement | null;
+    private resultsTitleEl: HTMLElement | null;
 
     constructor() {
         this.comboEl = document.getElementById("combo-list");
         this.rankEl = document.getElementById("rank-section");
         this.statusEl = document.getElementById("refinement-status");
         this.chartStatusEl = document.getElementById("chart-status");
+        this.resultsTitleEl = document.getElementById("results-title");
     }
 
     public showPlaceholder(text: string): void {
@@ -69,9 +77,28 @@ export class ResultsView {
     /**
      * V5 update path using the pre-projected TopRunView.
      */
-    public updateV5(view: TopRunView, registry: RegistryState): void {
-        if (view.combos.length > 0 || view.target) {
-            this.renderCombosV5(view, registry);
+    public updateV5(
+        view: TopRunView,
+        registry: RegistryState,
+        levelClueAdvisor?: TargetLevelClueAdvisorView | undefined,
+        levelClueSignalAdvisor?: LevelClueSignalAdvisorView | undefined,
+        displayMode = 'prob'
+    ): void {
+        const advisorMode = displayMode === 'advisor';
+        this.setResultsTitle(advisorMode ? 'Best Clues' : 'Top Combinations');
+
+        if (
+            view.combos.length > 0
+            || view.target
+            || (advisorMode && (view.clueAdvisor || levelClueAdvisor || view.clueSignalAdvisor || levelClueSignalAdvisor))
+        ) {
+            this.renderCombosV5(
+                view,
+                registry,
+                advisorMode ? levelClueAdvisor : undefined,
+                advisorMode ? levelClueSignalAdvisor : undefined,
+                advisorMode
+            );
             this.renderEnchantsV5(view, registry);
         } else {
             this.showNoResults();
@@ -159,37 +186,55 @@ export class ResultsView {
         this.rankEl.replaceChildren(fragment);
     }
 
-    private renderCombosV5(view: TopRunView, _registry: RegistryState): void {
+    private renderCombosV5(
+        view: TopRunView,
+        _registry: RegistryState,
+        levelClueAdvisor?: TargetLevelClueAdvisorView | undefined,
+        levelClueSignalAdvisor?: LevelClueSignalAdvisorView | undefined,
+        advisorMode = false
+    ): void {
         if (!this.comboEl) return;
 
         const fragment = document.createDocumentFragment();
 
-        view.combos.slice(0, UI_DEFAULTS.MAX_TOP_COMBOS_DISPLAY).forEach((combo) => {
-            const item = document.createElement("div");
-            item.className = "combo-item";
+        if (advisorMode) {
+            if (view.target) this.appendTargetItem(fragment, view.target);
+            if (view.target) {
+                if (view.clueAdvisor) this.appendClueAdvisorItem(fragment, view.clueAdvisor);
+                if (levelClueAdvisor) this.appendLevelClueAdvisorItem(fragment, levelClueAdvisor);
+            } else {
+                if (view.clueSignalAdvisor) this.appendClueSignalAdvisorItem(fragment, view.clueSignalAdvisor);
+                if (levelClueSignalAdvisor) this.appendLevelClueSignalAdvisorItem(fragment, levelClueSignalAdvisor);
+                if (!view.clueSignalAdvisor && !levelClueSignalAdvisor) this.appendAdvisorPlaceholder(fragment);
+            }
+        } else {
+            view.combos.slice(0, UI_DEFAULTS.MAX_TOP_COMBOS_DISPLAY).forEach((combo) => {
+                const item = document.createElement("div");
+                item.className = "combo-item";
 
-            if (combo.tooltip) item.title = combo.tooltip;
+                if (combo.tooltip) item.title = combo.tooltip;
 
-            item.innerHTML = `
-                <div style="display: flex; justify-content: space-between;">
-                    <span class="combo-names">${combo.enchants.join(' + ')}</span>
-                    <span class="combo-prob">${UIUtils.formatPercent(combo.share)}</span>
-                </div>
-            `;
-            fragment.appendChild(item);
-        });
+                item.innerHTML = `
+                    <div style="display: flex; justify-content: space-between;">
+                        <span class="combo-names">${combo.enchants.join(' + ')}</span>
+                        <span class="combo-prob">${UIUtils.formatPercent(combo.share)}</span>
+                    </div>
+                `;
+                fragment.appendChild(item);
+            });
 
-        if (view.target && view.combos.length === 0) {
-            const empty = document.createElement("div");
-            empty.className = "combo-placeholder";
-            empty.textContent = "No matching combinations found at this checkpoint.";
-            empty.style.opacity = "0.5";
-            empty.style.padding = "15px";
-            empty.style.fontSize = "0.85rem";
-            fragment.appendChild(empty);
+            if (view.target && view.combos.length === 0) {
+                const empty = document.createElement("div");
+                empty.className = "combo-placeholder";
+                empty.textContent = "No matching combinations found at this checkpoint.";
+                empty.style.opacity = "0.5";
+                empty.style.padding = "15px";
+                empty.style.fontSize = "0.85rem";
+                fragment.appendChild(empty);
+            }
+
+            if (view.target) this.appendTargetItem(fragment, view.target);
         }
-
-        if (view.target) this.appendTargetItem(fragment, view.target);
 
         const clueKnownSpace = view.normalization.domain === 'clue-known-space'
             ? view.normalization.clue?.knownSpace
@@ -198,6 +243,10 @@ export class ResultsView {
 
         // Atomic swap
         this.comboEl.replaceChildren(fragment);
+    }
+
+    private setResultsTitle(text: string): void {
+        if (this.resultsTitleEl) this.resultsTitleEl.textContent = text;
     }
 
     private appendTargetItem(
@@ -223,7 +272,9 @@ export class ResultsView {
 
         const count = document.createElement("div");
         count.style.cssText = "font-size: 0.7rem; color: var(--text-muted); margin-top: 3px;";
-        count.textContent = `${target.matchingComboCount} matching combinations`;
+        count.textContent = target.tablePossibleAtLevel
+            ? `${target.matchingComboCount} matching combinations`
+            : "Impossible at this level: no modified enchantment level can roll all selected target ranks together.";
 
         row.append(label, value);
         info.append(row, count);
@@ -245,6 +296,179 @@ export class ResultsView {
         }
 
         fragment.appendChild(info);
+    }
+
+    private appendAdvisorPlaceholder(fragment: DocumentFragment): void {
+        const placeholder = document.createElement("div");
+        placeholder.className = "combo-placeholder";
+        placeholder.textContent = "Select a target combination to compare shown clues.";
+        placeholder.style.opacity = "0.5";
+        placeholder.style.padding = "15px";
+        placeholder.style.fontSize = "0.85rem";
+        fragment.appendChild(placeholder);
+    }
+
+    private appendClueAdvisorItem(
+        fragment: DocumentFragment,
+        clueAdvisor: NonNullable<TopRunView['clueAdvisor']>
+    ): void {
+        if (clueAdvisor.recommendations.length === 0) return;
+
+        const info = document.createElement("div");
+        info.className = "combo-item";
+        info.style.cssText = "border-top: 1px solid rgba(255,255,255,0.05); margin-top: 10px; padding-top: 10px; opacity: 0.92;";
+
+        const title = document.createElement("div");
+        title.style.cssText = "font-size: 0.85rem; font-weight: 800; margin-bottom: 6px;";
+        title.textContent = "Best Shown Clues";
+        info.appendChild(title);
+
+        for (const recommendation of clueAdvisor.recommendations) {
+            const row = document.createElement("div");
+            row.style.cssText = "display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: baseline; margin-top: 5px;";
+
+            const label = document.createElement("span");
+            label.style.cssText = "font-size: 0.8rem; overflow-wrap: anywhere;";
+            label.textContent = recommendation.label;
+
+            const chance = document.createElement("span");
+            chance.style.cssText = "font-size: 0.8rem; font-weight: 800; color: var(--accent);";
+            chance.textContent = UIUtils.formatPercent(recommendation.targetChance);
+
+            const meta = document.createElement("div");
+            meta.style.cssText = "grid-column: 1 / -1; font-size: 0.68rem; color: var(--text-muted);";
+            meta.textContent = this.formatClueAdvisorMeta(recommendation);
+
+            row.append(label, chance, meta);
+            info.appendChild(row);
+        }
+
+        fragment.appendChild(info);
+    }
+
+    private appendClueSignalAdvisorItem(
+        fragment: DocumentFragment,
+        clueSignalAdvisor: NonNullable<TopRunView['clueSignalAdvisor']>
+    ): void {
+        if (clueSignalAdvisor.recommendations.length === 0) return;
+
+        const info = document.createElement("div");
+        info.className = "combo-item";
+        info.style.cssText = "border-top: 1px solid rgba(255,255,255,0.05); margin-top: 10px; padding-top: 10px; opacity: 0.92;";
+
+        const title = document.createElement("div");
+        title.style.cssText = "font-size: 0.85rem; font-weight: 800; margin-bottom: 6px;";
+        title.textContent = "Best High-Roll Clues";
+        info.appendChild(title);
+
+        for (const recommendation of clueSignalAdvisor.recommendations) {
+            const row = this.createClueSignalRow(recommendation.label, recommendation);
+            info.appendChild(row);
+        }
+
+        fragment.appendChild(info);
+    }
+
+    private appendLevelClueAdvisorItem(
+        fragment: DocumentFragment,
+        advisor: TargetLevelClueAdvisorView
+    ): void {
+        if (advisor.recommendations.length === 0) return;
+
+        const info = document.createElement("div");
+        info.className = "combo-item";
+        info.style.cssText = "border-top: 1px solid rgba(255,255,255,0.05); margin-top: 10px; padding-top: 10px; opacity: 0.92;";
+
+        const title = document.createElement("div");
+        title.style.cssText = "font-size: 0.85rem; font-weight: 800; margin-bottom: 6px;";
+        title.textContent = "Best Level + Clue";
+        info.appendChild(title);
+
+        for (const recommendation of advisor.recommendations) {
+            const row = document.createElement("div");
+            row.style.cssText = "display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: baseline; margin-top: 5px;";
+
+            const label = document.createElement("span");
+            label.style.cssText = "font-size: 0.8rem; overflow-wrap: anywhere;";
+            label.textContent = `Level ${recommendation.xpLevel} | ${recommendation.label}`;
+
+            const chance = document.createElement("span");
+            chance.style.cssText = "font-size: 0.8rem; font-weight: 800; color: var(--accent);";
+            chance.textContent = UIUtils.formatPercent(recommendation.targetChance);
+
+            const meta = document.createElement("div");
+            meta.style.cssText = "grid-column: 1 / -1; font-size: 0.68rem; color: var(--text-muted);";
+            meta.textContent = this.formatClueAdvisorMeta(recommendation);
+
+            row.append(label, chance, meta);
+            info.appendChild(row);
+        }
+
+        fragment.appendChild(info);
+    }
+
+    private appendLevelClueSignalAdvisorItem(
+        fragment: DocumentFragment,
+        advisor: LevelClueSignalAdvisorView
+    ): void {
+        if (advisor.recommendations.length === 0) return;
+
+        const info = document.createElement("div");
+        info.className = "combo-item";
+        info.style.cssText = "border-top: 1px solid rgba(255,255,255,0.05); margin-top: 10px; padding-top: 10px; opacity: 0.92;";
+
+        const title = document.createElement("div");
+        title.style.cssText = "font-size: 0.85rem; font-weight: 800; margin-bottom: 6px;";
+        title.textContent = "Best Level + High-Roll Clue";
+        info.appendChild(title);
+
+        for (const recommendation of advisor.recommendations) {
+            const row = this.createClueSignalRow(`Level ${recommendation.xpLevel} | ${recommendation.label}`, recommendation);
+            info.appendChild(row);
+        }
+
+        fragment.appendChild(info);
+    }
+
+    private createClueSignalRow(
+        labelText: string,
+        recommendation: {
+            clueShare: number;
+            averageModifiedLevel: number;
+            baselineModifiedLevel: number;
+            modifiedLevelLift: number;
+        }
+    ): HTMLElement {
+        const row = document.createElement("div");
+        row.style.cssText = "display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: baseline; margin-top: 5px;";
+
+        const label = document.createElement("span");
+        label.style.cssText = "font-size: 0.8rem; overflow-wrap: anywhere;";
+        label.textContent = labelText;
+
+        const lift = document.createElement("span");
+        lift.style.cssText = "font-size: 0.8rem; font-weight: 800; color: var(--accent);";
+        lift.textContent = `+${recommendation.modifiedLevelLift.toFixed(1)} ML`;
+
+        const meta = document.createElement("div");
+        meta.style.cssText = "grid-column: 1 / -1; font-size: 0.68rem; color: var(--text-muted);";
+        meta.textContent = `Shown ${UIUtils.formatPercent(recommendation.clueShare)} | avg ML ${recommendation.averageModifiedLevel.toFixed(1)} | baseline ${recommendation.baselineModifiedLevel.toFixed(1)}`;
+
+        row.append(label, lift, meta);
+        return row;
+    }
+
+    private formatClueAdvisorMeta(recommendation: {
+        clueShare: number;
+        anyBaselineChance: number;
+        compatibleBaselineChance: number;
+        liftOverCompatibleBaseline: number;
+    }): string {
+        const lift = recommendation.liftOverCompatibleBaseline > 0
+            ? `${recommendation.liftOverCompatibleBaseline.toFixed(1)}x`
+            : 'n/a';
+
+        return `Shown ${UIUtils.formatPercent(recommendation.clueShare)} | any ${UIUtils.formatPercent(recommendation.anyBaselineChance)} | compatible ${UIUtils.formatPercent(recommendation.compatibleBaselineChance)} | ${lift}`;
     }
 
     private createTargetDiagnosticRow(labelText: string, share: number, count: number): HTMLElement {

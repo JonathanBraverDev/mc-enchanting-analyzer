@@ -24,12 +24,58 @@ export interface TargetOptionView {
 
 export interface TargetDiagnosticsView {
   labels: string[];
+  tablePossibleAtLevel: boolean;
   matchShare: number;
   matchingComboCount: number;
   nearMissShare: number;
   nearMissComboCount: number;
   blockedShare: number;
   blockedComboCount: number;
+}
+
+export interface TargetClueRecommendationView {
+  idAndRank: number;
+  label: string;
+  targetChance: number;
+  clueShare: number;
+  targetAndClueShare: number;
+  anyBaselineChance: number;
+  liftOverAnyBaseline: number;
+  compatibleBaselineChance: number;
+  liftOverCompatibleBaseline: number;
+}
+
+export interface TargetClueAdvisorView {
+  recommendations: TargetClueRecommendationView[];
+}
+
+export interface TargetLevelClueRecommendationView extends TargetClueRecommendationView {
+  xpLevel: number;
+}
+
+export interface TargetLevelClueAdvisorView {
+  recommendations: TargetLevelClueRecommendationView[];
+}
+
+export interface ClueSignalRecommendationView {
+  idAndRank: number;
+  label: string;
+  clueShare: number;
+  averageModifiedLevel: number;
+  baselineModifiedLevel: number;
+  modifiedLevelLift: number;
+}
+
+export interface ClueSignalAdvisorView {
+  recommendations: ClueSignalRecommendationView[];
+}
+
+export interface LevelClueSignalRecommendationView extends ClueSignalRecommendationView {
+  xpLevel: number;
+}
+
+export interface LevelClueSignalAdvisorView {
+  recommendations: LevelClueSignalRecommendationView[];
 }
 
 export interface TargetAnalysisResult {
