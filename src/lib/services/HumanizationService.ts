@@ -57,12 +57,12 @@ export class HumanizationService {
         // Apply sorting
         const entries = Object.entries(comboShares);
         if (sortMode === 'prob') {
-            entries.sort((a, b) => b[1] - a[1]);
+            entries.sort((a, b) => this.compareComboShares(a, b));
         } else if (sortMode === 'count') {
             entries.sort((a, b) => {
                 const countA = a[0].split('+').length;
                 const countB = b[0].split('+').length;
-                return countB - countA || b[1] - a[1];
+                return countB - countA || this.compareComboShares(a, b);
             });
         } else if (sortMode === 'rank' && romanMap) {
             const getRankSum = (s: string) => {
@@ -74,7 +74,7 @@ export class HumanizationService {
             entries.sort((a, b) => {
                 const rankA = getRankSum(a[0]);
                 const rankB = getRankSum(b[0]);
-                return rankB - rankA || b[1] - a[1];
+                return rankB - rankA || this.compareComboShares(a, b);
             });
         }
 
@@ -83,5 +83,11 @@ export class HumanizationService {
         }
 
         return human;
+    }
+
+    private static compareComboShares(a: [string, number], b: [string, number]): number {
+        const delta = b[1] - a[1];
+        if (Math.abs(delta) > 1e-15) return delta;
+        return a[0].localeCompare(b[0]);
     }
 }
