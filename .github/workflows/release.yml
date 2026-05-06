@@ -4,6 +4,16 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to archive, for example v5.2.0'
+        required: true
+        type: string
+      pr_number:
+        description: 'Release PR number whose head should be archived'
+        required: true
+        type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -27,7 +37,23 @@ jobs:
 
       - name: Extract version from main commit
         id: version
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_TAG: ${{ inputs.tag }}
+          DISPATCH_PR_NUMBER: ${{ inputs.pr_number }}
         run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            if [ -z "$DISPATCH_TAG" ] || [ -z "$DISPATCH_PR_NUMBER" ]; then
+              echo "::error::Manual archive runs require tag and pr_number inputs."
+              exit 1
+            fi
+
+            echo "tag=$DISPATCH_TAG" >> "$GITHUB_OUTPUT"
+            echo "pr_number=$DISPATCH_PR_NUMBER" >> "$GITHUB_OUTPUT"
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           SUBJECT=$(git log -1 --pretty=%s)
           TAG=$(printf '%s\n' "$SUBJECT" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n 1 || true)
           PR_NUMBER=$(printf '%s\n' "$SUBJECT" | grep -oE '#[0-9]+' | tail -n 1 | tr -d '#' || true)
@@ -43,21 +69,21 @@ jobs:
           echo "should_release=true" >> "$GITHUB_OUTPUT"
 
       - name: Use Node.js 22.x
-        if: steps.version.outputs.should_release == 'true'
+        if: steps.version.outputs.should_release == 'true' && github.event_name == 'push'
         uses: actions/setup-node@v4
         with:
           node-version: 22.x
           cache: 'npm'
 
       - name: Build standalone release asset
-        if: steps.version.outputs.should_release == 'true'
+        if: steps.version.outputs.should_release == 'true' && github.event_name == 'push'
         run: |
           npm ci
           npm run build:standalone
           test -s dist/analyzer-standalone.html
 
       - name: Extract release notes
-        if: steps.version.outputs.should_release == 'true'
+        if: steps.version.outputs.should_release == 'true' && github.event_name == 'push'
         run: |
           TAG="${{ steps.version.outputs.tag }}"
 
@@ -72,7 +98,7 @@ jobs:
           fi
 
       - name: Create or verify tag
-        if: steps.version.outputs.should_release == 'true'
+        if: steps.version.outputs.should_release == 'true' && github.event_name == 'push'
         run: |
           TAG="${{ steps.version.outputs.tag }}"
           SHA="${{ github.sha }}"
@@ -90,7 +116,7 @@ jobs:
           fi
 
       - name: Create or update GitHub Release
-        if: steps.version.outputs.should_release == 'true'
+        if: steps.version.outputs.should_release == 'true' && github.event_name == 'push'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.version.outputs.tag }}
@@ -133,6 +159,11 @@ jobs:
         run: |
           TAG="${{ needs.release.outputs.tag }}"
           PR_NUMBER="${{ needs.release.outputs.pr_number }}"
+          RELEASE_REF="origin/main"
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            RELEASE_REF="refs/tags/$TAG"
+          fi
 
           if [ -z "$PR_NUMBER" ]; then
             echo "::error::Could not find the release PR number in the main squash commit subject."
@@ -142,16 +173,31 @@ jobs:
           git fetch origin \
             "+refs/heads/release-history:refs/remotes/origin/release-history" \
             "+refs/heads/main:refs/remotes/origin/main" \
+            "+refs/tags/${TAG}:refs/tags/${TAG}" \
             "pull/${PR_NUMBER}/head:refs/remotes/origin/release-branch-head"
 
-          if ! git diff --quiet origin/main refs/remotes/origin/release-branch-head; then
-            echo "::error::Release branch head does not match the released main commit tree."
+          if ! git diff --quiet "$RELEASE_REF" refs/remotes/origin/release-branch-head; then
+            echo "::error::Release branch head does not match the released tree."
             exit 1
           fi
 
-          ARCHIVE_COMMIT=$(git commit-tree refs/remotes/origin/release-branch-head^{tree} \
-            -p origin/release-history \
-            -p refs/remotes/origin/release-branch-head \
-            -m "archive: record $TAG release history")
+          RELEASE_BASE=$(git merge-base "$RELEASE_REF" refs/remotes/origin/release-branch-head)
+          if [ -z "$RELEASE_BASE" ]; then
+            echo "::error::Could not find a shared base between the released tree and the release PR head."
+            exit 1
+          fi
 
-          git push origin "$ARCHIVE_COMMIT:refs/heads/release-history"
+          if ! git diff --quiet "$RELEASE_BASE" origin/release-history; then
+            echo "::error::release-history must match the release PR base tree before archiving."
+            exit 1
+          fi
+
+          git switch --detach origin/release-history
+          git cherry-pick "$RELEASE_BASE"..refs/remotes/origin/release-branch-head
+
+          if ! git diff --quiet HEAD "$RELEASE_REF"; then
+            echo "::error::Archived release history does not match the released tree."
+            exit 1
+          fi
+
+          git push origin "HEAD:refs/heads/release-history"

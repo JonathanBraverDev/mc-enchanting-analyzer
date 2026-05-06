@@ -179,4 +179,11 @@ jobs:
             exit 1
           fi
 
-          echo "origin/release-history is current with main, and the release PR starts from main with branch history intact."
+          MERGE_COMMITS=$(git rev-list --merges "origin/main..refs/remotes/origin/release-check-head")
+          if [ -n "$MERGE_COMMITS" ]; then
+            echo "::error::Release PR history must be linear so the release workflow can archive it on release-history."
+            echo "$MERGE_COMMITS"
+            exit 1
+          fi
+
+          echo "origin/release-history is current with main, and the release PR starts from main with linear branch history intact."
