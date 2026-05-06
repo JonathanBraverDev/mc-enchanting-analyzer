@@ -15,8 +15,8 @@ export class ChartController {
      * @param canvasId ID of the canvas element for Chart.js.
      * @param metricId ID of the metric selector dropdown.
      */
-    constructor(canvasId: string, metricId: string) {
-        this.manager = new ChartManager(canvasId);
+    constructor(canvasId: string, metricId: string, onLevelSelect?: (level: number) => void) {
+        this.manager = new ChartManager(canvasId, onLevelSelect);
         this.metricEl = document.getElementById(metricId) as HTMLSelectElement;
     }
 

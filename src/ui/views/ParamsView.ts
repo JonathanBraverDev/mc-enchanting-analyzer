@@ -169,6 +169,21 @@ export class ParamsView {
         this.renderTargets();
     }
 
+    public setLevel(level: number): void {
+        const lvlRange = this.elements["lvl-range"] as HTMLInputElement;
+        if (!lvlRange) return;
+
+        const min = parseInt(lvlRange.min || "1");
+        const max = parseInt(lvlRange.max || level.toString());
+        const clampedLevel = Math.max(min, Math.min(max, level));
+        lvlRange.value = clampedLevel.toString();
+
+        const lvlVal = document.getElementById("lvl-val");
+        if (lvlVal) lvlVal.textContent = clampedLevel.toString();
+
+        lvlRange.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+
     public setEnchantability(val: number): void {
         const el = document.getElementById("ench-val");
         if (el) el.textContent = val.toString();

@@ -31,7 +31,7 @@ class AppController {
             (type) => this.onParamsChange(type)
         );
         this.results = new ResultsView();
-        this.chart = new ChartController("mainChart", "chart-metric");
+        this.chart = new ChartController("mainChart", "chart-metric", (level) => this.params.setLevel(level));
         this.refinement = new RefinementService();
     }
 
