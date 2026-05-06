@@ -84,12 +84,22 @@ class AppController {
             this.enqueueTopRun();
             return;
         } else if (type === 'combo-sort') {
+            const vals = this.params.getValues();
+            if (vals.sortMode === 'advisor' && vals.targets.length > 0) {
+                this.results.showPlaceholder(UI_TEXTS.STATUS_REFINING);
+                this.enqueueRun();
+                return;
+            }
             if (this.lastView) {
                 this.updateInsightsFromView(this.lastView);
             }
             return;
         } else if (type === 'target') {
             this.results.showPlaceholder(UI_TEXTS.STATUS_REFINING);
+            if (this.params.getValues().sortMode === 'advisor') {
+                this.enqueueRun();
+                return;
+            }
             if (!this.refinement.isCalculating() && this.lastView) {
                 void this.projectTargets();
                 return;
@@ -119,6 +129,7 @@ class AppController {
 
     private async run(): Promise<void> {
         if (!this.isWorkerReady) return;
+        this.lastView = null;
 
         try {
             this.params.updateClueTarget();
@@ -138,7 +149,7 @@ class AppController {
                     onStats: (view) => this.updateInsightsFromView(view),
                     onChart: (sweep) => {
                         this.chart.refresh(sweep, registry);
-                        this.refreshLastView();
+                        this.refreshLastViewIfAdvisorMode();
                     }
                 }
             );
@@ -150,6 +161,7 @@ class AppController {
 
     private async runTopOnly(): Promise<void> {
         if (!this.isWorkerReady) return;
+        this.lastView = null;
 
         try {
             this.params.updateClueTarget();
@@ -168,7 +180,7 @@ class AppController {
                     onStats: (view) => this.updateInsightsFromView(view),
                     onChart: (sweep) => {
                         this.chart.refresh(sweep, registry);
-                        this.refreshLastView();
+                        this.refreshLastViewIfAdvisorMode();
                     }
                 }
             );
@@ -194,7 +206,7 @@ class AppController {
                     onStats: (view) => this.updateInsightsFromView(view),
                     onChart: (sweep) => {
                         this.chart.refresh(sweep, registry);
-                        this.refreshLastView();
+                        this.refreshLastViewIfAdvisorMode();
                     }
                 }
             );
@@ -208,12 +220,19 @@ class AppController {
         this.lastView = view;
         const { version } = this.params.getValues();
         const registry = UiMetadataService.getRegistry(version);
+        const sortMode = this.params.getValues().sortMode;
 
-        this.results.updateV5(view, registry, TargetClueAdvisorService.summarizeSweep(this.refinement.currentSweep));
+        this.results.updateV5(
+            view,
+            registry,
+            sortMode === 'advisor' ? TargetClueAdvisorService.summarizeSweep(this.refinement.currentSweep) : undefined,
+            sortMode
+        );
     }
 
-    private refreshLastView(): void {
+    private refreshLastViewIfAdvisorMode(): void {
         if (!this.lastView) return;
+        if (this.params.getValues().sortMode !== 'advisor') return;
         this.updateInsightsFromView(this.lastView);
     }
 
