@@ -19,6 +19,7 @@ We follow a specialized workflow to keep production history clean while preservi
     *   The release workflow replays the original release PR commits after the squash merge lands on `main`.
     *   `release-history` must match the current `main` tree before each release PR merges.
     *   Release PR history must stay linear, because `release-history` rejects merge commits.
+    *   After a release branch has been archived successfully, the release workflow deletes that same-repository PR branch.
     *   Do not push to `release-history` manually; it is maintained by the release workflow.
 
 ## Development Principles
