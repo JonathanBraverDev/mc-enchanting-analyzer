@@ -10,6 +10,7 @@ A high-performance, real-time simulation tool for Minecraft's enchanting mechani
 - **📈 Live Charting**: Watch the probability charts update live as the engine explores millions of possible outcomes.
 - **💎 Version Perfect**: Supports all major mechanics changes from **Beta 1.9 up to 1.21**, including historical quirks like the 1.14 Protection conflict window.
 - **📏 Deep Analysis**: Correctly models up to **6 concurrent enchantments** on a single item, providing better coverage for top-tier gear.
+- **🎯 Target Combos**: Filter results by the enchantments you want together, like `Efficiency IV+` and `Fortune III+`, and see the combined chance directly.
 - **📚 Complex Support**: Accurate handling of "Multi-Enchantment" books and secondary enchantment decays that other tools often overlook.
 
 ## 🚀 Getting Started

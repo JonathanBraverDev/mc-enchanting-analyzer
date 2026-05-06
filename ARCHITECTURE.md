@@ -82,6 +82,7 @@ The public calls use request objects so callers can pass optional search, instru
 | `ProbabilityMassAccountant` | Records resolved, clue-incompatible, pending, sieved, capped, overflow, and rounding mass |
 | `ModifiedLevelDistributionService` | Computes the BigInt distribution of modified enchantment levels |
 | `SummaryAggregationService` | Scans resolved combos and pending frontiers once to derive shared any/rank/count/clue mass buckets |
+| `TargetAnalysisService` | Projects target-combo filters over resolved combos and pending frontiers without changing search behavior |
 | `SummaryService` | Formats aggregated checkpoint masses into presented `CalculationStats` |
 | `SnapshotService` | Formats aggregated checkpoint masses into UI/reporting snapshots |
 
@@ -115,6 +116,8 @@ When a request includes a displayed clue, `EnchantEngine` validates the clue lab
 ## Reporting Aggregation
 
 `SummaryAggregationService` is the shared scanner for post-search reporting. It walks resolved combo maps and pending frontier nodes once, scales pending frontier mass once per node, and derives `any`, `ranks`, `count`, and `shownClueDistribution` together. Pending book nodes preserve the existing book-adjusted `any`/`ranks`/`count` behavior while shown-clue mass remains based on the packed frontier combo. `SummaryService` and `SnapshotService` then format those aggregate masses for public stats and UI snapshots. For clue-conditioned output, `clue.knownSpace` is derived from displayed clue mass; it is not stored in engine mass accounting. Because clue-pruned searches no longer retain a full distribution for every possible displayed clue, conditioned output omits `shownClueDistribution`.
+
+Target combo filtering is a reporting projection, not a search mode. The UI sends minimum-rank requirements such as `Efficiency IV+` and `Fortune III+`; `TargetAnalysisService` validates that the requirements can coexist, scans the checkpoint result before display limits are applied, and returns matching mass, top matching combos, and near-miss diagnostics. Top-result target changes can reuse cached checkpoint `SearchResult` objects in the top worker, so changing targets does not rerun the engine when the base item, level, clue, and refinement inputs are unchanged.
 
 ## Node-ID Frontier Model
 

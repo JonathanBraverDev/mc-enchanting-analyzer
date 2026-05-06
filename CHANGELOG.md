@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## v5.3.0 (2026-05-06)
+
+### Added
+- **Target combo filtering**: Select desired enchantments, such as `Efficiency IV+` and `Fortune III+`, to see the chance of getting them together.
+- **Matching combinations view**: When targets are active, Top Combinations shows matching results and updates immediately when only the targets change.
+- **Conflict-aware targets**: The target selector prevents impossible combinations such as `Sharpness` with `Smite`.
+
 ## v5.2.2 (2026-05-06)
 
 ### Fixed
