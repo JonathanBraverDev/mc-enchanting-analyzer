@@ -19,9 +19,7 @@ export class ResultsView {
     }
 
     public showPlaceholder(text: string): void {
-        if (this.comboEl) {
-            this.comboEl.innerHTML = `<div class="combo-placeholder" style="opacity: 0.5; padding: 15px; font-size: 0.85rem;">${text}${UI_TEXTS.STATUS_POSTFIX}</div>`;
-        }
+        this.setComboPlaceholder(`${text}${UI_TEXTS.STATUS_POSTFIX}`);
     }
 
     public setRefinementStatus(text: string, level: RefinementStatusLevel): void {
@@ -73,9 +71,20 @@ export class ResultsView {
     }
 
     public showNoResults(): void {
-        if (this.comboEl) {
-            this.comboEl.innerHTML = `<div class="combo-placeholder" style="opacity: 0.5; padding: 15px; font-size: 0.85rem;">No combinations found for this level.</div>`;
-        }
+        this.setComboPlaceholder('No combinations found for this level.');
+    }
+
+    private setComboPlaceholder(text: string): void {
+        if (!this.comboEl) return;
+
+        const placeholder = document.createElement('div');
+        placeholder.className = 'combo-placeholder';
+        placeholder.textContent = text;
+        placeholder.style.opacity = '0.5';
+        placeholder.style.padding = '15px';
+        placeholder.style.fontSize = '0.85rem';
+
+        this.comboEl.replaceChildren(placeholder);
     }
 
     private renderCombos(insights: EnchantInsights, registry: RegistryState): void {

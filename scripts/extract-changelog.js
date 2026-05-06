@@ -10,10 +10,16 @@ const changelog = fs.readFileSync('CHANGELOG.md', 'utf8');
 
 // Normalize version (e.g., v3.1.0 -> 3.1.0)
 const cleanVersion = version.startsWith('v') ? version.slice(1) : version;
+if (!/^\d+\.\d+\.\d+$/.test(cleanVersion)) {
+    console.error(`Invalid version: ${version}`);
+    process.exit(1);
+}
+
+const escapedVersion = cleanVersion.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // Regex to find the section for the specific version
 // Matches "## v[version] (date)" and everything until the next "## "
-const regex = new RegExp(`## v${cleanVersion}\\s+\\(\\d{4}-\\d{2}-\\d{2}\\)\\s+([\\s\\S]*?)(?=\\n\\s*##\\s+|$)`);
+const regex = new RegExp(`## v${escapedVersion}\\s+\\(\\d{4}-\\d{2}-\\d{2}\\)\\s+([\\s\\S]*?)(?=\\n\\s*##\\s+|$)`);
 const match = changelog.match(regex);
 
 if (match && match[1]) {
