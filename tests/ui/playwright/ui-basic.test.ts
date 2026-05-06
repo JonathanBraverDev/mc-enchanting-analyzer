@@ -57,6 +57,7 @@ test.describe('Basic UI Functionality', () => {
 
         await expect(analyzer.targetChips).toContainText(['Sharpness I+']);
         await expect(analyzer.comboList).toContainText('Target Match (Sharpness I+)');
+        await expect(analyzer.comboList).toContainText('Best Shown Clues');
 
         const comboNames = analyzer.page.locator('#combo-list .combo-names');
         await expect(comboNames.first()).toContainText('Sharpness');

@@ -12,6 +12,7 @@ import {
   ChartBucketsView,
   RefinementLevelName,
   SearchFrontierSnapshot,
+  TargetClueAdvisorView,
   TargetDiagnosticsView
 } from '#types/index.js';
 import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
@@ -22,6 +23,7 @@ import { ENGINE_LIMITS } from '#constants/engine.js';
 import { ClueValidator } from '#core/clue.js';
 import { SummaryAggregationService } from '#services/SummaryAggregationService.js';
 import { TargetAnalysisService } from '#services/TargetAnalysisService.js';
+import { TargetClueAdvisorService } from '#services/TargetClueAdvisorService.js';
 
 
 export class SnapshotService {
@@ -104,6 +106,27 @@ export class SnapshotService {
         blockedComboCount: targetAnalysis.blockedComboCount
       }
       : undefined;
+    const clueAdvice = snapshotType === 'top' && !isConditioned
+      ? TargetClueAdvisorService.recommend({
+        combos,
+        indexToEnchant: state.indexToEnchant,
+        targets: packedTargets,
+        registry: state,
+        frontiers,
+        limit: 5
+      })
+      : undefined;
+    const clueAdvisor: TargetClueAdvisorView | undefined = clueAdvice
+      ? {
+        recommendations: clueAdvice.recommendations.map(recommendation => ({
+          idAndRank: recommendation.idAndRank,
+          label: recommendation.label,
+          targetChance: ProbUtils.toNumber(recommendation.targetChanceMass),
+          clueShare: ProbUtils.toNumber(recommendation.clueMass),
+          targetAndClueShare: ProbUtils.toNumber(recommendation.targetAndClueMass)
+        }))
+      }
+      : undefined;
     const displayResult = targetAnalysis
       ? { ...result, combos: targetAnalysis.combos }
       : result;
@@ -124,7 +147,8 @@ export class SnapshotService {
         accounting,
         displayResult,
         comboLimit ?? ENGINE_LIMITS.MAX_RESULTS_SUMMARY,
-        targetDiagnostics
+        targetDiagnostics,
+        clueAdvisor
       );
     } else {
       return this.createChartCellView(
@@ -159,7 +183,8 @@ export class SnapshotService {
     accounting: AccountingView,
     result: { anyMass: Map<number, bigint>, rankMass: Map<number, bigint>, countMass: Map<number, bigint>, combos: Map<PackedCombo, bigint> },
     comboLimit: number,
-    target?: TargetDiagnosticsView
+    target?: TargetDiagnosticsView,
+    clueAdvisor?: TargetClueAdvisorView
   ): TopRunView {
     const combos: TopComboView[] = [];
     const entries = [...result.combos.entries()].sort((a, b) => b[1] > a[1] ? 1 : (b[1] < a[1] ? -1 : 0));
@@ -194,7 +219,8 @@ export class SnapshotService {
       accounting,
       combos,
       enchants,
-      target
+      target,
+      clueAdvisor
     };
   }
 

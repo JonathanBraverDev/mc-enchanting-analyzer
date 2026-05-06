@@ -32,6 +32,18 @@ export interface TargetDiagnosticsView {
   blockedComboCount: number;
 }
 
+export interface TargetClueRecommendationView {
+  idAndRank: number;
+  label: string;
+  targetChance: number;
+  clueShare: number;
+  targetAndClueShare: number;
+}
+
+export interface TargetClueAdvisorView {
+  recommendations: TargetClueRecommendationView[];
+}
+
 export interface TargetAnalysisResult {
   matchMass: bigint;
   matchingComboCount: number;
