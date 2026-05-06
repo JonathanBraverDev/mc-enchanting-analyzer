@@ -361,6 +361,7 @@ export class ResultsView {
 
     private formatClueAdvisorMeta(recommendation: {
         clueShare: number;
+        anyBaselineChance: number;
         compatibleBaselineChance: number;
         liftOverCompatibleBaseline: number;
     }): string {
@@ -368,7 +369,7 @@ export class ResultsView {
             ? `${recommendation.liftOverCompatibleBaseline.toFixed(1)}x`
             : 'n/a';
 
-        return `Shown ${UIUtils.formatPercent(recommendation.clueShare)} · compatible baseline ${UIUtils.formatPercent(recommendation.compatibleBaselineChance)} · ${lift}`;
+        return `Shown ${UIUtils.formatPercent(recommendation.clueShare)} · any ${UIUtils.formatPercent(recommendation.anyBaselineChance)} · compatible ${UIUtils.formatPercent(recommendation.compatibleBaselineChance)} · ${lift}`;
     }
 
     private createTargetDiagnosticRow(labelText: string, share: number, count: number): HTMLElement {

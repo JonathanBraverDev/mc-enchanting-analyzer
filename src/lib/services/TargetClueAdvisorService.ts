@@ -28,6 +28,8 @@ export interface TargetClueRecommendation {
     targetChanceMass: bigint;
     clueMass: bigint;
     targetAndClueMass: bigint;
+    anyBaselineChanceMass: bigint;
+    liftOverAnyBaseline: number;
     compatibleBaselineChanceMass: bigint;
     liftOverCompatibleBaseline: number;
 }
@@ -74,7 +76,11 @@ export class TargetClueAdvisorService {
             });
         }
 
-        const compatibleBaselineChanceMass = this.calculateCompatibleBaselineChance(buckets, targets, registry);
+        const anyBaselineChanceMass = this.calculateBaselineChance(buckets, () => true);
+        const compatibleBaselineChanceMass = this.calculateBaselineChance(
+            buckets,
+            (idAndRank) => this.isCompatibleClue(idAndRank, targets, registry)
+        );
         const recommendations: TargetClueRecommendation[] = [];
         for (const [idAndRank, bucket] of buckets) {
             if (bucket.clueMass <= 0n || bucket.targetAndClueMass <= 0n) continue;
@@ -86,6 +92,8 @@ export class TargetClueAdvisorService {
                 targetChanceMass,
                 clueMass: bucket.clueMass,
                 targetAndClueMass: bucket.targetAndClueMass,
+                anyBaselineChanceMass,
+                liftOverAnyBaseline: this.divideAsNumber(targetChanceMass, anyBaselineChanceMass),
                 compatibleBaselineChanceMass,
                 liftOverCompatibleBaseline: this.divideAsNumber(targetChanceMass, compatibleBaselineChanceMass)
             });
@@ -193,16 +201,15 @@ export class TargetClueAdvisorService {
         return true;
     }
 
-    private static calculateCompatibleBaselineChance(
+    private static calculateBaselineChance(
         buckets: Map<number, MutableClueAdviceBucket>,
-        targets: PackedTargetRequirement[],
-        registry: RegistryState
+        includeClue: (idAndRank: number) => boolean
     ): bigint {
         let clueMass = 0n;
         let targetAndClueMass = 0n;
 
         for (const [idAndRank, bucket] of buckets) {
-            if (!this.isCompatibleClue(idAndRank, targets, registry)) continue;
+            if (!includeClue(idAndRank)) continue;
             clueMass += bucket.clueMass;
             targetAndClueMass += bucket.targetAndClueMass;
         }
