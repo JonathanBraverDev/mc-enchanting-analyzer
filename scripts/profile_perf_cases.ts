@@ -73,7 +73,7 @@ async function runCase(testCase: PerfCase) {
         searchOverheadMs: engineTotalMs - searchMs - postProcessingMs,
         combos: Object.keys(stats.combos).length,
         accuracy: stats.accuracy,
-        clueKnownSpace: stats.accounting.clueKnownSpace
+        clueKnownSpace: stats.clue?.knownSpace
     };
 }
 

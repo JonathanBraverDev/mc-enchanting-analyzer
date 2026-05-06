@@ -154,14 +154,14 @@ export class MassForwardingEngine {
 
         if (stopIsClueCompatible) {
             tracker.mass.record('resolved', stopSettled);
-            tracker.mass.record('sieved', stopSettlement.discarded);
+            tracker.mass.record('clueIncompatible', stopSettlement.discarded);
         } else {
-            tracker.mass.record('sieved', probStop);
+            tracker.mass.record('clueIncompatible', probStop);
         }
         tracker.mass.record('rounding', localRounding);
 
         if (!stopIsClueCompatible) {
-            tracker.mass.record('sieved', probForward);
+            tracker.mass.record('clueIncompatible', probForward);
         } else if (term.isTooSmall) {
             if (ctx.instrumentation) ctx.instrumentation.totalPrunedNodes++;
             tracker.mass.record('sieved', probForward - forwardSettlement.rounding);
@@ -171,7 +171,7 @@ export class MassForwardingEngine {
             tracker.mass.record('capped', probForward - forwardSettlement.rounding);
         } else if (blueprint.totalWeight === 0) {
             tracker.mass.record('resolved', forwardSettled);
-            tracker.mass.record('sieved', forwardSettlement.discarded);
+            tracker.mass.record('clueIncompatible', forwardSettlement.discarded);
         }
 
         if (localRounding > 0n && ctx.instrumentation) ctx.instrumentation.roundingErrorEvents++;
@@ -220,7 +220,7 @@ export class MassForwardingEngine {
 
             const childId = ctx.graph.getEdgeChildId(edgeStart + i);
             if (childId === SearchNodeGraph.PRUNED_CHILD_ID) {
-                tracker.mass.record('sieved', pNext);
+                tracker.mass.record('clueIncompatible', pNext);
                 if (ctx.instrumentation) ctx.instrumentation.totalPrunedNodes++;
                 continue;
             }
@@ -238,9 +238,9 @@ export class MassForwardingEngine {
 
         if (stopIsClueCompatible) {
             tracker.mass.record('resolved', this.settledMass(probStop, stopSettlement));
-            tracker.mass.record('sieved', stopSettlement.discarded);
+            tracker.mass.record('clueIncompatible', stopSettlement.discarded);
         } else {
-            tracker.mass.record('sieved', probStop);
+            tracker.mass.record('clueIncompatible', probStop);
         }
         tracker.mass.record('rounding', stopSettlement.rounding + scaleLoss);
 

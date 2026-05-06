@@ -3,11 +3,14 @@ import { ProbabilityShare, TopInputSignature, RefinementLevelName, ChartInputSig
 export interface NormalizationView {
   domain: 'resolved-mass' | 'clue-known-space';
   /** Absolute compatible clue mass when clue-conditioned; absent otherwise. */
-  clueKnownSpace?: ProbabilityShare;
+  clue?: {
+    knownSpace: ProbabilityShare;
+  };
 }
 
 export interface AccountingView {
   resolved: ProbabilityShare;
+  clueIncompatible: ProbabilityShare;
   pending: ProbabilityShare;
   sieved: ProbabilityShare;
   overflow: ProbabilityShare;

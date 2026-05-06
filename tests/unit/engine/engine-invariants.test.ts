@@ -11,7 +11,7 @@ describe('Engine Architectural Invariants', () => {
         const stats = await engine.calculate({ cat: 'sword', xp: 30, mat: 'diamond', threshold: 0.001 });
 
         const acc = stats.accounting;
-        const total = acc.resolved + acc.pending + acc.sieved + acc.overflow + acc.capped + acc.rounding;
+        const total = acc.resolved + acc.clueIncompatible + acc.pending + acc.sieved + acc.overflow + acc.capped + acc.rounding;
 
         // Sum should be exactly 1.0 within floating point precision of the stats object reconstruction.
         // The accounting buckets in stats are already normalized to 0..1 floats.

@@ -6,7 +6,7 @@ import { PRECISION } from '#utils/math/ProbUtils.js';
 describe('ProbabilityMassAccountant', () => {
     it('should initialize with zero mass in all buckets', () => {
         const tracker = new ProbabilityMassAccountant();
-        const bk = tracker.getBookkeeping();
+        const bk = tracker.getBucketUnits();
         assert.strictEqual(bk.resolved, 0n);
         assert.strictEqual(bk.pending, 0n);
         assert.strictEqual(bk.rounding, 0n);
@@ -16,15 +16,15 @@ describe('ProbabilityMassAccountant', () => {
         const tracker = new ProbabilityMassAccountant();
         tracker.record('resolved', 100n);
         tracker.record('pending', 50n);
-        assert.strictEqual(tracker.getBookkeeping().resolved, 100n);
-        assert.strictEqual(tracker.getBookkeeping().pending, 50n);
+        assert.strictEqual(tracker.getBucketUnits().resolved, 100n);
+        assert.strictEqual(tracker.getBucketUnits().pending, 50n);
     });
 
     it('should subtract mass', () => {
         const tracker = new ProbabilityMassAccountant();
         tracker.record('pending', 100n);
         tracker.subtract('pending', 40n);
-        assert.strictEqual(tracker.getBookkeeping().pending, 60n);
+        assert.strictEqual(tracker.getBucketUnits().pending, 60n);
     });
 
     it('should calculate total mass correctly', () => {
@@ -54,7 +54,7 @@ describe('ProbabilityMassAccountant', () => {
         const clone = tracker.clone();
         clone.record('resolved', 50n);
 
-        assert.strictEqual(tracker.getBookkeeping().resolved, 100n);
-        assert.strictEqual(clone.getBookkeeping().resolved, 150n);
+        assert.strictEqual(tracker.getBucketUnits().resolved, 100n);
+        assert.strictEqual(clone.getBucketUnits().resolved, 150n);
     });
 });

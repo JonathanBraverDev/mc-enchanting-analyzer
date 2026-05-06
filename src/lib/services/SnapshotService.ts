@@ -49,7 +49,7 @@ export class SnapshotService {
       try {
         targetClueId = ClueValidator.validate(state, request.input.category, clue);
       } catch (err) {
-        // If worker didn't catch it, or if factory is used in a context where invalid clues
+        // If worker didn't catch it, or if factory is used in a context where invalid clue input
         // might slip in, we throw here to prevent silent unconditioned fallback.
         throw new Error(`Snapshot projection failed: Invalid clue "${clue}". ${err instanceof Error ? err.message : ''}`);
       }
@@ -58,13 +58,13 @@ export class SnapshotService {
     // 2. Perform conditioning if needed
     const isConditioned = targetClueId !== null;
     let result: any;
-    let clueKnownSpace: number | undefined;
+    let knownSpace: number | undefined;
 
     if (isConditioned) {
       // Conditioned views derive from top combos (representing the posterior)
       // Note: frontiers are passed to conditionOnClue which now handles them
       const conditioned = ClueAnalysisService.conditionOnClue(combos, targetClueId!, state.indexToEnchant, frontiers);
-      clueKnownSpace = ProbUtils.toNumber(conditioned.clueKnownSpace);
+      knownSpace = ProbUtils.toNumber(conditioned.knownSpace);
       result = conditioned;
     } else {
       // Unconditioned views derive aggregate stats from combos + frontiers (SSoT)
@@ -73,7 +73,7 @@ export class SnapshotService {
         indexToEnchant: state.indexToEnchant,
         frontiers,
         isBook,
-        includeClues: false
+        includeShownClueDistribution: false
       });
       result = {
         combos,
@@ -86,7 +86,7 @@ export class SnapshotService {
     const accounting = tracker.mass.toPublic();
     const normalization: NormalizationView = {
       domain: isConditioned ? 'clue-known-space' : 'resolved-mass',
-      ...(clueKnownSpace !== undefined ? { clueKnownSpace } : {})
+      ...(knownSpace !== undefined ? { clue: { knownSpace } } : {})
     };
 
     if (snapshotType === 'top') {

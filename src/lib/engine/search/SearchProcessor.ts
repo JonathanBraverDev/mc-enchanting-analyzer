@@ -126,7 +126,7 @@ export class SearchProcessor {
 
             const nextPacked = poolPlan.singleCombos[i]! as PackedCombo;
             if (cluePolicy && !cluePolicy.canSelectChild(poolPlan.pool[i]! as PackedEnchant, false)) {
-                tracker.mass.record('sieved', pNext);
+                tracker.mass.record('clueIncompatible', pNext);
                 continue;
             }
             const nodeId = poolPlan.identityMode === 'number53'

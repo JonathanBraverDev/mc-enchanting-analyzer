@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { EngineFactory } from '#engine/factory.js';
+import { ClueValidator } from '#core/clue.js';
 import { SearchProcessor } from '#engine/search/SearchProcessor.js';
 import { ClueSearchPolicy } from '#engine/search/ClueSearchPolicy.js';
 import { DATA } from '#data/index.js';
@@ -18,15 +19,18 @@ describe('Clue-aware search optimization', () => {
     const assertMatchesFullSearchConditioning = async (cat: string, mat: string, clue: string, threshold = 0.005) => {
         const baseline = await calculateByFullSearchThenCondition(cat, mat, clue, threshold);
         const optimized = await calculateWithPruning(cat, mat, clue, threshold);
+        const targetClueId = ClueValidator.validate(EngineFactory.create(DATA, '1.21.11').registry, cat, clue);
 
-        assert.strictEqual(optimized.accounting.clueKnownSpace, baseline.accounting.clueKnownSpace);
+        assert.strictEqual(optimized.clue?.knownSpace, baseline.clue?.knownSpace);
         compareConditionedMaps(optimized.any, baseline.any, `${clue} any`);
         compareConditionedMaps(optimized.ranks, baseline.ranks, `${clue} ranks`);
         compareConditionedMaps(optimized.count, baseline.count, `${clue} count`);
         compareConditionedMaps(optimized.combos, baseline.combos, `${clue} combos`);
+        assert.strictEqual(optimized.clue?.idAndRank, targetClueId);
+        assert.strictEqual(optimized.shownClueDistribution, undefined);
         assert.ok(
-            optimized.accounting.sieved > baseline.accounting.sieved,
-            'optimized clue search should account incompatible branches as sieved mass'
+            optimized.accounting.clueIncompatible > (baseline.accounting.clueIncompatible ?? 0),
+            'optimized clue search should account incompatible branches as clue-incompatible mass'
         );
     };
 
@@ -34,7 +38,7 @@ describe('Clue-aware search optimization', () => {
         await assertMatchesFullSearchConditioning(TEST_DATA.ITEMS.SWORD, TEST_DATA.MATERIALS.DIAMOND, 'Sharpness IV');
     });
 
-    it('matches full-search conditioning for common and rare modern book clues', async () => {
+    it('matches full-search conditioning for common and rare modern book clue inputs', async () => {
         await assertMatchesFullSearchConditioning(TEST_DATA.ITEMS.BOOK, TEST_DATA.MATERIALS.BOOK, 'Protection III', 0.01);
         await assertMatchesFullSearchConditioning(TEST_DATA.ITEMS.BOOK, TEST_DATA.MATERIALS.BOOK, 'Projectile Protection IV', 0.01);
     });
@@ -47,6 +51,7 @@ describe('Clue-aware search optimization', () => {
         const baseline = await calculateByFullSearchThenCondition(cat, mat, clue, threshold);
         const engine = EngineFactory.create(DATA, '1.21.11');
         engine.resetCaches();
+        const targetClueId = ClueValidator.validate(engine.registry, cat, clue);
 
         const result = await engine.searchToCheckpoint({
             cat,
@@ -58,12 +63,14 @@ describe('Clue-aware search optimization', () => {
         });
         const optimized = summarizeCheckpoint(engine, result, cat, clue);
 
-        assert.strictEqual(optimized.accounting.clueKnownSpace, baseline.accounting.clueKnownSpace);
+        assert.strictEqual(optimized.clue?.knownSpace, baseline.clue?.knownSpace);
         compareConditionedMaps(optimized.any, baseline.any, `${clue} checkpoint any`);
         compareConditionedMaps(optimized.ranks, baseline.ranks, `${clue} checkpoint ranks`);
         compareConditionedMaps(optimized.count, baseline.count, `${clue} checkpoint count`);
         compareConditionedMaps(optimized.combos, baseline.combos, `${clue} checkpoint combos`);
-        assert.ok(result.tracker.mass.toPublic().sieved > baseline.accounting.sieved);
+        assert.strictEqual(optimized.clue?.idAndRank, targetClueId);
+        assert.strictEqual(optimized.shownClueDistribution, undefined);
+        assert.ok(result.tracker.mass.toPublic().clueIncompatible > (baseline.accounting.clueIncompatible ?? 0));
     });
 
     it('searchSequentialCheckpoints forwards clue pruning for every streamed checkpoint', async () => {
@@ -79,8 +86,9 @@ describe('Clue-aware search optimization', () => {
         );
         const engine = EngineFactory.create(DATA, '1.21.11');
         engine.resetCaches();
+        const targetClueId = ClueValidator.validate(engine.registry, cat, clue);
         const streamed: CalculationStats[] = [];
-        const rawSieved: number[] = [];
+        const clueIncompatibleMass: number[] = [];
 
         await engine.searchSequentialCheckpoints({
             cat,
@@ -91,7 +99,7 @@ describe('Clue-aware search optimization', () => {
             useCache: false,
             onCheckpointComplete: (result) => {
                 streamed.push(summarizeCheckpoint(engine, result, cat, clue));
-                rawSieved.push(result.tracker.mass.toPublic().sieved);
+                clueIncompatibleMass.push(result.tracker.mass.toPublic().clueIncompatible);
             }
         });
 
@@ -99,12 +107,14 @@ describe('Clue-aware search optimization', () => {
         for (let i = 0; i < checkpoints.length; i++) {
             const optimized = streamed[i]!;
             const baseline = baselines[i]!;
-            assert.strictEqual(optimized.accounting.clueKnownSpace, baseline.accounting.clueKnownSpace);
+            assert.strictEqual(optimized.clue?.knownSpace, baseline.clue?.knownSpace);
             compareConditionedMaps(optimized.any, baseline.any, `${clue} sequential ${i} any`);
             compareConditionedMaps(optimized.ranks, baseline.ranks, `${clue} sequential ${i} ranks`);
             compareConditionedMaps(optimized.count, baseline.count, `${clue} sequential ${i} count`);
             compareConditionedMaps(optimized.combos, baseline.combos, `${clue} sequential ${i} combos`);
-            assert.ok(rawSieved[i]! > baseline.accounting.sieved);
+            assert.strictEqual(optimized.clue?.idAndRank, targetClueId);
+            assert.strictEqual(optimized.shownClueDistribution, undefined);
+            assert.ok(clueIncompatibleMass[i]! > (baseline.accounting.clueIncompatible ?? 0));
         }
     });
 

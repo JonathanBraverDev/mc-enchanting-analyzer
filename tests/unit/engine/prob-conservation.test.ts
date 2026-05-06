@@ -30,7 +30,7 @@ afterEach(() => {
 /** sum of all mass buckets from the accounting object */
 function massTotal(stats: any): number {
     const acc = stats.accounting;
-    return acc.resolved + acc.pending + acc.sieved + acc.overflow + acc.capped + acc.rounding;
+    return acc.resolved + acc.clueIncompatible + acc.pending + acc.sieved + acc.overflow + acc.capped + acc.rounding;
 }
 
 describe('Probability Conservation', () => {
@@ -103,7 +103,7 @@ describe('Probability Conservation', () => {
             threshold: TEST_DATA.THRESHOLDS.PROB_MIN,
         });
 
-        const compatibleProgress = stats.accounting.resolved + stats.accounting.sieved;
+        const compatibleProgress = stats.accounting.resolved + stats.accounting.clueIncompatible + stats.accounting.sieved;
         assert.ok(
             compatibleProgress >= 1.0 - TOLERANCE,
             `Guaranteed clue search should finish all compatible/incompatible space, got ${compatibleProgress}. Breakdown: ${JSON.stringify(stats.accounting)}`

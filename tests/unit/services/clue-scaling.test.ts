@@ -21,7 +21,9 @@ describe('Clue Conditioning Scaling diagnostics', () => {
         tracker.mass.record('resolved', PRECISION);
         const stats = SummaryService.summarizeConditioned({ combos: rawCombos as any, tracker, indexToEnchant, targetClueId });
 
-        assert.strictEqual(stats.accounting.clueKnownSpace, 0);
+        assert.strictEqual(stats.clue?.knownSpace, 0);
+        assert.strictEqual(stats.clue?.idAndRank, targetClueId);
+        assert.strictEqual(stats.shownClueDistribution, undefined);
         assert.strictEqual(stats.accuracy, 1); // Search was 100% complete
         assert.strictEqual(Object.keys(stats.combos).length, 0); // But 0 results match
     });
@@ -36,7 +38,9 @@ describe('Clue Conditioning Scaling diagnostics', () => {
         const stats = SummaryService.summarizeConditioned({ combos: rawCombos as any, tracker, indexToEnchant, targetClueId });
 
         // pClue should be 1.0
-        assert.ok(Math.abs((stats.accounting.clueKnownSpace ?? 0) - 1.0) < 1e-12);
+        assert.ok(Math.abs((stats.clue?.knownSpace ?? 0) - 1.0) < 1e-12);
+        assert.strictEqual(stats.clue?.idAndRank, targetClueId);
+        assert.strictEqual(stats.shownClueDistribution, undefined);
         assert.strictEqual(stats.accuracy, 1);
         // combos should sum to 1.0
         assert.ok(Math.abs((stats.combos['1'] ?? 0) - 1.0) < 1e-12);
@@ -54,7 +58,9 @@ describe('Clue Conditioning Scaling diagnostics', () => {
         const stats = SummaryService.summarizeConditioned({ combos: rawCombos as any, tracker, indexToEnchant, targetClueId });
 
         // pClue = 0.5
-        assert.ok(Math.abs((stats.accounting.clueKnownSpace ?? 0) - 0.5) < 1e-12);
+        assert.ok(Math.abs((stats.clue?.knownSpace ?? 0) - 0.5) < 1e-12);
+        assert.strictEqual(stats.clue?.idAndRank, targetClueId);
+        assert.strictEqual(stats.shownClueDistribution, undefined);
         // stats.accuracy is 1.0, so combos should scale up to sum to 1.0
         assert.ok(Math.abs((stats.combos['1'] ?? 0) - 1.0) < 1e-12);
     });
@@ -70,7 +76,7 @@ describe('Clue Conditioning Scaling diagnostics', () => {
         const stats = SummaryService.summarizeConditioned({ combos: rawCombos as any, tracker, indexToEnchant, targetClueId });
 
         // pClue = 0.25 (Found 25% of absolute generation space)
-        assert.ok(Math.abs((stats.accounting.clueKnownSpace ?? 0) - 0.25) < 1e-12);
+        assert.ok(Math.abs((stats.clue?.knownSpace ?? 0) - 0.25) < 1e-12);
         // Search accuracy reflects 50% progress
         assert.strictEqual(stats.accuracy, 0.5);
         // BUT results target 1.0 (asserting 100% certainty that IF the clue is found, this is the combo)
@@ -96,7 +102,7 @@ describe('Clue Conditioning Scaling diagnostics', () => {
             frontiers
         });
 
-        assert.ok(Math.abs((stats.accounting.clueKnownSpace ?? 0) - 0.25) < 1e-12);
+        assert.ok(Math.abs((stats.clue?.knownSpace ?? 0) - 0.25) < 1e-12);
         assert.ok(Math.abs(Number(stats.combos[packed.toString(16)] ?? 0) - 1.0) < 1e-12);
     });
 
@@ -123,7 +129,7 @@ describe('Clue Conditioning Scaling diagnostics', () => {
             isBook: true
         });
 
-        assert.ok(Math.abs((stats.accounting.clueKnownSpace ?? 0) - (1 / 3)) < 1e-12);
+        assert.ok(Math.abs((stats.clue?.knownSpace ?? 0) - (1 / 3)) < 1e-12);
         assert.ok(Math.abs(Number(stats.combos[packed.toString(16)] ?? 0) - 1.0) < 1e-12);
     });
 });

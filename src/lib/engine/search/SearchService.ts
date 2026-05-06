@@ -176,7 +176,8 @@ export class SearchService {
 
             if (++iterCount % UI_CONSTANTS.PROGRESS_UPDATE_FREQUENCY === 0) {
                 if (request.onProgress) {
-                    const accuracy = accumulator.tracker.mass.toPublic().resolved;
+                    const accounting = accumulator.tracker.mass.toPublic();
+                    const accuracy = accounting.resolved + accounting.clueIncompatible;
                     request.onProgress({
                         processed: iterCount,
                         total: levels.length,
@@ -338,7 +339,7 @@ export class SearchService {
 
     private handleClueIncompatiblePool(threshold: bigint): SearchState {
         const rootTracker = new SearchStateTracker();
-        rootTracker.mass.record('sieved', PRECISION);
+        rootTracker.mass.record('clueIncompatible', PRECISION);
 
         return {
             queue: new NodeIdSearchFrontier(),

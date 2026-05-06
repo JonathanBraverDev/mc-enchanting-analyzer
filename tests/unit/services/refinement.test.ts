@@ -27,7 +27,7 @@ describe('RefinementService (V5 Hardened)', () => {
                         refinementLevel: level,
                         clueConditioned: !!input.clue,
                         normalization: { domain: 'resolved-mass' },
-                        accounting: { resolved: 0.9, pending: 0.1, sieved: 0, overflow: 0, capped: 0, rounding: 0 },
+                        accounting: { resolved: 0.9, clueIncompatible: 0, pending: 0.1, sieved: 0, overflow: 0, capped: 0, rounding: 0 },
                         combos: [],
                         enchants: []
                     } as any);

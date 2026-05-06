@@ -10,7 +10,7 @@ export const SnapshotUtils = {
     /**
      * Compares a set of statistics against a saved snapshot.
      */
-    async assertSnapshot(name: string, stats: any): Promise<void> {
+    async assertSnapshot(name: string, stats: any, registry?: any): Promise<void> {
         const snapshotDir = path.resolve(process.cwd(), 'tests', 'snapshots');
         const snapshotPath = path.join(snapshotDir, `${name}.json`);
 
@@ -33,6 +33,26 @@ export const SnapshotUtils = {
             error.stack = errorMessage;
             throw error;
         }
+
+        if (registry) {
+            const humanPath = path.join(snapshotDir, `${name}.human.json`);
+            if (!fs.existsSync(humanPath)) {
+                throw new Error(`Human snapshot "${name}" not found at ${humanPath}. Run the update-snapshots script first.`);
+            }
+
+            const expectedHuman = JSON.parse(fs.readFileSync(humanPath, 'utf8'));
+            const actualHuman = HumanizationService.humanize(cleanStats, registry);
+            const humanSummary = this.computeStatisticalSummary(actualHuman, expectedHuman);
+            if (humanSummary.hasMismatches) {
+                const diffPath = path.join(snapshotDir, `${name}.human.actual.json`);
+                fs.writeFileSync(diffPath, JSON.stringify(actualHuman, null, 2) + '\n');
+
+                const errorMessage = `Human snapshot mismatch for "${name}".\n${humanSummary.report}\nActual human result saved to ${diffPath}`;
+                const error = new Error(errorMessage);
+                error.stack = errorMessage;
+                throw error;
+            }
+        }
     },
 
     /**
@@ -48,6 +68,24 @@ export const SnapshotUtils = {
         if (Math.abs(aAcc - eAcc) > 1e-12) {
             hasMismatches = true;
             sections.push(`[metadata]: Accuracy mismatch. Expected ${eAcc}, got ${aAcc}`);
+        }
+
+        const hasActualClueKnownSpace = actual.clue?.knownSpace !== undefined;
+        const hasExpectedClueKnownSpace = expected.clue?.knownSpace !== undefined;
+        if (hasActualClueKnownSpace !== hasExpectedClueKnownSpace) {
+            hasMismatches = true;
+            sections.push(`[metadata]: clue.knownSpace ${hasExpectedClueKnownSpace ? 'missing' : 'unexpected'}`);
+        } else if (hasActualClueKnownSpace) {
+            const aClue = actual.clue.knownSpace || 0;
+            const eClue = expected.clue.knownSpace || 0;
+            if (Math.abs(aClue - eClue) > 1e-12) {
+                hasMismatches = true;
+                sections.push(`[metadata]: clue.knownSpace mismatch. Expected ${eClue}, got ${aClue}`);
+            }
+            if (actual.clue.idAndRank !== expected.clue.idAndRank) {
+                hasMismatches = true;
+                sections.push(`[metadata]: clue.idAndRank mismatch. Expected ${expected.clue.idAndRank}, got ${actual.clue.idAndRank}`);
+            }
         }
 
         // 2. Check accounting buckets
@@ -68,6 +106,18 @@ export const SnapshotUtils = {
                 sections.push(report.text);
             }
         }
+        const actualShownClues = actual.shownClueDistribution;
+        const expectedShownClues = expected.shownClueDistribution;
+        if ((actualShownClues === undefined) !== (expectedShownClues === undefined)) {
+            hasMismatches = true;
+            sections.push(`[metadata]: shownClueDistribution ${expectedShownClues === undefined ? 'unexpected' : 'missing'}`);
+        } else if (actualShownClues !== undefined) {
+            const report = this.compareProbabilityMap(actualShownClues, expectedShownClues || {}, 'shownClueDistribution');
+            if (report.hasMismatches) {
+                hasMismatches = true;
+                sections.push(report.text);
+            }
+        }
 
         return {
             hasMismatches,
@@ -82,7 +132,7 @@ export const SnapshotUtils = {
         let hasMismatches = false;
         const lines: string[] = ['Category [accounting]:'];
 
-        const buckets = ['resolved', 'pending', 'sieved', 'overflow', 'capped', 'rounding', 'recoveredRounding', 'recoveredSieved'];
+        const buckets = ['resolved', 'clueIncompatible', 'pending', 'sieved', 'overflow', 'capped', 'rounding', 'recoveredRounding', 'recoveredSieved'];
         for (const bucket of buckets) {
             const aVal = actual[bucket] || 0;
             const eVal = expected[bucket] || 0;
@@ -190,12 +240,12 @@ export const SnapshotUtils = {
         }
 
         const cleanStats = this.sanitize(stats);
-        fs.writeFileSync(snapshotPath, JSON.stringify(cleanStats, null, 2));
+        fs.writeFileSync(snapshotPath, JSON.stringify(cleanStats, null, 2) + '\n');
 
         if (registry) {
             const humanPath = path.join(snapshotDir, `${name}.human.json`);
             const humanStats = HumanizationService.humanize(cleanStats, registry);
-            fs.writeFileSync(humanPath, JSON.stringify(humanStats, null, 2));
+            fs.writeFileSync(humanPath, JSON.stringify(humanStats, null, 2) + '\n');
             console.log(`Snapshots saved: ${name} (+human)`);
         } else {
             console.log(`Snapshot saved: ${name}`);
@@ -234,8 +284,12 @@ export const SnapshotUtils = {
             any: sortMap(stats.any),
             count: sortMap(stats.count),
             combos: sortMap(stats.combos),
+            ...(stats.shownClueDistribution !== undefined ? { shownClueDistribution: sortMap(stats.shownClueDistribution) } : {}),
             accuracy: round(stats.accuracy),
-            accounting: stats.accounting
+            accounting: stats.accounting,
+            ...(stats.clue?.knownSpace !== undefined
+                ? { clue: { idAndRank: stats.clue.idAndRank, knownSpace: round(stats.clue.knownSpace) } }
+                : {})
         };
     }
 };
