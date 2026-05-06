@@ -144,6 +144,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: read
     steps:
       - uses: actions/checkout@v4
         with:
@@ -201,3 +202,31 @@ jobs:
           fi
 
           git push origin "HEAD:refs/heads/release-history"
+
+      - name: Delete archived release branch
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ needs.release.outputs.pr_number }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+        run: |
+          HEAD_OWNER=$(gh pr view "$PR_NUMBER" --json headRepositoryOwner --jq '.headRepositoryOwner.login')
+          HEAD_REF=$(gh pr view "$PR_NUMBER" --json headRefName --jq '.headRefName')
+
+          if [ "$HEAD_OWNER" != "$REPOSITORY_OWNER" ]; then
+            echo "Skipping branch deletion for fork-owned PR branch $HEAD_OWNER:$HEAD_REF."
+            exit 0
+          fi
+
+          case "$HEAD_REF" in
+            main|release-history|"")
+              echo "::error::Refusing to delete protected or empty branch name: '$HEAD_REF'"
+              exit 1
+              ;;
+          esac
+
+          if git ls-remote --exit-code --heads origin "$HEAD_REF" >/dev/null 2>&1; then
+            git push origin --delete "$HEAD_REF"
+          else
+            echo "Branch '$HEAD_REF' is already deleted."
+          fi

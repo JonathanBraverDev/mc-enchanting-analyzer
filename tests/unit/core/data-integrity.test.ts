@@ -106,6 +106,14 @@ describe('Data integrity: latest vanilla 1.21.11 spot checks', () => {
         assert.ok(!Object.hasOwn(global_enchantments['Quick Charge'].levels, 'III'), 'Quick Charge III is vanilla 52-50 and cannot be rolled');
     });
 
+    it('omits Thorns III because its vanilla range starts above reachable table rolls', () => {
+        assert.deepStrictEqual(global_enchantments.Thorns.levels, {
+            I: [10, 60],
+            II: [30, 80]
+        });
+        assert.ok(!Object.hasOwn(global_enchantments.Thorns.levels, 'III'), 'Thorns III starts at modified level 50 and cannot be rolled directly');
+    });
+
     it('Impaling participates in the 1.21.11 damage exclusive set', () => {
         const damageNames = ['Sharpness', 'Smite', 'Bane of Arthropods', 'Density', 'Breach'];
         const impalingId = getEnchantId(reg, 'Impaling');
