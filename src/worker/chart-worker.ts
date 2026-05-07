@@ -74,7 +74,8 @@ shell.onRun = async (msg: WorkerRequest, engine, signal) => {
                     snapshotType: 'chart-cell',
                     input: { ...input, xpLevel: xp },
                     refinementLevel: level,
-                    clue: input.clue
+                    clue: input.clue,
+                    includeCombos: false
                 },
                 result.frontiers
             );

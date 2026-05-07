@@ -41,7 +41,7 @@ export class SearchService {
             modLevel,
             threshold = 0n,
             limit = ENGINE_LIMITS.MAX_ITERATIONS_UNBOUNDED,
-            resultsLimit = ENGINE_LIMITS.MAX_RESULTS_SIZE,
+            resultsLimit = ENGINE_LIMITS.MAX_RESULTS_UNBOUNDED,
             timing: timingResult,
             mat,
             existingState,
@@ -126,7 +126,7 @@ export class SearchService {
             threshold = ENGINE_LIMITS.DEFAULT_THRESHOLD,
             signal,
             maxIterations,
-            resultsLimit = ENGINE_LIMITS.MAX_RESULTS_SIZE,
+            resultsLimit = ENGINE_LIMITS.MAX_RESULTS_UNBOUNDED,
             useCache = true,
             instrumentation
         } = request;
@@ -238,7 +238,7 @@ export class SearchService {
                     existingState,
                     threshold: activeThreshold,
                     limit: checkpoint.limit,
-                    resultsLimit: request.resultsLimit ?? ENGINE_LIMITS.MAX_RESULTS_SIZE,
+                    resultsLimit: request.resultsLimit ?? ENGINE_LIMITS.MAX_RESULTS_UNBOUNDED,
                     signal,
                     instrumentation,
                     timing: request.timing,

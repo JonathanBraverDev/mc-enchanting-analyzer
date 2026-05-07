@@ -11,6 +11,7 @@ import { SummaryService } from '#services/SummaryService.js';
 import { SummaryAggregationService } from '#services/SummaryAggregationService.js';
 import { SerializationService } from '#services/SerializationService.js';
 import { HumanizationService } from '#services/HumanizationService.js';
+import { SnapshotService } from '#services/SnapshotService.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { EngineFactory } from '#engine/factory.js';
 import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
@@ -203,6 +204,42 @@ describe('SummaryService', () => {
         const tracker = new SearchStateTracker();
         const result = SummaryService.summarize({ combos: combos as any, tracker, indexToEnchant: [] });
         assert.ok(Object.keys(result.combos).includes('ff'));
+    });
+
+    it('chart-cell snapshots expose aggregate buckets without a combo payload', () => {
+        const engine = EngineFactory.create(DATA, '1.20');
+        const registry = engine.registry;
+        const sharpness = registry.idMap.get('Sharpness')!;
+        const sharpnessRank = ((sharpness << 8) | 1) as PackedEnchant;
+        const combos = new Map<PackedCombo, bigint>([
+            [ComboUtils.pack([sharpnessRank], registry.enchantToIndex), PRECISION]
+        ]);
+        const tracker = new SearchStateTracker();
+        tracker.mass.record('resolved', PRECISION);
+
+        const cell = SnapshotService.create(
+            registry,
+            tracker,
+            combos,
+            {
+                snapshotType: 'chart-cell',
+                input: {
+                    version: '1.20',
+                    category: 'sword',
+                    material: 'diamond',
+                    xpLevel: 30,
+                    clue: null
+                },
+                refinementLevel: 'ultra',
+                clue: null,
+                includeCombos: false
+            }
+        );
+
+        assert.strictEqual('combos' in cell, false);
+        assert.strictEqual((cell as any).buckets.anyByEnchantId[sharpness], 1);
+        assert.strictEqual((cell as any).buckets.rankByIdAndRank[sharpnessRank], 1);
+        assert.strictEqual((cell as any).buckets.countBySize[1], 1);
     });
 });
 

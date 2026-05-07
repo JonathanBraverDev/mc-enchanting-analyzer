@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## v5.4.2 (2026-05-07)
+
+### Fixed
+- **Complete result accounting**: Engine defaults no longer cap terminal combinations before building result summaries.
+
 ## v5.4.1 (2026-05-06)
 
 ### Fixed
