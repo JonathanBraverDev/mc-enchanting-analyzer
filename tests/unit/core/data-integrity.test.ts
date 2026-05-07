@@ -6,7 +6,7 @@
  *
  *   - Every enchantment has required fields with sensible values
  *   - Level ranges are valid (min ≥ 1, min < max)
- *   - Every conflict edge resolves to known enchantments and version boundaries
+ *   - Every conflict rule resolves to known enchantments and version boundaries
  *   - Every enchantment-group member is a known enchantment
  *   - Conflict pairs are symmetric after factory expansion
  *     (if A conflicts with B then B must conflict with A)
@@ -16,8 +16,8 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { global_enchantments, conflict_edges, enchantment_groups } from '#data/enchantments.js';
-import { category_pool_rules, material_rules } from '#data/availability.js';
+import { global_enchantments, enchantment_groups } from '#data/enchantments.js';
+import { conflict_rules, category_pool_rules, material_rules } from '#data/registry-rules.js';
 import { EngineFactory } from '#engine/factory.js';
 import { DATA } from '#data/index.js';
 import { hasConflict, getEnchantId, getEnchantability } from '#core/registry.js';
@@ -28,6 +28,7 @@ import type { EnchantmentData } from '#types/index.js';
 
 const registryEnchantments: EnchantmentData["global_enchantments"] = global_enchantments;
 const registryVersions: EnchantmentData["versions"] = versions;
+const registryConflictRules: EnchantmentData["conflict_rules"] = conflict_rules;
 const registryCategoryRules: EnchantmentData["category_pool_rules"] = category_pool_rules;
 const registryMaterialRules: EnchantmentData["material_rules"] = material_rules;
 const enchantNames = Object.keys(registryEnchantments);
@@ -159,9 +160,9 @@ describe('Data integrity: latest vanilla 1.21.11 spot checks', () => {
     });
 });
 
-// ── Conflict edge validity ─────────────────────────────────────────────────────
+// ── Conflict rule validity ─────────────────────────────────────────────────────
 
-describe('Data integrity: conflict edges resolve to known data', () => {
+describe('Data integrity: conflict rules resolve to known data', () => {
     it('enchantment entries do not declare inline conflicts', () => {
         const inlineConflicts: string[] = [];
         for (const [name, ench] of Object.entries(registryEnchantments)) {
@@ -171,47 +172,34 @@ describe('Data integrity: conflict edges resolve to known data', () => {
         assert.deepStrictEqual(inlineConflicts, [], `enchantments with inline conflicts: ${inlineConflicts.join(', ')}`);
     });
 
-    it('all conflict edges reference two known, distinct enchantments', () => {
-        const badEdges: string[] = [];
-        for (const edge of conflict_edges) {
-            const [left, right] = edge.enchants;
+    it('all conflict rules reference two known, distinct enchantments', () => {
+        const badRules: string[] = [];
+        for (const rule of registryConflictRules) {
+            const [left, right] = rule.enchants;
             if (left === right || !enchantNames.includes(left) || !enchantNames.includes(right)) {
-                badEdges.push(`${left} ↔ ${right}`);
+                badRules.push(`${left} ↔ ${right}`);
             }
         }
 
         assert.deepStrictEqual(
-            badEdges, [],
-            `invalid conflict edges: ${badEdges.join(', ')}`
+            badRules, [],
+            `invalid conflict rules: ${badRules.join(', ')}`
         );
     });
 
-    it('all conflict edge version boundaries are selectable registry versions', () => {
-        const versionKeys = new Set(Object.keys(registryVersions));
-        const missing = conflict_edges.flatMap(edge => {
-            const bad: string[] = [];
-            if (!versionKeys.has(edge.valid_from)) bad.push(`${edge.enchants.join(' ↔ ')} valid_from: ${edge.valid_from}`);
-            const validUntil = 'valid_until' in edge ? edge.valid_until : undefined;
-            if (validUntil && !versionKeys.has(validUntil)) bad.push(`${edge.enchants.join(' ↔ ')} valid_until: ${validUntil}`);
-            return bad;
-        });
-
-        assert.deepStrictEqual(missing, [], `conflict edge versions missing from versions manifest: ${missing.join(', ')}`);
-    });
-
-    it('does not duplicate conflict edges for the same pair and version range', () => {
+    it('does not duplicate conflict rules for the same pair and version range', () => {
         const seen = new Set<string>();
         const duplicates: string[] = [];
 
-        for (const edge of conflict_edges) {
-            const pair = [...edge.enchants].sort().join('|');
-            const validUntil = 'valid_until' in edge ? edge.valid_until : '';
-            const key = `${pair}|${edge.valid_from}|${validUntil}`;
+        for (const rule of registryConflictRules) {
+            const pair = [...rule.enchants].sort().join('|');
+            const validUntil = 'valid_until' in rule ? rule.valid_until : '';
+            const key = `${pair}|${rule.valid_from}|${validUntil}`;
             if (seen.has(key)) duplicates.push(key);
             seen.add(key);
         }
 
-        assert.deepStrictEqual(duplicates, [], `duplicate conflict edges: ${duplicates.join(', ')}`);
+        assert.deepStrictEqual(duplicates, [], `duplicate conflict rules: ${duplicates.join(', ')}`);
     });
 });
 
@@ -276,10 +264,16 @@ describe('Data integrity: version manifests reference known data', () => {
     });
 });
 
-describe('Data integrity: availability timeline rules reference known data', () => {
-    it('all category and material rule boundaries are selectable registry versions', () => {
+describe('Data integrity: registry rules reference known data', () => {
+    it('all registry rule boundaries are selectable registry versions', () => {
         const versionKeys = new Set(Object.keys(registryVersions));
         const missing = [
+            ...registryConflictRules.flatMap(rule => {
+                const bad: string[] = [];
+                if (!versionKeys.has(rule.valid_from)) bad.push(`${rule.enchants.join(' ↔ ')} valid_from: ${rule.valid_from}`);
+                if (rule.valid_until && !versionKeys.has(rule.valid_until)) bad.push(`${rule.enchants.join(' ↔ ')} valid_until: ${rule.valid_until}`);
+                return bad;
+            }),
             ...registryCategoryRules.flatMap(rule => {
                 const bad: string[] = [];
                 if (!versionKeys.has(rule.valid_from)) bad.push(`${rule.category} valid_from: ${rule.valid_from}`);
@@ -294,7 +288,7 @@ describe('Data integrity: availability timeline rules reference known data', () 
             })
         ];
 
-        assert.deepStrictEqual(missing, [], `availability rule versions missing from versions manifest: ${missing.join(', ')}`);
+        assert.deepStrictEqual(missing, [], `registry rule versions missing from versions manifest: ${missing.join(', ')}`);
     });
 
     it('category rules reference known groups or enchantments', () => {
@@ -376,7 +370,7 @@ describe('Data integrity: conflict symmetry after RegistryFactory.build()', () =
         );
     });
 
-    // Spot-check specific pairs that are compiled from unordered conflict edges.
+    // Spot-check specific pairs that are compiled from unordered conflict rules.
     it('Fortune ↔ Silk Touch conflict is symmetric', () => {
         const fortuneId = getEnchantId(reg, 'Fortune');
         const silkId    = getEnchantId(reg, 'Silk Touch');
@@ -450,7 +444,7 @@ describe('Data integrity: conflict bitsets only include active version enchantme
 // ── Material coverage ─────────────────────────────────────────────────────────
 
 describe('Data integrity: material enchantability coverage', () => {
-    it('every material availability rule has an enchantability entry', () => {
+    it('every material rule has an enchantability entry', () => {
         const allMaterials = new Set<string>();
         for (const rule of registryMaterialRules) allMaterials.add(rule.material);
 

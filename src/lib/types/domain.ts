@@ -26,11 +26,11 @@ export interface Enchantment {
 }
 
 /**
- * Historical conflict relationship between two enchantments.
- * Conflict records are unordered pairs and are compiled into symmetric bitsets.
+ * Version-ranged conflict rule between two enchantments.
+ * Conflict rules are unordered pairs and are compiled into symmetric bitsets.
  * @property valid_until First version where this conflict no longer applies.
  */
-export interface ConflictEdge {
+export interface ConflictRule {
   enchants: [string, string];
   valid_from: string;
   valid_until?: string;
@@ -50,10 +50,10 @@ export interface CategoryPoolRule {
 }
 
 /**
- * Version-ranged material availability rule.
+ * Version-ranged material rule.
  * @property valid_until First version where this material rule no longer applies.
  */
-export interface MaterialAvailabilityRule {
+export interface MaterialRule {
   material: string;
   valid_from: string;
   valid_until?: string;
@@ -100,9 +100,9 @@ export interface EnchantmentData {
   global_enchantments: {
     [name: string]: Enchantment;
   };
-  conflict_edges: ConflictEdge[];
+  conflict_rules: ConflictRule[];
   category_pool_rules: CategoryPoolRule[];
-  material_rules: MaterialAvailabilityRule[];
+  material_rules: MaterialRule[];
   enchantment_groups: {
     [groupName: string]: string[];
   };
