@@ -52,11 +52,15 @@ describe('Registry & Data Rules Test Suite', () => {
         });
 
         it('should correctly handle Protection conflicts (1.14 vs 1.14.3)', () => {
+            const reg113 = EngineFactory.create(DATA, '1.13').registry;
+            const prot113Id = getEnchantId(reg113, 'Protection')!;
+            const fireProt113Id = getEnchantId(reg113, 'Fire Protection')!;
+            assert.strictEqual(hasConflict(reg113, prot113Id, fireProt113Id), true, '1.13: Protection vs Fire Protection should conflict');
+
             const reg114 = EngineFactory.create(DATA, '1.14').registry;
             const protId = getEnchantId(reg114, 'Protection')!;
             const fireProtId = getEnchantId(reg114, 'Fire Protection')!;
 
-            // 1.14: No protection conflicts allowed
             assert.strictEqual(hasConflict(reg114, protId, fireProtId), false, '1.14: Protection vs Fire Protection should NOT conflict');
 
             // 1.14.3: ALL protections conflict

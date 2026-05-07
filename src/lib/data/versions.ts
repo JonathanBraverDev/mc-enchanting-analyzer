@@ -81,22 +81,10 @@ export const versions = {
     "item_enchantments": {
       "crossbow": ["crossbow_pool"]
     },
-    "materials": ["crossbow"],
-    "overrides": {
-      "Protection": {"conflicts": []},
-      "Fire Protection": {"conflicts": []},
-      "Blast Protection": {"conflicts": []},
-      "Projectile Protection": {"conflicts": []}
-    }
+    "materials": ["crossbow"]
   },
   "1.14.3": {
-    "extends": "1.14",
-    "overrides": {
-      "Protection": {"conflicts": ["Fire Protection", "Blast Protection", "Projectile Protection"]},
-      "Fire Protection": {"conflicts": ["Protection", "Blast Protection", "Projectile Protection"]},
-      "Blast Protection": {"conflicts": ["Protection", "Fire Protection", "Projectile Protection"]},
-      "Projectile Protection": {"conflicts": ["Protection", "Fire Protection", "Blast Protection"]}
-    }
+    "extends": "1.14"
   },
   "1.16": {
     "extends": "1.14.3",

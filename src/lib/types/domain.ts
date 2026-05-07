@@ -15,16 +15,25 @@ export interface EnchantmentLevels {
  * Definition of an enchantment from data files.
  * @property weight Relative weight for selection (higher = more likely).
  * @property levels Rank-to-level-range mappings.
- * @property conflicts List of enchantment names that conflict with this one.
  * @property valid_from Earliest version where this enchantment is available.
  * @property valid_to Latest version where this enchantment is available.
  */
 export interface Enchantment {
   weight: number;
   levels: EnchantmentLevels;
-  conflicts?: string[];
   valid_from?: string;
   valid_to?: string;
+}
+
+/**
+ * Historical conflict relationship between two enchantments.
+ * Conflict records are unordered pairs and are compiled into symmetric bitsets.
+ * @property valid_until First version where this conflict no longer applies.
+ */
+export interface ConflictEdge {
+  enchants: [string, string];
+  valid_from: string;
+  valid_until?: string;
 }
 
 /**
@@ -74,6 +83,7 @@ export interface EnchantmentData {
   global_enchantments: {
     [name: string]: Enchantment;
   };
+  conflict_edges: ConflictEdge[];
   enchantment_groups: {
     [groupName: string]: string[];
   };
