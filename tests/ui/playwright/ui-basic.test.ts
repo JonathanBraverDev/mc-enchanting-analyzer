@@ -38,20 +38,28 @@ test.describe('Basic UI Functionality', () => {
 
     test('should set enchanting level when clicking the chart sweep', async () => {
         await analyzer.waitForChartIdle();
+        await expect(analyzer.levelValue).toHaveText('30');
+        await expect(analyzer.levelSlider).toHaveValue('30');
 
         const target = await analyzer.page.evaluate(() => {
             const app = (window as any).App;
             const chart = app.chartManager.chartInstance;
-            const canvas = document.getElementById('mainChart') as HTMLCanvasElement;
-            const bounds = canvas.getBoundingClientRect();
+            const midpointY = (chart.chartArea.top + chart.chartArea.bottom) / 2;
             return {
-                x: bounds.left + chart.scales.x.getPixelForValue(14),
-                y: bounds.top + ((chart.chartArea.top + chart.chartArea.bottom) / 2)
+                outsideX: Math.max(1, chart.chartArea.left - 5),
+                y: midpointY,
+                x: chart.scales.x.getPixelForValue(14)
             };
         });
 
-        await analyzer.page.mouse.click(target.x, target.y);
+        await analyzer.chartCanvas.click({ position: { x: target.outsideX, y: target.y } });
+        await expect(analyzer.levelValue).toHaveText('30');
+        await expect(analyzer.levelSlider).toHaveValue('30');
+
+        await analyzer.chartCanvas.click({ position: { x: target.x, y: target.y } });
         await expect(analyzer.levelValue).toHaveText('15');
+        await expect(analyzer.levelSlider).toHaveValue('15');
+        await analyzer.waitForRefinementComplete();
     });
 
     test('should display total enchantability', async () => {
