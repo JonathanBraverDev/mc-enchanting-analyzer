@@ -21,6 +21,7 @@ export class RegistryFactory {
             mergedOverrides: {},
             resolvedRegistry: {},
             mergedMaterials: new Set<string>(),
+            categoryMaterials: {},
             multiEnchantBooks: true,
             idMap: new Map(),
             revIdMap: [],
@@ -187,12 +188,11 @@ export class RegistryFactory {
 
         data.category_pool_rules.forEach(rule => {
             addId(state.catIdMap, rule.category);
-            addId(state.matIdMap, rule.category);
         });
 
-        data.constants.ITEM_SPECIFIC_CATS.forEach(cat => {
-            addId(state.catIdMap, cat);
-            addId(state.matIdMap, cat);
+        data.category_material_rules.forEach(rule => {
+            addId(state.catIdMap, rule.category);
+            rule.materials.forEach(material => addId(state.matIdMap, material));
         });
     }
 
@@ -213,6 +213,10 @@ export class RegistryFactory {
             if (this.isTimelineEntryActive(state.version, rule.valid_from, rule.valid_until)) {
                 state.mergedMaterials.add(rule.material);
             }
+        }
+
+        for (const rule of data.category_material_rules) {
+            state.categoryMaterials[rule.category] = rule.materials;
         }
     }
 

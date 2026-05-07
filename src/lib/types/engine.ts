@@ -128,6 +128,10 @@ export interface MergedOverrides {
   [enchantment: string]: Partial<Enchantment>;
 }
 
+export interface CategoryMaterials {
+  [category: string]: string[];
+}
+
 /**
  * Packed representation of a search node to minimize object and array overhead.
  */
@@ -200,6 +204,7 @@ export interface RegistryState {
     mergedOverrides: MergedOverrides;
     resolvedRegistry: ResolvedRegistry;
     mergedMaterials: Set<string>;
+    categoryMaterials: CategoryMaterials;
     multiEnchantBooks: boolean;
     idMap: Map<string, number>;
     revIdMap: string[];

@@ -7,6 +7,7 @@
  */
 import { EnchantEngine, EngineFactory } from '#engine/index.js';
 import { DATA } from '#data/index.js';
+import { getEligibleMaterials } from '#core/registry.js';
 import { SearchResult, EngineInstrumentation, ExploredMassSample } from '#types/index.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -34,40 +35,10 @@ const findArg = (key: string) => {
 function getJobs(engine: EnchantEngine): Array<{ cat: string; mat: string }> {
     const registry = engine.registry;
     const categories = Object.keys(registry.mergedItems);
-    const versionMaterials = registry.mergedMaterials;
-
-    const { ARMOR_CATS, ITEM_SPECIFIC_CATS } = DATA.constants;
-    const armorMats = Object.keys(DATA.material_values.armor).filter(m => versionMaterials.has(m as any));
-    const toolMats = Object.keys(DATA.material_values.tools).filter(m => versionMaterials.has(m as any));
-
     const jobs: Array<{ cat: string; mat: string }> = [];
 
     for (const cat of categories) {
-        if (cat === 'book') {
-            jobs.push({ cat: 'book', mat: 'book' });
-            continue;
-        }
-
-        if (ITEM_SPECIFIC_CATS.includes(cat)) {
-            if (versionMaterials.has(cat)) {
-                jobs.push({ cat, mat: cat });
-            } else if (cat === 'spear') {
-                for (const mat of toolMats) jobs.push({ cat, mat });
-            }
-            continue;
-        }
-
-        if (ARMOR_CATS.includes(cat)) {
-            for (const mat of armorMats) {
-                if (mat === 'turtle_shell' && cat !== 'helmet') continue;
-                jobs.push({ cat, mat });
-            }
-            continue;
-        }
-
-        for (const mat of toolMats) {
-            jobs.push({ cat, mat });
-        }
+        for (const mat of getEligibleMaterials(registry, cat)) jobs.push({ cat, mat });
     }
 
     return jobs;

@@ -86,3 +86,27 @@ export const material_rules = [
   { material: "mace", valid_from: "1.21" },
   { material: "copper", valid_from: "1.21.9" }
 ] satisfies EnchantmentData["material_rules"];
+
+const tool_materials = ["wood", "stone", "iron", "gold", "diamond", "netherite", "copper"];
+const armor_materials = ["leather", "chain", "iron", "gold", "diamond", "netherite", "copper"];
+
+export const category_material_rules = [
+  { category: "sword", materials: tool_materials },
+  { category: "pickaxe", materials: tool_materials },
+  { category: "axe", materials: tool_materials },
+  { category: "shovel", materials: tool_materials },
+  { category: "hoe", materials: tool_materials },
+  { category: "spear", materials: tool_materials },
+
+  { category: "helmet", materials: [...armor_materials, "turtle_shell"] },
+  { category: "chestplate", materials: armor_materials },
+  { category: "leggings", materials: armor_materials },
+  { category: "boots", materials: armor_materials },
+
+  { category: "bow", materials: ["bow"] },
+  { category: "book", materials: ["book"] },
+  { category: "fishing_rod", materials: ["fishing_rod"] },
+  { category: "trident", materials: ["trident"] },
+  { category: "crossbow", materials: ["crossbow"] },
+  { category: "mace", materials: ["mace"] }
+] satisfies EnchantmentData["category_material_rules"];

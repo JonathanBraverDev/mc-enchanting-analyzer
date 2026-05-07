@@ -17,7 +17,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { global_enchantments, enchantment_groups } from '#data/enchantments.js';
-import { conflict_rules, category_pool_rules, material_rules } from '#data/registry-rules.js';
+import { conflict_rules, category_pool_rules, material_rules, category_material_rules } from '#data/registry-rules.js';
 import { EngineFactory } from '#engine/factory.js';
 import { DATA } from '#data/index.js';
 import { hasConflict, getEnchantId, getEnchantability } from '#core/registry.js';
@@ -31,6 +31,7 @@ const registryVersions: EnchantmentData["versions"] = versions;
 const registryConflictRules: EnchantmentData["conflict_rules"] = conflict_rules;
 const registryCategoryRules: EnchantmentData["category_pool_rules"] = category_pool_rules;
 const registryMaterialRules: EnchantmentData["material_rules"] = material_rules;
+const registryCategoryMaterialRules: EnchantmentData["category_material_rules"] = category_material_rules;
 const enchantNames = Object.keys(registryEnchantments);
 const versionEntries = Object.entries(registryVersions);
 
@@ -344,6 +345,33 @@ describe('Data integrity: registry rules reference known data', () => {
             .filter(material => !toolMats.has(material) && !armorMats.has(material));
 
         assert.deepStrictEqual(missing, [], `material rules with unknown materials: ${missing.join(', ')}`);
+    });
+
+    it('category material rules reference known categories and materials', () => {
+        const categories = new Set(registryCategoryRules.map(rule => rule.category));
+        const toolMats = new Set(Object.keys(material_values.tools));
+        const armorMats = new Set(Object.keys(material_values.armor));
+        const unknown: string[] = [];
+
+        for (const rule of registryCategoryMaterialRules) {
+            if (!categories.has(rule.category)) unknown.push(`${rule.category}: missing category rule`);
+            if (rule.materials.length === 0) unknown.push(`${rule.category}: empty materials`);
+            for (const material of rule.materials) {
+                if (!toolMats.has(material) && !armorMats.has(material)) {
+                    unknown.push(`${rule.category}/${material}`);
+                }
+            }
+        }
+
+        assert.deepStrictEqual(unknown, [], `category material rules with unknown entries: ${unknown.join(', ')}`);
+    });
+
+    it('every category rule has an explicit material binding', () => {
+        const boundCategories = new Set(registryCategoryMaterialRules.map(rule => rule.category));
+        const missing = [...new Set(registryCategoryRules.map(rule => rule.category))]
+            .filter(category => !boundCategories.has(category));
+
+        assert.deepStrictEqual(missing, [], `category rules without material bindings: ${missing.join(', ')}`);
     });
 });
 
