@@ -37,6 +37,29 @@ export interface ConflictEdge {
 }
 
 /**
+ * Version-ranged category pool rule.
+ * Missing groups means the category uses every active table enchantment.
+ * That derived mode is currently valid only for enchanted books.
+ * @property valid_until First version where this category rule no longer applies.
+ */
+export interface CategoryPoolRule {
+  category: string;
+  valid_from: string;
+  valid_until?: string;
+  groups?: string[];
+}
+
+/**
+ * Version-ranged material availability rule.
+ * @property valid_until First version where this material rule no longer applies.
+ */
+export interface MaterialAvailabilityRule {
+  material: string;
+  valid_from: string;
+  valid_until?: string;
+}
+
+/**
  * Game mechanics configuration for a version.
  * @property enchantability_bonus_divisor Divisor for the enchantability stat (default 15).
  * @property random_bonus_range Range of random multiplier applied to base modified level.
@@ -55,18 +78,12 @@ export interface VersionMechanics {
  * Version-specific enchantment configuration.
  * Supports inheritance and overrides for progressive version refinement.
  * @property extends Parent version to inherit enchantments from.
- * @property item_enchantments Maps categories to lists of enchantments available on them.
- * @property materials Available materials for this version.
  * @property mechanics Game mechanics changes.
  * @property multi_enchant_books Whether enchanted books can have multiple enchantments.
  * @property overrides Partial enchantment definitions to override inherited values.
  */
 export interface VersionManifest {
   extends?: string;
-  item_enchantments?: {
-    [category: string]: string[];
-  };
-  materials?: string[];
   mechanics?: VersionMechanics;
   multi_enchant_books?: boolean;
   overrides?: {
@@ -84,6 +101,8 @@ export interface EnchantmentData {
     [name: string]: Enchantment;
   };
   conflict_edges: ConflictEdge[];
+  category_pool_rules: CategoryPoolRule[];
+  material_rules: MaterialAvailabilityRule[];
   enchantment_groups: {
     [groupName: string]: string[];
   };

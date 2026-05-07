@@ -51,6 +51,47 @@ describe('Registry & Data Rules Test Suite', () => {
              assert.ok(getEligibleMaterials(v1219, 'sword').includes('copper'), '1.21.9: SHOULD have copper');
         });
 
+        it('should expose category availability from timeline rules', () => {
+            const cases = [
+                { version: '1.0', available: ['sword', 'pickaxe'], unavailable: ['book', 'fishing_rod', 'trident', 'crossbow', 'hoe', 'mace', 'spear'] },
+                { version: '1.4.6', available: ['book'], unavailable: ['fishing_rod'] },
+                { version: '1.7.2', available: ['fishing_rod'], unavailable: ['trident'] },
+                { version: '1.13', available: ['trident'], unavailable: ['crossbow'] },
+                { version: '1.14', available: ['crossbow'], unavailable: ['hoe'] },
+                { version: '1.16', available: ['hoe'], unavailable: ['mace'] },
+                { version: '1.21', available: ['mace'], unavailable: ['spear'] },
+                { version: '1.21.11', available: ['spear'], unavailable: [] }
+            ];
+
+            for (const { version, available, unavailable } of cases) {
+                const registry = EngineFactory.create(DATA, version).registry;
+                for (const cat of available) assert.strictEqual(isCategoryAvailable(registry, cat), true, `${version}: ${cat} should be available`);
+                for (const cat of unavailable) assert.strictEqual(isCategoryAvailable(registry, cat), false, `${version}: ${cat} should not be available`);
+            }
+        });
+
+        it('should expose material availability from timeline rules', () => {
+            const v10 = EngineFactory.create(DATA, '1.0').registry;
+            assert.deepStrictEqual(getEligibleMaterials(v10, 'sword'), ['diamond', 'gold', 'iron', 'stone', 'wood']);
+            assert.ok(getEligibleMaterials(v10, 'helmet').includes('leather'), '1.0: armor should include leather');
+
+            const v11 = EngineFactory.create(DATA, '1.1').registry;
+            assert.deepStrictEqual(getEligibleMaterials(v11, 'bow'), ['bow']);
+
+            const v172 = EngineFactory.create(DATA, '1.7.2').registry;
+            assert.deepStrictEqual(getEligibleMaterials(v172, 'fishing_rod'), ['fishing_rod']);
+
+            const v113 = EngineFactory.create(DATA, '1.13').registry;
+            assert.deepStrictEqual(getEligibleMaterials(v113, 'trident'), ['trident']);
+            assert.deepStrictEqual(getEligibleMaterials(v113, 'helmet').filter(mat => mat === 'turtle_shell'), ['turtle_shell']);
+
+            const v114 = EngineFactory.create(DATA, '1.14').registry;
+            assert.deepStrictEqual(getEligibleMaterials(v114, 'crossbow'), ['crossbow']);
+
+            const v121 = EngineFactory.create(DATA, '1.21').registry;
+            assert.deepStrictEqual(getEligibleMaterials(v121, 'mace'), ['mace']);
+        });
+
         it('should correctly handle Protection conflicts (1.14 vs 1.14.3)', () => {
             const reg113 = EngineFactory.create(DATA, '1.13').registry;
             const prot113Id = getEnchantId(reg113, 'Protection')!;

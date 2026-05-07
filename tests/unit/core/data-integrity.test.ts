@@ -17,26 +17,33 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { global_enchantments, conflict_edges, enchantment_groups } from '#data/enchantments.js';
+import { category_pool_rules, material_rules } from '#data/availability.js';
 import { EngineFactory } from '#engine/factory.js';
 import { DATA } from '#data/index.js';
-import { hasConflict, getEnchantId, getEnchantability } from '#core/registry.js';;
+import { hasConflict, getEnchantId, getEnchantability } from '#core/registry.js';
 import { versions } from '#data/versions.js';
 import { material_values } from '#data/materials.js';
-import type { EnchantmentData, VersionManifest } from '#types/index.js';
+import { VersionUtils } from '#utils/index.js';
+import type { EnchantmentData } from '#types/index.js';
 
 const registryEnchantments: EnchantmentData["global_enchantments"] = global_enchantments;
 const registryVersions: EnchantmentData["versions"] = versions;
+const registryCategoryRules: EnchantmentData["category_pool_rules"] = category_pool_rules;
+const registryMaterialRules: EnchantmentData["material_rules"] = material_rules;
 const enchantNames = Object.keys(registryEnchantments);
 const versionEntries = Object.entries(registryVersions);
 
 function collectVersionMaterials(version: string): Set<string> {
     const materials = new Set<string>();
-    let current: VersionManifest | undefined = registryVersions[version];
-    while (current) {
-        for (const mat of current.materials ?? []) materials.add(mat);
-        current = current.extends ? registryVersions[current.extends] : undefined;
+    for (const rule of registryMaterialRules) {
+        if (isTimelineEntryActive(version, rule.valid_from, rule.valid_until)) materials.add(rule.material);
     }
     return materials;
+}
+
+function isTimelineEntryActive(version: string, validFrom: string, validUntil?: string): boolean {
+    if (VersionUtils.compare(version, validFrom) < 0) return false;
+    return validUntil === undefined || VersionUtils.compare(version, validUntil) < 0;
 }
 
 // ── Enchantment required fields ───────────────────────────────────────────────
@@ -257,36 +264,6 @@ describe('Data integrity: version manifests reference known data', () => {
         assert.deepStrictEqual(cycles, [], `cyclic version inheritance: ${cycles.join(', ')}`);
     });
 
-    it('all version item pools reference known groups or enchantments', () => {
-        const groupNames = new Set(Object.keys(enchantment_groups));
-        const unknown: string[] = [];
-
-        for (const [version, manifest] of versionEntries) {
-            for (const [cat, entries] of Object.entries(manifest.item_enchantments ?? {})) {
-                for (const entry of entries) {
-                    if (!groupNames.has(entry) && !enchantNames.includes(entry)) {
-                        unknown.push(`${version} ${cat}: ${entry}`);
-                    }
-                }
-            }
-        }
-
-        assert.deepStrictEqual(unknown, [], `version pools with unknown entries: ${unknown.join(', ')}`);
-    });
-
-    it('book categories use an empty pool marker derived from the active registry', () => {
-        const invalidBookPools: string[] = [];
-        for (const [version, manifest] of versionEntries) {
-            const bookPool = manifest.item_enchantments?.['book'];
-            if (bookPool !== undefined && bookPool.length > 0) invalidBookPools.push(version);
-        }
-
-        assert.deepStrictEqual(invalidBookPools, [], `book versions with explicit pools: ${invalidBookPools.join(', ')}`);
-
-        const latestBookPool = EngineFactory.create(DATA, '1.21.11').registry.versionPool.get('book') ?? [];
-        assert.deepStrictEqual([...latestBookPool].sort(), [...enchantNames].sort());
-    });
-
     it('all version overrides reference known enchantments', () => {
         const unknown: string[] = [];
         for (const [version, manifest] of versionEntries) {
@@ -296,6 +273,83 @@ describe('Data integrity: version manifests reference known data', () => {
         }
 
         assert.deepStrictEqual(unknown, [], `version overrides for unknown enchantments: ${unknown.join(', ')}`);
+    });
+});
+
+describe('Data integrity: availability timeline rules reference known data', () => {
+    it('all category and material rule boundaries are selectable registry versions', () => {
+        const versionKeys = new Set(Object.keys(registryVersions));
+        const missing = [
+            ...registryCategoryRules.flatMap(rule => {
+                const bad: string[] = [];
+                if (!versionKeys.has(rule.valid_from)) bad.push(`${rule.category} valid_from: ${rule.valid_from}`);
+                if (rule.valid_until && !versionKeys.has(rule.valid_until)) bad.push(`${rule.category} valid_until: ${rule.valid_until}`);
+                return bad;
+            }),
+            ...registryMaterialRules.flatMap(rule => {
+                const bad: string[] = [];
+                if (!versionKeys.has(rule.valid_from)) bad.push(`${rule.material} valid_from: ${rule.valid_from}`);
+                if (rule.valid_until && !versionKeys.has(rule.valid_until)) bad.push(`${rule.material} valid_until: ${rule.valid_until}`);
+                return bad;
+            })
+        ];
+
+        assert.deepStrictEqual(missing, [], `availability rule versions missing from versions manifest: ${missing.join(', ')}`);
+    });
+
+    it('category rules reference known groups or enchantments', () => {
+        const groupNames = new Set(Object.keys(enchantment_groups));
+        const unknown: string[] = [];
+
+        for (const rule of registryCategoryRules) {
+            for (const entry of rule.groups ?? []) {
+                if (!groupNames.has(entry) && !enchantNames.includes(entry)) {
+                    unknown.push(`${rule.category}: ${entry}`);
+                }
+            }
+        }
+
+        assert.deepStrictEqual(unknown, [], `category rules with unknown entries: ${unknown.join(', ')}`);
+    });
+
+    it('only book category rules may omit groups, and explicit groups are never empty', () => {
+        const invalidDerived: string[] = [];
+        const emptyGroups: string[] = [];
+
+        for (const rule of registryCategoryRules) {
+            if (rule.groups === undefined && rule.category !== 'book') invalidDerived.push(rule.category);
+            if (rule.groups !== undefined && rule.groups.length === 0) emptyGroups.push(rule.category);
+        }
+
+        assert.deepStrictEqual(invalidDerived, [], `non-book derived category pools: ${invalidDerived.join(', ')}`);
+        assert.deepStrictEqual(emptyGroups, [], `category rules with empty groups: ${emptyGroups.join(', ')}`);
+
+        const latestBookPool = EngineFactory.create(DATA, '1.21.11').registry.versionPool.get('book') ?? [];
+        assert.deepStrictEqual([...latestBookPool].sort(), [...enchantNames].sort());
+    });
+
+    it('category rules do not overlap for the same selectable version', () => {
+        const overlaps: string[] = [];
+        for (const category of new Set(registryCategoryRules.map(rule => rule.category))) {
+            for (const version of Object.keys(registryVersions)) {
+                const active = registryCategoryRules.filter(rule =>
+                    rule.category === category && isTimelineEntryActive(version, rule.valid_from, rule.valid_until)
+                );
+                if (active.length > 1) overlaps.push(`${category}@${version}`);
+            }
+        }
+
+        assert.deepStrictEqual(overlaps, [], `overlapping category rules: ${overlaps.join(', ')}`);
+    });
+
+    it('material rules reference known material entries', () => {
+        const toolMats = new Set(Object.keys(material_values.tools));
+        const armorMats = new Set(Object.keys(material_values.armor));
+        const missing = registryMaterialRules
+            .map(rule => rule.material)
+            .filter(material => !toolMats.has(material) && !armorMats.has(material));
+
+        assert.deepStrictEqual(missing, [], `material rules with unknown materials: ${missing.join(', ')}`);
     });
 });
 
@@ -396,11 +450,9 @@ describe('Data integrity: conflict bitsets only include active version enchantme
 // ── Material coverage ─────────────────────────────────────────────────────────
 
 describe('Data integrity: material enchantability coverage', () => {
-    it('every material declared in any version has an enchantability entry', () => {
+    it('every material availability rule has an enchantability entry', () => {
         const allMaterials = new Set<string>();
-        for (const ver of Object.values(registryVersions)) {
-            for (const mat of ver.materials ?? []) allMaterials.add(mat);
-        }
+        for (const rule of registryMaterialRules) allMaterials.add(rule.material);
 
         const toolMats  = new Set(Object.keys(material_values.tools));
         const armorMats = new Set(Object.keys(material_values.armor));

@@ -42,7 +42,7 @@ export class RegistryFactory {
         // 1. Apply inheritance chain
         for (const vName of chain) {
             const manifest = data.versions[vName] as VersionManifest;
-            if (manifest) this.applyVersionManifest(state, data, manifest);
+            if (manifest) this.applyVersionManifest(state, manifest);
         }
 
         // 2. Finalize Registry data structure
@@ -51,10 +51,13 @@ export class RegistryFactory {
         // 3. Initialize mapping lookups
         this.initializeIdMaps(state, data);
 
-        // 4. Filter based on version ranges
+        // 4. Apply active category and material availability
+        this.applyAvailabilityRules(state, data);
+
+        // 5. Filter based on version ranges
         this.filterMergedPools(state);
 
-        // 5. Initialize active version pool
+        // 6. Initialize active version pool
         this.initializeVersionPool(state);
 
         return state;
@@ -80,16 +83,7 @@ export class RegistryFactory {
         return chain;
     }
 
-    private static applyVersionManifest(state: RegistryState, data: EnchantmentData, manifest: VersionManifest): void {
-        if (manifest.item_enchantments) {
-            for (const [cat, content] of Object.entries(manifest.item_enchantments)) {
-                const resolved = content.flatMap(item => {
-                    return data.enchantment_groups[item] || [item];
-                });
-                state.mergedItems[cat] = [...new Set(resolved)];
-            }
-        }
-
+    private static applyVersionManifest(state: RegistryState, manifest: VersionManifest): void {
         Object.assign(state.mechanics, manifest.mechanics || {});
         if (manifest.multi_enchant_books !== undefined) {
             state.multiEnchantBooks = manifest.multi_enchant_books;
@@ -99,10 +93,6 @@ export class RegistryFactory {
             for (const [ench, props] of Object.entries(manifest.overrides)) {
                 state.mergedOverrides[ench] = Object.assign(state.mergedOverrides[ench] || {}, props);
             }
-        }
-
-        if (manifest.materials) {
-            manifest.materials.forEach(m => state.mergedMaterials.add(m));
         }
     }
 
@@ -148,7 +138,7 @@ export class RegistryFactory {
         );
 
         for (const edge of state.data.conflict_edges) {
-            if (!this.isConflictEdgeActive(state.version, edge.valid_from, edge.valid_until)) continue;
+            if (!this.isTimelineEntryActive(state.version, edge.valid_from, edge.valid_until)) continue;
             const [left, right] = edge.enchants;
             if (!activeNames.has(left) || !activeNames.has(right)) continue;
 
@@ -161,7 +151,7 @@ export class RegistryFactory {
         }
     }
 
-    private static isConflictEdgeActive(version: string, validFrom: string, validUntil?: string): boolean {
+    private static isTimelineEntryActive(version: string, validFrom: string, validUntil?: string): boolean {
         if (VersionUtils.compare(version, validFrom) < 0) return false;
         return validUntil === undefined || VersionUtils.compare(version, validUntil) < 0;
     }
@@ -195,13 +185,9 @@ export class RegistryFactory {
         const matValues = data.material_values;
         [...Object.keys(matValues.tools), ...Object.keys(matValues.armor)].forEach(mat => addId(state.matIdMap, mat));
 
-        Object.values(data.versions).forEach(v => {
-            if (v.item_enchantments) {
-                Object.keys(v.item_enchantments).forEach(cat => {
-                    addId(state.catIdMap, cat);
-                    addId(state.matIdMap, cat);
-                });
-            }
+        data.category_pool_rules.forEach(rule => {
+            addId(state.catIdMap, rule.category);
+            addId(state.matIdMap, rule.category);
         });
 
         data.constants.ITEM_SPECIFIC_CATS.forEach(cat => {
@@ -210,14 +196,30 @@ export class RegistryFactory {
         });
     }
 
+    private static applyAvailabilityRules(state: RegistryState, data: EnchantmentData): void {
+        for (const rule of data.category_pool_rules) {
+            if (!this.isTimelineEntryActive(state.version, rule.valid_from, rule.valid_until)) continue;
+
+            if (rule.groups === undefined) {
+                state.mergedItems[rule.category] = this.getActiveRegistryEnchantments(state);
+                continue;
+            }
+
+            const resolved = rule.groups.flatMap(item => data.enchantment_groups[item] || [item]);
+            state.mergedItems[rule.category] = [...new Set(resolved)];
+        }
+
+        for (const rule of data.material_rules) {
+            if (this.isTimelineEntryActive(state.version, rule.valid_from, rule.valid_until)) {
+                state.mergedMaterials.add(rule.material);
+            }
+        }
+    }
+
     private static filterMergedPools(state: RegistryState): void {
         for (const cat of Object.keys(state.mergedItems)) {
             const pool = state.mergedItems[cat];
             if (!pool) continue;
-            if (cat === 'book' && pool.length === 0) {
-                state.mergedItems[cat] = this.getActiveRegistryEnchantments(state);
-                continue;
-            }
             state.mergedItems[cat] = pool.filter(name => {
                 const props = state.resolvedRegistry[name];
                 if (!props) return false;
