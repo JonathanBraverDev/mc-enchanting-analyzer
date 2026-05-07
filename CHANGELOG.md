@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## v5.4.3 (2026-05-07)
+
+### Fixed
+- **Sweeping Edge version boundary**: Added `1.11.1` as a selectable version so Sweeping Edge appears at its actual table-rollable introduction point.
+- **Historical conflict cleanup**: Older registries no longer carry conflict links to enchantments that did not exist yet.
+
 ## v5.4.2 (2026-05-07)
 
 ### Fixed
