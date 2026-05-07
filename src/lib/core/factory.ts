@@ -1,5 +1,6 @@
 import { EnchantmentData, VersionManifest, Enchantment, RegistryState } from '#types/index.js';
 import { VersionUtils } from '#utils/index.js';
+import { resolveManifestVersion, resolveRegistryVersion } from '#core/version-resolution.js';
 
 
 /**
@@ -35,10 +36,10 @@ export class RegistryFactory {
             indexToEnchant: [0]
         };
 
-        const resolvedVersion = this.resolveVersion(data, version);
+        const resolvedVersion = resolveRegistryVersion(data, version);
         state.version = version;
 
-        const chain = this.getInheritanceChain(data, resolvedVersion);
+        const chain = this.getInheritanceChain(data, resolveManifestVersion(data, resolvedVersion));
 
         // 1. Apply inheritance chain
         for (const vName of chain) {
@@ -62,16 +63,6 @@ export class RegistryFactory {
         this.initializeVersionPool(state);
 
         return state;
-    }
-
-    private static resolveVersion(data: EnchantmentData, v: string): string {
-        if (data.versions[v]) return v;
-        const sorted = Object.keys(data.versions).sort(VersionUtils.compare);
-        let resolved = sorted[0] ?? v;
-        for (const ver of sorted) {
-            if (VersionUtils.compare(v, ver) >= 0) resolved = ver;
-        }
-        return resolved;
     }
 
     private static getInheritanceChain(data: EnchantmentData, v: string): string[] {

@@ -26,6 +26,22 @@ describe('UiMetadataService', () => {
     it('includes version boundaries used by registry data', () => {
         const versions = UiMetadataService.getVersions();
 
+        assert.deepStrictEqual(versions, [
+            '1.21.11',
+            '1.21.9',
+            '1.21',
+            '1.16',
+            '1.14.3',
+            '1.14',
+            '1.13',
+            '1.11.1',
+            '1.8',
+            '1.7.2',
+            '1.4.6',
+            '1.3.1',
+            '1.1',
+            '1.0'
+        ]);
         assert.ok(versions.includes('1.11.1'), 'enchantment-boundary versions should be selectable');
         assert.ok(versions.includes('1.14'), 'conflict cutoff boundary versions should be selectable');
     });

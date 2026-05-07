@@ -10,11 +10,8 @@ export const versions = {
       "lapis_required": false
     }
   },
-  "1.1": {
-    "extends": "1.0"
-  },
   "1.3.1": {
-    "extends": "1.1",
+    "extends": "1.0",
     "mechanics": {
       "enchantability_bonus_divisor": 4,
       "random_bonus_range": 0.15,
@@ -35,29 +32,5 @@ export const versions = {
       "xp_cost_type": "flat",
       "lapis_required": true
     }
-  },
-  "1.11.1": {
-    "extends": "1.8"
-  },
-  "1.13": {
-    "extends": "1.11.1"
-  },
-  "1.14": {
-    "extends": "1.13"
-  },
-  "1.14.3": {
-    "extends": "1.14"
-  },
-  "1.16": {
-    "extends": "1.14.3"
-  },
-  "1.21": {
-    "extends": "1.16"
-  },
-  "1.21.9": {
-    "extends": "1.21"
-  },
-  "1.21.11": {
-    "extends": "1.21.9"
   }
 } satisfies EnchantmentData["versions"];
