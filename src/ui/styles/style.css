@@ -189,6 +189,33 @@ header h1 {
 
 .combo-names { font-size: 0.9rem; color: #ddd; }
 .combo-prob { font-weight: 800; color: var(--accent); }
+.combo-prob-tiny {
+    display: inline-grid;
+    justify-items: end;
+    min-width: max-content;
+    position: relative;
+}
+.combo-prob-alt {
+    animation-duration: 7s;
+    animation-iteration-count: infinite;
+    animation-timing-function: ease-in-out;
+    grid-area: 1 / 1;
+    white-space: nowrap;
+}
+.combo-prob-alt-human { animation-name: combo-prob-human-fade; }
+.combo-prob-alt-scientific { animation-name: combo-prob-scientific-fade; }
+
+@keyframes combo-prob-human-fade {
+    0%, 42% { opacity: 1; }
+    50%, 92% { opacity: 0; }
+    100% { opacity: 1; }
+}
+
+@keyframes combo-prob-scientific-fade {
+    0%, 42% { opacity: 0; }
+    50%, 92% { opacity: 1; }
+    100% { opacity: 0; }
+}
 
 .rank-grid {
     display: grid;
