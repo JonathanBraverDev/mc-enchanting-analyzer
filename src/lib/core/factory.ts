@@ -123,7 +123,7 @@ export class RegistryFactory {
         // First pass: resolve all props (applying version overrides)
         this.resolveEnchantmentProps(state, data, allEnchNames);
 
-        // Build symmetric conflict map and bitsets
+        // Build symmetric conflict map and bitsets for enchantments active in this version.
         this.buildConflictBitsets(state, allEnchNames);
 
         const romanMap = data.constants.ROMAN_MAP;
@@ -144,12 +144,25 @@ export class RegistryFactory {
     }
 
     private static buildConflictBitsets(state: RegistryState, allEnchNames: string[]): void {
+        const activeNames = new Set(
+            allEnchNames.filter(name => {
+                const entry = state.resolvedRegistry[name];
+                return entry !== undefined && VersionUtils.isInRange(state.version, entry.valid_from, entry.valid_to);
+            })
+        );
         const effectiveConflicts = new Map<string, Set<string>>();
         for (const name of allEnchNames) {
+            if (!activeNames.has(name)) {
+                effectiveConflicts.set(name, new Set());
+                continue;
+            }
+
             const entry = state.resolvedRegistry[name];
-            effectiveConflicts.set(name, new Set(entry?.conflicts ?? []));
+            const activeConflicts = (entry?.conflicts ?? []).filter(conflictName => activeNames.has(conflictName));
+            effectiveConflicts.set(name, new Set(activeConflicts));
         }
         for (const [name, conflicts] of effectiveConflicts) {
+            if (!activeNames.has(name)) continue;
             for (const conflictName of conflicts) {
                 effectiveConflicts.get(conflictName)?.add(name);
             }
