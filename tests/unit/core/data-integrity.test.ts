@@ -51,6 +51,15 @@ describe('Data integrity: enchantment required fields', () => {
         }
         assert.deepStrictEqual(bad, [], `enchantments missing valid_from: ${bad.join(', ')}`);
     });
+
+    it('all enchantment valid_from boundaries are selectable registry versions', () => {
+        const versionKeys = new Set(Object.keys(versions));
+        const missing = Object.entries(global_enchantments)
+            .filter(([, ench]) => !versionKeys.has((ench as any).valid_from))
+            .map(([name, ench]) => `${name}: ${(ench as any).valid_from}`);
+
+        assert.deepStrictEqual(missing, [], `valid_from versions missing from versions manifest: ${missing.join(', ')}`);
+    });
 });
 
 // ── Level range validity ───────────────────────────────────────────────────────
@@ -232,6 +241,32 @@ describe('Data integrity: conflict symmetry after RegistryFactory.build()', () =
         const unbrId = getEnchantId(reg, 'Unbreaking');
         assert.ok(!hasConflict(reg, effId,  unbrId), 'Efficiency should not conflict with Unbreaking');
         assert.ok(!hasConflict(reg, unbrId, effId),  'Unbreaking should not conflict with Efficiency');
+    });
+});
+
+describe('Data integrity: conflict bitsets only include active version enchantments', () => {
+    it('older damage enchantments do not conflict with future damage enchantments before those enchants exist', () => {
+        const v18 = EngineFactory.create(DATA, '1.8').registry;
+        const sharpnessId = getEnchantId(v18, 'Sharpness');
+        const impalingId = getEnchantId(v18, 'Impaling');
+        const densityId = getEnchantId(v18, 'Density');
+        const breachId = getEnchantId(v18, 'Breach');
+
+        assert.ok(!hasConflict(v18, sharpnessId, impalingId), '1.8 Sharpness should not conflict with future Impaling');
+        assert.ok(!hasConflict(v18, impalingId, sharpnessId), '1.8 inactive Impaling should not conflict with Sharpness');
+        assert.ok(!hasConflict(v18, sharpnessId, densityId), '1.8 Sharpness should not conflict with future Density');
+        assert.ok(!hasConflict(v18, sharpnessId, breachId), '1.8 Sharpness should not conflict with future Breach');
+    });
+
+    it('conflicts activate as the relevant enchantments enter the table registry', () => {
+        const v13 = EngineFactory.create(DATA, '1.13').registry;
+        const sharpnessId = getEnchantId(v13, 'Sharpness');
+        const impalingId = getEnchantId(v13, 'Impaling');
+        const densityId = getEnchantId(v13, 'Density');
+
+        assert.ok(hasConflict(v13, sharpnessId, impalingId), '1.13 Sharpness should conflict with Impaling');
+        assert.ok(hasConflict(v13, impalingId, sharpnessId), '1.13 Impaling should conflict with Sharpness');
+        assert.ok(!hasConflict(v13, sharpnessId, densityId), '1.13 Sharpness should not conflict with future Density');
     });
 });
 
