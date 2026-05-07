@@ -4,21 +4,14 @@ import { PACKING_CONSTANTS, ENGINE_LIMITS } from '#constants/engine.js';
 
 /**
  * Returns the list of materials compatible with a given category.
- * Armor materials and tool-specific categories are handled separately.
+ * Category/material compatibility is declared in registry data.
  * @param state The resolved registry state.
  * @param cat The item category (e.g., "sword", "armor").
  * @returns Sorted list of compatible material names.
  */
 export function getEligibleMaterials(state: RegistryState, cat: string): string[] {
-    const itemSpecific = state.data.constants.ITEM_SPECIFIC_CATS;
-    const isArmor = state.data.constants.ARMOR_CATS.includes(cat);
-    const mats = isArmor ? state.data.material_values.armor : state.data.material_values.tools;
-
-    if (itemSpecific.includes(cat) && mats[cat] && state.mergedMaterials.has(cat)) {
-        return [cat];
-    }
-
-    const eligible = Object.keys(mats).filter(m => isMaterialCompatible(m, cat, itemSpecific, state.mergedMaterials));
+    const materials = state.categoryMaterials[cat] ?? [];
+    const eligible = materials.filter(material => state.mergedMaterials.has(material));
     return sortMaterials(state.data, eligible);
 }
 
@@ -211,13 +204,6 @@ export function getEnchantability(state: RegistryState, mat: string, cat: string
     const value = isArmor ? armor[mat] : tools[mat];
     if (value === undefined) throw new Error(`Unknown material "${mat}" for category "${cat}"`);
     return value;
-}
-
-function isMaterialCompatible(mat: string, cat: string, itemCats: string[], mergedMaterials: Set<string>): boolean {
-    if (!mergedMaterials.has(mat)) return false;
-    if (mat === 'turtle_shell') return cat === 'helmet';
-    if (itemCats.includes(mat)) return mat === cat;
-    return true;
 }
 
 function sortMaterials(data: EnchantmentData, mats: string[]): string[] {

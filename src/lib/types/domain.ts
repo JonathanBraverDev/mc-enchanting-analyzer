@@ -60,6 +60,15 @@ export interface MaterialRule {
 }
 
 /**
+ * Category-to-material compatibility rule.
+ * Version availability is still controlled by category and material rules.
+ */
+export interface CategoryMaterialRule {
+  category: string;
+  materials: string[];
+}
+
+/**
  * Game mechanics configuration for a version.
  * @property enchantability_bonus_divisor Divisor for the enchantability stat (default 15).
  * @property random_bonus_range Range of random multiplier applied to base modified level.
@@ -103,6 +112,7 @@ export interface EnchantmentData {
   conflict_rules: ConflictRule[];
   category_pool_rules: CategoryPoolRule[];
   material_rules: MaterialRule[];
+  category_material_rules: CategoryMaterialRule[];
   enchantment_groups: {
     [groupName: string]: string[];
   };
@@ -117,7 +127,6 @@ export interface EnchantmentData {
     ROMAN_MAP: RomanMap;
     ARMOR_CATS: string[];
     MATERIAL_PRIORITY: string[];
-    ITEM_SPECIFIC_CATS: string[];
   };
   cosmetics: {
     RANK_LIGHTNESS_BOOST: { [rank: string]: number };
