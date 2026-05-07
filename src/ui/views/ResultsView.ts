@@ -139,12 +139,8 @@ export class ResultsView {
             }).join('\n');
             item.title = tooltip;
 
-            item.innerHTML = `
-                <div style="display: flex; justify-content: space-between;">
-                    <span class="combo-names">${combo.replace(/\+/g, ' + ')}</span>
-                    <span class="combo-prob">${UIUtils.formatPercent(prob)}</span>
-                </div>
-            `;
+            const row = this.createComboRow(combo.replace(/\+/g, ' + '), prob);
+            item.append(row);
             fragment.appendChild(item);
         });
 
@@ -214,12 +210,8 @@ export class ResultsView {
 
                 if (combo.tooltip) item.title = combo.tooltip;
 
-                item.innerHTML = `
-                    <div style="display: flex; justify-content: space-between;">
-                        <span class="combo-names">${combo.enchants.join(' + ')}</span>
-                        <span class="combo-prob">${UIUtils.formatPercent(combo.share)}</span>
-                    </div>
-                `;
+                const row = this.createComboRow(combo.enchants.join(' + '), combo.share);
+                item.append(row);
                 fragment.appendChild(item);
             });
 
@@ -247,6 +239,58 @@ export class ResultsView {
 
     private setResultsTitle(text: string): void {
         if (this.resultsTitleEl) this.resultsTitleEl.textContent = text;
+    }
+
+    private createComboRow(label: string, probability: number): HTMLDivElement {
+        const row = document.createElement('div');
+        row.style.cssText = 'display: flex; justify-content: space-between; gap: 12px; align-items: baseline;';
+
+        const names = document.createElement('span');
+        names.className = 'combo-names';
+        names.textContent = label;
+
+        row.append(names, this.createComboProbability(probability));
+        return row;
+    }
+
+    private createComboProbability(probability: number): HTMLSpanElement {
+        const value = document.createElement('span');
+        value.className = 'combo-prob';
+
+        if (!UIUtils.shouldUseTinyProbabilityOdds(probability)) {
+            value.textContent = UIUtils.formatPercent(probability);
+            return value;
+        }
+
+        const odds = UIUtils.formatTinyProbabilityOdds(probability);
+        value.title = odds.shouldFadeScientific ? `${odds.human} (${odds.scientificText})` : odds.human;
+
+        if (!odds.shouldFadeScientific) {
+            value.textContent = odds.human;
+            return value;
+        }
+
+        value.classList.add('combo-prob-tiny');
+
+        const human = document.createElement('span');
+        human.className = 'combo-prob-alt combo-prob-alt-human';
+        human.textContent = odds.human;
+
+        const scientific = document.createElement('span');
+        scientific.className = 'combo-prob-alt combo-prob-alt-scientific';
+        scientific.append(
+            `1 in ${odds.scientificMantissa} × 10`,
+            this.createSuperscript(odds.scientificExponent.toString())
+        );
+
+        value.append(human, scientific);
+        return value;
+    }
+
+    private createSuperscript(text: string): HTMLElement {
+        const sup = document.createElement('sup');
+        sup.textContent = text;
+        return sup;
     }
 
     private appendTargetItem(

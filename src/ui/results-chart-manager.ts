@@ -7,9 +7,8 @@ import { ENGINE_LIMITS } from '#constants/engine.js';
 interface ChartInstance {
     data: { labels: unknown[]; datasets: unknown[] };
     destroy(): void;
-    hide(datasetIndex: number): void;
     isDatasetVisible(datasetIndex: number): boolean;
-    show(datasetIndex: number): void;
+    setDatasetVisibility(datasetIndex: number, visible: boolean): void;
     update(mode: string): void;
 }
 interface TooltipDataset {
@@ -207,8 +206,7 @@ export class ChartManager {
         (this.chart.data.datasets as ChartDataset[]).forEach((dataset, index) => {
             const shouldShow = !dataset.groupKey
                 || (!this.hiddenGroups.has(dataset.groupKey) && !this.hiddenGroupRanks.has(this.getGroupRankKey(dataset.groupKey, dataset.rankLevel)));
-            if (shouldShow) this.chart!.show(index);
-            else this.chart!.hide(index);
+            this.chart!.setDatasetVisibility(index, shouldShow);
         });
     }
 
@@ -560,8 +558,8 @@ export class ChartManager {
                         const clickedDataset = legend.chart.data.datasets[datasetIndex] as ChartDataset | undefined;
                         const groupKey = clickedDataset?.groupKey;
                         if (!groupKey) {
-                            if (legend.chart.isDatasetVisible(datasetIndex)) legend.chart.hide(datasetIndex);
-                            else legend.chart.show(datasetIndex);
+                            legend.chart.setDatasetVisibility(datasetIndex, !legend.chart.isDatasetVisible(datasetIndex));
+                            legend.chart.update('none');
                             return;
                         }
 
@@ -570,9 +568,9 @@ export class ChartManager {
                             .filter(index => index >= 0);
                         const shouldHide = groupedIndexes.some(index => legend.chart.isDatasetVisible(index));
                         groupedIndexes.forEach(index => {
-                            if (shouldHide) legend.chart.hide(index);
-                            else legend.chart.show(index);
+                            legend.chart.setDatasetVisibility(index, !shouldHide);
                         });
+                        legend.chart.update('none');
                     }
                 }
             }

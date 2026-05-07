@@ -15,6 +15,41 @@ test.describe('Chart Loading Regression', () => {
         await analyzer.goto();
     });
 
+    test('should expose grouped rank legend controls for specific-rank charts', async () => {
+        await analyzer.waitForChartIdle();
+
+        await analyzer.selectChartMetric('ranks');
+
+        const legend = analyzer.page.locator('#chart-custom-legend');
+        await expect(legend).toBeVisible();
+        await expect(legend.getByRole('button', { name: 'Recommended' })).toBeVisible();
+        await expect(legend.getByRole('button', { name: 'All' })).toBeVisible();
+        await expect(legend.getByRole('button', { name: 'None' })).toBeVisible();
+        await expect(legend.getByRole('button', { name: 'Max only' })).toBeVisible();
+
+        const visibleGroupedCount = async () => analyzer.page.evaluate(() => {
+            const chart = (window as any).App.chartManager.chartInstance;
+            return chart.data.datasets
+                .map((dataset: any, index: number) => dataset.groupKey ? chart.isDatasetVisible(index) : null)
+                .filter((visible: boolean | null) => visible === true).length;
+        });
+
+        const groupedDatasetCount = async () => analyzer.page.evaluate(() => {
+            const chart = (window as any).App.chartManager.chartInstance;
+            return chart.data.datasets.filter((dataset: any) => dataset.groupKey).length;
+        });
+        await expect.poll(groupedDatasetCount).toBeGreaterThan(0);
+
+        await legend.getByRole('button', { name: 'None' }).click();
+        await expect.poll(visibleGroupedCount).toBe(0);
+
+        await legend.getByRole('button', { name: 'All' }).click();
+        await expect.poll(async () => visibleGroupedCount()).toBe(await groupedDatasetCount());
+
+        await analyzer.selectChartMetric('any');
+        await expect(legend).toBeHidden();
+    });
+
     test('should provide visible progress feedback to the user during complex book calculations', async () => {
         test.setTimeout(120000); // Allow more time for sequential redraws
         // 1. Setup
