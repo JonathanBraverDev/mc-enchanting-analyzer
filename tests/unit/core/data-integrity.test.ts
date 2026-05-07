@@ -22,15 +22,30 @@ import { DATA } from '#data/index.js';
 import { hasConflict, getEnchantId, getEnchantability } from '#core/registry.js';;
 import { versions } from '#data/versions.js';
 import { material_values } from '#data/materials.js';
+import type { EnchantmentData, VersionManifest } from '#types/index.js';
 
-const enchantNames = Object.keys(global_enchantments);
+const registryEnchantments: EnchantmentData["global_enchantments"] = global_enchantments;
+const registryVersions: EnchantmentData["versions"] = versions;
+const enchantNames = Object.keys(registryEnchantments);
+const versionEntries = Object.entries(registryVersions);
+const specialPoolTokens = new Set(['book_pool']);
+
+function collectVersionMaterials(version: string): Set<string> {
+    const materials = new Set<string>();
+    let current: VersionManifest | undefined = registryVersions[version];
+    while (current) {
+        for (const mat of current.materials ?? []) materials.add(mat);
+        current = current.extends ? registryVersions[current.extends] : undefined;
+    }
+    return materials;
+}
 
 // ── Enchantment required fields ───────────────────────────────────────────────
 
 describe('Data integrity: enchantment required fields', () => {
     it('all enchantments have a weight >= 1', () => {
         const bad: string[] = [];
-        for (const [name, ench] of Object.entries(global_enchantments)) {
+        for (const [name, ench] of Object.entries(registryEnchantments)) {
             if (typeof ench.weight !== 'number' || ench.weight < 1) bad.push(name);
         }
         assert.deepStrictEqual(bad, [], `enchantments with invalid weight: ${bad.join(', ')}`);
@@ -38,7 +53,7 @@ describe('Data integrity: enchantment required fields', () => {
 
     it('all enchantments have at least one level entry', () => {
         const bad: string[] = [];
-        for (const [name, ench] of Object.entries(global_enchantments)) {
+        for (const [name, ench] of Object.entries(registryEnchantments)) {
             if (!ench.levels || Object.keys(ench.levels).length === 0) bad.push(name);
         }
         assert.deepStrictEqual(bad, [], `enchantments with no levels: ${bad.join(', ')}`);
@@ -46,19 +61,22 @@ describe('Data integrity: enchantment required fields', () => {
 
     it('all enchantments have a valid_from string', () => {
         const bad: string[] = [];
-        for (const [name, ench] of Object.entries(global_enchantments)) {
-            if (typeof (ench as any).valid_from !== 'string') bad.push(name);
+        for (const [name, ench] of Object.entries(registryEnchantments)) {
+            if (typeof ench.valid_from !== 'string') bad.push(name);
         }
         assert.deepStrictEqual(bad, [], `enchantments missing valid_from: ${bad.join(', ')}`);
     });
 
-    it('all enchantment valid_from boundaries are selectable registry versions', () => {
-        const versionKeys = new Set(Object.keys(versions));
-        const missing = Object.entries(global_enchantments)
-            .filter(([, ench]) => !versionKeys.has((ench as any).valid_from))
-            .map(([name, ench]) => `${name}: ${(ench as any).valid_from}`);
+    it('all enchantment availability boundaries are selectable registry versions', () => {
+        const versionKeys = new Set(Object.keys(registryVersions));
+        const missing = Object.entries(registryEnchantments).flatMap(([name, ench]) => {
+            const bad: string[] = [];
+            if (!versionKeys.has(ench.valid_from ?? '')) bad.push(`${name} valid_from: ${ench.valid_from}`);
+            if (ench.valid_to && !versionKeys.has(ench.valid_to)) bad.push(`${name} valid_to: ${ench.valid_to}`);
+            return bad;
+        });
 
-        assert.deepStrictEqual(missing, [], `valid_from versions missing from versions manifest: ${missing.join(', ')}`);
+        assert.deepStrictEqual(missing, [], `enchantment versions missing from versions manifest: ${missing.join(', ')}`);
     });
 });
 
@@ -67,7 +85,7 @@ describe('Data integrity: enchantment required fields', () => {
 describe('Data integrity: level ranges', () => {
     it('all level ranges have min >= 1', () => {
         const bad: string[] = [];
-        for (const [name, ench] of Object.entries(global_enchantments)) {
+        for (const [name, ench] of Object.entries(registryEnchantments)) {
             for (const [roman, range] of Object.entries(ench.levels)) {
                 if (range[0] < 1) bad.push(`${name} ${roman}: min=${range[0]}`);
             }
@@ -77,7 +95,7 @@ describe('Data integrity: level ranges', () => {
 
     it('all level ranges have min strictly less than max', () => {
         const bad: string[] = [];
-        for (const [name, ench] of Object.entries(global_enchantments)) {
+        for (const [name, ench] of Object.entries(registryEnchantments)) {
             for (const [roman, range] of Object.entries(ench.levels)) {
                 const key = `${name} ${roman}`;
                 if (range[0] >= range[1]) {
@@ -140,7 +158,7 @@ describe('Data integrity: latest vanilla 1.21.11 spot checks', () => {
 describe('Data integrity: conflict edges resolve to known data', () => {
     it('enchantment entries do not declare inline conflicts', () => {
         const inlineConflicts: string[] = [];
-        for (const [name, ench] of Object.entries(global_enchantments)) {
+        for (const [name, ench] of Object.entries(registryEnchantments)) {
             if ('conflicts' in ench) inlineConflicts.push(name);
         }
 
@@ -163,7 +181,7 @@ describe('Data integrity: conflict edges resolve to known data', () => {
     });
 
     it('all conflict edge version boundaries are selectable registry versions', () => {
-        const versionKeys = new Set(Object.keys(versions));
+        const versionKeys = new Set(Object.keys(registryVersions));
         const missing = conflict_edges.flatMap(edge => {
             const bad: string[] = [];
             if (!versionKeys.has(edge.valid_from)) bad.push(`${edge.enchants.join(' ↔ ')} valid_from: ${edge.valid_from}`);
@@ -211,6 +229,62 @@ describe('Data integrity: enchantment groups reference valid enchantments', () =
 });
 
 // ── Conflict symmetry after factory build ─────────────────────────────────────
+
+describe('Data integrity: version manifests reference known data', () => {
+    it('all parent versions exist and inheritance chains are acyclic', () => {
+        const missingParents: string[] = [];
+        const cycles: string[] = [];
+
+        for (const [version, manifest] of versionEntries) {
+            if (manifest.extends && !registryVersions[manifest.extends]) {
+                missingParents.push(`${version} extends ${manifest.extends}`);
+                continue;
+            }
+
+            const seen = new Set<string>();
+            let current: string | undefined = version;
+            while (current) {
+                if (seen.has(current)) {
+                    cycles.push(`${version} cycles at ${current}`);
+                    break;
+                }
+                seen.add(current);
+                current = registryVersions[current]?.extends;
+            }
+        }
+
+        assert.deepStrictEqual(missingParents, [], `missing version parents: ${missingParents.join(', ')}`);
+        assert.deepStrictEqual(cycles, [], `cyclic version inheritance: ${cycles.join(', ')}`);
+    });
+
+    it('all version item pools reference known groups, enchantments, or special pool tokens', () => {
+        const groupNames = new Set(Object.keys(enchantment_groups));
+        const unknown: string[] = [];
+
+        for (const [version, manifest] of versionEntries) {
+            for (const [cat, entries] of Object.entries(manifest.item_enchantments ?? {})) {
+                for (const entry of entries) {
+                    if (!groupNames.has(entry) && !enchantNames.includes(entry) && !specialPoolTokens.has(entry)) {
+                        unknown.push(`${version} ${cat}: ${entry}`);
+                    }
+                }
+            }
+        }
+
+        assert.deepStrictEqual(unknown, [], `version pools with unknown entries: ${unknown.join(', ')}`);
+    });
+
+    it('all version overrides reference known enchantments', () => {
+        const unknown: string[] = [];
+        for (const [version, manifest] of versionEntries) {
+            for (const enchantment of Object.keys(manifest.overrides ?? {})) {
+                if (!enchantNames.includes(enchantment)) unknown.push(`${version}: ${enchantment}`);
+            }
+        }
+
+        assert.deepStrictEqual(unknown, [], `version overrides for unknown enchantments: ${unknown.join(', ')}`);
+    });
+});
 
 describe('Data integrity: conflict symmetry after RegistryFactory.build()', () => {
     // Build with the latest version so all enchantments are active
@@ -311,10 +385,8 @@ describe('Data integrity: conflict bitsets only include active version enchantme
 describe('Data integrity: material enchantability coverage', () => {
     it('every material declared in any version has an enchantability entry', () => {
         const allMaterials = new Set<string>();
-        for (const ver of Object.values(versions)) {
-            for (const mat of (ver as any).materials ?? []) {
-                allMaterials.add(mat as string);
-            }
+        for (const ver of Object.values(registryVersions)) {
+            for (const mat of ver.materials ?? []) allMaterials.add(mat);
         }
 
         const toolMats  = new Set(Object.keys(material_values.tools));
@@ -341,16 +413,7 @@ describe('Data integrity: material enchantability coverage', () => {
         const armorCats = DATA.constants.ARMOR_CATS as readonly string[];
         const bad: string[] = [];
 
-        // For each category, get only the materials valid for that version
-        // by checking against the version's flat materials list
-        const versionEntry = (versions as any)[latestVersion];
-        const validMaterials = new Set<string>();
-        // Walk the version chain to collect all materials
-        let cur: any = versionEntry;
-        while (cur) {
-            for (const mat of cur.materials ?? []) validMaterials.add(mat);
-            cur = cur.extends ? (versions as any)[cur.extends] : null;
-        }
+        const validMaterials = collectVersionMaterials(latestVersion);
 
         for (const cat of cats) {
             // Only test materials that make sense for this category type
