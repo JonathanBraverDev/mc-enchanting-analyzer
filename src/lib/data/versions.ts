@@ -66,8 +66,11 @@ export const versions = {
       "lapis_required": true
     }
   },
+  "1.11.1": {
+    "extends": "1.8"
+  },
   "1.13": {
-    "extends": "1.8",
+    "extends": "1.11.1",
     "item_enchantments": {
       "trident": ["trident_pool"]
     },
