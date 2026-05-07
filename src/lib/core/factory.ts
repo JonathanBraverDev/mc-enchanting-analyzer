@@ -84,10 +84,6 @@ export class RegistryFactory {
         if (manifest.item_enchantments) {
             for (const [cat, content] of Object.entries(manifest.item_enchantments)) {
                 const resolved = content.flatMap(item => {
-                    if (item === "book_pool") {
-                        // global_enchantments is the active table registry; treasure-only enchants are excluded from data.
-                        return Object.keys(data.global_enchantments);
-                    }
                     return data.enchantment_groups[item] || [item];
                 });
                 state.mergedItems[cat] = [...new Set(resolved)];
@@ -218,12 +214,23 @@ export class RegistryFactory {
         for (const cat of Object.keys(state.mergedItems)) {
             const pool = state.mergedItems[cat];
             if (!pool) continue;
+            if (cat === 'book' && pool.length === 0) {
+                state.mergedItems[cat] = this.getActiveRegistryEnchantments(state);
+                continue;
+            }
             state.mergedItems[cat] = pool.filter(name => {
                 const props = state.resolvedRegistry[name];
                 if (!props) return false;
                 return VersionUtils.isInRange(state.version, props.valid_from, props.valid_to);
             });
         }
+    }
+
+    private static getActiveRegistryEnchantments(state: RegistryState): string[] {
+        return Object.keys(state.resolvedRegistry).filter(name => {
+            const props = state.resolvedRegistry[name];
+            return props !== undefined && VersionUtils.isInRange(state.version, props.valid_from, props.valid_to);
+        });
     }
 
     private static initializeVersionPool(state: RegistryState): void {

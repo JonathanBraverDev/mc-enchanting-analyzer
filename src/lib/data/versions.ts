@@ -40,7 +40,7 @@ export const versions = {
     "extends": "1.3.1",
     "item_enchantments": {
       "chestplate": ["legacy_armor_pool", "chestplate_extras"],
-      "book": ["book_pool"]
+      "book": []
     },
     "materials": ["book"],
     "multi_enchant_books": false

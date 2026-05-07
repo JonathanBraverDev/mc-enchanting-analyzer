@@ -28,7 +28,6 @@ const registryEnchantments: EnchantmentData["global_enchantments"] = global_ench
 const registryVersions: EnchantmentData["versions"] = versions;
 const enchantNames = Object.keys(registryEnchantments);
 const versionEntries = Object.entries(registryVersions);
-const specialPoolTokens = new Set(['book_pool']);
 
 function collectVersionMaterials(version: string): Set<string> {
     const materials = new Set<string>();
@@ -226,6 +225,7 @@ describe('Data integrity: enchantment groups reference valid enchantments', () =
             `enchantment groups with unknown members: ${unknown.join(', ')}`
         );
     });
+
 });
 
 // ── Conflict symmetry after factory build ─────────────────────────────────────
@@ -257,14 +257,14 @@ describe('Data integrity: version manifests reference known data', () => {
         assert.deepStrictEqual(cycles, [], `cyclic version inheritance: ${cycles.join(', ')}`);
     });
 
-    it('all version item pools reference known groups, enchantments, or special pool tokens', () => {
+    it('all version item pools reference known groups or enchantments', () => {
         const groupNames = new Set(Object.keys(enchantment_groups));
         const unknown: string[] = [];
 
         for (const [version, manifest] of versionEntries) {
             for (const [cat, entries] of Object.entries(manifest.item_enchantments ?? {})) {
                 for (const entry of entries) {
-                    if (!groupNames.has(entry) && !enchantNames.includes(entry) && !specialPoolTokens.has(entry)) {
+                    if (!groupNames.has(entry) && !enchantNames.includes(entry)) {
                         unknown.push(`${version} ${cat}: ${entry}`);
                     }
                 }
@@ -272,6 +272,19 @@ describe('Data integrity: version manifests reference known data', () => {
         }
 
         assert.deepStrictEqual(unknown, [], `version pools with unknown entries: ${unknown.join(', ')}`);
+    });
+
+    it('book categories use an empty pool marker derived from the active registry', () => {
+        const invalidBookPools: string[] = [];
+        for (const [version, manifest] of versionEntries) {
+            const bookPool = manifest.item_enchantments?.['book'];
+            if (bookPool !== undefined && bookPool.length > 0) invalidBookPools.push(version);
+        }
+
+        assert.deepStrictEqual(invalidBookPools, [], `book versions with explicit pools: ${invalidBookPools.join(', ')}`);
+
+        const latestBookPool = EngineFactory.create(DATA, '1.21.11').registry.versionPool.get('book') ?? [];
+        assert.deepStrictEqual([...latestBookPool].sort(), [...enchantNames].sort());
     });
 
     it('all version overrides reference known enchantments', () => {
