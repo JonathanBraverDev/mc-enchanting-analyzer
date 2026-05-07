@@ -1,5 +1,45 @@
 import type { EnchantmentData } from '#types/index.js';
 
+export const conflict_rules = [
+  { enchants: ["Sharpness", "Smite"], valid_from: "1.0" },
+  { enchants: ["Sharpness", "Bane of Arthropods"], valid_from: "1.0" },
+  { enchants: ["Smite", "Bane of Arthropods"], valid_from: "1.0" },
+
+  { enchants: ["Protection", "Fire Protection"], valid_from: "1.0", valid_until: "1.14" },
+  { enchants: ["Protection", "Blast Protection"], valid_from: "1.0", valid_until: "1.14" },
+  { enchants: ["Protection", "Projectile Protection"], valid_from: "1.0", valid_until: "1.14" },
+  { enchants: ["Fire Protection", "Blast Protection"], valid_from: "1.0", valid_until: "1.14" },
+  { enchants: ["Fire Protection", "Projectile Protection"], valid_from: "1.0", valid_until: "1.14" },
+  { enchants: ["Blast Protection", "Projectile Protection"], valid_from: "1.0", valid_until: "1.14" },
+
+  { enchants: ["Fortune", "Silk Touch"], valid_from: "1.0" },
+
+  { enchants: ["Impaling", "Sharpness"], valid_from: "1.13" },
+  { enchants: ["Impaling", "Smite"], valid_from: "1.13" },
+  { enchants: ["Impaling", "Bane of Arthropods"], valid_from: "1.13" },
+  { enchants: ["Riptide", "Loyalty"], valid_from: "1.13" },
+  { enchants: ["Riptide", "Channeling"], valid_from: "1.13" },
+
+  { enchants: ["Protection", "Fire Protection"], valid_from: "1.14.3" },
+  { enchants: ["Protection", "Blast Protection"], valid_from: "1.14.3" },
+  { enchants: ["Protection", "Projectile Protection"], valid_from: "1.14.3" },
+  { enchants: ["Fire Protection", "Blast Protection"], valid_from: "1.14.3" },
+  { enchants: ["Fire Protection", "Projectile Protection"], valid_from: "1.14.3" },
+  { enchants: ["Blast Protection", "Projectile Protection"], valid_from: "1.14.3" },
+
+  { enchants: ["Multishot", "Piercing"], valid_from: "1.14" },
+
+  { enchants: ["Density", "Sharpness"], valid_from: "1.21" },
+  { enchants: ["Density", "Smite"], valid_from: "1.21" },
+  { enchants: ["Density", "Bane of Arthropods"], valid_from: "1.21" },
+  { enchants: ["Density", "Impaling"], valid_from: "1.21" },
+  { enchants: ["Density", "Breach"], valid_from: "1.21" },
+  { enchants: ["Breach", "Sharpness"], valid_from: "1.21" },
+  { enchants: ["Breach", "Smite"], valid_from: "1.21" },
+  { enchants: ["Breach", "Bane of Arthropods"], valid_from: "1.21" },
+  { enchants: ["Breach", "Impaling"], valid_from: "1.21" }
+] satisfies EnchantmentData["conflict_rules"];
+
 export const category_pool_rules = [
   { category: "sword", valid_from: "1.0", valid_until: "1.8", groups: ["legacy_sword_pool"] },
   { category: "sword", valid_from: "1.8", groups: ["sword_pool"] },

@@ -51,8 +51,8 @@ export class RegistryFactory {
         // 3. Initialize mapping lookups
         this.initializeIdMaps(state, data);
 
-        // 4. Apply active category and material availability
-        this.applyAvailabilityRules(state, data);
+        // 4. Apply active category and material rules
+        this.applyRegistryRules(state, data);
 
         // 5. Filter based on version ranges
         this.filterMergedPools(state);
@@ -137,9 +137,9 @@ export class RegistryFactory {
             })
         );
 
-        for (const edge of state.data.conflict_edges) {
-            if (!this.isTimelineEntryActive(state.version, edge.valid_from, edge.valid_until)) continue;
-            const [left, right] = edge.enchants;
+        for (const rule of state.data.conflict_rules) {
+            if (!this.isTimelineEntryActive(state.version, rule.valid_from, rule.valid_until)) continue;
+            const [left, right] = rule.enchants;
             if (!activeNames.has(left) || !activeNames.has(right)) continue;
 
             const leftId = state.idMap.get(left);
@@ -196,7 +196,7 @@ export class RegistryFactory {
         });
     }
 
-    private static applyAvailabilityRules(state: RegistryState, data: EnchantmentData): void {
+    private static applyRegistryRules(state: RegistryState, data: EnchantmentData): void {
         for (const rule of data.category_pool_rules) {
             if (!this.isTimelineEntryActive(state.version, rule.valid_from, rule.valid_until)) continue;
 

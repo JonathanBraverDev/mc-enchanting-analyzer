@@ -51,7 +51,7 @@ describe('Registry & Data Rules Test Suite', () => {
              assert.ok(getEligibleMaterials(v1219, 'sword').includes('copper'), '1.21.9: SHOULD have copper');
         });
 
-        it('should expose category availability from timeline rules', () => {
+        it('should expose category availability from registry rules', () => {
             const cases = [
                 { version: '1.0', available: ['sword', 'pickaxe'], unavailable: ['book', 'fishing_rod', 'trident', 'crossbow', 'hoe', 'mace', 'spear'] },
                 { version: '1.4.6', available: ['book'], unavailable: ['fishing_rod'] },
@@ -70,7 +70,7 @@ describe('Registry & Data Rules Test Suite', () => {
             }
         });
 
-        it('should expose material availability from timeline rules', () => {
+        it('should expose material availability from registry rules', () => {
             const v10 = EngineFactory.create(DATA, '1.0').registry;
             assert.deepStrictEqual(getEligibleMaterials(v10, 'sword'), ['diamond', 'gold', 'iron', 'stone', 'wood']);
             assert.ok(getEligibleMaterials(v10, 'helmet').includes('leather'), '1.0: armor should include leather');
