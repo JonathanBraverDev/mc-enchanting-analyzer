@@ -1,3 +1,5 @@
+import type { EnchantmentData } from '#types/index.js';
+
 export const versions = {
   "1.0": {
     "item_enchantments": {
@@ -111,4 +113,4 @@ export const versions = {
     },
     "materials": ["wood", "stone", "copper", "iron", "gold", "diamond", "netherite"]
   }
-} as const;
+} satisfies EnchantmentData["versions"];

@@ -1,3 +1,5 @@
+import type { EnchantmentData } from '#types/index.js';
+
 export const global_enchantments = {
   "Sharpness": {
     "weight": 10,
@@ -181,7 +183,7 @@ export const global_enchantments = {
     "levels": {"I": [5, 25], "II": [13, 33], "III": [21, 41]},
     "valid_from": "1.21.11"
   }
-} as const;
+} satisfies EnchantmentData["global_enchantments"];
 
 export const conflict_edges = [
   { enchants: ["Sharpness", "Smite"], valid_from: "1.0" },
@@ -221,7 +223,7 @@ export const conflict_edges = [
   { enchants: ["Breach", "Smite"], valid_from: "1.21" },
   { enchants: ["Breach", "Bane of Arthropods"], valid_from: "1.21" },
   { enchants: ["Breach", "Impaling"], valid_from: "1.21" }
-] as const;
+] satisfies EnchantmentData["conflict_edges"];
 
 export const enchantment_groups = {
   "armor_pool": ["Protection", "Fire Protection", "Blast Protection", "Projectile Protection", "Unbreaking"],
@@ -239,4 +241,4 @@ export const enchantment_groups = {
   "crossbow_pool": ["Quick Charge", "Multishot", "Piercing", "Unbreaking"],
   "mace_pool": ["Density", "Breach", "Smite", "Bane of Arthropods", "Fire Aspect", "Unbreaking"],
   "spear_pool": ["Lunge", "Sharpness", "Smite", "Bane of Arthropods", "Knockback", "Fire Aspect", "Looting", "Unbreaking"]
-} as const;
+} satisfies EnchantmentData["enchantment_groups"];
