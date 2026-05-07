@@ -24,6 +24,7 @@ import { hasConflict, getEnchantId, getEnchantability } from '#core/registry.js'
 import { versions } from '#data/versions.js';
 import { material_values } from '#data/materials.js';
 import { VersionUtils } from '#utils/index.js';
+import { getRegistryVersionBoundaries } from '#core/version-resolution.js';
 import type { EnchantmentData } from '#types/index.js';
 
 const registryEnchantments: EnchantmentData["global_enchantments"] = global_enchantments;
@@ -34,6 +35,7 @@ const registryMaterialRules: EnchantmentData["material_rules"] = material_rules;
 const registryCategoryMaterialRules: EnchantmentData["category_material_rules"] = category_material_rules;
 const enchantNames = Object.keys(registryEnchantments);
 const versionEntries = Object.entries(registryVersions);
+const supportedVersions = getRegistryVersionBoundaries(DATA);
 
 function collectVersionMaterials(version: string): Set<string> {
     const materials = new Set<string>();
@@ -76,7 +78,7 @@ describe('Data integrity: enchantment required fields', () => {
     });
 
     it('all enchantment availability boundaries are selectable registry versions', () => {
-        const versionKeys = new Set(Object.keys(registryVersions));
+        const versionKeys = new Set(supportedVersions);
         const missing = Object.entries(registryEnchantments).flatMap(([name, ench]) => {
             const bad: string[] = [];
             if (!versionKeys.has(ench.valid_from ?? '')) bad.push(`${name} valid_from: ${ench.valid_from}`);
@@ -267,7 +269,7 @@ describe('Data integrity: version manifests reference known data', () => {
 
 describe('Data integrity: registry rules reference known data', () => {
     it('all registry rule boundaries are selectable registry versions', () => {
-        const versionKeys = new Set(Object.keys(registryVersions));
+        const versionKeys = new Set(supportedVersions);
         const missing = [
             ...registryConflictRules.flatMap(rule => {
                 const bad: string[] = [];
@@ -326,7 +328,7 @@ describe('Data integrity: registry rules reference known data', () => {
     it('category rules do not overlap for the same selectable version', () => {
         const overlaps: string[] = [];
         for (const category of new Set(registryCategoryRules.map(rule => rule.category))) {
-            for (const version of Object.keys(registryVersions)) {
+            for (const version of supportedVersions) {
                 const active = registryCategoryRules.filter(rule =>
                     rule.category === category && isTimelineEntryActive(version, rule.valid_from, rule.valid_until)
                 );
@@ -335,6 +337,19 @@ describe('Data integrity: registry rules reference known data', () => {
         }
 
         assert.deepStrictEqual(overlaps, [], `overlapping category rules: ${overlaps.join(', ')}`);
+    });
+
+    it('all derived registry versions can be built', () => {
+        const failures: string[] = [];
+        for (const version of supportedVersions) {
+            try {
+                EngineFactory.create(DATA, version);
+            } catch (error: any) {
+                failures.push(`${version}: ${error?.message ?? String(error)}`);
+            }
+        }
+
+        assert.deepStrictEqual(failures, [], `derived versions that failed to build: ${failures.join('; ')}`);
     });
 
     it('material rules reference known material entries', () => {

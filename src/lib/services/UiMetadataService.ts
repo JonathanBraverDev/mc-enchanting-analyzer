@@ -11,6 +11,7 @@ import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedL
 import { TargetAnalysisService } from '#services/TargetAnalysisService.js';
 
 import { RegistryFactory } from '#core/factory.js';
+import { getRegistryVersionBoundaries } from '#core/version-resolution.js';
 
 /**
  * Lightweight service for the UI to retrieve metadata and constraints
@@ -22,7 +23,7 @@ export class UiMetadataService {
 
   /** Returns the list of supported Minecraft versions in reverse chronological order. */
   public static getVersions(): string[] {
-    return Object.keys(DATA.versions).reverse();
+    return getRegistryVersionBoundaries(DATA).reverse();
   }
 
   /** Gets the registry state for a specific version. */
