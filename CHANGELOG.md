@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 - **Modern Thorns table results**: Thorns III is no longer included in enchanting-table results, because its vanilla modified-level range starts above reachable table rolls.
+- **Complete result accounting**: Engine defaults no longer cap terminal combinations before building result summaries.
 
 ### Developer Experience
 - **Stable human snapshots**: Human snapshot output now uses stable tie ordering for equal-probability combinations.

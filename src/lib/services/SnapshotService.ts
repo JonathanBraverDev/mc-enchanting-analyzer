@@ -47,6 +47,7 @@ export class SnapshotService {
     frontiers: SearchFrontierSnapshot[] = []
   ): TopRunView | ChartCellView {
     const { snapshotType, refinementLevel, clue, comboLimit } = request;
+    const includeCombos = request.includeCombos ?? snapshotType === 'top';
     const isBook = request.input.category === 'book';
 
     // Resolve clue here as a final guard against invalid worker or test input.
@@ -101,7 +102,7 @@ export class SnapshotService {
       indexToEnchant: state.indexToEnchant,
       targets: packedTargets,
       frontiers: isConditioned ? [] : frontiers,
-      comboLimit: snapshotType === 'top' ? comboLimit ?? ENGINE_LIMITS.MAX_RESULTS_SUMMARY : 0,
+      comboLimit: includeCombos ? comboLimit ?? ENGINE_LIMITS.MAX_RESULTS_SUMMARY : 0,
       registry: state
     });
     const targetDiagnostics: TargetDiagnosticsView | undefined = targetAnalysis
