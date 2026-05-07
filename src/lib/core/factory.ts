@@ -150,34 +150,24 @@ export class RegistryFactory {
                 return entry !== undefined && VersionUtils.isInRange(state.version, entry.valid_from, entry.valid_to);
             })
         );
-        const effectiveConflicts = new Map<string, Set<string>>();
-        for (const name of allEnchNames) {
-            if (!activeNames.has(name)) {
-                effectiveConflicts.set(name, new Set());
-                continue;
-            }
 
-            const entry = state.resolvedRegistry[name];
-            const activeConflicts = (entry?.conflicts ?? []).filter(conflictName => activeNames.has(conflictName));
-            effectiveConflicts.set(name, new Set(activeConflicts));
-        }
-        for (const [name, conflicts] of effectiveConflicts) {
-            if (!activeNames.has(name)) continue;
-            for (const conflictName of conflicts) {
-                effectiveConflicts.get(conflictName)?.add(name);
-            }
-        }
+        for (const edge of state.data.conflict_edges) {
+            if (!this.isConflictEdgeActive(state.version, edge.valid_from, edge.valid_until)) continue;
+            const [left, right] = edge.enchants;
+            if (!activeNames.has(left) || !activeNames.has(right)) continue;
 
-        for (const [i, name] of allEnchNames.entries()) {
-            if (name === undefined) continue;
-            let bitset = 0n;
-            const confList = effectiveConflicts.get(name) ?? [];
-            for (const cName of confList) {
-                const cId = state.idMap.get(cName);
-                if (cId !== undefined) bitset |= (1n << BigInt(cId));
-            }
-            state.conflictBitsets[i] = bitset;
+            const leftId = state.idMap.get(left);
+            const rightId = state.idMap.get(right);
+            if (leftId === undefined || rightId === undefined) continue;
+
+            state.conflictBitsets[leftId] = (state.conflictBitsets[leftId] ?? 0n) | (1n << BigInt(rightId));
+            state.conflictBitsets[rightId] = (state.conflictBitsets[rightId] ?? 0n) | (1n << BigInt(leftId));
         }
+    }
+
+    private static isConflictEdgeActive(version: string, validFrom: string, validUntil?: string): boolean {
+        if (VersionUtils.compare(version, validFrom) < 0) return false;
+        return validUntil === undefined || VersionUtils.compare(version, validUntil) < 0;
     }
 
     private static initializeEnchantmentPairs(state: RegistryState, data: EnchantmentData, allEnchNames: string[]): void {

@@ -12,6 +12,7 @@ import { SummaryAggregationService } from '#services/SummaryAggregationService.j
 import { SerializationService } from '#services/SerializationService.js';
 import { HumanizationService } from '#services/HumanizationService.js';
 import { SnapshotService } from '#services/SnapshotService.js';
+import { UiMetadataService } from '#services/UiMetadataService.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { EngineFactory } from '#engine/factory.js';
 import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
@@ -20,6 +21,15 @@ import { ComboUtils } from '#utils/domain/ComboUtils.js';
 import { ProbUtils } from '#utils/index.js';
 import { makeFrontierSnapshot } from '#tests/infra/frontier-test-utils.js';
 import type { CalculationStats, MassAccountingBreakdown, PackedCombo, PackedEnchant } from '#types/index.js';
+
+describe('UiMetadataService', () => {
+    it('includes version boundaries used by registry data', () => {
+        const versions = UiMetadataService.getVersions();
+
+        assert.ok(versions.includes('1.11.1'), 'enchantment-boundary versions should be selectable');
+        assert.ok(versions.includes('1.14'), 'conflict cutoff boundary versions should be selectable');
+    });
+});
 
 // ── SummaryService ────────────────────────────────────────────────────────────
 

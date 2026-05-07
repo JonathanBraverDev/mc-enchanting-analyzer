@@ -6,7 +6,7 @@
  *
  *   - Every enchantment has required fields with sensible values
  *   - Level ranges are valid (min ≥ 1, min < max)
- *   - Every conflict name resolves to a known enchantment
+ *   - Every conflict edge resolves to known enchantments and version boundaries
  *   - Every enchantment-group member is a known enchantment
  *   - Conflict pairs are symmetric after factory expansion
  *     (if A conflicts with B then B must conflict with A)
@@ -16,7 +16,7 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { global_enchantments, enchantment_groups } from '#data/enchantments.js';
+import { global_enchantments, conflict_edges, enchantment_groups } from '#data/enchantments.js';
 import { EngineFactory } from '#engine/factory.js';
 import { DATA } from '#data/index.js';
 import { hasConflict, getEnchantId, getEnchantability } from '#core/registry.js';;
@@ -135,23 +135,59 @@ describe('Data integrity: latest vanilla 1.21.11 spot checks', () => {
     });
 });
 
-// ── Conflict name validity ─────────────────────────────────────────────────────
+// ── Conflict edge validity ─────────────────────────────────────────────────────
 
-describe('Data integrity: conflict names resolve to known enchantments', () => {
-    it('all declared conflict names are valid enchantment names', () => {
-        const unknownConflicts: string[] = [];
+describe('Data integrity: conflict edges resolve to known data', () => {
+    it('enchantment entries do not declare inline conflicts', () => {
+        const inlineConflicts: string[] = [];
         for (const [name, ench] of Object.entries(global_enchantments)) {
-            const conflicts = (ench as any).conflicts ?? [];
-            for (const conflictName of conflicts) {
-                if (!enchantNames.includes(conflictName)) {
-                    unknownConflicts.push(`"${name}" → "${conflictName}"`);
-                }
+            if ('conflicts' in ench) inlineConflicts.push(name);
+        }
+
+        assert.deepStrictEqual(inlineConflicts, [], `enchantments with inline conflicts: ${inlineConflicts.join(', ')}`);
+    });
+
+    it('all conflict edges reference two known, distinct enchantments', () => {
+        const badEdges: string[] = [];
+        for (const edge of conflict_edges) {
+            const [left, right] = edge.enchants;
+            if (left === right || !enchantNames.includes(left) || !enchantNames.includes(right)) {
+                badEdges.push(`${left} ↔ ${right}`);
             }
         }
+
         assert.deepStrictEqual(
-            unknownConflicts, [],
-            `unresolvable conflict references: ${unknownConflicts.join(', ')}`
+            badEdges, [],
+            `invalid conflict edges: ${badEdges.join(', ')}`
         );
+    });
+
+    it('all conflict edge version boundaries are selectable registry versions', () => {
+        const versionKeys = new Set(Object.keys(versions));
+        const missing = conflict_edges.flatMap(edge => {
+            const bad: string[] = [];
+            if (!versionKeys.has(edge.valid_from)) bad.push(`${edge.enchants.join(' ↔ ')} valid_from: ${edge.valid_from}`);
+            const validUntil = 'valid_until' in edge ? edge.valid_until : undefined;
+            if (validUntil && !versionKeys.has(validUntil)) bad.push(`${edge.enchants.join(' ↔ ')} valid_until: ${validUntil}`);
+            return bad;
+        });
+
+        assert.deepStrictEqual(missing, [], `conflict edge versions missing from versions manifest: ${missing.join(', ')}`);
+    });
+
+    it('does not duplicate conflict edges for the same pair and version range', () => {
+        const seen = new Set<string>();
+        const duplicates: string[] = [];
+
+        for (const edge of conflict_edges) {
+            const pair = [...edge.enchants].sort().join('|');
+            const validUntil = 'valid_until' in edge ? edge.valid_until : '';
+            const key = `${pair}|${edge.valid_from}|${validUntil}`;
+            if (seen.has(key)) duplicates.push(key);
+            seen.add(key);
+        }
+
+        assert.deepStrictEqual(duplicates, [], `duplicate conflict edges: ${duplicates.join(', ')}`);
     });
 });
 
@@ -199,7 +235,7 @@ describe('Data integrity: conflict symmetry after RegistryFactory.build()', () =
         );
     });
 
-    // Spot-check specific pairs that are defined one-directionally in the raw data
+    // Spot-check specific pairs that are compiled from unordered conflict edges.
     it('Fortune ↔ Silk Touch conflict is symmetric', () => {
         const fortuneId = getEnchantId(reg, 'Fortune');
         const silkId    = getEnchantId(reg, 'Silk Touch');
