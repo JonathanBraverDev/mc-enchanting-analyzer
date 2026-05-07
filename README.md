@@ -36,9 +36,10 @@ To build your own standalone version, use: `npm run build:standalone`. The resul
 
 This tool uses the V5 checkpoint search engine. It prioritizes the most likely outcomes first, reports useful intermediate checkpoints to the UI, and keeps every probability bucket accounted for while deeper searches continue. The bundled registry models only enchantments reachable through the enchanting table, so treasure-only enchantments are excluded from the active search space.
 
-For implementation details, see:
+For implementation details and design plans, see:
 - `ARCHITECTURE.md` for the engine, worker, and checkpoint flow.
 - `MASS_HANDLING.md` for probability conservation and accounting.
+- `V6_UI_DESIGN.md` for the proposed V6 UI redesign and planner/advisor direction.
 
 ---
 Created by **Jonathan Braver**
