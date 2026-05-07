@@ -70,7 +70,7 @@ export class EnchantEngine {
      * @param mat Item material.
      * @param threshold High-precision bigint threshold (1.0 = 10^18).
      * @param maxIterations Max nodes to process.
-     * @param resultsLimit Max unique combinations to return.
+     * @param resultsLimit Max unique combinations to retain before recording capped mass.
      * @param instrumentation Optional performance tracking.
      */
     public async searchModifiedLevel(request: ModifiedLevelSearchRequest): Promise<SearchState> {
@@ -80,7 +80,7 @@ export class EnchantEngine {
             mat,
             threshold = ProbUtils.toBigInt(ENGINE_LIMITS.DEFAULT_THRESHOLD),
             maxIterations,
-            resultsLimit = ENGINE_LIMITS.MAX_RESULTS_SIZE,
+            resultsLimit = ENGINE_LIMITS.MAX_RESULTS_UNBOUNDED,
             instrumentation
         } = request;
         const cacheKey = this.getPackedKey(cat, modLevel, mat);
@@ -155,7 +155,7 @@ export class EnchantEngine {
             onProgress,
             maxIterations,
             summaryLimit = ENGINE_LIMITS.MAX_RESULTS_SUMMARY,
-            resultsLimit = ENGINE_LIMITS.MAX_RESULTS_SIZE,
+            resultsLimit = ENGINE_LIMITS.MAX_RESULTS_UNBOUNDED,
             useCache,
             instrumentation,
             timing

@@ -12,4 +12,5 @@ export interface SnapshotRequest {
   refinementLevel: RefinementLevelName;
   clue: string | null;
   comboLimit?: number;
+  includeCombos?: boolean | undefined;
 }
