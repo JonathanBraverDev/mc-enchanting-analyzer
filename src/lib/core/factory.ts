@@ -18,6 +18,7 @@ import {
 import { isAvailabilityActive } from '#core/availability.js';
 import { resolveManifestVersion, resolveRegistryVersion } from '#core/version-resolution.js';
 import { DATA } from '#data/index.js';
+import { VersionUtils } from '#utils/index.js';
 
 
 /**
@@ -42,6 +43,8 @@ export class RegistryFactory {
         for (const mutation of appliedMutations) {
             this.applyRegistryMutation(data, mutation);
         }
+
+        this.validateMutatedData(data);
 
         return {
             ...this.createState(data, version),
@@ -128,6 +131,95 @@ export class RegistryFactory {
 
     private static cloneRule<T>(rule: T): T {
         return JSON.parse(JSON.stringify(rule)) as T;
+    }
+
+    private static validateMutatedData(data: EnchantmentData): void {
+        const enchantNames = new Set(Object.keys(data.global_enchantments));
+        const groupNames = new Set(data.enchantment_group_rules.map(rule => rule.group));
+        const materialNames = new Set(Object.values(data.material_values).flatMap(table => Object.keys(table)));
+        const materialRefs = new Set([...materialNames, ...Object.keys(data.material_sets)]);
+        const enchantabilityTables = new Set(['tool', 'armor', 'other']);
+
+        for (const [name, enchantment] of Object.entries(data.global_enchantments)) {
+            this.assertAvailabilityOrder(enchantment, `enchantment "${name}"`);
+            if (typeof enchantment.weight !== 'number' || enchantment.weight < 1) {
+                throw new Error(`Invalid enchantment "${name}": weight must be >= 1.`);
+            }
+            const levelEntries = Object.entries(enchantment.levels ?? {});
+            if (levelEntries.length === 0) {
+                throw new Error(`Invalid enchantment "${name}": levels must not be empty.`);
+            }
+            for (const [rank, range] of levelEntries) {
+                if (!Array.isArray(range) || range.length !== 2 || range[0] < 1 || range[0] >= range[1]) {
+                    throw new Error(`Invalid enchantment "${name}" level "${rank}": expected [min, max] with 1 <= min < max.`);
+                }
+            }
+        }
+
+        for (const rule of data.conflict_rules) {
+            this.assertAvailabilityOrder(rule, `conflict rule "${rule.enchants.join(' <-> ')}"`);
+            const [left, right] = rule.enchants;
+            if (left === right || !enchantNames.has(left) || !enchantNames.has(right)) {
+                throw new Error(`Invalid conflict rule "${left} <-> ${right}": enchantments must be known and distinct.`);
+            }
+        }
+
+        for (const rule of data.enchantment_group_rules) {
+            this.assertAvailabilityOrder(rule, `enchantment group rule "${rule.group}"`);
+            if (rule.enchantments.length === 0) {
+                throw new Error(`Invalid enchantment group rule "${rule.group}": enchantments must not be empty.`);
+            }
+            for (const enchantment of rule.enchantments) {
+                if (!enchantNames.has(enchantment)) {
+                    throw new Error(`Invalid enchantment group rule "${rule.group}": unknown enchantment "${enchantment}".`);
+                }
+            }
+        }
+
+        for (const rule of data.material_rules) {
+            this.assertAvailabilityOrder(rule, `material rule "${rule.material}"`);
+            if (!materialNames.has(rule.material)) {
+                throw new Error(`Invalid material rule "${rule.material}": unknown material.`);
+            }
+        }
+
+        for (const rule of data.enchantable_item_rules) {
+            this.assertAvailabilityOrder(rule, `enchantable item rule "${rule.item}"`);
+            if (!enchantabilityTables.has(rule.enchantability)) {
+                throw new Error(`Invalid enchantable item rule "${rule.item}": unknown enchantability table "${rule.enchantability}".`);
+            }
+            if (rule.groups === undefined) {
+                if (rule.item !== 'book') {
+                    throw new Error(`Invalid enchantable item rule "${rule.item}": only book may omit groups.`);
+                }
+            } else if (rule.groups.length === 0) {
+                throw new Error(`Invalid enchantable item rule "${rule.item}": groups must not be empty.`);
+            } else {
+                for (const entry of rule.groups) {
+                    if (!groupNames.has(entry) && !enchantNames.has(entry)) {
+                        throw new Error(`Invalid enchantable item rule "${rule.item}": unknown group or enchantment "${entry}".`);
+                    }
+                }
+            }
+
+            if (rule.materials.length === 0) {
+                throw new Error(`Invalid enchantable item rule "${rule.item}": materials must not be empty.`);
+            }
+            for (const material of rule.materials) {
+                if (!materialRefs.has(material)) {
+                    throw new Error(`Invalid enchantable item rule "${rule.item}": unknown material or material set "${material}".`);
+                }
+            }
+        }
+    }
+
+    private static assertAvailabilityOrder(
+        entry: { valid_from?: string; valid_until?: string },
+        context: string
+    ): void {
+        if (entry.valid_from && entry.valid_until && VersionUtils.compare(entry.valid_until, entry.valid_from) <= 0) {
+            throw new Error(`Invalid ${context}: valid_until must be after valid_from.`);
+        }
     }
 
     private static removeExactly<T, S>(
