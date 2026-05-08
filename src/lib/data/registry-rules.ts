@@ -100,12 +100,12 @@ export const enchantable_item_rules = [
   { item: "leggings", valid_from: "1.0", groups: ["armor_pool"], materials: ["armor"], enchantability: "armor" },
   { item: "boots", valid_from: "1.0", groups: ["armor_pool", "boot_extras"], materials: ["armor"], enchantability: "armor" },
 
-  { item: "bow", valid_from: "1.1", groups: ["bow_pool"], materials: ["bow"], enchantability: "tool" },
-  { item: "book", valid_from: "1.4.6", materials: ["book"], enchantability: "tool" },
-  { item: "fishing_rod", valid_from: "1.7.2", groups: ["fishing_pool"], materials: ["fishing_rod"], enchantability: "tool" },
-  { item: "trident", valid_from: "1.13", groups: ["trident_pool"], materials: ["trident"], enchantability: "tool" },
-  { item: "crossbow", valid_from: "1.14", groups: ["crossbow_pool"], materials: ["crossbow"], enchantability: "tool" },
+  { item: "bow", valid_from: "1.1", groups: ["bow_pool"], materials: ["bow"], enchantability: "other" },
+  { item: "book", valid_from: "1.4.6", materials: ["book"], enchantability: "other" },
+  { item: "fishing_rod", valid_from: "1.7.2", groups: ["fishing_pool"], materials: ["fishing_rod"], enchantability: "other" },
+  { item: "trident", valid_from: "1.13", groups: ["trident_pool"], materials: ["trident"], enchantability: "other" },
+  { item: "crossbow", valid_from: "1.14", groups: ["crossbow_pool"], materials: ["crossbow"], enchantability: "other" },
   { item: "hoe", valid_from: "1.16", groups: ["tool_pool"], materials: ["tool"], enchantability: "tool" },
-  { item: "mace", valid_from: "1.21", groups: ["mace_pool"], materials: ["mace"], enchantability: "tool" },
+  { item: "mace", valid_from: "1.21", groups: ["mace_pool"], materials: ["mace"], enchantability: "other" },
   { item: "spear", valid_from: "1.21.11", groups: ["spear_pool"], materials: ["tool"], enchantability: "tool" }
 ] satisfies EnchantmentData["enchantable_item_rules"];

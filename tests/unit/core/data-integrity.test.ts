@@ -37,6 +37,15 @@ const registryMaterialSets: EnchantmentData["material_sets"] = material_sets;
 const enchantNames = Object.keys(registryEnchantments);
 const versionEntries = Object.entries(registryVersions);
 const supportedVersions = getRegistryVersionBoundaries(DATA);
+const materialValueTables = Object.values(material_values);
+
+function hasMaterialValue(material: string): boolean {
+    return materialValueTables.some(table => Object.hasOwn(table, material));
+}
+
+function getMaterialValueTable(tableName: keyof EnchantmentData["material_values"] | 'tool'): Record<string, number> | undefined {
+    return (tableName === 'tool' ? material_values.tools : material_values[tableName]) as Record<string, number> | undefined;
+}
 
 function isTimelineEntryActive(version: string, validFrom: string, validUntil?: string): boolean {
     if (VersionUtils.compare(version, validFrom) < 0) return false;
@@ -359,25 +368,21 @@ describe('Data integrity: registry rules reference known data', () => {
     });
 
     it('material rules reference known material entries', () => {
-        const toolMats = new Set(Object.keys(material_values.tools));
-        const armorMats = new Set(Object.keys(material_values.armor));
         const missing = registryMaterialRules
             .map(rule => rule.material)
-            .filter(material => !toolMats.has(material) && !armorMats.has(material));
+            .filter(material => !hasMaterialValue(material));
 
         assert.deepStrictEqual(missing, [], `material rules with unknown materials: ${missing.join(', ')}`);
     });
 
     it('enchantable item rule materials reference known material aliases or material entries', () => {
         const materialAliases = new Set(Object.keys(registryMaterialSets));
-        const toolMats = new Set(Object.keys(material_values.tools));
-        const armorMats = new Set(Object.keys(material_values.armor));
         const unknown: string[] = [];
 
         for (const rule of registryItemRules) {
             if (rule.materials.length === 0) unknown.push(`${rule.item}: empty materials`);
             for (const material of rule.materials) {
-                if (!materialAliases.has(material) && !toolMats.has(material) && !armorMats.has(material)) {
+                if (!materialAliases.has(material) && !hasMaterialValue(material)) {
                     unknown.push(`${rule.item}/${material}`);
                 }
             }
@@ -388,21 +393,19 @@ describe('Data integrity: registry rules reference known data', () => {
 
     it('enchantable item rules declare a valid enchantability table', () => {
         const invalid = registryItemRules
-            .filter(rule => rule.enchantability !== 'tool' && rule.enchantability !== 'armor')
+            .filter(rule => getMaterialValueTable(rule.enchantability) === undefined)
             .map(rule => `${rule.item}: ${rule.enchantability}`);
 
         assert.deepStrictEqual(invalid, [], `item rules with invalid enchantability table: ${invalid.join(', ')}`);
     });
 
     it('material aliases reference known material entries', () => {
-        const toolMats = new Set(Object.keys(material_values.tools));
-        const armorMats = new Set(Object.keys(material_values.armor));
         const unknown: string[] = [];
 
         for (const [set, materials] of Object.entries(registryMaterialSets)) {
             if (materials.length === 0) unknown.push(`${set}: empty materials`);
             for (const material of materials) {
-                if (!toolMats.has(material) && !armorMats.has(material)) {
+                if (!hasMaterialValue(material)) {
                     unknown.push(`${set}/${material}`);
                 }
             }
@@ -513,12 +516,9 @@ describe('Data integrity: material enchantability coverage', () => {
         const allMaterials = new Set<string>();
         for (const rule of registryMaterialRules) allMaterials.add(rule.material);
 
-        const toolMats  = new Set(Object.keys(material_values.tools));
-        const armorMats = new Set(Object.keys(material_values.armor));
-
         const missing: string[] = [];
         for (const material of allMaterials) {
-            if (!toolMats.has(material) && !armorMats.has(material)) {
+            if (!hasMaterialValue(material)) {
                 missing.push(material);
             }
         }
@@ -562,9 +562,7 @@ describe('Data integrity: material enchantability coverage', () => {
                 continue;
             }
             for (const material of getEligibleMaterials(reg, item)) {
-                const enchantability = tableName === 'armor'
-                    ? material_values.armor[material as keyof typeof material_values.armor]
-                    : material_values.tools[material as keyof typeof material_values.tools];
+                const enchantability = getMaterialValueTable(tableName)?.[material];
                 if (enchantability === undefined) bad.push(`${item}/${material}: missing from ${tableName}`);
             }
         }
