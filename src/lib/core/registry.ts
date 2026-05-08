@@ -3,14 +3,14 @@ import { RomanUtils, EnchantUtils } from '#utils/index.js';
 import { PACKING_CONSTANTS, ENGINE_LIMITS } from '#constants/engine.js';
 
 /**
- * Returns the list of materials compatible with a given category.
- * Category/material compatibility is declared in registry data.
+ * Returns the list of materials compatible with a given enchantable item.
+ * Item/material compatibility is declared in registry data.
  * @param state The resolved registry state.
- * @param cat The item category (e.g., "sword", "armor").
+ * @param item The item type (e.g., "sword", "helmet").
  * @returns Sorted list of compatible material names.
  */
-export function getEligibleMaterials(state: RegistryState, cat: string): string[] {
-    const materials = state.categoryMaterials[cat] ?? [];
+export function getEligibleMaterials(state: RegistryState, item: string): string[] {
+    const materials = state.itemMaterials[item] ?? [];
     const eligible = materials.filter(material => state.mergedMaterials.has(material));
     return sortMaterials(state.data, eligible);
 }
@@ -39,13 +39,20 @@ export function getRankRoman(state: RegistryState, rank: number): string {
 }
 
 /**
- * Gets the internal ID for a category.
+ * Gets the internal ID for an enchantable item.
  * @param state The resolved registry state.
- * @param cat The category name (e.g., "sword", "helmet").
- * @returns The category ID, or UNKNOWN_CATEGORY_ID if not found.
+ * @param item The item name (e.g., "sword", "helmet").
+ * @returns The item ID, or UNKNOWN_CATEGORY_ID if not found.
+ */
+export function getItemId(state: RegistryState, item: string): number {
+    return state.itemIdMap.get(item) ?? ENGINE_LIMITS.UNKNOWN_CATEGORY_ID;
+}
+
+/**
+ * @deprecated Use getItemId.
  */
 export function getCategoryId(state: RegistryState, cat: string): number {
-    return state.catIdMap.get(cat) ?? ENGINE_LIMITS.UNKNOWN_CATEGORY_ID;
+    return getItemId(state, cat);
 }
 
 /**
@@ -80,24 +87,38 @@ export function hasConflict(state: RegistryState, idA: number, idB: number): boo
 }
 
 /**
- * Checks if a category has any enchantable items.
+ * Checks if an item has any enchantable entries.
  * @param state The resolved registry state.
- * @param cat The category name.
- * @returns True if the category has at least one item.
+ * @param item The item name.
+ * @returns True if the item has at least one enchantment.
  */
-export function isCategoryAvailable(state: RegistryState, cat: string): boolean {
-    const pool = state.mergedItems[cat];
+export function isItemAvailable(state: RegistryState, item: string): boolean {
+    const pool = state.itemPool[item];
     return !!(pool && pool.length > 0);
 }
 
 /**
- * Gets the list of item names in a category.
+ * @deprecated Use isItemAvailable.
+ */
+export function isCategoryAvailable(state: RegistryState, cat: string): boolean {
+    return isItemAvailable(state, cat);
+}
+
+/**
+ * Gets the list of enchantment names available for an item.
  * @param state The resolved registry state.
- * @param cat The category name.
- * @returns Array of item names, or empty array if category not found.
+ * @param item The item name.
+ * @returns Array of enchantment names, or empty array if item not found.
+ */
+export function getItemPool(state: RegistryState, item: string): string[] {
+    return state.itemPool[item] || [];
+}
+
+/**
+ * @deprecated Use getItemPool.
  */
 export function getCategoryPool(state: RegistryState, cat: string): string[] {
-    return state.mergedItems[cat] || [];
+    return getItemPool(state, cat);
 }
 
 /**
@@ -118,7 +139,7 @@ export function getFullEnchantName(state: RegistryState, idAndRank: number): str
  * Each enchantment is returned as a packed (id << 8 | rank) value.
  *
  * @param state The resolved registry state.
- * @param cat Item category.
+ * @param cat Item type.
  * @param level The modified level.
  * @param cache Optional cache for pool results (per-version).
  * @param version Optional version key for cache lookup.
@@ -136,7 +157,7 @@ export function getEligiblePool(
     if (cached) return cached;
 
     const pool = state.versionPool.get(cat);
-    if (pool === undefined) throw new Error(`Unknown category "${cat}"`);
+    if (pool === undefined) throw new Error(`Unknown item "${cat}"`);
     const out: PackedEnchant[] = [];
 
     for (const name of pool) {

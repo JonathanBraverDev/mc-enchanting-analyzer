@@ -17,7 +17,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { global_enchantments } from '#data/enchantments.js';
-import { conflict_rules, enchantment_group_rules, category_pool_rules, material_rules, category_material_rules } from '#data/registry-rules.js';
+import { conflict_rules, enchantment_group_rules, enchantable_item_rules, material_rules, material_sets } from '#data/registry-rules.js';
 import { EngineFactory } from '#engine/factory.js';
 import { DATA } from '#data/index.js';
 import { hasConflict, getEnchantId, getEnchantability } from '#core/registry.js';
@@ -31,9 +31,9 @@ const registryEnchantments: EnchantmentData["global_enchantments"] = global_ench
 const registryVersions: EnchantmentData["versions"] = versions;
 const registryConflictRules: EnchantmentData["conflict_rules"] = conflict_rules;
 const registryGroupRules: EnchantmentData["enchantment_group_rules"] = enchantment_group_rules;
-const registryCategoryRules: EnchantmentData["category_pool_rules"] = category_pool_rules;
+const registryItemRules: EnchantmentData["enchantable_item_rules"] = enchantable_item_rules;
 const registryMaterialRules: EnchantmentData["material_rules"] = material_rules;
-const registryCategoryMaterialRules: EnchantmentData["category_material_rules"] = category_material_rules;
+const registryMaterialSets: EnchantmentData["material_sets"] = material_sets;
 const enchantNames = Object.keys(registryEnchantments);
 const versionEntries = Object.entries(registryVersions);
 const supportedVersions = getRegistryVersionBoundaries(DATA);
@@ -291,10 +291,10 @@ describe('Data integrity: registry rules reference known data', () => {
                 if (rule.valid_until && !versionKeys.has(rule.valid_until)) bad.push(`${rule.group} valid_until: ${rule.valid_until}`);
                 return bad;
             }),
-            ...registryCategoryRules.flatMap(rule => {
+            ...registryItemRules.flatMap(rule => {
                 const bad: string[] = [];
-                if (!versionKeys.has(rule.valid_from)) bad.push(`${rule.category} valid_from: ${rule.valid_from}`);
-                if (rule.valid_until && !versionKeys.has(rule.valid_until)) bad.push(`${rule.category} valid_until: ${rule.valid_until}`);
+                if (!versionKeys.has(rule.valid_from)) bad.push(`${rule.item} valid_from: ${rule.valid_from}`);
+                if (rule.valid_until && !versionKeys.has(rule.valid_until)) bad.push(`${rule.item} valid_until: ${rule.valid_until}`);
                 return bad;
             }),
             ...registryMaterialRules.flatMap(rule => {
@@ -308,49 +308,49 @@ describe('Data integrity: registry rules reference known data', () => {
         assert.deepStrictEqual(missing, [], `registry rule versions missing from versions manifest: ${missing.join(', ')}`);
     });
 
-    it('category rules reference known groups or enchantments', () => {
+    it('enchantable item rules reference known groups or enchantments', () => {
         const groupNames = new Set(registryGroupRules.map(rule => rule.group));
         const unknown: string[] = [];
 
-        for (const rule of registryCategoryRules) {
+        for (const rule of registryItemRules) {
             for (const entry of rule.groups ?? []) {
                 if (!groupNames.has(entry) && !enchantNames.includes(entry)) {
-                    unknown.push(`${rule.category}: ${entry}`);
+                    unknown.push(`${rule.item}: ${entry}`);
                 }
             }
         }
 
-        assert.deepStrictEqual(unknown, [], `category rules with unknown entries: ${unknown.join(', ')}`);
+        assert.deepStrictEqual(unknown, [], `enchantable item rules with unknown entries: ${unknown.join(', ')}`);
     });
 
-    it('only book category rules may omit groups, and explicit groups are never empty', () => {
+    it('only book item rules may omit groups, and explicit groups are never empty', () => {
         const invalidDerived: string[] = [];
         const emptyGroups: string[] = [];
 
-        for (const rule of registryCategoryRules) {
-            if (rule.groups === undefined && rule.category !== 'book') invalidDerived.push(rule.category);
-            if (rule.groups !== undefined && rule.groups.length === 0) emptyGroups.push(rule.category);
+        for (const rule of registryItemRules) {
+            if (rule.groups === undefined && rule.item !== 'book') invalidDerived.push(rule.item);
+            if (rule.groups !== undefined && rule.groups.length === 0) emptyGroups.push(rule.item);
         }
 
-        assert.deepStrictEqual(invalidDerived, [], `non-book derived category pools: ${invalidDerived.join(', ')}`);
-        assert.deepStrictEqual(emptyGroups, [], `category rules with empty groups: ${emptyGroups.join(', ')}`);
+        assert.deepStrictEqual(invalidDerived, [], `non-book derived item pools: ${invalidDerived.join(', ')}`);
+        assert.deepStrictEqual(emptyGroups, [], `item rules with empty groups: ${emptyGroups.join(', ')}`);
 
         const latestBookPool = EngineFactory.create(DATA, '1.21.11').registry.versionPool.get('book') ?? [];
         assert.deepStrictEqual([...latestBookPool].sort(), [...enchantNames].sort());
     });
 
-    it('category rules do not overlap for the same selectable version', () => {
+    it('enchantable item rules do not overlap for the same selectable version', () => {
         const overlaps: string[] = [];
-        for (const category of new Set(registryCategoryRules.map(rule => rule.category))) {
+        for (const item of new Set(registryItemRules.map(rule => rule.item))) {
             for (const version of supportedVersions) {
-                const active = registryCategoryRules.filter(rule =>
-                    rule.category === category && isTimelineEntryActive(version, rule.valid_from, rule.valid_until)
+                const active = registryItemRules.filter(rule =>
+                    rule.item === item && isTimelineEntryActive(version, rule.valid_from, rule.valid_until)
                 );
-                if (active.length > 1) overlaps.push(`${category}@${version}`);
+                if (active.length > 1) overlaps.push(`${item}@${version}`);
             }
         }
 
-        assert.deepStrictEqual(overlaps, [], `overlapping category rules: ${overlaps.join(', ')}`);
+        assert.deepStrictEqual(overlaps, [], `overlapping item rules: ${overlaps.join(', ')}`);
     });
 
     it('all derived registry versions can be built', () => {
@@ -376,31 +376,39 @@ describe('Data integrity: registry rules reference known data', () => {
         assert.deepStrictEqual(missing, [], `material rules with unknown materials: ${missing.join(', ')}`);
     });
 
-    it('category material rules reference known categories and materials', () => {
-        const categories = new Set(registryCategoryRules.map(rule => rule.category));
+    it('enchantable item rule materials reference known material aliases or material entries', () => {
+        const materialAliases = new Set(Object.keys(registryMaterialSets));
         const toolMats = new Set(Object.keys(material_values.tools));
         const armorMats = new Set(Object.keys(material_values.armor));
         const unknown: string[] = [];
 
-        for (const rule of registryCategoryMaterialRules) {
-            if (!categories.has(rule.category)) unknown.push(`${rule.category}: missing category rule`);
-            if (rule.materials.length === 0) unknown.push(`${rule.category}: empty materials`);
+        for (const rule of registryItemRules) {
+            if (rule.materials.length === 0) unknown.push(`${rule.item}: empty materials`);
             for (const material of rule.materials) {
-                if (!toolMats.has(material) && !armorMats.has(material)) {
-                    unknown.push(`${rule.category}/${material}`);
+                if (!materialAliases.has(material) && !toolMats.has(material) && !armorMats.has(material)) {
+                    unknown.push(`${rule.item}/${material}`);
                 }
             }
         }
 
-        assert.deepStrictEqual(unknown, [], `category material rules with unknown entries: ${unknown.join(', ')}`);
+        assert.deepStrictEqual(unknown, [], `item rule materials with unknown entries: ${unknown.join(', ')}`);
     });
 
-    it('every category rule has an explicit material binding', () => {
-        const boundCategories = new Set(registryCategoryMaterialRules.map(rule => rule.category));
-        const missing = [...new Set(registryCategoryRules.map(rule => rule.category))]
-            .filter(category => !boundCategories.has(category));
+    it('material aliases reference known material entries', () => {
+        const toolMats = new Set(Object.keys(material_values.tools));
+        const armorMats = new Set(Object.keys(material_values.armor));
+        const unknown: string[] = [];
 
-        assert.deepStrictEqual(missing, [], `category rules without material bindings: ${missing.join(', ')}`);
+        for (const [set, materials] of Object.entries(registryMaterialSets)) {
+            if (materials.length === 0) unknown.push(`${set}: empty materials`);
+            for (const material of materials) {
+                if (!toolMats.has(material) && !armorMats.has(material)) {
+                    unknown.push(`${set}/${material}`);
+                }
+            }
+        }
+
+        assert.deepStrictEqual(unknown, [], `material aliases with unknown entries: ${unknown.join(', ')}`);
     });
 });
 

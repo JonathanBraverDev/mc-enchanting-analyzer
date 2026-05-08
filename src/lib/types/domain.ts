@@ -37,19 +37,6 @@ export interface ConflictRule {
 }
 
 /**
- * Version-ranged category pool rule.
- * Missing groups means the category uses every active table enchantment.
- * That derived mode is currently valid only for enchanted books.
- * @property valid_until First version where this category rule no longer applies.
- */
-export interface CategoryPoolRule {
-  category: string;
-  valid_from: string;
-  valid_until?: string;
-  groups?: string[];
-}
-
-/**
  * Version-ranged material rule.
  * @property valid_until First version where this material rule no longer applies.
  */
@@ -72,11 +59,25 @@ export interface EnchantmentGroupRule {
 }
 
 /**
- * Category-to-material compatibility rule.
- * Version availability is still controlled by category and material rules.
+ * Named material aliases used by enchantable item rules.
+ * Each entry expands to concrete material keys declared by material rules.
  */
-export interface CategoryMaterialRule {
-  category: string;
+export interface MaterialSets {
+  [set: string]: string[];
+}
+
+/**
+ * Version-ranged enchantable item rule.
+ * Missing groups means the item uses every active table enchantment.
+ * That derived mode is currently valid only for enchanted books.
+ * Materials may reference concrete material keys or material set aliases.
+ * @property valid_until First version where this item rule no longer applies.
+ */
+export interface EnchantableItemRule {
+  item: string;
+  valid_from: string;
+  valid_until?: string;
+  groups?: string[];
   materials: string[];
 }
 
@@ -123,9 +124,9 @@ export interface EnchantmentData {
   };
   conflict_rules: ConflictRule[];
   enchantment_group_rules: EnchantmentGroupRule[];
-  category_pool_rules: CategoryPoolRule[];
+  enchantable_item_rules: EnchantableItemRule[];
   material_rules: MaterialRule[];
-  category_material_rules: CategoryMaterialRule[];
+  material_sets: MaterialSets;
   versions: {
     [version: string]: VersionManifest;
   };
