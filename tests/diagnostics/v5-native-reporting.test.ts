@@ -20,7 +20,7 @@ function freshInstrumentation(): EngineInstrumentation {
     };
 }
 
-test('V5 native reporting can reproduce the obsolete matrix runner payload', async () => {
+test('native reporting can reproduce the obsolete matrix runner payload', async () => {
     const engine = EngineFactory.createForVersion('1.21.11');
     const instrumentation = freshInstrumentation();
     instrumentation.exploredMassTargets = EXPLORED_MASS_TARGETS;
@@ -85,7 +85,7 @@ test('V5 native reporting can reproduce the obsolete matrix runner payload', asy
         instrumentation
     });
 
-    assert.strictEqual(records.length, 1, 'single deep V5 search should emit one final result');
+    assert.strictEqual(records.length, 1, 'single deep search should emit one final result');
 
     const finalRecord = records[0];
     assert.ok(finalRecord, 'final reporting record should exist');

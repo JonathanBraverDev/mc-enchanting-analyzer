@@ -38,7 +38,7 @@ async function waitForTerminal(
     throw new Error(`Timeout waiting for terminal for ${runId}.`);
 }
 
-describe('Worker: Protocol Hardening (v5)', () => {
+describe('Worker: Protocol Hardening', () => {
     const captured: WorkerResponse[] = [];
     let originalPostMessage: typeof globalThis.postMessage | undefined;
 

@@ -11,7 +11,7 @@ function flush(): Promise<void> {
 
 const BASE_PAYLOAD = TEST_DATA.PAYLOADS.BASE_SWORD;
 
-describe('Integration: Chart sweep with mocked WorkerClient V5', () => {
+describe('Integration: Chart sweep with mocked WorkerClient', () => {
     let originalStartTop: typeof WorkerClient.startTopRun;
     let originalStartChart: typeof WorkerClient.startChartRun;
 
@@ -36,7 +36,7 @@ describe('Integration: Chart sweep with mocked WorkerClient V5', () => {
         };
 
         WorkerClient.startChartRun = (_input, refinement, onUpdate, onTerminal) => {
-            // In v5, we process all levels. For this test, we just stream 1 level's worth.
+            // The chart worker processes all levels. For this test, we just stream one pass.
             const level = refinement[0]!;
             for (let i = 1; i <= 30; i++) {
                 onUpdate({
@@ -85,7 +85,7 @@ describe('Integration: Chart sweep with mocked WorkerClient V5', () => {
         );
     });
 
-    it('accuracy improves between coarse and final passes (streaming v5)', async () => {
+    it('accuracy improves between coarse and final passes (streaming checkpoints)', async () => {
         const service = new RefinementService();
         let coarseSweepSnap: any[] | null = null;
         let finalSweepSnap: any[] | null = null;

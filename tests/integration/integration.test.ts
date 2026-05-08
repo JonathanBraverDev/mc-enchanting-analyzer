@@ -9,7 +9,7 @@ import { SummaryService } from '#services/SummaryService.js';
 
 const BASE_PAYLOAD = TEST_DATA.PAYLOADS.BASE_SWORD;
 
-describe('Integration: RefinementService V5 Contract', () => {
+describe('Integration: RefinementService Checkpoint Contract', () => {
     let originalStartTop: typeof WorkerClient.startTopRun;
     let originalStartChart: typeof WorkerClient.startChartRun;
 

@@ -4,6 +4,9 @@ import { RefinementService, RefinementPayload } from '#ui/refinement.js';
 import { RegistryFactory } from '#core/factory.js';
 import { WorkerClient } from '#ui/worker-client.js';
 
+const EMPTY_BUCKETS = { anyByEnchantId: {}, rankByIdAndRank: {}, countBySize: {} };
+const RESOLVED_NORMALIZATION = { domain: 'resolved-mass' as const };
+
 /** Flush pending macrotasks (AsyncUtils.yield uses setTimeout 0). */
 function flush(): Promise<void> {
     return new Promise(r => setTimeout(r, 20));
@@ -37,7 +40,13 @@ describe('XP Cap Sweep Integration', () => {
         WorkerClient.startChartRun = (_input, _refinement, onUpdate, onTerminal) => {
             const xpCap = registry.mechanics.xp_cap || 30;
             for (let i = 1; i <= xpCap; i++) {
-                onUpdate({ xpLevel: i, buckets: {} } as any);
+                onUpdate({
+                    xpLevel: i,
+                    refinementLevel: 'ultra',
+                    clueConditioned: false,
+                    normalization: RESOLVED_NORMALIZATION,
+                    buckets: EMPTY_BUCKETS
+                });
             }
             onTerminal('done');
             return 'chart-run' as any;
@@ -77,7 +86,13 @@ describe('XP Cap Sweep Integration', () => {
         WorkerClient.startChartRun = (_input, _refinement, onUpdate, onTerminal) => {
             const xpCap = registry.mechanics.xp_cap || 50;
             for (let i = 1; i <= xpCap; i++) {
-                onUpdate({ xpLevel: i, buckets: {} } as any);
+                onUpdate({
+                    xpLevel: i,
+                    refinementLevel: 'ultra',
+                    clueConditioned: false,
+                    normalization: RESOLVED_NORMALIZATION,
+                    buckets: EMPTY_BUCKETS
+                });
             }
             onTerminal('done');
             return 'chart-run' as any;
