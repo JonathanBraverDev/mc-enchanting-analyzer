@@ -69,7 +69,7 @@ describe('Probability Conservation', () => {
     it('accuracy >= 0 and sum(buckets) ≈ 1.0 across items/versions', async () => {
         const cases: Array<{ version: string; item: string; level: number; material: string }> = [
             { version: TEST_DATA.VERSIONS.CLASSIC, item: TEST_DATA.ITEMS.SWORD, level: 30, material: TEST_DATA.MATERIALS.DIAMOND },
-            { version: '1.14.3', item: 'chestplate', level: 30, material: TEST_DATA.MATERIALS.NETHERITE }, // Custom boundary
+            { version: '1.14.3', item: 'chestplate', level: 30, material: TEST_DATA.MATERIALS.DIAMOND }, // Custom boundary before netherite exists
             { version: TEST_DATA.VERSIONS.MODERN,  item: TEST_DATA.ITEMS.MACE, level: 15, material: TEST_DATA.MATERIALS.MACE },
             { version: TEST_DATA.VERSIONS.BOOK_MULTI_LIMIT, item: TEST_DATA.ITEMS.BOOK, level: 30, material: TEST_DATA.MATERIALS.BOOK },
         ];
