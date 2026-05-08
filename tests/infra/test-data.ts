@@ -40,21 +40,21 @@ export const TEST_DATA = {
 
     PAYLOADS: {
         BASE_SWORD: {
-            category: 'sword',
+            item: 'sword',
             material: 'diamond',
             clue: null,
             xpLevel: 30,
             version: '1.21'
         },
         BASE_PICKAXE: {
-            category: 'pickaxe',
+            item: 'pickaxe',
             material: 'diamond',
             clue: null,
             xpLevel: 30,
             version: '1.21'
         },
         MODERN_BOOK: {
-            category: 'book',
+            item: 'book',
             material: 'book',
             clue: null,
             xpLevel: 30,

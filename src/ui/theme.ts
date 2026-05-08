@@ -12,7 +12,7 @@ export const ThemeManager = {
      */
     getEnchantColor: (idOrName: string | number, registry: RegistryState): string => {
         let fullName = typeof idOrName === 'number' ? getFullEnchantName(registry, idOrName) : idOrName;
-        const base = RomanUtils.getBaseName(fullName, registry.data.constants.ROMAN_MAP);
+        const base = RomanUtils.getBaseName(fullName, registry.romanMap);
         let color = DATA.cosmetics.ENCHANT_COLORS[base];
 
         if (!color) {

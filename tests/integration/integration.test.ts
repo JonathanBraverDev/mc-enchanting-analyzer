@@ -3,7 +3,6 @@ import assert from 'node:assert';
 import { RefinementService } from '#ui/refinement.js';
 import { WorkerClient } from '#ui/worker-client.js';
 import { EngineFactory } from '#engine/factory.js';
-import { DATA } from '#data/index.js';
 import { TEST_DATA } from '#tests/infra/test-data.js';
 import { SnapshotService } from '#services/SnapshotService.js';
 import { SummaryService } from '#services/SummaryService.js';
@@ -68,11 +67,11 @@ describe('Integration: RefinementService V5 Contract', () => {
 
 describe('Integration: Snapshot Integrity', () => {
     it('unconditioned snapshot masses should match engine summary exactly', async () => {
-        const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
+        const engine = EngineFactory.createForVersion(TEST_DATA.VERSIONS.MODERN);
         const res = await engine.searchToCheckpoint({
-            cat: TEST_DATA.ITEMS.BOOK,
+            item: TEST_DATA.ITEMS.BOOK,
             xp: 30,
-            mat: TEST_DATA.MATERIALS.DIAMOND,
+            material: TEST_DATA.MATERIALS.BOOK,
             threshold: 1n // Very low threshold to ensure many combinations
         });
 
@@ -90,9 +89,9 @@ describe('Integration: Snapshot Integrity', () => {
             {
                 snapshotType: 'top',
                 input: {
-                    category: TEST_DATA.ITEMS.BOOK,
+                    item: TEST_DATA.ITEMS.BOOK,
                     xpLevel: 30,
-                    material: TEST_DATA.MATERIALS.DIAMOND,
+                    material: TEST_DATA.MATERIALS.BOOK,
                     clue: null,
                     version: TEST_DATA.VERSIONS.MODERN
                 },
@@ -113,21 +112,21 @@ describe('Integration: Snapshot Integrity', () => {
 
 describe('Integration: Clue Validation', () => {
     it('should reject invalid clue input consistently', async () => {
-        const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
+        const engine = EngineFactory.createForVersion(TEST_DATA.VERSIONS.MODERN);
 
         // Unknown enchantment
         await assert.rejects(async () => {
-            await engine.calculate({ cat: TEST_DATA.ITEMS.SWORD, xp: 30, mat: TEST_DATA.MATERIALS.DIAMOND, clue: 'FakeEnchant X' });
+            await engine.calculate({ item: TEST_DATA.ITEMS.SWORD, xp: 30, material: TEST_DATA.MATERIALS.DIAMOND, clue: 'FakeEnchant X' });
         }, /Unknown enchantment/);
 
-        // Inapplicable category
+        // Inapplicable item
         await assert.rejects(async () => {
-            await engine.calculate({ cat: TEST_DATA.ITEMS.SWORD, xp: 30, mat: TEST_DATA.MATERIALS.DIAMOND, clue: 'Aqua Affinity I' });
-        }, /not applicable to category/);
+            await engine.calculate({ item: TEST_DATA.ITEMS.SWORD, xp: 30, material: TEST_DATA.MATERIALS.DIAMOND, clue: 'Aqua Affinity I' });
+        }, /not applicable to item/);
 
         // Rank above max
         await assert.rejects(async () => {
-            await engine.calculate({ cat: TEST_DATA.ITEMS.SWORD, xp: 30, mat: TEST_DATA.MATERIALS.DIAMOND, clue: 'Sharpness VI' });
+            await engine.calculate({ item: TEST_DATA.ITEMS.SWORD, xp: 30, material: TEST_DATA.MATERIALS.DIAMOND, clue: 'Sharpness VI' });
         }, /exceeds max/);
     });
 });

@@ -11,7 +11,7 @@ import { UI_TEXTS, UI_DEFAULTS, RefinementStatusLevel, getSearchCheckpointForRef
 import { WorkerClient } from '#ui/worker-client.js';
 
 export interface RefinementPayload {
-    category: string;
+    item: string;
     material: string;
     clue: string | null;
     xpLevel: number;
@@ -61,7 +61,7 @@ export class RefinementService {
             this.sweep = new Array(xpCap).fill(null);
 
             const topInput: TopInputSignature = {
-                category: payload.category,
+                item: payload.item,
                 xpLevel: payload.xpLevel,
                 material: payload.material,
                 clue: payload.clue,
@@ -70,7 +70,7 @@ export class RefinementService {
             };
 
             const chartInput: ChartInputSignature = {
-                category: payload.category,
+                item: payload.item,
                 material: payload.material,
                 clue: payload.clue,
                 version: payload.version,
@@ -78,7 +78,7 @@ export class RefinementService {
             };
 
             const refinementLevels: RefinementLevelName[] = ['coarse', 'standard', 'deep', 'ultra'];
-            const isBook = payload.category === 'book';
+            const isBook = payload.item === 'book';
 
             // Start Top Run (Single call for all levels)
             WorkerClient.startTopRun(
@@ -153,7 +153,7 @@ export class RefinementService {
         this.isRefining = true;
 
         const topInput: TopInputSignature = {
-            category: payload.category,
+            item: payload.item,
             xpLevel: payload.xpLevel,
             material: payload.material,
             clue: payload.clue,
@@ -162,7 +162,7 @@ export class RefinementService {
         };
 
         const refinementLevels: RefinementLevelName[] = ['coarse', 'standard', 'deep', 'ultra'];
-        const isBook = payload.category === 'book';
+        const isBook = payload.item === 'book';
 
         WorkerClient.startTopRun(
             topInput,
@@ -205,7 +205,7 @@ export class RefinementService {
         this.isRefining = true;
 
         const topInput: TopInputSignature = {
-            category: payload.category,
+            item: payload.item,
             xpLevel: payload.xpLevel,
             material: payload.material,
             clue: payload.clue,
@@ -214,7 +214,7 @@ export class RefinementService {
         };
 
         const refinementLevels: RefinementLevelName[] = ['coarse', 'standard', 'deep', 'ultra'];
-        const isBook = payload.category === 'book';
+        const isBook = payload.item === 'book';
 
         WorkerClient.projectTopRun(
             topInput,

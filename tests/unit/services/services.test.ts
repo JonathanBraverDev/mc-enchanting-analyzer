@@ -12,14 +12,39 @@ import { SummaryAggregationService } from '#services/SummaryAggregationService.j
 import { SerializationService } from '#services/SerializationService.js';
 import { HumanizationService } from '#services/HumanizationService.js';
 import { SnapshotService } from '#services/SnapshotService.js';
+import { UiMetadataService } from '#services/UiMetadataService.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { EngineFactory } from '#engine/factory.js';
 import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
-import { DATA } from '#data/index.js';
 import { ComboUtils } from '#utils/domain/ComboUtils.js';
 import { ProbUtils } from '#utils/index.js';
 import { makeFrontierSnapshot } from '#tests/infra/frontier-test-utils.js';
 import type { CalculationStats, MassAccountingBreakdown, PackedCombo, PackedEnchant } from '#types/index.js';
+
+describe('UiMetadataService', () => {
+    it('includes version boundaries used by registry data', () => {
+        const versions = UiMetadataService.getVersions();
+
+        assert.deepStrictEqual(versions, [
+            '1.21.11',
+            '1.21.9',
+            '1.21',
+            '1.16',
+            '1.14.3',
+            '1.14',
+            '1.13',
+            '1.11.1',
+            '1.8',
+            '1.7.2',
+            '1.4.6',
+            '1.3.1',
+            '1.1',
+            '1.0'
+        ]);
+        assert.ok(versions.includes('1.11.1'), 'enchantment-boundary versions should be selectable');
+        assert.ok(versions.includes('1.14'), 'conflict cutoff boundary versions should be selectable');
+    });
+});
 
 // ── SummaryService ────────────────────────────────────────────────────────────
 
@@ -207,7 +232,7 @@ describe('SummaryService', () => {
     });
 
     it('chart-cell snapshots expose aggregate buckets without a combo payload', () => {
-        const engine = EngineFactory.create(DATA, '1.20');
+        const engine = EngineFactory.createForVersion('1.20');
         const registry = engine.registry;
         const sharpness = registry.idMap.get('Sharpness')!;
         const sharpnessRank = ((sharpness << 8) | 1) as PackedEnchant;
@@ -225,7 +250,7 @@ describe('SummaryService', () => {
                 snapshotType: 'chart-cell',
                 input: {
                     version: '1.20',
-                    category: 'sword',
+                    item: 'sword',
                     material: 'diamond',
                     xpLevel: 30,
                     clue: null
@@ -303,11 +328,11 @@ describe('SerializationService', () => {
 // ── HumanizationService ────────────────────────────────────────────────────
 
 describe('HumanizationService', () => {
-    const engine = EngineFactory.create(DATA, '1.20');
+    const engine = EngineFactory.createForVersion('1.20');
     const reg    = engine.registry;
 
     before(async () => {
-        await engine.calculate({ cat: 'pickaxe', xp: 30, mat: 'diamond', threshold: 0.005 });
+        await engine.calculate({ item: 'pickaxe', xp: 30, material: 'diamond', threshold: 0.005 });
     });
 
     it('resolves enchantment names in the any map', () => {

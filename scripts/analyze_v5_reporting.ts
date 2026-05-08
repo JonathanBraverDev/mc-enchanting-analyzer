@@ -1,7 +1,7 @@
 /**
  * Analyzes scripts/v5-report-output/ files produced by run_v5_reporting.ts.
  *
- * Usage: npx tsx scripts/analyze_v5_reporting.ts [--cat book] [--xp 30]
+ * Usage: npx tsx scripts/analyze_v5_reporting.ts [--item book] [--xp 30]
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -18,7 +18,7 @@ const findArg = (key: string) => {
     return next && !next.startsWith('--') ? next : null;
 };
 
-const filterCat = findArg('--cat');
+const filterItem = findArg('--item');
 const xpArg = findArg('--xp');
 const filterXp = xpArg ? parseInt(xpArg) : null;
 
@@ -46,8 +46,8 @@ interface ExploredMassSampleData {
 }
 
 interface FileData {
-    cat: string;
-    mat: string;
+    item: string;
+    material: string;
     xp: number;
     uncertainty: number | null;
     elapsedMs: number;
@@ -64,7 +64,7 @@ function loadAll(): FileData[] {
     return fs.readdirSync(OUT_DIR)
         .filter(f => f.endsWith('.json'))
         .map(f => JSON.parse(fs.readFileSync(path.join(OUT_DIR, f), 'utf8')) as FileData)
-        .filter(d => (!filterCat || d.cat === filterCat) && (!filterXp || d.xp === filterXp));
+        .filter(d => (!filterItem || d.item === filterItem) && (!filterXp || d.xp === filterXp));
 }
 
 function formatThreshold(t: number): string {
@@ -75,13 +75,13 @@ function formatThreshold(t: number): string {
 }
 
 function summarize(data: FileData[]) {
-    const byCat = new Map<string, FileData[]>();
+    const byItem = new Map<string, FileData[]>();
     for (const d of data) {
-        if (!byCat.has(d.cat)) byCat.set(d.cat, []);
-        byCat.get(d.cat)!.push(d);
+        if (!byItem.has(d.item)) byItem.set(d.item, []);
+        byItem.get(d.item)!.push(d);
     }
 
-    for (const [cat, items] of [...byCat.entries()].sort()) {
+    for (const [item, items] of [...byItem.entries()].sort()) {
         const byXp = new Map<number, FileData[]>();
         for (const d of items) {
             if (!byXp.has(d.xp)) byXp.set(d.xp, []);
@@ -89,7 +89,7 @@ function summarize(data: FileData[]) {
         }
 
         console.log(`\n${'='.repeat(60)}`);
-        console.log(`CAT: ${cat}`);
+        console.log(`ITEM: ${item}`);
         console.log(`${'='.repeat(60)}`);
 
         const xpLevels = [...new Set(items.map(d => d.xp))].sort((a, b) => a - b);
@@ -121,19 +121,19 @@ function summarize(data: FileData[]) {
 
 function worstCaseTable(data: FileData[]) {
     console.log('\n\n' + '='.repeat(60));
-    console.log('WORST-CASE UNCERTAINTY BY CAT (xp=30)');
+    console.log('WORST-CASE UNCERTAINTY BY ITEM (xp=30)');
     console.log('='.repeat(60));
 
-    const byCat = new Map<string, number>();
+    const byItem = new Map<string, number>();
     for (const d of data.filter(d => d.xp === 30 && d.uncertainty !== null)) {
-        const prev = byCat.get(d.cat) ?? 0;
-        byCat.set(d.cat, Math.max(prev, d.uncertainty!));
+        const prev = byItem.get(d.item) ?? 0;
+        byItem.set(d.item, Math.max(prev, d.uncertainty!));
     }
 
-    const sorted = [...byCat.entries()].sort((a, b) => b[1] - a[1]);
-    for (const [cat, uncertainty] of sorted) {
+    const sorted = [...byItem.entries()].sort((a, b) => b[1] - a[1]);
+    for (const [item, uncertainty] of sorted) {
         const bar = '#'.repeat(Math.round(uncertainty * 10000));
-        console.log(`  ${cat.padEnd(15)} ${(uncertainty * 100).toFixed(4)}%  ${bar}`);
+        console.log(`  ${item.padEnd(15)} ${(uncertainty * 100).toFixed(4)}%  ${bar}`);
     }
 }
 

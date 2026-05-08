@@ -1,9 +1,9 @@
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert';
+import { RegistryFactory } from '#core/factory.js';
 import { CacheManager } from '#engine/cache/CacheManager.js';
 import { EnchantEngine } from '#engine/index.js';
 import { EngineFactory } from '#engine/factory.js';
-import { DATA } from '#data/index.js';
 import { TEST_DATA } from '#tests/infra/test-data.js';
 
 describe('EnchantEngine: Sequential Checkpoint Search', () => {
@@ -14,7 +14,7 @@ describe('EnchantEngine: Sequential Checkpoint Search', () => {
     beforeEach(() => {
         EngineFactory.clearCaches();
         cache = new CacheManager({ statsSize: 100, comboOtherSize: 100, comboBookSize: 100, poolSize: 100 });
-        engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN, { cache });
+        engine = EngineFactory.create(RegistryFactory.build(TEST_DATA.VERSIONS.MODERN), { cache });
     });
 
     it('should improve accuracy monotonically across checkpoints', async () => {
@@ -26,9 +26,9 @@ describe('EnchantEngine: Sequential Checkpoint Search', () => {
         ];
 
         await engine.searchSequentialCheckpoints({
-            cat: TEST_DATA.ITEMS.SWORD,
+            item: TEST_DATA.ITEMS.SWORD,
             xp: 30,
-            mat: TEST_DATA.MATERIALS.DIAMOND,
+            material: TEST_DATA.MATERIALS.DIAMOND,
             checkpoints,
             onCheckpointComplete: (result) => {
                 accuracies.push(result.tracker.mass.toPublic().resolved);
@@ -49,9 +49,9 @@ describe('EnchantEngine: Sequential Checkpoint Search', () => {
         ];
 
         const finalResult = await engine.searchSequentialCheckpoints({
-            cat: TEST_DATA.ITEMS.SWORD,
+            item: TEST_DATA.ITEMS.SWORD,
             xp: 30,
-            mat: TEST_DATA.MATERIALS.DIAMOND,
+            material: TEST_DATA.MATERIALS.DIAMOND,
             checkpoints,
             onCheckpointComplete: () => {
                 checkpointCount++;
@@ -70,9 +70,9 @@ describe('EnchantEngine: Sequential Checkpoint Search', () => {
         ];
 
         await engine.searchSequentialCheckpoints({
-            cat: TEST_DATA.ITEMS.SWORD,
+            item: TEST_DATA.ITEMS.SWORD,
             xp: 30,
-            mat: TEST_DATA.MATERIALS.DIAMOND,
+            material: TEST_DATA.MATERIALS.DIAMOND,
             checkpoints,
             onCheckpointComplete: (result) => {
                 roundingValues.push(result.tracker.mass.toPublic().rounding);

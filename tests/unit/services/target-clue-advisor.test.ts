@@ -1,6 +1,5 @@
 import { describe, it, before } from 'node:test';
 import assert from 'node:assert';
-import { DATA } from '#data/index.js';
 import { getEnchantId } from '#core/registry.js';
 import { EngineFactory } from '#engine/factory.js';
 import { TargetAnalysisService } from '#services/TargetAnalysisService.js';
@@ -24,7 +23,7 @@ function pack(enchants: PackedEnchant[]): PackedCombo {
 
 describe('TargetClueAdvisorService', () => {
     before(() => {
-        registry = EngineFactory.create(DATA, '1.21.11').registry;
+        registry = EngineFactory.createForVersion('1.21.11').registry;
 
         const efficiencyId = getEnchantId(registry, 'Efficiency');
         const fortuneId = getEnchantId(registry, 'Fortune');

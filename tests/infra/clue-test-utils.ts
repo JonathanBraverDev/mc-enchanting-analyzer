@@ -1,12 +1,11 @@
 import assert from 'node:assert';
 import { ClueValidator } from '#core/clue.js';
-import { DATA } from '#data/index.js';
 import { EngineFactory } from '#engine/factory.js';
 import { SummaryService } from '#services/SummaryService.js';
 import { TEST_DATA } from '#tests/infra/test-data.js';
 import type { CalculationStats } from '#types/index.js';
 
-type TestEngine = ReturnType<typeof EngineFactory.create>;
+type TestEngine = ReturnType<typeof EngineFactory.createForVersion>;
 type CheckpointResult = Awaited<ReturnType<TestEngine['searchToCheckpoint']>>;
 
 export function compareConditionedMaps(
@@ -26,19 +25,19 @@ export function compareConditionedMaps(
 }
 
 export async function calculateByFullSearchThenCondition(
-    cat: string,
-    mat: string,
+    item: string,
+    material: string,
     clue: string,
     threshold: number,
     xp = 30
 ): Promise<CalculationStats> {
-    const engine = EngineFactory.create(DATA, '1.21.11');
+    const engine = EngineFactory.createForVersion('1.21.11');
     engine.resetCaches();
-    const targetClueId = ClueValidator.validate(engine.registry, cat, clue);
+    const targetClueId = ClueValidator.validate(engine.registry, item, clue);
     const fullSearch = await engine.searchToCheckpoint({
-        cat,
+        item,
         xp,
-        mat,
+        material,
         threshold,
         useCache: false
     });
@@ -49,23 +48,23 @@ export async function calculateByFullSearchThenCondition(
         indexToEnchant: engine.registry.indexToEnchant,
         targetClueId,
         frontiers: fullSearch.frontiers,
-        isBook: cat === TEST_DATA.ITEMS.BOOK,
+        isBook: item === TEST_DATA.ITEMS.BOOK,
         comboLimit: 1000
     });
 }
 
 export async function calculateWithPruning(
-    cat: string,
-    mat: string,
+    item: string,
+    material: string,
     clue: string,
     threshold: number
 ): Promise<CalculationStats> {
-    const engine = EngineFactory.create(DATA, '1.21.11');
+    const engine = EngineFactory.createForVersion('1.21.11');
     engine.resetCaches();
     return engine.calculate({
-        cat,
+        item,
         xp: 30,
-        mat,
+        material,
         clue,
         threshold,
         useCache: false,
@@ -76,10 +75,10 @@ export async function calculateWithPruning(
 export function summarizeCheckpoint(
     engine: TestEngine,
     result: CheckpointResult,
-    cat: string,
+    item: string,
     clue: string
 ): CalculationStats {
-    const targetClueId = ClueValidator.validate(engine.registry, cat, clue);
+    const targetClueId = ClueValidator.validate(engine.registry, item, clue);
 
     return SummaryService.summarizeConditioned({
         combos: result.combos,
@@ -87,7 +86,7 @@ export function summarizeCheckpoint(
         indexToEnchant: engine.registry.indexToEnchant,
         targetClueId,
         frontiers: result.frontiers,
-        isBook: cat === TEST_DATA.ITEMS.BOOK,
+        isBook: item === TEST_DATA.ITEMS.BOOK,
         comboLimit: 1000
     });
 }

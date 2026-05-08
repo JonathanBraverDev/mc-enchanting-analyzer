@@ -13,12 +13,12 @@ export class ClueValidator {
      * Throws an error if the clue is invalid.
      *
      * @param registry Resolved registry state.
-     * @param cat Item category.
+     * @param item Item type.
      * @param clue The clue string (e.g., "Sharpness IV").
      * @returns Packed clue ID (enchantId << 8 | rank).
      */
-    public static validate(registry: RegistryState, cat: string, clue: string): number {
-        const romanMap = registry.data.constants.ROMAN_MAP;
+    public static validate(registry: RegistryState, item: string, clue: string): number {
+        const romanMap = registry.romanMap;
         const parsed = EnchantUtils.parse(clue, romanMap);
 
         if (!parsed) {
@@ -34,9 +34,9 @@ export class ClueValidator {
         const rank = parsed.rank ?? 1;
 
         // Applicability check
-        const versionPool = registry.versionPool.get(cat);
-        if (versionPool && !versionPool.includes(parsed.name) && cat !== 'book') {
-            throw new Error(`Enchantment "${parsed.name}" is not applicable to category "${cat}"`);
+        const itemPool = registry.itemPool[item];
+        if (itemPool && !itemPool.includes(parsed.name) && item !== 'book') {
+            throw new Error(`Enchantment "${parsed.name}" is not applicable to item "${item}"`);
         }
 
         // Rank bounds check

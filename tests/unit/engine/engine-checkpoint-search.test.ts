@@ -3,16 +3,16 @@
  */
 import { describe, it, afterEach } from 'node:test';
 import assert from 'node:assert';
+import { RegistryFactory } from '#core/factory.js';
 import { EngineFactory } from '#engine/factory.js';
 import { CacheManager } from '#engine/cache/CacheManager.js';
 import { SummaryService } from '#services/SummaryService.js';
-import { DATA } from '#data/index.js';
 import { TEST_DATA } from '#tests/infra/test-data.js';
 import { CacheConfig, SearchResult } from '#types/index.js';
 
-const CAT = TEST_DATA.ITEMS.SWORD;
+const ITEM = TEST_DATA.ITEMS.SWORD;
 const XP = 30;
-const MAT = TEST_DATA.MATERIALS.DIAMOND;
+const MATERIAL = TEST_DATA.MATERIALS.DIAMOND;
 const VERSION = TEST_DATA.VERSIONS.MODERN;
 
 describe('EnchantEngine: sequential checkpoint aggregation', () => {
@@ -21,7 +21,7 @@ describe('EnchantEngine: sequential checkpoint aggregation', () => {
 
     function createEngine() {
         cache = new CacheManager(cacheConfig);
-        return EngineFactory.create(DATA, VERSION, { cache });
+        return EngineFactory.create(RegistryFactory.build(VERSION), { cache });
     }
 
     afterEach(() => {
@@ -32,9 +32,9 @@ describe('EnchantEngine: sequential checkpoint aggregation', () => {
         const engine = createEngine();
 
         const singleResult = await engine.searchToCheckpoint({
-            cat: CAT,
+            item: ITEM,
             xp: XP,
-            mat: MAT,
+            material: MATERIAL,
             threshold: TEST_DATA.THRESHOLDS.PROB_MIN,
             resultsLimit: 10000
         });
@@ -47,9 +47,9 @@ describe('EnchantEngine: sequential checkpoint aggregation', () => {
         });
 
         const sequentialResult = await engine.searchSequentialCheckpoints({
-            cat: CAT,
+            item: ITEM,
             xp: XP,
-            mat: MAT,
+            material: MATERIAL,
             checkpoints: [
                 { threshold: 0.01,   limit: 500 },
                 { threshold: TEST_DATA.THRESHOLDS.PROB_MIN, limit: 10000 },
@@ -80,9 +80,9 @@ describe('EnchantEngine: sequential checkpoint aggregation', () => {
         const callbackIndices: number[] = [];
 
         await engine.searchSequentialCheckpoints({
-            cat: CAT,
+            item: ITEM,
             xp: XP,
-            mat: MAT,
+            material: MATERIAL,
             checkpoints,
             onCheckpointComplete: (_result: SearchResult, checkpointIndex: number) => { callbackIndices.push(checkpointIndex); }
         });
@@ -107,9 +107,9 @@ describe('EnchantEngine: sequential checkpoint aggregation', () => {
         } as AbortSignal;
 
         const result = await engine.searchSequentialCheckpoints({
-            cat: CAT,
+            item: ITEM,
             xp: XP,
-            mat: MAT,
+            material: MATERIAL,
             checkpoints: [
                 { threshold: 0.01, limit: 200 },
                 { threshold: 0.001, limit: 500 },
@@ -130,9 +130,9 @@ describe('EnchantEngine: sequential checkpoint aggregation', () => {
         const accuracies: number[] = [];
 
         await engine.searchSequentialCheckpoints({
-            cat: TEST_DATA.ITEMS.BOOK,
+            item: TEST_DATA.ITEMS.BOOK,
             xp: 30,
-            mat: TEST_DATA.MATERIALS.BOOK,
+            material: TEST_DATA.MATERIALS.BOOK,
             checkpoints: [
                 { threshold: 0.1,    limit: 100 },
                 { threshold: 0.01,   limit: 500 },
@@ -153,18 +153,18 @@ describe('EnchantEngine: sequential checkpoint aggregation', () => {
 
 describe('EnchantEngine checkpoint search', () => {
     afterEach(() => {
-        const engine = EngineFactory.create(DATA, VERSION);
+        const engine = EngineFactory.createForVersion(VERSION);
         engine.resetCaches();
     });
 
     it('searchSequentialCheckpoints produces same summarized result as calculate', async () => {
-        const engine = EngineFactory.create(DATA, VERSION);
+        const engine = EngineFactory.createForVersion(VERSION);
         engine.resetCaches();
 
         const sequentialResult = await engine.searchSequentialCheckpoints({
-            cat: CAT,
+            item: ITEM,
             xp: XP,
-            mat: MAT,
+            material: MATERIAL,
             checkpoints: [
                 { threshold: 0.01,   limit: 500 },
                 { threshold: TEST_DATA.THRESHOLDS.PROB_MIN, limit: 10000 },
@@ -182,9 +182,9 @@ describe('EnchantEngine checkpoint search', () => {
         engine.resetCaches();
 
         const fullStats = await engine.calculate({
-            cat: CAT,
+            item: ITEM,
             xp: XP,
-            mat: MAT,
+            material: MATERIAL,
             threshold: TEST_DATA.THRESHOLDS.PROB_MIN,
             summaryLimit: 10000,
             resultsLimit: 10000
@@ -196,14 +196,14 @@ describe('EnchantEngine checkpoint search', () => {
     });
 
     it('best checkpoint result survives for future calls', async () => {
-        const engine = EngineFactory.create(DATA, VERSION);
+        const engine = EngineFactory.createForVersion(VERSION);
         engine.resetCaches();
         const checkpointAccuracies: number[] = [];
 
         await engine.searchSequentialCheckpoints({
-            cat: CAT,
+            item: ITEM,
             xp: XP,
-            mat: MAT,
+            material: MATERIAL,
             checkpoints: [
                 { threshold: 0.1,    limit: 100 },
                 { threshold: 0.01,   limit: 500 },
@@ -214,7 +214,8 @@ describe('EnchantEngine checkpoint search', () => {
 
         assert.strictEqual(checkpointAccuracies.length, 3);
         const ultraAccuracy = checkpointAccuracies[2];
-        const futureResult = await engine.searchToCheckpoint({ cat: CAT, xp: XP, mat: MAT, threshold: TEST_DATA.THRESHOLDS.PROB_MIN });
+        const futureResult = await engine.searchToCheckpoint({ item: ITEM, xp: XP, material: MATERIAL, threshold: TEST_DATA.THRESHOLDS.PROB_MIN });
         assert.strictEqual(futureResult.tracker.mass.toPublic().resolved, ultraAccuracy);
     });
+
 });

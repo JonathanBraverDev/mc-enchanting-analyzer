@@ -1,13 +1,12 @@
 import { EngineFactory } from '#engine/index.js';
-import { DATA } from '#data/index.js';
 import { TEST_DEFAULTS } from '#constants/testing.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 
 interface PerfCase {
     name: string;
     version: string;
-    cat: string;
-    mat: string;
+    item: string;
+    material: string;
     xp: number;
     clue?: string;
 }
@@ -16,38 +15,38 @@ const CASES: PerfCase[] = [
     {
         name: 'book-modern-no-clue',
         version: '1.21.11',
-        cat: 'book',
-        mat: 'book',
+        item: 'book',
+        material: 'book',
         xp: 30
     },
     {
         name: 'book-modern-common-clue',
         version: '1.21.11',
-        cat: 'book',
-        mat: 'book',
+        item: 'book',
+        material: 'book',
         xp: 30,
         clue: 'Protection III'
     },
     {
         name: 'book-modern-rare-clue',
         version: '1.21.11',
-        cat: 'book',
-        mat: 'book',
+        item: 'book',
+        material: 'book',
         xp: 30,
         clue: 'Projectile Protection IV'
     }
 ];
 
 async function runCase(testCase: PerfCase) {
-    const engine = EngineFactory.create(DATA, testCase.version);
+    const engine = EngineFactory.createForVersion(testCase.version);
     engine.resetCaches();
 
     const timing = { totalMs: 0, searchMs: 0, postProcessingMs: 0 };
     const wallStart = performance.now();
     const stats = await engine.calculate({
-        cat: testCase.cat,
+        item: testCase.item,
         xp: testCase.xp,
-        mat: testCase.mat,
+        material: testCase.material,
         clue: testCase.clue,
         threshold: TEST_DEFAULTS.SNAPSHOT_THRESHOLD,
         maxIterations: ENGINE_LIMITS.MAX_ITERATIONS_UNBOUNDED,

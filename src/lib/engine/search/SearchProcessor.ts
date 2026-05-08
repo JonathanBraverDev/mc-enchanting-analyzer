@@ -145,11 +145,11 @@ export class SearchProcessor {
         nodeId: number,
         ctx: ForwardingContext
     ): ExpansionBlueprint {
-        const { registry, cat, poolPlan } = ctx;
+        const { registry, item, poolPlan } = ctx;
         const currentCombo = ctx.graph.getCombo(nodeId);
         const currentCount = ctx.graph.getCount(nodeId);
         const currentLevel = ctx.graph.getLevel(nodeId);
-        const isBook = cat === "book";
+        const isBook = item === "book";
         const cluePolicy = ctx.cluePolicy;
         const targetAlreadySelected = cluePolicy?.containsTargetClue(currentCombo, registry.indexToEnchant) ?? false;
 

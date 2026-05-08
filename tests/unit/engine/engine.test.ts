@@ -1,7 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { EngineFactory } from '#engine/factory.js';
-import { DATA } from '#data/index.js';
 import { ProbUtils } from '#utils/index.js';
 import { HumanizationService } from '#services/index.js';
 import { EngineTestUtils } from '#tests/infra/test-utils.js';
@@ -15,7 +14,7 @@ if (typeof (globalThis as any).requestAnimationFrame !== 'function') {
 
 describe('Enchantment Engine Test Suite', () => {
     describe('1. Core Engine Logic', () => {
-        const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
+        const engine = EngineFactory.createForVersion(TEST_DATA.VERSIONS.MODERN);
 
         it('should maintain total probability of Modified Level Distribution near 1.0 (Exact BigInt)', () => {
             const dist = engine.getModifiedLevelDist(30, 10);
@@ -25,7 +24,7 @@ describe('Enchantment Engine Test Suite', () => {
         });
 
         it('should NOT return "X undefined" when no enchants are possible', async () => {
-            const stats = await engine.calculate({ cat: TEST_DATA.ITEMS.SWORD, xp: 1, mat: TEST_DATA.MATERIALS.DIAMOND });
+            const stats = await engine.calculate({ item: TEST_DATA.ITEMS.SWORD, xp: 1, material: TEST_DATA.MATERIALS.DIAMOND });
             const h = HumanizationService.humanize(stats, engine.registry);
             const hasUndefined = Object.keys(h.combos).some(c => c.includes('undefined')) ||
                                 Object.keys(h.ranks).some(r => r.includes('undefined'));
@@ -35,9 +34,9 @@ describe('Enchantment Engine Test Suite', () => {
         it('reports search and post-processing timing separately', async () => {
             const timing = { totalMs: 0, searchMs: 0, postProcessingMs: 0 };
             const stats = await engine.calculate({
-                cat: TEST_DATA.ITEMS.SWORD,
+                item: TEST_DATA.ITEMS.SWORD,
                 xp: 30,
-                mat: TEST_DATA.MATERIALS.DIAMOND,
+                material: TEST_DATA.MATERIALS.DIAMOND,
                 threshold: 0.001,
                 useCache: false,
                 timing
@@ -52,19 +51,19 @@ describe('Enchantment Engine Test Suite', () => {
 
     describe('2. Version Compatibility & Search Logic', () => {
         it('1.11.1+: Sweeping Edge should only appear in valid versions', async () => {
-            const v18 = EngineFactory.create(DATA, TEST_DATA.VERSIONS.LEGACY);
+            const v18 = EngineFactory.createForVersion(TEST_DATA.VERSIONS.LEGACY);
             const id = v18.registry.idMap.get('Sweeping Edge')!;
-            const s18 = await v18.calculate({ cat: TEST_DATA.ITEMS.SWORD, xp: 30, mat: TEST_DATA.MATERIALS.DIAMOND });
+            const s18 = await v18.calculate({ item: TEST_DATA.ITEMS.SWORD, xp: 30, material: TEST_DATA.MATERIALS.DIAMOND });
             assert.ok(!(s18.any[id] ?? 0));
 
-            const v111 = EngineFactory.create(DATA, '1.11.1');
-            const s111 = await v111.calculate({ cat: TEST_DATA.ITEMS.SWORD, xp: 30, mat: TEST_DATA.MATERIALS.DIAMOND });
+            const v111 = EngineFactory.createForVersion('1.11.1');
+            const s111 = await v111.calculate({ item: TEST_DATA.ITEMS.SWORD, xp: 30, material: TEST_DATA.MATERIALS.DIAMOND });
             assert.ok((s111.any[id] ?? 0) > 0);
         });
 
         it('1.14 vs 1.14.3: Protection conflict window (Engine Check)', async () => {
-            const e114 = EngineFactory.create(DATA, TEST_DATA.GOD_ARMOR.START);
-            const e1143 = EngineFactory.create(DATA, TEST_DATA.GOD_ARMOR.END);
+            const e114 = EngineFactory.createForVersion(TEST_DATA.GOD_ARMOR.START);
+            const e1143 = EngineFactory.createForVersion(TEST_DATA.GOD_ARMOR.END);
             const protNames = ["Protection", "Fire Protection", "Blast Protection", "Projectile Protection"];
             const getBases = (c: string) => c.split("+").map(e => e.split(" ").slice(0, -1).join(" "));
 
@@ -83,13 +82,13 @@ describe('Enchantment Engine Test Suite', () => {
     });
 
     describe('4. Search Algorithm & Accuracy', () => {
-        const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.POST_NETHERITE);
+        const engine = EngineFactory.createForVersion(TEST_DATA.VERSIONS.POST_NETHERITE);
 
         it('Progressive Refinement Parity: Resumed search should match fresh search', async () => {
-            const standard = await engine.calculate({ cat: TEST_DATA.ITEMS.BOOK, xp: 30, mat: TEST_DATA.MATERIALS.BOOK, threshold: 0.001 });
+            const standard = await engine.calculate({ item: TEST_DATA.ITEMS.BOOK, xp: 30, material: TEST_DATA.MATERIALS.BOOK, threshold: 0.001 });
             engine.resetCaches();
-            await engine.calculate({ cat: TEST_DATA.ITEMS.BOOK, xp: 30, mat: TEST_DATA.MATERIALS.BOOK, threshold: 0.05 }); // Coarse
-            const resumed = await engine.calculate({ cat: TEST_DATA.ITEMS.BOOK, xp: 30, mat: TEST_DATA.MATERIALS.BOOK, threshold: 0.001 }); // Resume
+            await engine.calculate({ item: TEST_DATA.ITEMS.BOOK, xp: 30, material: TEST_DATA.MATERIALS.BOOK, threshold: 0.05 }); // Coarse
+            const resumed = await engine.calculate({ item: TEST_DATA.ITEMS.BOOK, xp: 30, material: TEST_DATA.MATERIALS.BOOK, threshold: 0.001 }); // Resume
 
             const keysS = Object.keys(standard.any).sort().slice(0, 5);
             const keysR = Object.keys(resumed.any).sort().slice(0, 5);
@@ -97,7 +96,7 @@ describe('Enchantment Engine Test Suite', () => {
         });
 
         it('Delayed Level Decay & Pool Persistence', async () => {
-            const stats = await engine.calculate({ cat: TEST_DATA.ITEMS.PICKAXE, xp: 30, mat: TEST_DATA.MATERIALS.DIAMOND });
+            const stats = await engine.calculate({ item: TEST_DATA.ITEMS.PICKAXE, xp: 30, material: TEST_DATA.MATERIALS.DIAMOND });
             const human = HumanizationService.humanize(stats, engine.registry);
 
             const hasEffIVDeep = Object.keys(human.combos)
@@ -121,7 +120,7 @@ describe('Enchantment Engine Test Suite', () => {
 
         it('Clue conditioning should yield 100% total probability (Pickaxe)', async () => {
             const clue = "Efficiency IV";
-            const stats = await engine.calculate({ cat: TEST_DATA.ITEMS.PICKAXE, xp: 30, mat: TEST_DATA.MATERIALS.DIAMOND, clue, threshold: TEST_DATA.THRESHOLDS.PROB_MIN });
+            const stats = await engine.calculate({ item: TEST_DATA.ITEMS.PICKAXE, xp: 30, material: TEST_DATA.MATERIALS.DIAMOND, clue, threshold: TEST_DATA.THRESHOLDS.PROB_MIN });
             const effId = engine.registry.idMap.get('Efficiency')!;
             const probAnyEff = stats.any[effId];
 
@@ -135,7 +134,7 @@ describe('Enchantment Engine Test Suite', () => {
         });
 
         it('should maintain high precision for complex enchantment results', async () => {
-            const stats = await engine.calculate({ cat: TEST_DATA.ITEMS.PICKAXE, xp: 30, mat: TEST_DATA.MATERIALS.DIAMOND, threshold: 0.00001 });
+            const stats = await engine.calculate({ item: TEST_DATA.ITEMS.PICKAXE, xp: 30, material: TEST_DATA.MATERIALS.DIAMOND, threshold: 0.00001 });
             let totalProb = 0; // Uncertainty is now properly tracked within the combos themselves as partial states
             for (const p of Object.values(stats.combos)) {
                 totalProb += Number(p);
@@ -144,13 +143,13 @@ describe('Enchantment Engine Test Suite', () => {
         });
 
         it('Frontier Mass Tracking: Clue conditioning must be 100% even with high uncertainty', async () => {
-             const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
+             const engine = EngineFactory.createForVersion(TEST_DATA.VERSIONS.MODERN);
 
              // Force a high-uncertainty search by setting extremely low maxIterations (e.g., 5)
              const stats = await engine.calculate({
-                 cat: TEST_DATA.ITEMS.SWORD,
+                 item: TEST_DATA.ITEMS.SWORD,
                  xp: 30,
-                 mat: TEST_DATA.MATERIALS.DIAMOND,
+                 material: TEST_DATA.MATERIALS.DIAMOND,
                  clue: 'Sharpness IV',
                  threshold: 0.000001,
                  maxIterations: 5
@@ -169,11 +168,11 @@ describe('Enchantment Engine Test Suite', () => {
          });
 
          it('Regression: Clue conditioning must still allow single-enchant outcomes (Match Wiki)', async () => {
-             const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.LAPIS_PIVOT);
+             const engine = EngineFactory.createForVersion(TEST_DATA.VERSIONS.LAPIS_PIVOT);
              const stats = await engine.calculate({
-                 cat: TEST_DATA.ITEMS.BOW,
+                 item: TEST_DATA.ITEMS.BOW,
                  xp: 30,
-                 mat: TEST_DATA.MATERIALS.BOW,
+                 material: TEST_DATA.MATERIALS.BOW,
                  clue: 'Power IV',
                  threshold: 0.0001
              });
@@ -183,8 +182,8 @@ describe('Enchantment Engine Test Suite', () => {
          });
 
          it('Clue conditioned book enchant should be exactly 100%', async () => {
-             const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.POST_NETHERITE);
-             const stats = await engine.calculate({ cat: TEST_DATA.ITEMS.BOOK, xp: 30, mat: TEST_DATA.MATERIALS.BOOK, clue: 'Silk Touch I', threshold: TEST_DATA.THRESHOLDS.PROB_MIN, summaryLimit: 1000 });
+             const engine = EngineFactory.createForVersion(TEST_DATA.VERSIONS.POST_NETHERITE);
+             const stats = await engine.calculate({ item: TEST_DATA.ITEMS.BOOK, xp: 30, material: TEST_DATA.MATERIALS.BOOK, clue: 'Silk Touch I', threshold: TEST_DATA.THRESHOLDS.PROB_MIN, summaryLimit: 1000 });
              const silkTouchId = getEnchantId(engine.registry,'Silk Touch');
              assert.strictEqual(stats.any[silkTouchId], 1.0, 'Guaranteed book enchant should be exactly 100%');
          });
@@ -192,16 +191,16 @@ describe('Enchantment Engine Test Suite', () => {
 
     describe('5. Cache Isolation & Consistency', () => {
         it('should NOT return cached Sword results when asking for Pickaxe (same material)', async () => {
-             const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.LAPIS_PIVOT);
+             const engine = EngineFactory.createForVersion(TEST_DATA.VERSIONS.LAPIS_PIVOT);
 
              // 1. Get stats for Sword
-             const swordStats = await engine.calculate({ cat: TEST_DATA.ITEMS.SWORD, xp: 30, mat: TEST_DATA.MATERIALS.DIAMOND, threshold: 0.001 });
+             const swordStats = await engine.calculate({ item: TEST_DATA.ITEMS.SWORD, xp: 30, material: TEST_DATA.MATERIALS.DIAMOND, threshold: 0.001 });
              const sharpnessId = getEnchantId(engine.registry,'Sharpness') as number;
              assert.ok((swordStats.any[sharpnessId] ?? 0) > 0, 'Sword should have Sharpness');
 
              // 2. Get stats for Pickaxe (same version, level, material)
              // This should bypass the sword cache because category ID is different
-             const pickaxeStats = await engine.calculate({ cat: TEST_DATA.ITEMS.PICKAXE, xp: 30, mat: TEST_DATA.MATERIALS.DIAMOND, threshold: 0.001 });
+             const pickaxeStats = await engine.calculate({ item: TEST_DATA.ITEMS.PICKAXE, xp: 30, material: TEST_DATA.MATERIALS.DIAMOND, threshold: 0.001 });
              const efficiencyId = getEnchantId(engine.registry,'Efficiency') as number;
 
              assert.strictEqual(pickaxeStats.any[sharpnessId] || 0, 0, 'Pickaxe should NOT have Sharpness');

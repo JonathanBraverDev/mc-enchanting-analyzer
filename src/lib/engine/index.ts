@@ -1,6 +1,6 @@
-import { CalculationRequest, CalculationStats, CheckpointSearchRequest, EngineInstrumentation, ModifiedLevelSearchRequest, RegistryState, SearchResult, SearchConfig, SearchState, SequentialCheckpointSearchRequest } from '#types/index.js';
+import { BuiltRegistryState, CalculationRequest, CalculationStats, CheckpointSearchRequest, EngineInstrumentation, ModifiedLevelSearchRequest, SearchResult, SearchConfig, SearchState, SequentialCheckpointSearchRequest } from '#types/index.js';
 import { KeyUtils, ProbUtils } from '#utils/index.js';
-import { getCategoryId, getMaterialId, isCategoryAvailable, getEligibleListNumeric as getRegistryEligibleListNumeric } from '#core/registry.js';
+import { getItemId, getMaterialId, isItemAvailable, isMaterialEligible, getEligibleListNumeric as getRegistryEligibleListNumeric } from '#core/registry.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import { MINECRAFT_RULES } from '#constants/minecraft.js';
 import { getSearchLimit } from '#engine/utils.js';
@@ -17,11 +17,11 @@ export { EngineFactory } from './factory.js';
  * Optimized for high-speed calculation via Dependency Injection.
  */
 export class EnchantEngine {
-    private readonly _registry: RegistryState;
-    get registry(): RegistryState { return this._registry; }
+    private readonly _registry: BuiltRegistryState;
+    get registry(): BuiltRegistryState { return this._registry; }
 
     constructor(
-        registry: RegistryState,
+        registry: BuiltRegistryState,
         private readonly cache: CacheManager,
         private readonly distributionService: ModifiedLevelDistributionService,
         private readonly searchService: SearchService
@@ -58,46 +58,45 @@ export class EnchantEngine {
     /**
      * Returns a list of eligible enchantments filtered by conflict bitset.
      */
-    public getEligibleListNumeric(cat: string, level: number, bitset: bigint = 0n): number[] {
-        return getRegistryEligibleListNumeric(this._registry, cat, level, bitset, this.cache, this._registry.version);
+    public getEligibleListNumeric(item: string, level: number, bitset: bigint = 0n): number[] {
+        return getRegistryEligibleListNumeric(this._registry, item, level, bitset, this.cache, this._registry.version);
     }
 
     /**
      * Search for enchantment combinations at a specific modified level.
      *
-     * @param cat Item category.
+     * @param item Item type.
      * @param modLevel The pre-computed modified level for this search.
-     * @param mat Item material.
+     * @param material Item material.
      * @param threshold High-precision bigint threshold (1.0 = 10^18).
      * @param maxIterations Max nodes to process.
      * @param resultsLimit Max unique combinations to retain before recording capped mass.
      * @param instrumentation Optional performance tracking.
      */
     public async searchModifiedLevel(request: ModifiedLevelSearchRequest): Promise<SearchState> {
+        const { item, material } = request;
         const {
-            cat,
             modLevel,
-            mat,
             threshold = ProbUtils.toBigInt(ENGINE_LIMITS.DEFAULT_THRESHOLD),
             maxIterations,
             resultsLimit = ENGINE_LIMITS.MAX_RESULTS_UNBOUNDED,
             instrumentation
         } = request;
-        const cacheKey = this.getPackedKey(cat, modLevel, mat);
-        const cached = this.cache.getSearchState(cat, this.registry.version, cacheKey) as SearchState | undefined;
+        const cacheKey = this.getPackedKey(item, modLevel, material);
+        const cached = this.cache.getSearchState(item, this.registry.version, cacheKey) as SearchState | undefined;
         // This one-level API returns a frontier directly, so a complete cached frontier is already
         // the full answer. Request-level searches still enter SearchService to preserve reporting.
         if (cached && cached.threshold <= threshold) return cached;
 
         return this.searchService.searchModifiedLevel({
             registry: this.registry,
-            cat,
+            item,
             modLevel,
-            mat,
+            material,
             useCache: true,
             existingState: cached,
             threshold,
-            limit: getSearchLimit(cat, ProbUtils.toNumber(threshold), maxIterations),
+            limit: getSearchLimit(item, ProbUtils.toNumber(threshold), maxIterations),
             resultsLimit,
             instrumentation
         });
@@ -109,10 +108,13 @@ export class EnchantEngine {
      */
     public async searchSequentialCheckpoints(request: SequentialCheckpointSearchRequest): Promise<SearchResult> {
         this.validateRequest(request);
-        const targetClueId = request.clue ? this.getPackedClue(request.cat, request.clue) : undefined;
+        const { item, material } = request;
+        const targetClueId = request.clue ? this.getPackedClue(item, request.clue) : undefined;
 
         return this.searchService.searchSequentialCheckpoints({
             ...request,
+            item,
+            material,
             registry: this.registry,
             targetClueId
         });
@@ -123,10 +125,13 @@ export class EnchantEngine {
      */
     public async searchToCheckpoint(request: CheckpointSearchRequest): Promise<SearchResult> {
         this.validateRequest(request);
-        const targetClueId = request.clue ? this.getPackedClue(request.cat, request.clue) : undefined;
+        const { item, material } = request;
+        const targetClueId = request.clue ? this.getPackedClue(item, request.clue) : undefined;
 
         return this.searchService.searchToCheckpoint({
             ...request,
+            item,
+            material,
             registry: this.registry,
             targetClueId
         });
@@ -136,19 +141,18 @@ export class EnchantEngine {
      * Aggregates all statistics for a given enchantment attempt.
      * Use this for standard single-pass calculations (e.g. standard UI search).
      *
-     * @param cat The item category (e.g., 'sword', 'pickaxe').
+     * @param item The item type (e.g., 'sword', 'pickaxe').
      * @param xp The base XP level from the enchantment table (1-50).
-     * @param mat The item material (e.g., 'diamond', 'netherite').
+     * @param material The item material (e.g., 'diamond', 'netherite').
      * @param config Optional search configuration (threshold, signals, etc).
      * @returns A promise resolving to the final aggregated statistics.
      */
     public async calculate(request: CalculationRequest): Promise<CalculationStats> {
         this.validateRequest(request);
+        const { item, material } = request;
 
         const {
-            cat,
             xp,
-            mat,
             clue,
             threshold = ENGINE_LIMITS.DEFAULT_THRESHOLD,
             signal,
@@ -161,9 +165,9 @@ export class EnchantEngine {
             timing
         } = request;
 
-        const packedClue = clue ? this.getPackedClue(cat, clue) : null;
+        const packedClue = clue ? this.getPackedClue(item, clue) : null;
 
-        const cacheKey = this.getStatsKey(cat, xp, mat, packedClue);
+        const cacheKey = this.getStatsKey(item, xp, material, packedClue);
 
         const cachedStats = this.cache.getStats(this.registry.version, cacheKey);
         if (cachedStats && cachedStats.threshold <= threshold) return cachedStats;
@@ -181,14 +185,14 @@ export class EnchantEngine {
 
         const finalResult = await this.searchService.searchToCheckpoint({
             registry: this.registry,
-            cat,
+            item,
             xp,
-            mat,
+            material,
             targetClueId: packedClue ?? undefined,
             ...searchConfig
         });
 
-        const isBook = cat === "book";
+        const isBook = item === "book";
         const postProcessingStart = timing ? performance.now() : 0;
         const finalStats = packedClue
             ? SummaryService.summarizeConditioned({
@@ -228,31 +232,32 @@ export class EnchantEngine {
         return finalStats;
     }
 
-    private getPackedClue(cat: string, clue: string): number {
-        return ClueValidator.validate(this.registry, cat, clue);
+    private getPackedClue(item: string, clue: string): number {
+        return ClueValidator.validate(this.registry, item, clue);
     }
 
-    private getPackedKey(cat: string, modLevel: number, mat: string): number {
-        const catId = getCategoryId(this.registry, cat);
-        const matId = getMaterialId(this.registry, mat);
+    private getPackedKey(item: string, modLevel: number, material: string): number {
+        const itemId = getItemId(this.registry, item);
+        const materialId = getMaterialId(this.registry, material);
 
-        return KeyUtils.getPackedKey(catId, matId, modLevel);
+        return KeyUtils.getPackedKey(itemId, materialId, modLevel);
     }
 
-    private getStatsKey(cat: string, xp: number, mat: string, packedClue: number | null = null): number {
-        const catId = getCategoryId(this.registry, cat);
-        const matId = getMaterialId(this.registry, mat);
+    private getStatsKey(item: string, xp: number, material: string, packedClue: number | null = null): number {
+        const itemId = getItemId(this.registry, item);
+        const materialId = getMaterialId(this.registry, material);
 
-        let key = KeyUtils.getStatsKey(catId, matId, xp);
+        let key = KeyUtils.getStatsKey(itemId, materialId, xp);
         if (packedClue !== null) {
-            // Encode the clue into the high bits above the cat/material/level fields.
+            // Encode the clue into the high bits above the item/material/level fields.
             key |= (packedClue << 18);
         }
         return key;
     }
 
     private validateRequest(request: CalculationRequest | CheckpointSearchRequest | SequentialCheckpointSearchRequest): void {
-        const { cat, xp, mat } = request;
+        const { item, material } = request;
+        const { xp } = request;
 
         if (!Number.isFinite(xp) || !Number.isInteger(xp) || xp <= 0) {
             throw new Error(`Invalid XP level: ${xp}. XP must be a positive integer.`);
@@ -261,11 +266,11 @@ export class EnchantEngine {
         if (xp > xpCap) {
             throw new Error(`XP level ${xp} exceeds the maximum of ${xpCap} for version ${this.registry.version}.`);
         }
-        if (!isCategoryAvailable(this.registry, cat)) {
-            throw new Error(`Unknown or unavailable category: "${cat}" in version ${this.registry.version}.`);
+        if (!isItemAvailable(this.registry, item)) {
+            throw new Error(`Unknown or unavailable item: "${item}" in version ${this.registry.version}.`);
         }
-        if (getMaterialId(this.registry, mat) === ENGINE_LIMITS.UNKNOWN_MATERIAL_ID) {
-            throw new Error(`Unknown material: "${mat}".`);
+        if (!isMaterialEligible(this.registry, item, material)) {
+            throw new Error(`Material "${material}" is not available for item "${item}" in version ${this.registry.version}.`);
         }
 
         // Config validation

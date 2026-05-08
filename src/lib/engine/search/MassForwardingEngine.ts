@@ -71,7 +71,7 @@ export class MassForwardingEngine {
 
             const stopSettlement = stopIsClueCompatible
                 ? SearchProcessor.settleMass(
-                    ctx.cat === "book",
+                    ctx.item === "book",
                     blueprint.currentCount,
                     blueprint.currentCombo,
                     probStop,
@@ -83,7 +83,7 @@ export class MassForwardingEngine {
 
             const term = SearchProcessor.isTerminalCondition(
                 blueprint.currentCount,
-                ctx.cat === "book",
+                ctx.item === "book",
                 probForward,
                 ctx.results.size,
                 ctx.resultsLimit,
@@ -138,7 +138,7 @@ export class MassForwardingEngine {
     ): bigint {
         const forwardSettlement = stopIsClueCompatible
             ? SearchProcessor.settleMass(
-                ctx.cat === "book",
+                ctx.item === "book",
                 blueprint.currentCount,
                 blueprint.currentCombo,
                 probForward,

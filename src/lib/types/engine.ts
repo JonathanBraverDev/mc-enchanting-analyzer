@@ -1,4 +1,4 @@
-import { Enchantment, EnchantmentData } from '#types/domain.js';
+import { Enchantment, MaterialValues, RegistryMutation, RomanMap } from '#types/domain.js';
 import { NodeIdSearchFrontier } from '#engine/search/NodeIdSearchFrontier.js';
 import { SearchPoolPlan } from '#engine/search/SearchPoolPlan.js';
 import { SearchNodeGraph } from '#engine/search/SearchNodeGraph.js';
@@ -120,12 +120,20 @@ export interface ResolvedRegistry {
   [enchantment: string]: Enchantment;
 }
 
-export interface MergedItems {
-  [category: string]: string[];
+export interface ItemPools {
+  [item: string]: string[];
 }
 
 export interface MergedOverrides {
   [enchantment: string]: Partial<Enchantment>;
+}
+
+export interface ItemMaterials {
+  [item: string]: string[];
+}
+
+export interface ItemEnchantabilityTables {
+  [item: string]: import('./domain.js').EnchantabilityTable;
 }
 
 /**
@@ -163,7 +171,7 @@ export interface ForwardingContext {
     timing?: SearchTiming | undefined;
 
     // Search-global parameters
-    cat: string;
+    item: string;
     poolPlan: SearchPoolPlan;
     cluePolicy?: ClueSearchPolicy | undefined;
 }
@@ -193,25 +201,39 @@ export interface SearchFrontierSnapshot {
  * Internal state of a Registry, containing pre-computed mapping and conflict data.
  */
 export interface RegistryState {
-    data: EnchantmentData;
     version: string;
     mechanics: import('./domain.js').VersionMechanics;
-    mergedItems: MergedItems;
+    romanMap: RomanMap;
+    materialPriority: string[];
+    materialValues: MaterialValues;
+    itemPool: ItemPools;
     mergedOverrides: MergedOverrides;
     resolvedRegistry: ResolvedRegistry;
     mergedMaterials: Set<string>;
+    itemMaterials: ItemMaterials;
+    itemEnchantability: ItemEnchantabilityTables;
     multiEnchantBooks: boolean;
     idMap: Map<string, number>;
     revIdMap: string[];
-    catIdMap: Map<string, number>;
-    matIdMap: Map<string, number>;
+    itemIdMap: Map<string, number>;
+    materialIdMap: Map<string, number>;
     conflictBitsets: BigUint64Array;
     weightMap: Uint32Array;
     sortedRanks: [string, number][];
-    versionPool: Map<string, string[]>;
     enchantToIndex: Map<number, number>;
     indexToEnchant: number[];
 }
+
+export interface VanillaRegistryState extends RegistryState {
+    readonly source: 'vanilla';
+}
+
+export interface MutatedRegistryState extends RegistryState {
+    readonly source: 'mutated';
+    readonly mutations: readonly RegistryMutation[];
+}
+
+export type BuiltRegistryState = VanillaRegistryState | MutatedRegistryState;
 
 export type PackedEnchant = number & { __brand: "PackedEnchant" };
 export type PackedCombo = number & { __brand: "PackedCombo" };
@@ -231,35 +253,32 @@ export interface SearchConfig {
     timing?: SearchTiming | undefined;
 }
 
-export interface CalculationRequest extends SearchConfig {
-    cat: string;
-    xp: number;
-    mat: string;
+export interface ItemSelectionRequest {
+    item: string;
+    material: string;
 }
 
-export interface ModifiedLevelSearchRequest {
-    cat: string;
+export type CalculationRequest = SearchConfig & ItemSelectionRequest & {
+    xp: number;
+};
+
+export type ModifiedLevelSearchRequest = ItemSelectionRequest & {
     modLevel: number;
-    mat: string;
     threshold?: bigint | undefined;
     maxIterations?: number | undefined;
     resultsLimit?: number | undefined;
     instrumentation?: EngineInstrumentation | undefined;
-}
+};
 
-export interface CheckpointSearchRequest extends SearchConfig {
-    cat: string;
+export type CheckpointSearchRequest = SearchConfig & ItemSelectionRequest & {
     xp: number;
-    mat: string;
-}
+};
 
-export interface SequentialCheckpointSearchRequest extends SearchConfig {
-    cat: string;
+export type SequentialCheckpointSearchRequest = SearchConfig & ItemSelectionRequest & {
     xp: number;
-    mat: string;
     checkpoints: SearchCheckpoint[];
     onCheckpointComplete: (result: SearchResult, checkpointIndex: number) => void;
-}
+};
 
 export interface SummaryRequest {
     combos: Map<PackedCombo, bigint>;
@@ -319,9 +338,9 @@ export interface SearchContext {
 
 export interface ModifiedLevelSearchContext extends SearchContext {
     registry: RegistryState;
-    cat: string;
+    item: string;
     modLevel: number;
-    mat?: string | undefined;
+    material?: string | undefined;
     existingState?: SearchState | undefined;
     useCache?: boolean | undefined;
     targetClueId?: number | undefined;
@@ -329,9 +348,9 @@ export interface ModifiedLevelSearchContext extends SearchContext {
 
 export interface CheckpointSearchContext extends SearchConfig {
     registry: RegistryState;
-    cat: string;
+    item: string;
     xp: number;
-    mat: string;
+    material: string;
     targetClueId?: number | undefined;
 }
 

@@ -1,20 +1,19 @@
+import type { EnchantmentData } from '#types/index.js';
+
 export const global_enchantments = {
   "Sharpness": {
     "weight": 10,
     "levels": {"I": [1, 21], "II": [12, 32], "III": [23, 43], "IV": [34, 54], "V": [45, 65]},
-    "conflicts": ["Smite", "Bane of Arthropods", "Impaling", "Density", "Breach"],
     "valid_from": "1.0"
   },
   "Smite": {
     "weight": 5,
     "levels": {"I": [5, 25], "II": [13, 33], "III": [21, 41], "IV": [29, 49], "V": [37, 57]},
-    "conflicts": ["Bane of Arthropods", "Impaling", "Density", "Breach"],
     "valid_from": "1.0"
   },
   "Bane of Arthropods": {
     "weight": 5,
     "levels": {"I": [5, 25], "II": [13, 33], "III": [21, 41], "IV": [29, 49], "V": [37, 57]},
-    "conflicts": ["Impaling", "Density", "Breach"],
     "valid_from": "1.0"
   },
   "Knockback": {
@@ -50,7 +49,6 @@ export const global_enchantments = {
   "Fortune": {
     "weight": 2,
     "levels": {"I": [15, 65], "II": [24, 74], "III": [33, 83]},
-    "conflicts": ["Silk Touch"],
     "valid_from": "1.0"
   },
   "Silk Touch": {
@@ -81,19 +79,16 @@ export const global_enchantments = {
   "Protection": {
     "weight": 10,
     "levels": {"I": [1, 12], "II": [12, 23], "III": [23, 34], "IV": [34, 45]},
-    "conflicts": ["Fire Protection", "Blast Protection", "Projectile Protection"],
     "valid_from": "1.0"
   },
   "Fire Protection": {
     "weight": 5,
     "levels": {"I": [10, 18], "II": [18, 26], "III": [26, 34], "IV": [34, 42]},
-    "conflicts": ["Blast Protection", "Projectile Protection"],
     "valid_from": "1.0"
   },
   "Blast Protection": {
     "weight": 2,
     "levels": {"I": [5, 13], "II": [13, 21], "III": [21, 29], "IV": [29, 37]},
-    "conflicts": ["Projectile Protection"],
     "valid_from": "1.0"
   },
   "Projectile Protection": {
@@ -130,19 +125,16 @@ export const global_enchantments = {
   "Impaling": {
     "weight": 2,
     "levels": {"I": [1, 21], "II": [9, 29], "III": [17, 37], "IV": [25, 45], "V": [33, 53]},
-    "conflicts": ["Density", "Breach"],
     "valid_from": "1.13"
   },
   "Loyalty": {
     "weight": 5,
     "levels": {"I": [12, 50], "II": [19, 50], "III": [26, 50]},
-    "conflicts": ["Riptide"],
     "valid_from": "1.13"
   },
   "Riptide": {
     "weight": 2,
     "levels": {"I": [17, 50], "II": [24, 50], "III": [31, 50]},
-    "conflicts": ["Channeling"],
     "valid_from": "1.13"
   },
   "Channeling": {
@@ -159,7 +151,6 @@ export const global_enchantments = {
   "Multishot": {
     "weight": 2,
     "levels": {"I": [20, 50]},
-    "conflicts": ["Piercing"],
     "valid_from": "1.14"
   },
   "Piercing": {
@@ -180,13 +171,11 @@ export const global_enchantments = {
   "Density": {
     "weight": 5,
     "levels": {"I": [5, 25], "II": [13, 33], "III": [21, 41], "IV": [29, 49], "V": [37, 57]},
-    "conflicts": ["Impaling", "Breach"],
     "valid_from": "1.21"
   },
   "Breach": {
     "weight": 2,
     "levels": {"I": [15, 65], "II": [24, 74], "III": [33, 83], "IV": [42, 92]},
-    "conflicts": ["Impaling"],
     "valid_from": "1.21"
   },
   "Lunge": {
@@ -194,22 +183,4 @@ export const global_enchantments = {
     "levels": {"I": [5, 25], "II": [13, 33], "III": [21, 41]},
     "valid_from": "1.21.11"
   }
-} as const;
-
-export const enchantment_groups = {
-  "armor_pool": ["Protection", "Fire Protection", "Blast Protection", "Projectile Protection", "Unbreaking"],
-  "legacy_armor_pool": ["Protection", "Fire Protection", "Blast Protection", "Projectile Protection"],
-  "chestplate_extras": ["Thorns"],
-  "boot_extras": ["Feather Falling", "Depth Strider"],
-  "helmet_extras": ["Respiration", "Aqua Affinity"],
-  "sword_pool": ["Sharpness", "Smite", "Bane of Arthropods", "Knockback", "Fire Aspect", "Looting", "Sweeping Edge", "Unbreaking"],
-  "legacy_sword_pool": ["Sharpness", "Smite", "Bane of Arthropods", "Knockback", "Fire Aspect", "Looting"],
-  "bow_pool": ["Power", "Punch", "Flame", "Infinity", "Unbreaking"],
-  "legacy_bow_pool": ["Power", "Punch", "Flame", "Infinity"],
-  "tool_pool": ["Efficiency", "Unbreaking", "Fortune", "Silk Touch"],
-  "fishing_pool": ["Luck of the Sea", "Lure", "Unbreaking"],
-  "trident_pool": ["Impaling", "Loyalty", "Riptide", "Channeling", "Unbreaking"],
-  "crossbow_pool": ["Quick Charge", "Multishot", "Piercing", "Unbreaking"],
-  "mace_pool": ["Density", "Breach", "Smite", "Bane of Arthropods", "Fire Aspect", "Unbreaking"],
-  "spear_pool": ["Lunge", "Sharpness", "Smite", "Bane of Arthropods", "Knockback", "Fire Aspect", "Looting", "Unbreaking"]
-} as const;
+} satisfies EnchantmentData["global_enchantments"];

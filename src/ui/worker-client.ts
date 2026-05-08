@@ -88,7 +88,7 @@ export const WorkerClient = {
             type: 'init',
             requestId: this.nextRequestId(),
             version,
-            data: rawData
+            bootstrapData: rawData
         });
     },
 

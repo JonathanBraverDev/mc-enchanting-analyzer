@@ -1,6 +1,5 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { DATA } from '#data/index.js';
 import { RegistryFactory } from '#core/factory.js';
 import { CACHE_CONFIG, ENGINE_LIMITS } from '#constants/engine.js';
 import { CacheManager } from '#engine/cache/CacheManager.js';
@@ -10,7 +9,7 @@ import { type SearchIdentityMode } from '#engine/search/SearchPoolPlan.js';
 import { SearchState } from '#types/index.js';
 import { ProbUtils } from '#utils/index.js';
 
-const registry = RegistryFactory.build(DATA, '1.21.11');
+const registry = RegistryFactory.build('1.21.11');
 
 function createCache(): CacheManager {
     return new CacheManager({
@@ -30,8 +29,8 @@ async function searchCurrentBookPool(identityModeOverride?: SearchIdentityMode):
 
     return service.searchModifiedLevel({
         registry,
-        cat: 'book',
-        mat: 'book',
+        item: 'book',
+        material: 'book',
         modLevel: 30,
         threshold: ProbUtils.toBigInt(0.001),
         limit: ENGINE_LIMITS.MAX_ITERATIONS_UNBOUNDED,

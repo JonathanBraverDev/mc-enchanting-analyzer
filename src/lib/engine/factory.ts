@@ -1,4 +1,4 @@
-import { EnchantmentData, RegistryState } from '#types/index.js';
+import { BuiltRegistryState } from '#types/index.js';
 import { EnchantEngine } from '#engine/index.js';
 import { CacheManager } from '#engine/cache/CacheManager.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
@@ -6,8 +6,7 @@ import { SearchService } from '#engine/search/SearchService.js';
 import { CACHE_CONFIG } from '#constants/engine.js';
 import { RegistryFactory } from '#core/factory.js';
 
-export interface EngineDependencies {
-    registry: RegistryState;
+export interface EngineRuntimeOverrides {
     cache: CacheManager;
     distributionService: ModifiedLevelDistributionService;
     searchService: SearchService;
@@ -23,14 +22,25 @@ export class EngineFactory {
      * Creates or retrieves a fully-wired EnchantEngine for the given version.
      * Reuses instances to optimize registry building and cache warming.
      */
-    public static create(data: EnchantmentData, version: string, overrides: Partial<EngineDependencies> = {}): EnchantEngine {
+    public static createForVersion(version: string, overrides: Partial<EngineRuntimeOverrides> = {}): EnchantEngine {
         const cacheKey = version;
         if (this.instances.has(cacheKey) && Object.keys(overrides).length === 0) {
             return this.instances.get(cacheKey)!;
         }
 
-        const registry = overrides.registry || RegistryFactory.build(data, version);
+        const registry = RegistryFactory.build(version);
+        const engine = this.create(registry, overrides);
 
+        if (Object.keys(overrides).length === 0) {
+            this.instances.set(cacheKey, engine);
+        }
+        return engine;
+    }
+
+    /**
+     * Creates a fully-wired engine around an already resolved registry.
+     */
+    public static create(registry: BuiltRegistryState, overrides: Partial<EngineRuntimeOverrides> = {}): EnchantEngine {
         const cache = overrides.cache || new CacheManager({
             comboOtherSize: CACHE_CONFIG.COMBO_OTHER_SIZE,
             comboBookSize: CACHE_CONFIG.COMBO_BOOK_SIZE,
@@ -47,10 +57,6 @@ export class EngineFactory {
             distributionService,
             searchService
         );
-
-        if (Object.keys(overrides).length === 0) {
-            this.instances.set(cacheKey, engine);
-        }
         return engine;
     }
 

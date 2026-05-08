@@ -1,5 +1,4 @@
 import { EngineFactory } from '#engine/index.js';
-import { DATA as data } from '#data/index.js';
 import { EngineInstrumentation } from '#types/index.js';
 
 
@@ -10,15 +9,15 @@ async function run() {
         return (idx !== -1 && args[idx + 1]) ? args[idx + 1] : null;
     };
 
-    const cat = findArg('--cat') ?? 'book';
-    const mat = findArg('--mat') ?? 'book';
+    const item = findArg('--item') ?? 'book';
+    const material = findArg('--material') ?? 'book';
     const xp = parseInt(findArg('--xp') ?? '30');
     const version = findArg('--version') ?? '1.21.11';
 
     console.log(`--- Running Enchantment Simulation ---`);
-    console.log(`Version: ${version}, Category: ${cat}, Material: ${mat}, XP: ${xp}\n`);
+    console.log(`Version: ${version}, Item: ${item}, Material: ${material}, XP: ${xp}\n`);
 
-    const engine = EngineFactory.create(data, version);
+    const engine = EngineFactory.createForVersion(version);
     const instrumentation: EngineInstrumentation = {
         poolCache: { hits: 0, misses: 0 },
         distCache: { hits: 0, misses: 0 },
@@ -27,14 +26,14 @@ async function run() {
     };
 
     console.log(`--- Running Enchantment Simulation ---`);
-    console.log(`Version: ${version}, Category: ${cat}, Material: ${mat}, XP: ${xp}\n`);
+    console.log(`Version: ${version}, Item: ${item}, Material: ${material}, XP: ${xp}\n`);
 
     const threshold = 0.001; // 1e-3 Standard UI Fine Accuracy
     const start = performance.now();
     const stats = await engine.calculate({
-        cat,
+        item,
         xp,
-        mat,
+        material,
         instrumentation,
         threshold,
         maxIterations: 100000, // High limit for snapshot level

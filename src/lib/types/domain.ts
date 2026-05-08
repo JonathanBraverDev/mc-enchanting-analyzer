@@ -15,17 +15,106 @@ export interface EnchantmentLevels {
  * Definition of an enchantment from data files.
  * @property weight Relative weight for selection (higher = more likely).
  * @property levels Rank-to-level-range mappings.
- * @property conflicts List of enchantment names that conflict with this one.
- * @property valid_from Earliest version where this enchantment is available.
- * @property valid_to Latest version where this enchantment is available.
+ * @property valid_from First version where this enchantment is available, inclusive.
+ * @property valid_until First version where this enchantment is no longer available, exclusive.
  */
 export interface Enchantment {
   weight: number;
   levels: EnchantmentLevels;
-  conflicts?: string[];
   valid_from?: string;
-  valid_to?: string;
+  valid_until?: string;
 }
+
+/**
+ * Version-ranged conflict rule between two enchantments.
+ * Conflict rules are unordered pairs and are compiled into symmetric bitsets.
+ * @property valid_from First version where this conflict applies, inclusive.
+ * @property valid_until First version where this conflict no longer applies, exclusive.
+ */
+export interface ConflictRule {
+  enchants: [string, string];
+  valid_from: string;
+  valid_until?: string;
+}
+
+/**
+ * Version-ranged material rule.
+ * @property valid_from First version where this material rule applies, inclusive.
+ * @property valid_until First version where this material rule no longer applies, exclusive.
+ */
+export interface MaterialRule {
+  material: string;
+  valid_from: string;
+  valid_until?: string;
+}
+
+/**
+ * Version-ranged membership rule for an enchantment group.
+ * Active rules for the same group are unioned in declaration order.
+ * @property valid_from First version where this membership rule applies, inclusive.
+ * @property valid_until First version where this membership rule no longer applies, exclusive.
+ */
+export interface EnchantmentGroupRule {
+  group: string;
+  enchantments: string[];
+  valid_from: string;
+  valid_until?: string;
+}
+
+/**
+ * Named material aliases used by enchantable item rules.
+ * Each entry expands to concrete material keys declared by material rules.
+ */
+export interface MaterialSets {
+  [set: string]: string[];
+}
+
+export type EnchantabilityTable = 'tool' | 'armor' | 'other';
+
+export interface MaterialValues {
+  tool: { [material: string]: number };
+  armor: { [material: string]: number };
+  other: { [material: string]: number };
+}
+
+/**
+ * Version-ranged enchantable item rule.
+ * Missing groups means the item uses every active table enchantment.
+ * That derived mode is currently valid only for enchanted books.
+ * Materials may reference concrete material keys or material set aliases.
+ * Enchantability selects the material-value table used by this item.
+ * @property valid_from First version where this item rule applies, inclusive.
+ * @property valid_until First version where this item rule no longer applies, exclusive.
+ */
+export interface EnchantableItemRule {
+  item: string;
+  valid_from: string;
+  valid_until?: string;
+  groups?: string[];
+  materials: string[];
+  enchantability: EnchantabilityTable;
+}
+
+export type ConflictRuleSelector = Pick<ConflictRule, 'enchants' | 'valid_from' | 'valid_until'>;
+export type EnchantmentGroupRuleSelector = Pick<EnchantmentGroupRule, 'group' | 'valid_from' | 'valid_until'>;
+export type MaterialRuleSelector = Pick<MaterialRule, 'material' | 'valid_from' | 'valid_until'>;
+export type EnchantableItemRuleSelector = Pick<EnchantableItemRule, 'item' | 'valid_from' | 'valid_until'>;
+
+/**
+ * Small vanilla-data mutations for vanilla registry variants.
+ * These operate on version-ranged rule tables only and are applied to a cloned
+ * vanilla data pack before the resolved registry is built.
+ */
+export type RegistryMutation =
+  | { type: 'patchEnchantment'; enchantment: string; patch: Partial<Enchantment> }
+  | { type: 'addConflictRule'; rule: ConflictRule }
+  | { type: 'removeConflictRule'; selector: ConflictRuleSelector }
+  | { type: 'addEnchantmentGroupRule'; rule: EnchantmentGroupRule }
+  | { type: 'removeEnchantmentGroupRule'; selector: EnchantmentGroupRuleSelector }
+  | { type: 'addMaterialRule'; rule: MaterialRule }
+  | { type: 'removeMaterialRule'; selector: MaterialRuleSelector }
+  | { type: 'addEnchantableItemRule'; rule: EnchantableItemRule }
+  | { type: 'removeEnchantableItemRule'; selector: EnchantableItemRuleSelector };
 
 /**
  * Game mechanics configuration for a version.
@@ -46,18 +135,12 @@ export interface VersionMechanics {
  * Version-specific enchantment configuration.
  * Supports inheritance and overrides for progressive version refinement.
  * @property extends Parent version to inherit enchantments from.
- * @property item_enchantments Maps categories to lists of enchantments available on them.
- * @property materials Available materials for this version.
  * @property mechanics Game mechanics changes.
  * @property multi_enchant_books Whether enchanted books can have multiple enchantments.
  * @property overrides Partial enchantment definitions to override inherited values.
  */
 export interface VersionManifest {
   extends?: string;
-  item_enchantments?: {
-    [category: string]: string[];
-  };
-  materials?: string[];
   mechanics?: VersionMechanics;
   multi_enchant_books?: boolean;
   overrides?: {
@@ -74,21 +157,18 @@ export interface EnchantmentData {
   global_enchantments: {
     [name: string]: Enchantment;
   };
-  enchantment_groups: {
-    [groupName: string]: string[];
-  };
+  conflict_rules: ConflictRule[];
+  enchantment_group_rules: EnchantmentGroupRule[];
+  enchantable_item_rules: EnchantableItemRule[];
+  material_rules: MaterialRule[];
+  material_sets: MaterialSets;
   versions: {
     [version: string]: VersionManifest;
   };
-  material_values: {
-    tools: { [material: string]: number };
-    armor: { [material: string]: number };
-  };
+  material_values: MaterialValues;
   constants: {
     ROMAN_MAP: RomanMap;
-    ARMOR_CATS: string[];
     MATERIAL_PRIORITY: string[];
-    ITEM_SPECIFIC_CATS: string[];
   };
   cosmetics: {
     RANK_LIGHTNESS_BOOST: { [rank: string]: number };

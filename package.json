@@ -1,6 +1,6 @@
 {
   "name": "mc-enchanting-analyzer",
-  "version": "5.4.3",
+  "version": "6.0.0",
   "devDependencies": {
     "@playwright/test": "^1.58.2",
     "@types/chart.js": "^2.9.41",

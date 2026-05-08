@@ -27,7 +27,7 @@ class AppController {
 
     constructor() {
         this.params = new ParamsView(
-            ["v-select", "cat-select", "mat-select", "clue-select", "target-select", "lvl-range", "chart-metric", "combo-sort"],
+            ["v-select", "item-select", "material-select", "clue-select", "target-select", "lvl-range", "chart-metric", "combo-sort"],
             (type) => this.onParamsChange(type)
         );
         this.results = new ResultsView();
@@ -70,11 +70,11 @@ class AppController {
             return;
         }
 
-        if (type === 'cat') {
-            this.results.showPlaceholder(UI_TEXTS.STATUS_SWITCHING_CATEGORY);
+        if (type === 'item') {
+            this.results.showPlaceholder(UI_TEXTS.STATUS_SWITCHING_ITEM);
             this.params.updateMaterials();
             this.params.updateClueTarget();
-        } else if (type === 'mat') {
+        } else if (type === 'material') {
             this.params.updateClueTarget();
         } else if (type === 'chart-metric') {
             const registry = UiMetadataService.getRegistry(version);
@@ -145,13 +145,13 @@ class AppController {
             this.params.updateClueTarget();
 
             const vals = this.params.getValues();
-            const ench = UiMetadataService.getEnchantability(vals.version, vals.material, vals.category);
+            const ench = UiMetadataService.getEnchantability(vals.version, vals.material, vals.item);
             this.params.setEnchantability(ench);
 
             const registry = UiMetadataService.getRegistry(vals.version);
 
             await this.refinement.run(
-                { ...vals, category: vals.category },
+                vals,
                 registry,
                 {
                     onStatus: (status, level) => this.results.setRefinementStatus(status, level),
@@ -179,11 +179,11 @@ class AppController {
             this.params.updateClueTarget();
 
             const vals = this.params.getValues();
-            const ench = UiMetadataService.getEnchantability(vals.version, vals.material, vals.category);
+            const ench = UiMetadataService.getEnchantability(vals.version, vals.material, vals.item);
             this.params.setEnchantability(ench);
 
             await this.refinement.runTopOnly(
-                { ...vals, category: vals.category },
+                vals,
                 {
                     onStatus: (status, level) => this.results.setRefinementStatus(status, level),
                     onChartStatus: (status, progress) => this.results.setChartStatus(status, progress),
@@ -207,7 +207,7 @@ class AppController {
             const registry = UiMetadataService.getRegistry(vals.version);
 
             await this.refinement.projectTop(
-                { ...vals, category: vals.category },
+                vals,
                 registry,
                 {
                     onStatus: (status, level) => this.results.setRefinementStatus(status, level),
@@ -237,7 +237,7 @@ class AppController {
             sortMode === 'advisor' && !view.target
                 ? ClueSignalAdvisorService.summarizeLevels(
                     registry,
-                    view.input.category,
+                    view.input.item,
                     view.input.material,
                     UiMetadataService.getXpCap(version)
                 )
@@ -257,7 +257,7 @@ class AppController {
 
         const vals = this.params.getValues();
         const registry = UiMetadataService.getRegistry(vals.version);
-        const ench = UiMetadataService.getEnchantability(vals.version, vals.material, vals.category);
+        const ench = UiMetadataService.getEnchantability(vals.version, vals.material, vals.item);
         this.params.setEnchantability(ench);
 
         const cell = this.refinement.currentSweep[vals.xpLevel - 1];
@@ -282,7 +282,7 @@ class AppController {
 
         return {
             input: {
-                category: vals.category,
+                item: vals.item,
                 material: vals.material,
                 clue: vals.clue,
                 xpLevel: vals.xpLevel,

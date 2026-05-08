@@ -1,25 +1,24 @@
-import { EnchantmentData, RegistryState, PackedEnchant } from '#types/index.js';
+import { RegistryState, PackedEnchant } from '#types/index.js';
 import { RomanUtils, EnchantUtils } from '#utils/index.js';
 import { PACKING_CONSTANTS, ENGINE_LIMITS } from '#constants/engine.js';
 
 /**
- * Returns the list of materials compatible with a given category.
- * Armor materials and tool-specific categories are handled separately.
+ * Returns the list of materials compatible with a given enchantable item.
+ * Item/material compatibility is declared in registry data.
  * @param state The resolved registry state.
- * @param cat The item category (e.g., "sword", "armor").
+ * @param item The item type (e.g., "sword", "helmet").
  * @returns Sorted list of compatible material names.
  */
-export function getEligibleMaterials(state: RegistryState, cat: string): string[] {
-    const itemSpecific = state.data.constants.ITEM_SPECIFIC_CATS;
-    const isArmor = state.data.constants.ARMOR_CATS.includes(cat);
-    const mats = isArmor ? state.data.material_values.armor : state.data.material_values.tools;
+export function getEligibleMaterials(state: RegistryState, item: string): string[] {
+    const materials = state.itemMaterials[item] ?? [];
+    return sortMaterials(state.materialPriority, [...materials]);
+}
 
-    if (itemSpecific.includes(cat) && mats[cat] && state.mergedMaterials.has(cat)) {
-        return [cat];
-    }
-
-    const eligible = Object.keys(mats).filter(m => isMaterialCompatible(m, cat, itemSpecific, state.mergedMaterials));
-    return sortMaterials(state.data, eligible);
+/**
+ * Checks whether a material is valid for an item in the resolved registry version.
+ */
+export function isMaterialEligible(state: RegistryState, item: string, material: string): boolean {
+    return (state.itemMaterials[item] ?? []).includes(material);
 }
 
 /**
@@ -42,27 +41,27 @@ export function getEnchantName(state: RegistryState, id: number): string {
  * @returns Roman numeral string (e.g., "I", "II", "III").
  */
 export function getRankRoman(state: RegistryState, rank: number): string {
-    return RomanUtils.rankToRoman(rank, state.data.constants.ROMAN_MAP);
+    return RomanUtils.rankToRoman(rank, state.romanMap);
 }
 
 /**
- * Gets the internal ID for a category.
+ * Gets the internal ID for an enchantable item.
  * @param state The resolved registry state.
- * @param cat The category name (e.g., "sword", "helmet").
- * @returns The category ID, or UNKNOWN_CATEGORY_ID if not found.
+ * @param item The item name (e.g., "sword", "helmet").
+ * @returns The item ID, or UNKNOWN_ITEM_ID if not found.
  */
-export function getCategoryId(state: RegistryState, cat: string): number {
-    return state.catIdMap.get(cat) ?? ENGINE_LIMITS.UNKNOWN_CATEGORY_ID;
+export function getItemId(state: RegistryState, item: string): number {
+    return state.itemIdMap.get(item) ?? ENGINE_LIMITS.UNKNOWN_ITEM_ID;
 }
 
 /**
  * Gets the internal ID for a material.
  * @param state The resolved registry state.
- * @param mat The material name (e.g., "diamond", "wood").
+ * @param material The material name (e.g., "diamond", "wood").
  * @returns The material ID, or UNKNOWN_MATERIAL_ID if not found.
  */
-export function getMaterialId(state: RegistryState, mat: string): number {
-    return state.matIdMap.get(mat) ?? ENGINE_LIMITS.UNKNOWN_MATERIAL_ID;
+export function getMaterialId(state: RegistryState, material: string): number {
+    return state.materialIdMap.get(material) ?? ENGINE_LIMITS.UNKNOWN_MATERIAL_ID;
 }
 
 /**
@@ -87,24 +86,24 @@ export function hasConflict(state: RegistryState, idA: number, idB: number): boo
 }
 
 /**
- * Checks if a category has any enchantable items.
+ * Checks if an item has any enchantable entries.
  * @param state The resolved registry state.
- * @param cat The category name.
- * @returns True if the category has at least one item.
+ * @param item The item name.
+ * @returns True if the item has at least one enchantment.
  */
-export function isCategoryAvailable(state: RegistryState, cat: string): boolean {
-    const pool = state.mergedItems[cat];
+export function isItemAvailable(state: RegistryState, item: string): boolean {
+    const pool = state.itemPool[item];
     return !!(pool && pool.length > 0);
 }
 
 /**
- * Gets the list of item names in a category.
+ * Gets the list of enchantment names available for an item.
  * @param state The resolved registry state.
- * @param cat The category name.
- * @returns Array of item names, or empty array if category not found.
+ * @param item The item name.
+ * @returns Array of enchantment names, or empty array if item not found.
  */
-export function getCategoryPool(state: RegistryState, cat: string): string[] {
-    return state.mergedItems[cat] || [];
+export function getItemPool(state: RegistryState, item: string): string[] {
+    return state.itemPool[item] || [];
 }
 
 /**
@@ -125,7 +124,7 @@ export function getFullEnchantName(state: RegistryState, idAndRank: number): str
  * Each enchantment is returned as a packed (id << 8 | rank) value.
  *
  * @param state The resolved registry state.
- * @param cat Item category.
+ * @param item Item type.
  * @param level The modified level.
  * @param cache Optional cache for pool results (per-version).
  * @param version Optional version key for cache lookup.
@@ -133,17 +132,17 @@ export function getFullEnchantName(state: RegistryState, idAndRank: number): str
  */
 export function getEligiblePool(
     state: RegistryState,
-    cat: string,
+    item: string,
     level: number,
     cache?: { getPool(v: string, k: string): PackedEnchant[] | undefined; setPool(v: string, k: string, val: PackedEnchant[]): void },
     version?: string
 ): PackedEnchant[] {
-    const cacheKey = `${cat}|${level}`;
+    const cacheKey = `${item}|${level}`;
     const cached = (cache && version) ? cache.getPool(version, cacheKey) : undefined;
     if (cached) return cached;
 
-    const pool = state.versionPool.get(cat);
-    if (pool === undefined) throw new Error(`Unknown category "${cat}"`);
+    const pool = state.itemPool[item];
+    if (pool === undefined) throw new Error(`Unknown item "${item}"`);
     const out: PackedEnchant[] = [];
 
     for (const name of pool) {
@@ -168,13 +167,13 @@ export function getEligiblePool(
 
 export function getEligibleListNumeric(
     state: RegistryState,
-    cat: string,
+    item: string,
     level: number,
     bitset: bigint = 0n,
     cache?: { getPool(v: string, k: string): PackedEnchant[] | undefined; setPool(v: string, k: string, val: PackedEnchant[]): void },
     version?: string
 ): PackedEnchant[] {
-    const pool = getEligiblePool(state, cat, level, cache, version);
+    const pool = getEligiblePool(state, item, level, cache, version);
     if (bitset === 0n) return pool;
 
     return pool.filter(packedEnchant => {
@@ -186,42 +185,37 @@ export function getEligibleListNumeric(
 export function isEnchantmentAchievable(
     state: RegistryState,
     fullName: string,
-    cat: string,
+    item: string,
     levels: number[],
     cache?: { getPool(v: string, k: string): PackedEnchant[] | undefined; setPool(v: string, k: string, val: PackedEnchant[]): void },
     version?: string
 ): boolean {
-    const parsed = EnchantUtils.parse(fullName, state.data.constants.ROMAN_MAP);
+    const parsed = EnchantUtils.parse(fullName, state.romanMap);
     if (!parsed) return false;
     const targetId = state.idMap.get(parsed.name);
     if (targetId === undefined) return false;
     const targetRank = parsed.rank;
 
     for (const ml of levels) {
-        const pool = getEligiblePool(state, cat, ml, cache, version);
+        const pool = getEligiblePool(state, item, ml, cache, version);
         if (pool.some(p => (p >> PACKING_CONSTANTS.ENCHANT_SHIFT) === targetId && (p & PACKING_CONSTANTS.RANK_MASK) === targetRank)) return true;
     }
     return false;
 }
 
-export function getEnchantability(state: RegistryState, mat: string, cat: string): number {
-    if (cat === 'book') return 1;
-    const { armor, tools } = state.data.material_values;
-    const isArmor = state.data.constants.ARMOR_CATS.includes(cat);
-    const value = isArmor ? armor[mat] : tools[mat];
-    if (value === undefined) throw new Error(`Unknown material "${mat}" for category "${cat}"`);
+export function getEnchantability(state: RegistryState, material: string, item: string): number {
+    if (!isMaterialEligible(state, item, material)) {
+        throw new Error(`Material "${material}" is not available for item "${item}" in version ${state.version}.`);
+    }
+    const tableName = state.itemEnchantability[item];
+    if (tableName === undefined) throw new Error(`Unknown item "${item}"`);
+    const table = state.materialValues[tableName];
+    const value = table[material];
+    if (value === undefined) throw new Error(`Unknown material "${material}" for item "${item}"`);
     return value;
 }
 
-function isMaterialCompatible(mat: string, cat: string, itemCats: string[], mergedMaterials: Set<string>): boolean {
-    if (!mergedMaterials.has(mat)) return false;
-    if (mat === 'turtle_shell') return cat === 'helmet';
-    if (itemCats.includes(mat)) return mat === cat;
-    return true;
-}
-
-function sortMaterials(data: EnchantmentData, mats: string[]): string[] {
-    const priors = data.constants.MATERIAL_PRIORITY;
+function sortMaterials(priors: readonly string[], mats: string[]): string[] {
     return mats.sort((a, b) => {
         const ai = priors.indexOf(a);
         const bi = priors.indexOf(b);

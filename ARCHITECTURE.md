@@ -1,10 +1,10 @@
-# Architecture Map - Minecraft Enchantment Analyzer (V5)
+# Architecture Map - Minecraft Enchantment Analyzer (V6)
 
 ## Entry Points
 
 | Entry point | Purpose |
 |---|---|
-| `src/lib/index.ts` | Public library API: engine, registry, data, types, and utilities |
+| `src/lib/index.ts` | Public library API: engine, registry factories, data, types, and utilities |
 | `src/ui/index.ts` | Browser UI entry: wires DOM controls, workers, refinement, and charts |
 | `src/worker/top-worker.ts` | Worker for the selected XP/top-results view |
 | `src/worker/chart-worker.ts` | Worker for XP sweep chart cells |
@@ -31,9 +31,9 @@ scripts/           Build, profiling, reporting, and snapshot tools
 
 Dependency direction is intentionally one way: data and types sit at the bottom, engine code owns search behavior, services translate engine output into UI/reporting shapes, workers isolate long-running calculations, and the UI consumes worker responses.
 
-The bundled enchantment registry models the active enchanting-table space. Treasure-only or otherwise table-impossible enchantments are intentionally excluded from `global_enchantments` instead of being carried through the registry behind per-item filters.
+The bundled enchantment registry models the active enchanting-table space. Treasure-only or otherwise table-impossible enchantments are intentionally excluded from `global_enchantments` instead of being carried through the registry behind per-item filters. V6 constructs runtime engines from resolved `RegistryState` objects; normal vanilla callers build those states by version, while vanilla-plus-mutation registries are an explicit advanced path.
 
-## V5 Search Flow
+## Checkpoint Search Flow
 
 V5 centers the engine around checkpoint-capable searches. A normal calculation searches to one target checkpoint and summarizes the final result. UI refinement can instead search a sequence of checkpoints and stream a completed result each time a checkpoint is crossed.
 
@@ -57,14 +57,40 @@ UI input
 
 | API | Purpose |
 |---|---|
-| `calculate({ cat, xp, mat, ...config })` | Runs a standard calculation and returns summarized `CalculationStats` |
-| `searchToCheckpoint({ cat, xp, mat, ...config })` | Searches one target checkpoint and returns a `SearchResult` |
-| `searchSequentialCheckpoints({ cat, xp, mat, checkpoints, onCheckpointComplete, ...config })` | Searches multiple checkpoints in order and streams each completed `SearchResult` |
-| `searchModifiedLevel({ cat, modLevel, mat, ...config })` | Searches one modified level and returns its reusable `SearchState` |
+| `calculate({ item, xp, material, ...config })` | Runs a standard calculation and returns summarized `CalculationStats` |
+| `searchToCheckpoint({ item, xp, material, ...config })` | Searches one target checkpoint and returns a `SearchResult` |
+| `searchSequentialCheckpoints({ item, xp, material, checkpoints, onCheckpointComplete, ...config })` | Searches multiple checkpoints in order and streams each completed `SearchResult` |
+| `searchModifiedLevel({ item, modLevel, material, ...config })` | Searches one modified level and returns its reusable `SearchState` |
 | `getModifiedLevelDist(xp, enchantability, instrumentation?)` | Returns the BigInt distribution over modified levels |
-| `getEligibleListNumeric(cat, level, bitset?)` | Returns packed eligible enchant/rank IDs for a category and level |
+| `getEligibleListNumeric(item, level, bitset?)` | Returns packed eligible enchant/rank IDs for an item and level |
 
-The public calls use request objects so callers can pass optional search, instrumentation, timing, clue, and abort options without positional argument drift.
+The public calls use request objects so callers can pass optional search, instrumentation, timing, clue, and abort options without positional argument drift. V6 uses `item` and `material` consistently across engine calls, workers, UI code, tests, and scripts.
+
+## Registry Construction
+
+| API | Purpose |
+|---|---|
+| `RegistryFactory.build(version)` | Builds the bundled vanilla registry for a Minecraft version |
+| `RegistryFactory.buildWithMutations(version, mutations)` | Builds a vanilla registry with targeted rule or enchantment mutations applied |
+| `EngineFactory.createForVersion(version, overrides?)` | Builds or reuses a cached vanilla engine for a version |
+| `EngineFactory.create(registry, overrides?)` | Creates an engine around an already resolved vanilla or mutated registry |
+
+Runtime registry state contains projected lookup data such as active item pools, item/material compatibility, enchantability tables, conflict bitsets, material values, and rank maps. Raw registry data remains in the data/factory layer rather than being carried on each engine registry object.
+
+V6 intentionally keeps custom registry support narrow: the supported extension point is vanilla plus explicit mutations. Full custom data-pack construction is not part of the public runtime surface.
+
+## Registry Rule Model
+
+Registry data is assembled from version-ranged rule tables:
+
+- `enchantment_group_rules` define additive enchantment group membership over time, such as `sword_pool`, `armor_pool`, and item-specific extras.
+- `enchantable_item_rules` define each enchantable item, its active version range, the groups or direct enchantments it can roll, the material keys or aliases it accepts, and which enchantability table it uses.
+- `material_rules` define when concrete material keys exist.
+- `conflict_rules` define version-ranged enchantment conflicts and are compiled into symmetric conflict bitsets.
+
+Rule tables use inclusive `valid_from` and exclusive `valid_until`.
+
+Missing `groups` on an enchantable item rule means “all active table enchantments” and is reserved for books. Material aliases such as `tool` and `armor` expand to concrete material keys before version filtering, so item/material compatibility is declared once instead of split across parallel pool and binding tables.
 
 ## Search Components
 
@@ -153,11 +179,11 @@ The browser uses two dedicated workers:
 | Cache | Purpose |
 |---|---|
 | distribution cache | Modified-level distributions by version/xp/enchantability |
-| pool cache | Eligible enchant pools by version/category/level/material |
-| frontier cache | Reusable modified-level search states |
-| stats cache | Final `CalculationStats` summaries |
+| pool cache | Eligible enchant pools by version/item/level; material is intentionally absent because it affects modified-level distribution, not per-level eligibility |
+| frontier cache | Reusable modified-level search states keyed by version/item/material/modified level |
+| stats cache | Final `CalculationStats` summaries keyed by version/item/material/xp and clue when relevant |
 
-Search-state cache keys include version, category, material, modified level, and clue where relevant. Threshold-aware reads can reuse more precise cached state when it already satisfies the requested checkpoint.
+The registry rule model declares item/material compatibility together, but the engine cache keys still follow the computation they cache. Pool entries only depend on the fixed enchantable item pool at a modified level. Frontier and stats entries include material because material changes enchantability, which changes the modified-level distribution and therefore the final weighted result. Threshold-aware reads can reuse more precise cached state when it already satisfies the requested checkpoint.
 
 ## Release Documentation Rule
 

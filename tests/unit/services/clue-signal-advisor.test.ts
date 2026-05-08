@@ -2,11 +2,10 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { TEST_DATA } from '#tests/infra/test-data.js';
 import { RegistryFactory } from '#core/factory.js';
-import { DATA } from '#data/index.js';
 import { ClueSignalAdvisorService } from '#services/ClueSignalAdvisorService.js';
 
 describe('ClueSignalAdvisorService', () => {
-    const registry = RegistryFactory.build(DATA, TEST_DATA.VERSIONS.MODERN);
+    const registry = RegistryFactory.build(TEST_DATA.VERSIONS.MODERN);
 
     it('ranks clues by how much they raise the expected modified level', () => {
         const advisor = ClueSignalAdvisorService.recommend(registry, 'boots', 'diamond', 30, 10);

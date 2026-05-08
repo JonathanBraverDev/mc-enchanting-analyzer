@@ -1,11 +1,10 @@
 import { EngineFactory } from '#engine/index.js';
-import { DATA } from '#data/index.js';
 
 async function runProfile() {
     console.log('--- Enchantment Engine Performance Profile ---');
 
     const version = '1.21';
-    const engine = EngineFactory.create(DATA, version);
+    const engine = EngineFactory.createForVersion(version);
 
     const categories = ['helmet', 'sword', 'book'];
     const materials = ['netherite', 'diamond'];
@@ -16,9 +15,9 @@ async function runProfile() {
 
     // Warm up
     console.log('Warming up...');
-    for (const cat of categories) {
-        for (const mat of materials) {
-            await engine.calculate({ cat: cat, xp: level, mat: mat });
+    for (const item of categories) {
+        for (const material of materials) {
+            await engine.calculate({ item: item, xp: level, material: material });
         }
     }
 
@@ -26,22 +25,22 @@ async function runProfile() {
     console.log('\nRunning Benchmarks (Cold Cache)...');
 
     const start = performance.now();
-    for (const cat of categories) {
-        for (const mat of materials) {
+    for (const item of categories) {
+        for (const material of materials) {
             const qStart = performance.now();
-            await engine.calculate({ cat: cat, xp: level, mat: mat });
-            console.log(`[Cold] ${cat} @ ${level} (${mat}): ${(performance.now() - qStart).toFixed(2)}ms`);
+            await engine.calculate({ item: item, xp: level, material: material });
+            console.log(`[Cold] ${item} @ ${level} (${material}): ${(performance.now() - qStart).toFixed(2)}ms`);
         }
     }
     const coldDuration = performance.now() - start;
 
     console.log('\nRunning Benchmarks (Warm Cache)...');
     const startWarm = performance.now();
-    for (const cat of categories) {
-        for (const mat of materials) {
+    for (const item of categories) {
+        for (const material of materials) {
             const qStart = performance.now();
-            await engine.calculate({ cat: cat, xp: level, mat: mat });
-            console.log(`[Warm] ${cat} @ ${level} (${mat}): ${(performance.now() - qStart).toFixed(2)}ms`);
+            await engine.calculate({ item: item, xp: level, material: material });
+            console.log(`[Warm] ${item} @ ${level} (${material}): ${(performance.now() - qStart).toFixed(2)}ms`);
         }
     }
     const warmDuration = performance.now() - startWarm;

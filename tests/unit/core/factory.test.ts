@@ -1,12 +1,281 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
+import {
+    getEligibleMaterials,
+    getEnchantId,
+    getItemPool,
+    hasConflict,
+    isItemAvailable
+} from '#core/registry.js';
+import { RegistryFactory } from '#core/factory.js';
 import { EngineFactory } from '#engine/factory.js';
-import { DATA } from '#data/index.js';
+import { CacheManager } from '#engine/cache/CacheManager.js';
+import type { RegistryMutation } from '#types/index.js';
 
 describe('EngineFactory', () => {
+    it('builds the bundled vanilla registry by version', () => {
+        const registry = RegistryFactory.build('1.21.11');
+
+        assert.strictEqual(registry.version, '1.21.11');
+        assert.strictEqual(registry.source, 'vanilla');
+        assert.strictEqual('mutations' in registry, false);
+        assert.ok(isItemAvailable(registry, 'book'));
+    });
+
+    it('applies a single vanilla-data mutation without changing future vanilla builds', () => {
+        const custom = RegistryFactory.buildWithMutations('1.21.11', {
+            type: 'removeEnchantableItemRule',
+            selector: { item: 'mace', valid_from: '1.21' }
+        });
+        const vanilla = RegistryFactory.build('1.21.11');
+
+        assert.strictEqual(custom.source, 'mutated');
+        assert.deepStrictEqual(custom.mutations, [
+            {
+                type: 'removeEnchantableItemRule',
+                selector: { item: 'mace', valid_from: '1.21' }
+            }
+        ]);
+        assert.strictEqual(isItemAvailable(custom, 'mace'), false);
+        assert.strictEqual(isItemAvailable(vanilla, 'mace'), true);
+    });
+
+    it('keeps mutated registry provenance separate from caller-owned mutation objects', () => {
+        const originalSelector = { item: 'mace', valid_from: '1.21' };
+        const mutations: RegistryMutation[] = [
+            {
+                type: 'removeEnchantableItemRule',
+                selector: originalSelector
+            }
+        ];
+
+        const custom = RegistryFactory.buildWithMutations('1.21.11', mutations);
+        originalSelector.item = 'book';
+        mutations[0] = {
+            type: 'removeMaterialRule',
+            selector: { material: 'diamond', valid_from: '1.0' }
+        };
+
+        assert.deepStrictEqual(custom.mutations, [
+            {
+                type: 'removeEnchantableItemRule',
+                selector: { item: 'mace', valid_from: '1.21' }
+            }
+        ]);
+    });
+
+    it('applies mutation arrays to rule tables', () => {
+        const custom = RegistryFactory.buildWithMutations('1.15', [
+            {
+                type: 'addMaterialRule',
+                rule: { material: 'netherite', valid_from: '1.15', valid_until: '1.16' }
+            },
+            {
+                type: 'addEnchantmentGroupRule',
+                rule: {
+                    group: 'sword_pool',
+                    enchantments: ['Efficiency'],
+                    valid_from: '1.15',
+                    valid_until: '1.16'
+                }
+            }
+        ]);
+
+        assert.ok(getEligibleMaterials(custom, 'sword').includes('netherite'));
+        assert.ok(getItemPool(custom, 'sword').includes('Efficiency'));
+    });
+
+    it('removing a conflict rule changes compiled conflict bitsets', () => {
+        const vanilla = RegistryFactory.build('1.21.11');
+        const custom = RegistryFactory.buildWithMutations('1.21.11', {
+            type: 'removeConflictRule',
+            selector: { enchants: ['Smite', 'Sharpness'], valid_from: '1.0' }
+        });
+
+        const sharpness = getEnchantId(vanilla, 'Sharpness');
+        const smite = getEnchantId(vanilla, 'Smite');
+
+        assert.strictEqual(hasConflict(vanilla, sharpness, smite), true);
+        assert.strictEqual(hasConflict(custom, sharpness, smite), false);
+    });
+
+    it('patches existing enchantment weight into resolved registry indexes', () => {
+        const custom = RegistryFactory.buildWithMutations('1.21.11', {
+            type: 'patchEnchantment',
+            enchantment: 'Sharpness',
+            patch: { weight: 37 }
+        });
+        const sharpness = getEnchantId(custom, 'Sharpness');
+
+        assert.strictEqual(custom.resolvedRegistry['Sharpness']?.weight, 37);
+        assert.strictEqual(custom.weightMap[sharpness], 37);
+    });
+
+    it('merges patched enchantment levels by rank', () => {
+        const vanilla = RegistryFactory.build('1.21.11');
+        const custom = RegistryFactory.buildWithMutations('1.21.11', {
+            type: 'patchEnchantment',
+            enchantment: 'Sharpness',
+            patch: { levels: { III: [1, 2] } }
+        });
+
+        assert.deepStrictEqual(custom.resolvedRegistry['Sharpness']?.levels['III'], [1, 2]);
+        assert.deepStrictEqual(
+            custom.resolvedRegistry['Sharpness']?.levels['IV'],
+            vanilla.resolvedRegistry['Sharpness']?.levels['IV']
+        );
+    });
+
+    it('patches existing enchantment availability', () => {
+        const hidden = RegistryFactory.buildWithMutations('1.21.11', {
+            type: 'patchEnchantment',
+            enchantment: 'Sharpness',
+            patch: { valid_until: '1.21.11' }
+        });
+        const reintroduced = RegistryFactory.buildWithMutations('1.21', {
+            type: 'patchEnchantment',
+            enchantment: 'Lunge',
+            patch: { valid_from: '1.21' }
+        });
+
+        assert.strictEqual(getItemPool(hidden, 'sword').includes('Sharpness'), false);
+        assert.strictEqual(getItemPool(reintroduced, 'book').includes('Lunge'), true);
+    });
+
+    it('throws when patching an unknown enchantment', () => {
+        assert.throws(
+            () => RegistryFactory.buildWithMutations('1.21.11', {
+                type: 'patchEnchantment',
+                enchantment: 'Not Real',
+                patch: { weight: 1 }
+            }),
+            /cannot patch unknown enchantment "Not Real"/
+        );
+    });
+
+    it('rejects inherited enchantment names without mutating object prototypes', () => {
+        const mutation = JSON.parse(JSON.stringify({
+            type: 'patchEnchantment',
+            enchantment: '__proto__',
+            patch: { polluted: true, weight: 2 }
+        })) as RegistryMutation;
+
+        assert.throws(
+            () => RegistryFactory.buildWithMutations('1.21.11', mutation),
+            /cannot patch unknown enchantment "__proto__"/
+        );
+        assert.strictEqual(({} as any).polluted, undefined);
+    });
+
+    it('validates patched enchantment weights', () => {
+        assert.throws(
+            () => RegistryFactory.buildWithMutations('1.21.11', {
+                type: 'patchEnchantment',
+                enchantment: 'Sharpness',
+                patch: { weight: 0 }
+            }),
+            /weight must be >= 1/
+        );
+    });
+
+    it('validates patched enchantment level ranges', () => {
+        assert.throws(
+            () => RegistryFactory.buildWithMutations('1.21.11', {
+                type: 'patchEnchantment',
+                enchantment: 'Sharpness',
+                patch: { levels: { III: [5, 5] } }
+            }),
+            /expected \[min, max\] with 1 <= min < max/
+        );
+    });
+
+    it('validates patched enchantment rank names and continuity', () => {
+        assert.throws(
+            () => RegistryFactory.buildWithMutations('1.21.11', {
+                type: 'patchEnchantment',
+                enchantment: 'Sharpness',
+                patch: { levels: { Max: [1, 2] } }
+            }),
+            /unknown rank name/
+        );
+
+        assert.throws(
+            () => RegistryFactory.buildWithMutations('1.21.11', {
+                type: 'patchEnchantment',
+                enchantment: 'Sharpness',
+                patch: { levels: { X: [1, 2] } }
+            }),
+            /level ranks must be contiguous from I/
+        );
+    });
+
+    it('validates mutated availability ordering', () => {
+        assert.throws(
+            () => RegistryFactory.buildWithMutations('1.21.11', {
+                type: 'patchEnchantment',
+                enchantment: 'Sharpness',
+                patch: { valid_from: '1.21', valid_until: '1.0' }
+            }),
+            /valid_until must be after valid_from/
+        );
+    });
+
+    it('validates mutated item rule group references', () => {
+        assert.throws(
+            () => RegistryFactory.buildWithMutations('1.21.11', {
+                type: 'addEnchantableItemRule',
+                rule: {
+                    item: 'custom_sword',
+                    valid_from: '1.21',
+                    groups: ['missing_group'],
+                    materials: ['tool'],
+                    enchantability: 'tool'
+                }
+            }),
+            /unknown group or enchantment "missing_group"/
+        );
+    });
+
+    it('validates mutated item rule material references', () => {
+        assert.throws(
+            () => RegistryFactory.buildWithMutations('1.21.11', {
+                type: 'addEnchantableItemRule',
+                rule: {
+                    item: 'custom_sword',
+                    valid_from: '1.21',
+                    groups: ['sword_pool'],
+                    materials: ['missing_material'],
+                    enchantability: 'tool'
+                }
+            }),
+            /unknown material or material set "missing_material"/
+        );
+    });
+
+    it('throws when a remove mutation matches no rules', () => {
+        assert.throws(
+            () => RegistryFactory.buildWithMutations('1.21.11', {
+                type: 'removeMaterialRule',
+                selector: { material: 'not_real', valid_from: '1.0' }
+            }),
+            /expected exactly one matching rule; found 0/
+        );
+    });
+
+    it('throws when a remove mutation matches multiple rules', () => {
+        const duplicateWoodRule = { material: 'wood', valid_from: '1.0' };
+
+        assert.throws(
+            () => RegistryFactory.buildWithMutations('1.21.11', [
+                { type: 'addMaterialRule', rule: duplicateWoodRule },
+                { type: 'removeMaterialRule', selector: duplicateWoodRule }
+            ]),
+            /expected exactly one matching rule; found 2/
+        );
+    });
 
     it('should return a valid engine instance', () => {
-        const engine = EngineFactory.create(DATA, '1.21.11');
+        const engine = EngineFactory.createForVersion('1.21.11');
         assert.ok(engine, 'Engine should be created');
         assert.strictEqual(engine.registry.version, '1.21.11');
     });
@@ -15,15 +284,36 @@ describe('EngineFactory', () => {
         // Clear caches to ensure we start fresh
         EngineFactory.clearCaches();
 
-        const e1 = EngineFactory.create(DATA, '1.21.11');
-        const e2 = EngineFactory.create(DATA, '1.21.11');
+        const e1 = EngineFactory.createForVersion('1.21.11');
+        const e2 = EngineFactory.createForVersion('1.21.11');
 
         assert.strictEqual(e1, e2, 'Should return the same instance for the same version');
     });
 
+    it('should not use the vanilla version cache when overrides are supplied', () => {
+        EngineFactory.clearCaches();
+
+        const cached = EngineFactory.createForVersion('1.21.11');
+        const overrideEngine = EngineFactory.createForVersion('1.21.11', {
+            cache: new CacheManager({ comboOtherSize: 10, comboBookSize: 10, statsSize: 10, poolSize: 10 })
+        });
+        const cachedAgain = EngineFactory.createForVersion('1.21.11');
+
+        assert.notStrictEqual(overrideEngine, cached, 'Override engines should be separate instances');
+        assert.strictEqual(cachedAgain, cached, 'Override engines should not replace the cached vanilla instance');
+    });
+
+    it('should create an engine around exactly the provided registry', () => {
+        const registry = RegistryFactory.build('1.0');
+        const engine = EngineFactory.create(registry);
+
+        assert.strictEqual(engine.registry, registry);
+        assert.strictEqual(engine.registry.version, '1.0');
+    });
+
     it('should return different instances for different versions', () => {
-        const e1 = EngineFactory.create(DATA, '1.21.11');
-        const e2 = EngineFactory.create(DATA, '1.0');
+        const e1 = EngineFactory.createForVersion('1.21.11');
+        const e2 = EngineFactory.createForVersion('1.0');
 
         assert.notStrictEqual(e1, e2, 'Should return different instances for different versions');
         assert.strictEqual(e1.registry.version, '1.21.11');
@@ -31,9 +321,9 @@ describe('EngineFactory', () => {
     });
 
     it('should clear caches when requested', () => {
-        const e1 = EngineFactory.create(DATA, '1.21.11');
+        const e1 = EngineFactory.createForVersion('1.21.11');
         EngineFactory.clearCaches();
-        const e2 = EngineFactory.create(DATA, '1.21.11');
+        const e2 = EngineFactory.createForVersion('1.21.11');
 
         assert.notStrictEqual(e1, e2, 'Should return a new instance after clearCaches()');
     });
