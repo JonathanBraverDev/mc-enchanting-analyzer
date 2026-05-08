@@ -48,13 +48,13 @@ export class SnapshotService {
   ): TopRunView | ChartCellView {
     const { snapshotType, refinementLevel, clue, comboLimit } = request;
     const includeCombos = request.includeCombos ?? snapshotType === 'top';
-    const isBook = request.input.category === 'book';
+    const isBook = request.input.item === 'book';
 
     // Resolve clue here as a final guard against invalid worker or test input.
     let targetClueId: number | null = null;
     if (clue) {
       try {
-        targetClueId = ClueValidator.validate(state, request.input.category, clue);
+        targetClueId = ClueValidator.validate(state, request.input.item, clue);
       } catch (err) {
         // If worker didn't catch it, or if factory is used in a context where invalid clue input
         // might slip in, we throw here to prevent silent unconditioned fallback.
@@ -89,10 +89,10 @@ export class SnapshotService {
       };
     }
 
-    const packedTargets = TargetAnalysisService.packTargets(state, request.input.category, request.input.targets);
+    const packedTargets = TargetAnalysisService.packTargets(state, request.input.item, request.input.targets);
     const targetsPossibleAtLevel = packedTargets.length === 0 || TargetClueAdvisorService.supportsTargetsAtXp(
       state,
-      request.input.category,
+      request.input.item,
       request.input.material,
       request.input.xpLevel,
       packedTargets
@@ -145,7 +145,7 @@ export class SnapshotService {
     const clueSignalAdvisor: ClueSignalAdvisorView | undefined = !isConditioned && packedTargets.length === 0
       ? ClueSignalAdvisorService.recommend(
         state,
-        request.input.category,
+        request.input.item,
         request.input.material,
         request.input.xpLevel,
         5

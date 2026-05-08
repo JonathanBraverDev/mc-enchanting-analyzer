@@ -251,7 +251,7 @@ describe('SummaryService', () => {
                 snapshotType: 'chart-cell',
                 input: {
                     version: '1.20',
-                    category: 'sword',
+                    item: 'sword',
                     material: 'diamond',
                     xpLevel: 30,
                     clue: null

@@ -28,7 +28,7 @@ test('V5 native reporting can reproduce the obsolete matrix runner payload', asy
     instrumentation.exploredMassSamples = [];
     const input = {
         version: '1.21.11',
-        category: 'sword',
+        item: 'sword',
         material: 'diamond',
         xpLevel: 30,
         clue: null
@@ -46,9 +46,9 @@ test('V5 native reporting can reproduce the obsolete matrix runner payload', asy
     }> = [];
 
     await engine.searchSequentialCheckpoints({
-        cat: input.category,
+        item: input.item,
         xp: input.xpLevel,
-        mat: input.material,
+        material: input.material,
         checkpoints: [
             { threshold: 0.0001, limit: 50_000 }
         ],

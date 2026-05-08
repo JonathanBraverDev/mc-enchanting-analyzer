@@ -45,7 +45,7 @@ describe('XP Cap Sweep Integration', () => {
         };
 
         const payload: RefinementPayload = {
-            category: 'sword',
+            item: 'sword',
             material: 'diamond',
             clue: null,
             xpLevel: 30,
@@ -85,7 +85,7 @@ describe('XP Cap Sweep Integration', () => {
         };
 
         const payload: RefinementPayload = {
-            category: 'sword',
+            item: 'sword',
             material: 'diamond',
             clue: null,
             xpLevel: 50,

@@ -13,7 +13,7 @@ export type ProbabilityShare = number;
 
 export interface BaseInputSignature {
   version: string;
-  category: string;
+  item: string;
   material: string;
   clue: string | null;
   targets?: TargetRequirementInput[] | undefined;

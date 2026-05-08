@@ -16,7 +16,7 @@ shell.onRun = async (msg: WorkerRequest, engine, signal) => {
     if (msg.type !== 'chartRunStart') return;
 
     const { requestId, runId, input, refinementLevels } = msg;
-    const isBook = input.category === 'book';
+    const isBook = input.item === 'book';
     const xpCap = engine.registry.mechanics.xp_cap || 30;
 
     // Notify UI that run is accepted
@@ -42,7 +42,7 @@ shell.onRun = async (msg: WorkerRequest, engine, signal) => {
 
     // Upfront clue validation
     if (input.clue) {
-        ClueValidator.validate(engine.registry, input.category, input.clue);
+        ClueValidator.validate(engine.registry, input.item, input.clue);
     }
 
     for (const level of refinementLevels) {
@@ -55,9 +55,9 @@ shell.onRun = async (msg: WorkerRequest, engine, signal) => {
             if (signal.aborted || shell.runId !== runId) break;
 
             const result = await engine.searchToCheckpoint({
-                cat: input.category,
+                item: input.item,
                 xp,
-                mat: input.material,
+                material: input.material,
                 clue: input.clue,
                 threshold: params.threshold,
                 maxIterations: params.limit,

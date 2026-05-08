@@ -60,7 +60,7 @@ describe('RefinementService (V5 Hardened)', () => {
 
     it('calls startTopRun/startChartRun exactly once for a full run', async () => {
         const payload = {
-            category: 'sword',
+            item: 'sword',
             material: 'diamond',
             clue: null,
             xpLevel: 30,
@@ -79,7 +79,7 @@ describe('RefinementService (V5 Hardened)', () => {
 
     it('guards against stale callbacks using generations', async () => {
         const payload = {
-            category: 'sword',
+            item: 'sword',
             material: 'diamond',
             clue: null,
             xpLevel: 30,
@@ -117,7 +117,7 @@ describe('RefinementService (V5 Hardened)', () => {
 
     it('should correctly mark the final refinement checkpoint in streaming mode', async () => {
         const payload = {
-            category: 'sword',
+            item: 'sword',
             material: 'diamond',
             clue: null,
             xpLevel: 30,
@@ -138,7 +138,7 @@ describe('RefinementService (V5 Hardened)', () => {
 
     it('runs selected-level refinement without restarting the chart sweep', async () => {
         const payload = {
-            category: 'sword',
+            item: 'sword',
             material: 'diamond',
             clue: null,
             xpLevel: 25,

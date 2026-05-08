@@ -57,7 +57,7 @@ export class ParamsView {
     public getValues() {
         return {
             version: (this.elements["v-select"] as HTMLSelectElement)?.value || "",
-            category: (this.elements["cat-select"] as HTMLSelectElement)?.value || "",
+            item: (this.elements["cat-select"] as HTMLSelectElement)?.value || "",
             material: (this.elements["mat-select"] as HTMLSelectElement)?.value || "",
             clue: (this.elements["clue-select"] as HTMLSelectElement)?.value || "",
             xpLevel: parseInt((this.elements["lvl-range"] as HTMLInputElement)?.value || "0"),
@@ -82,13 +82,13 @@ export class ParamsView {
     }
 
     public updateMaterials(): void {
-        const { version, category, material } = this.getValues();
+        const { version, item, material } = this.getValues();
         const matSelect = this.elements["mat-select"] as HTMLSelectElement;
         if (!matSelect) return;
 
         const currentMat = material;
         matSelect.innerHTML = "";
-        const eligibleKeys = UiMetadataService.getEligibleMaterials(version, category);
+        const eligibleKeys = UiMetadataService.getEligibleMaterials(version, item);
 
         let bestMat = currentMat;
         if (!eligibleKeys.includes(currentMat)) {
@@ -101,7 +101,7 @@ export class ParamsView {
     }
 
     public updateClueTarget(): void {
-        const { version, category, material, xpLevel } = this.getValues();
+        const { version, item, material, xpLevel } = this.getValues();
         const gSelect = this.elements["clue-select"] as HTMLSelectElement;
         if (!gSelect) return;
 
@@ -112,7 +112,7 @@ export class ParamsView {
             return;
         }
 
-        const options = UiMetadataService.getClueOptions(version, category, material, xpLevel);
+        const options = UiMetadataService.getClueOptions(version, item, material, xpLevel);
 
         options.forEach(s => {
             DOMUtils.addOption(gSelect, s, s, s === saved);
@@ -122,12 +122,12 @@ export class ParamsView {
     }
 
     public updateTargetOptions(): void {
-        const { version, category, material, xpLevel } = this.getValues();
+        const { version, item, material, xpLevel } = this.getValues();
         const targetSelect = this.elements["target-select"] as HTMLSelectElement;
         if (!targetSelect) return;
 
         const saved = targetSelect.value;
-        this.targetOptions = UiMetadataService.getTargetOptions(version, category, material, xpLevel);
+        this.targetOptions = UiMetadataService.getTargetOptions(version, item, material, xpLevel);
         const validKeys = new Set(this.targetOptions.map(option => this.getTargetKey(option)));
         this.targets = this.targets.filter(target => validKeys.has(this.getTargetKey(target)));
         const compatibleOptions = this.targetOptions.filter(option =>
