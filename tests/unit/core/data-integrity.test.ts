@@ -43,8 +43,8 @@ function hasMaterialValue(material: string): boolean {
     return materialValueTables.some(table => Object.hasOwn(table, material));
 }
 
-function getMaterialValueTable(tableName: keyof EnchantmentData["material_values"] | 'tool'): Record<string, number> | undefined {
-    return (tableName === 'tool' ? material_values.tools : material_values[tableName]) as Record<string, number> | undefined;
+function getMaterialValueTable(tableName: keyof EnchantmentData["material_values"]): Record<string, number> | undefined {
+    return material_values[tableName] as Record<string, number> | undefined;
 }
 
 function isTimelineEntryActive(version: string, validFrom: string, validUntil?: string): boolean {

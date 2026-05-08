@@ -1,7 +1,7 @@
 import type { EnchantmentData } from '#types/index.js';
 
 export const material_values = {
-  "tools": {
+  "tool": {
     "wood": 15, "stone": 5, "iron": 14, "diamond": 10, "gold": 22, "netherite": 15, "copper": 13
   },
   "armor": {
