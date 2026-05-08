@@ -32,7 +32,7 @@ export class AnalyzerPage {
 
         // Using getByLabel where possible for better accessibility/resilience
         this.versionSelect = page.getByLabel('Version');
-        this.categorySelect = page.getByLabel('Item Category');
+        this.categorySelect = page.getByLabel('Item Type');
         this.materialSelect = page.getByLabel('Material');
         this.clueSelect = page.getByLabel('Shown in Table');
         this.targetSelect = page.getByLabel('Target Combination');
