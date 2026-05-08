@@ -15,20 +15,23 @@ export interface EnchantmentLevels {
  * Definition of an enchantment from data files.
  * @property weight Relative weight for selection (higher = more likely).
  * @property levels Rank-to-level-range mappings.
- * @property valid_from Earliest version where this enchantment is available.
- * @property valid_to Latest version where this enchantment is available.
+ * @property valid_from First version where this enchantment is available, inclusive.
+ * @property valid_until First version where this enchantment is no longer available, exclusive.
  */
 export interface Enchantment {
   weight: number;
   levels: EnchantmentLevels;
   valid_from?: string;
+  valid_until?: string;
+  /** @deprecated V6_REMOVE: Use exclusive valid_until. */
   valid_to?: string;
 }
 
 /**
  * Version-ranged conflict rule between two enchantments.
  * Conflict rules are unordered pairs and are compiled into symmetric bitsets.
- * @property valid_until First version where this conflict no longer applies.
+ * @property valid_from First version where this conflict applies, inclusive.
+ * @property valid_until First version where this conflict no longer applies, exclusive.
  */
 export interface ConflictRule {
   enchants: [string, string];
@@ -38,7 +41,8 @@ export interface ConflictRule {
 
 /**
  * Version-ranged material rule.
- * @property valid_until First version where this material rule no longer applies.
+ * @property valid_from First version where this material rule applies, inclusive.
+ * @property valid_until First version where this material rule no longer applies, exclusive.
  */
 export interface MaterialRule {
   material: string;
@@ -49,7 +53,8 @@ export interface MaterialRule {
 /**
  * Version-ranged membership rule for an enchantment group.
  * Active rules for the same group are unioned in declaration order.
- * @property valid_until First version where this membership rule no longer applies.
+ * @property valid_from First version where this membership rule applies, inclusive.
+ * @property valid_until First version where this membership rule no longer applies, exclusive.
  */
 export interface EnchantmentGroupRule {
   group: string;
@@ -71,7 +76,8 @@ export interface MaterialSets {
  * Missing groups means the item uses every active table enchantment.
  * That derived mode is currently valid only for enchanted books.
  * Materials may reference concrete material keys or material set aliases.
- * @property valid_until First version where this item rule no longer applies.
+ * @property valid_from First version where this item rule applies, inclusive.
+ * @property valid_until First version where this item rule no longer applies, exclusive.
  */
 export interface EnchantableItemRule {
   item: string;

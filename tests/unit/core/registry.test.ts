@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { EngineFactory } from '#engine/factory.js';
+import { RegistryFactory } from '#core/factory.js';
 import { DATA } from '#data/index.js';
 import {
     isCategoryAvailable,
@@ -16,6 +17,11 @@ import {
     getMaterialId,
     isMaterialEligible
 } from '#core/registry.js';
+import type { EnchantmentData } from '#types/index.js';
+
+function cloneData(): EnchantmentData {
+    return JSON.parse(JSON.stringify(DATA)) as EnchantmentData;
+}
 
 describe('Registry & Data Rules Test Suite', () => {
 
@@ -213,6 +219,35 @@ describe('Registry & Data Rules Test Suite', () => {
                     assert.strictEqual(hasConflict(reg1143, ids[i]!, ids[j]!), true, `1.14.3: ${enchs[i]} vs ${enchs[j]} SHOULD conflict`);
                 }
             }
+        });
+
+        // V6_REMOVE: This is the intentional compatibility path for legacy enchantment custom data.
+        it('converts deprecated enchantment valid_to to exclusive valid_until', () => {
+            const data = cloneData();
+            const sharpness = data.global_enchantments['Sharpness'];
+            assert.ok(sharpness);
+            data.global_enchantments['Sharpness'] = { ...sharpness, valid_to: '1.7.2' };
+
+            const reg172 = RegistryFactory.build(data, '1.7.2');
+            assert.ok(getItemPool(reg172, 'sword').includes('Sharpness'), '1.7.2: valid_to should remain inclusive');
+            assert.strictEqual(reg172.resolvedRegistry['Sharpness']?.valid_until, '1.8');
+            assert.strictEqual(reg172.resolvedRegistry['Sharpness']?.valid_to, undefined);
+
+            const reg18 = RegistryFactory.build(data, '1.8');
+            assert.ok(!getItemPool(reg18, 'sword').includes('Sharpness'), '1.8: converted valid_until should be exclusive');
+        });
+
+        // V6_REMOVE: This is the intentional compatibility path for legacy enchantment custom data.
+        it('rejects deprecated enchantment valid_to when there is no later boundary', () => {
+            const data = cloneData();
+            const sharpness = data.global_enchantments['Sharpness'];
+            assert.ok(sharpness);
+            data.global_enchantments['Sharpness'] = { ...sharpness, valid_to: '99.99' };
+
+            assert.throws(
+                () => RegistryFactory.build(data, '1.21.11'),
+                /valid_to is deprecated and cannot be converted; use valid_until/
+            );
         });
     });
 
