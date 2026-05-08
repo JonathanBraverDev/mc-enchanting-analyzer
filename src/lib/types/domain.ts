@@ -96,8 +96,8 @@ export type EnchantableItemRuleSelector = Pick<EnchantableItemRule, 'item' | 'va
 
 /**
  * Small vanilla-data mutations for custom registry experiments.
- * These operate on version-ranged rule tables only; full custom data packs remain
- * available through RegistryFactory.buildFromData().
+ * These operate on version-ranged rule tables only and are applied to a cloned
+ * vanilla data pack before the resolved registry is built.
  */
 export type RegistryMutation =
   | { type: 'addConflictRule'; rule: ConflictRule }

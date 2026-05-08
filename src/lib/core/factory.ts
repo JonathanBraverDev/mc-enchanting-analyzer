@@ -23,7 +23,7 @@ import { DATA } from '#data/index.js';
  */
 export class RegistryFactory {
     public static build(version: string): RegistryState {
-        return this.buildFromData(DATA, version);
+        return this.createState(DATA, version);
     }
 
     public static buildWithMutations(
@@ -37,10 +37,6 @@ export class RegistryFactory {
             this.applyRegistryMutation(data, mutation);
         }
 
-        return this.buildFromData(data, version);
-    }
-
-    public static buildFromData(data: EnchantmentData, version: string): RegistryState {
         return this.createState(data, version);
     }
 
