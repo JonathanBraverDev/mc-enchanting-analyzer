@@ -10,6 +10,7 @@ export function getRegistryVersionBoundaries(data: EnchantmentData): string[] {
     }
 
     for (const rule of data.conflict_rules) addRuleBoundaries(versions, rule);
+    for (const rule of data.enchantment_group_rules) addRuleBoundaries(versions, rule);
     for (const rule of data.category_pool_rules) addRuleBoundaries(versions, rule);
     for (const rule of data.material_rules) addRuleBoundaries(versions, rule);
 

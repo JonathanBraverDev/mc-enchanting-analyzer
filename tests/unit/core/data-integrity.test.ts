@@ -7,7 +7,7 @@
  *   - Every enchantment has required fields with sensible values
  *   - Level ranges are valid (min ≥ 1, min < max)
  *   - Every conflict rule resolves to known enchantments and version boundaries
- *   - Every enchantment-group member is a known enchantment
+ *   - Every enchantment-group rule member is a known enchantment
  *   - Conflict pairs are symmetric after factory expansion
  *     (if A conflicts with B then B must conflict with A)
  *
@@ -16,8 +16,8 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { global_enchantments, enchantment_groups } from '#data/enchantments.js';
-import { conflict_rules, category_pool_rules, material_rules, category_material_rules } from '#data/registry-rules.js';
+import { global_enchantments } from '#data/enchantments.js';
+import { conflict_rules, enchantment_group_rules, category_pool_rules, material_rules, category_material_rules } from '#data/registry-rules.js';
 import { EngineFactory } from '#engine/factory.js';
 import { DATA } from '#data/index.js';
 import { hasConflict, getEnchantId, getEnchantability } from '#core/registry.js';
@@ -30,6 +30,7 @@ import type { EnchantmentData } from '#types/index.js';
 const registryEnchantments: EnchantmentData["global_enchantments"] = global_enchantments;
 const registryVersions: EnchantmentData["versions"] = versions;
 const registryConflictRules: EnchantmentData["conflict_rules"] = conflict_rules;
+const registryGroupRules: EnchantmentData["enchantment_group_rules"] = enchantment_group_rules;
 const registryCategoryRules: EnchantmentData["category_pool_rules"] = category_pool_rules;
 const registryMaterialRules: EnchantmentData["material_rules"] = material_rules;
 const registryCategoryMaterialRules: EnchantmentData["category_material_rules"] = category_material_rules;
@@ -208,22 +209,29 @@ describe('Data integrity: conflict rules resolve to known data', () => {
 
 // ── Enchantment group membership ───────────────────────────────────────────────
 
-describe('Data integrity: enchantment groups reference valid enchantments', () => {
-    it('all members of every enchantment group are known enchantments', () => {
+describe('Data integrity: enchantment group rules reference valid enchantments', () => {
+    it('all members of every enchantment group rule are known enchantments', () => {
         const unknown: string[] = [];
-        for (const [groupName, members] of Object.entries(enchantment_groups)) {
-            for (const member of members) {
+        for (const rule of registryGroupRules) {
+            for (const member of rule.enchantments) {
                 if (!enchantNames.includes(member)) {
-                    unknown.push(`group "${groupName}" → "${member}"`);
+                    unknown.push(`group "${rule.group}" → "${member}"`);
                 }
             }
         }
         assert.deepStrictEqual(
             unknown, [],
-            `enchantment groups with unknown members: ${unknown.join(', ')}`
+            `enchantment group rules with unknown members: ${unknown.join(', ')}`
         );
     });
 
+    it('all enchantment group rules have at least one member', () => {
+        const empty = registryGroupRules
+            .filter(rule => rule.enchantments.length === 0)
+            .map(rule => rule.group);
+
+        assert.deepStrictEqual(empty, [], `empty enchantment group rules: ${empty.join(', ')}`);
+    });
 });
 
 // ── Conflict symmetry after factory build ─────────────────────────────────────
@@ -277,6 +285,12 @@ describe('Data integrity: registry rules reference known data', () => {
                 if (rule.valid_until && !versionKeys.has(rule.valid_until)) bad.push(`${rule.enchants.join(' ↔ ')} valid_until: ${rule.valid_until}`);
                 return bad;
             }),
+            ...registryGroupRules.flatMap(rule => {
+                const bad: string[] = [];
+                if (!versionKeys.has(rule.valid_from)) bad.push(`${rule.group} valid_from: ${rule.valid_from}`);
+                if (rule.valid_until && !versionKeys.has(rule.valid_until)) bad.push(`${rule.group} valid_until: ${rule.valid_until}`);
+                return bad;
+            }),
             ...registryCategoryRules.flatMap(rule => {
                 const bad: string[] = [];
                 if (!versionKeys.has(rule.valid_from)) bad.push(`${rule.category} valid_from: ${rule.valid_from}`);
@@ -295,7 +309,7 @@ describe('Data integrity: registry rules reference known data', () => {
     });
 
     it('category rules reference known groups or enchantments', () => {
-        const groupNames = new Set(Object.keys(enchantment_groups));
+        const groupNames = new Set(registryGroupRules.map(rule => rule.group));
         const unknown: string[] = [];
 
         for (const rule of registryCategoryRules) {
