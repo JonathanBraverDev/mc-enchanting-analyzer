@@ -120,10 +120,10 @@ describe('Integration: Clue Validation', () => {
             await engine.calculate({ item: TEST_DATA.ITEMS.SWORD, xp: 30, material: TEST_DATA.MATERIALS.DIAMOND, clue: 'FakeEnchant X' });
         }, /Unknown enchantment/);
 
-        // Inapplicable category
+        // Inapplicable item
         await assert.rejects(async () => {
             await engine.calculate({ item: TEST_DATA.ITEMS.SWORD, xp: 30, material: TEST_DATA.MATERIALS.DIAMOND, clue: 'Aqua Affinity I' });
-        }, /not applicable to category/);
+        }, /not applicable to item/);
 
         // Rank above max
         await assert.rejects(async () => {

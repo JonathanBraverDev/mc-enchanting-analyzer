@@ -25,7 +25,7 @@ export const UI_TEXTS = {
     STATUS_OPTIMIZING: "Optimizing",
     STATUS_COMPLETE: "Complete",
     STATUS_LOADING_VERSION: "Loading version",
-    STATUS_SWITCHING_CATEGORY: "Switching item",
+    STATUS_SWITCHING_ITEM: "Switching item",
     STATUS_CALCULATING: "Calculating combinations",
     STATUS_ERROR_LOADING: "Initialization failed",
     STATUS_ERROR_CALC: "Calculation failed",

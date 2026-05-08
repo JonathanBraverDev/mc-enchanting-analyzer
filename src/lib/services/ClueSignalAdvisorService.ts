@@ -22,21 +22,21 @@ export class ClueSignalAdvisorService {
 
     public static recommend(
         registry: RegistryState,
-        category: string,
+        item: string,
         material: string,
         xpLevel: number,
         limit = 5
     ): ClueSignalAdvisorView | undefined {
         if (limit <= 0) return undefined;
 
-        const enchantability = getEnchantability(registry, material, category);
+        const enchantability = getEnchantability(registry, material, item);
         const distribution = this.distributionService.getModifiedLevelDist(registry, xpLevel, enchantability);
         const baselineModifiedLevel = this.getAverageModifiedLevel(distribution);
         const buckets = new Map<number, MutableSignalBucket>();
 
         for (const [modifiedLevelText, levelMass] of Object.entries(distribution)) {
             const modifiedLevel = Number(modifiedLevelText);
-            const pool = getEligiblePool(registry, category, modifiedLevel);
+            const pool = getEligiblePool(registry, item, modifiedLevel);
             const totalWeight = this.getPoolWeight(registry, pool);
             if (totalWeight <= 0) continue;
 
@@ -84,7 +84,7 @@ export class ClueSignalAdvisorService {
 
     public static summarizeLevels(
         registry: RegistryState,
-        category: string,
+        item: string,
         material: string,
         maxXpLevel: number,
         limit = 5
@@ -93,7 +93,7 @@ export class ClueSignalAdvisorService {
 
         const recommendations: LevelClueSignalRecommendationView[] = [];
         for (let xpLevel = 1; xpLevel <= maxXpLevel; xpLevel++) {
-            const advisor = this.recommend(registry, category, material, xpLevel, limit);
+            const advisor = this.recommend(registry, item, material, xpLevel, limit);
             if (!advisor) continue;
 
             for (const recommendation of advisor.recommendations) {

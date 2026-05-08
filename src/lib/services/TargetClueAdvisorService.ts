@@ -107,18 +107,18 @@ export class TargetClueAdvisorService {
 
     public static supportsTargetsAtXp(
         registry: RegistryState,
-        category: string,
+        item: string,
         material: string,
         xpLevel: number,
         targets: PackedTargetRequirement[]
     ): boolean {
         if (targets.length === 0) return false;
 
-        const enchantability = getEnchantability(registry, material, category);
+        const enchantability = getEnchantability(registry, material, item);
         const distribution = this.distributionService.getModifiedLevelDist(registry, xpLevel, enchantability);
 
         for (const modLevelText of Object.keys(distribution)) {
-            const pool = getEligiblePool(registry, category, Number(modLevelText));
+            const pool = getEligiblePool(registry, item, Number(modLevelText));
             if (this.poolSupportsTargets(pool, targets)) return true;
         }
 
