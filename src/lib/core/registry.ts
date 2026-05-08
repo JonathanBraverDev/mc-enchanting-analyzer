@@ -1,4 +1,4 @@
-import { EnchantmentData, RegistryState, PackedEnchant } from '#types/index.js';
+import { RegistryState, PackedEnchant } from '#types/index.js';
 import { RomanUtils, EnchantUtils } from '#utils/index.js';
 import { PACKING_CONSTANTS, ENGINE_LIMITS } from '#constants/engine.js';
 
@@ -11,7 +11,7 @@ import { PACKING_CONSTANTS, ENGINE_LIMITS } from '#constants/engine.js';
  */
 export function getEligibleMaterials(state: RegistryState, item: string): string[] {
     const materials = state.itemMaterials[item] ?? [];
-    return sortMaterials(state.data, [...materials]);
+    return sortMaterials(state.materialPriority, [...materials]);
 }
 
 /**
@@ -41,7 +41,7 @@ export function getEnchantName(state: RegistryState, id: number): string {
  * @returns Roman numeral string (e.g., "I", "II", "III").
  */
 export function getRankRoman(state: RegistryState, rank: number): string {
-    return RomanUtils.rankToRoman(rank, state.data.constants.ROMAN_MAP);
+    return RomanUtils.rankToRoman(rank, state.romanMap);
 }
 
 /**
@@ -190,7 +190,7 @@ export function isEnchantmentAchievable(
     cache?: { getPool(v: string, k: string): PackedEnchant[] | undefined; setPool(v: string, k: string, val: PackedEnchant[]): void },
     version?: string
 ): boolean {
-    const parsed = EnchantUtils.parse(fullName, state.data.constants.ROMAN_MAP);
+    const parsed = EnchantUtils.parse(fullName, state.romanMap);
     if (!parsed) return false;
     const targetId = state.idMap.get(parsed.name);
     if (targetId === undefined) return false;
@@ -209,14 +209,13 @@ export function getEnchantability(state: RegistryState, material: string, item: 
     }
     const tableName = state.itemEnchantability[item];
     if (tableName === undefined) throw new Error(`Unknown item "${item}"`);
-    const table = tableName === 'tool' ? state.data.material_values.tools : state.data.material_values[tableName];
+    const table = tableName === 'tool' ? state.materialValues.tools : state.materialValues[tableName];
     const value = table[material];
     if (value === undefined) throw new Error(`Unknown material "${material}" for item "${item}"`);
     return value;
 }
 
-function sortMaterials(data: EnchantmentData, mats: string[]): string[] {
-    const priors = data.constants.MATERIAL_PRIORITY;
+function sortMaterials(priors: readonly string[], mats: string[]): string[] {
     return mats.sort((a, b) => {
         const ai = priors.indexOf(a);
         const bi = priors.indexOf(b);

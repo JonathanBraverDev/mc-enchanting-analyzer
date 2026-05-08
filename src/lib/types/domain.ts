@@ -71,6 +71,12 @@ export interface MaterialSets {
 
 export type EnchantabilityTable = 'tool' | 'armor' | 'other';
 
+export interface MaterialValues {
+  tools: { [material: string]: number };
+  armor: { [material: string]: number };
+  other: { [material: string]: number };
+}
+
 /**
  * Version-ranged enchantable item rule.
  * Missing groups means the item uses every active table enchantment.
@@ -159,11 +165,7 @@ export interface EnchantmentData {
   versions: {
     [version: string]: VersionManifest;
   };
-  material_values: {
-    tools: { [material: string]: number };
-    armor: { [material: string]: number };
-    other: { [material: string]: number };
-  };
+  material_values: MaterialValues;
   constants: {
     ROMAN_MAP: RomanMap;
     ARMOR_CATS: string[];

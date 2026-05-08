@@ -126,7 +126,7 @@ export class ResultsView {
         if (!this.comboEl) return;
 
         const fragment = document.createDocumentFragment();
-        const romanMap = registry.data.constants.ROMAN_MAP;
+        const romanMap = registry.romanMap;
 
         Object.entries(insights.combos).slice(0, UI_DEFAULTS.MAX_TOP_COMBOS_DISPLAY).forEach(([combo, prob]) => {
             const item = document.createElement("div");

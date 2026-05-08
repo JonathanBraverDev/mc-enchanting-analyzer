@@ -18,7 +18,7 @@ export class ClueValidator {
      * @returns Packed clue ID (enchantId << 8 | rank).
      */
     public static validate(registry: RegistryState, item: string, clue: string): number {
-        const romanMap = registry.data.constants.ROMAN_MAP;
+        const romanMap = registry.romanMap;
         const parsed = EnchantUtils.parse(clue, romanMap);
 
         if (!parsed) {
