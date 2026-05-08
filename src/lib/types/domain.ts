@@ -72,7 +72,7 @@ export interface MaterialSets {
 export type EnchantabilityTable = 'tool' | 'armor' | 'other';
 
 export interface MaterialValues {
-  tools: { [material: string]: number };
+  tool: { [material: string]: number };
   armor: { [material: string]: number };
   other: { [material: string]: number };
 }

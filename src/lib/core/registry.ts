@@ -209,7 +209,7 @@ export function getEnchantability(state: RegistryState, material: string, item: 
     }
     const tableName = state.itemEnchantability[item];
     if (tableName === undefined) throw new Error(`Unknown item "${item}"`);
-    const table = tableName === 'tool' ? state.materialValues.tools : state.materialValues[tableName];
+    const table = state.materialValues[tableName];
     const value = table[material];
     if (value === undefined) throw new Error(`Unknown material "${material}" for item "${item}"`);
     return value;
