@@ -72,7 +72,7 @@ describe('Integration: Snapshot Integrity', () => {
         const res = await engine.searchToCheckpoint({
             item: TEST_DATA.ITEMS.BOOK,
             xp: 30,
-            material: TEST_DATA.MATERIALS.DIAMOND,
+            material: TEST_DATA.MATERIALS.BOOK,
             threshold: 1n // Very low threshold to ensure many combinations
         });
 
@@ -92,7 +92,7 @@ describe('Integration: Snapshot Integrity', () => {
                 input: {
                     item: TEST_DATA.ITEMS.BOOK,
                     xpLevel: 30,
-                    material: TEST_DATA.MATERIALS.DIAMOND,
+                    material: TEST_DATA.MATERIALS.BOOK,
                     clue: null,
                     version: TEST_DATA.VERSIONS.MODERN
                 },
