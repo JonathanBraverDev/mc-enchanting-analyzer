@@ -3,10 +3,10 @@
  */
 import { describe, it, afterEach } from 'node:test';
 import assert from 'node:assert';
+import { RegistryFactory } from '#core/factory.js';
 import { EngineFactory } from '#engine/factory.js';
 import { CacheManager } from '#engine/cache/CacheManager.js';
 import { SummaryService } from '#services/SummaryService.js';
-import { DATA } from '#data/index.js';
 import { TEST_DATA } from '#tests/infra/test-data.js';
 import { CacheConfig, SearchResult } from '#types/index.js';
 
@@ -21,7 +21,7 @@ describe('EnchantEngine: sequential checkpoint aggregation', () => {
 
     function createEngine() {
         cache = new CacheManager(cacheConfig);
-        return EngineFactory.create(DATA, VERSION, { cache });
+        return EngineFactory.create(RegistryFactory.build(VERSION), { cache });
     }
 
     afterEach(() => {
@@ -153,12 +153,12 @@ describe('EnchantEngine: sequential checkpoint aggregation', () => {
 
 describe('EnchantEngine checkpoint search', () => {
     afterEach(() => {
-        const engine = EngineFactory.create(DATA, VERSION);
+        const engine = EngineFactory.createForVersion(VERSION);
         engine.resetCaches();
     });
 
     it('searchSequentialCheckpoints produces same summarized result as calculate', async () => {
-        const engine = EngineFactory.create(DATA, VERSION);
+        const engine = EngineFactory.createForVersion(VERSION);
         engine.resetCaches();
 
         const sequentialResult = await engine.searchSequentialCheckpoints({
@@ -196,7 +196,7 @@ describe('EnchantEngine checkpoint search', () => {
     });
 
     it('best checkpoint result survives for future calls', async () => {
-        const engine = EngineFactory.create(DATA, VERSION);
+        const engine = EngineFactory.createForVersion(VERSION);
         engine.resetCaches();
         const checkpointAccuracies: number[] = [];
 

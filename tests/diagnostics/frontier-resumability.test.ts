@@ -14,7 +14,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { EngineFactory } from '#engine/factory.js';
-import { DATA } from '#data/index.js';
 
 describe('Frontier Resumability & Cache Behavior', () => {
 
@@ -31,7 +30,7 @@ describe('Frontier Resumability & Cache Behavior', () => {
     it('progressive refinement improves accuracy (decreases pending mass)', async () => {
         // Coarse engine: threshold=0.01 — search stops when queue-top prob < 0.001
         EngineFactory.clearCaches();
-        const coarseEngine = EngineFactory.create(DATA, '1.21');
+        const coarseEngine = EngineFactory.createForVersion('1.21');
         const coarseResult = await coarseEngine.calculate({
             item: 'sword',
             xp: 30,
@@ -44,7 +43,7 @@ describe('Frontier Resumability & Cache Behavior', () => {
         // exploring far more of the probability mass before stopping.
         // A fresh engine ensures the stats cache from the coarse run doesn't interfere.
         EngineFactory.clearCaches();
-        const deepEngine = EngineFactory.create(DATA, '1.21');
+        const deepEngine = EngineFactory.createForVersion('1.21');
         const deepResult = await deepEngine.calculate({
             item: 'sword',
             xp: 30,
@@ -63,7 +62,7 @@ describe('Frontier Resumability & Cache Behavior', () => {
     // ── Test C: Stats cache returns cached result immediately ───────────────
 
     it('stats cache returns cached result immediately', async () => {
-        const engine = EngineFactory.create(DATA, '1.21');
+        const engine = EngineFactory.createForVersion('1.21');
 
         // First call: computes stats and stores them in the stats cache.
         const result1 = await engine.calculate({ item: 'sword', xp: 30, material: 'diamond', threshold: 0.001, resultsLimit: 1000 });
@@ -83,7 +82,7 @@ describe('Frontier Resumability & Cache Behavior', () => {
 
     it('cross-tier frontier cache: deep run resumes from coarse frontier', async () => {
         EngineFactory.clearCaches();
-        const engine = EngineFactory.create(DATA, '1.21');
+        const engine = EngineFactory.createForVersion('1.21');
 
         // Coarse pass: populates both statsCache and frontier cache.
         const coarseResult = await engine.calculate({
@@ -117,7 +116,7 @@ describe('Frontier Resumability & Cache Behavior', () => {
     // ── Test D: Ultra result satisfies coarse request via stats cache ────────
 
     it('sequential checkpoints produce same final result as repeated calculate calls', async () => {
-        const engine = EngineFactory.create(DATA, '1.21');
+        const engine = EngineFactory.createForVersion('1.21');
 
         // Ultra run first: produces low-uncertainty stats, cached at K_stats.
         // The stats key excludes limit and threshold, so K_stats is the same

@@ -3,7 +3,6 @@ import assert from 'node:assert';
 import { RefinementService } from '#ui/refinement.js';
 import { WorkerClient } from '#ui/worker-client.js';
 import { EngineFactory } from '#engine/factory.js';
-import { DATA } from '#data/index.js';
 import { TEST_DATA } from '#tests/infra/test-data.js';
 import { SnapshotService } from '#services/SnapshotService.js';
 import { SummaryService } from '#services/SummaryService.js';
@@ -68,7 +67,7 @@ describe('Integration: RefinementService V5 Contract', () => {
 
 describe('Integration: Snapshot Integrity', () => {
     it('unconditioned snapshot masses should match engine summary exactly', async () => {
-        const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
+        const engine = EngineFactory.createForVersion(TEST_DATA.VERSIONS.MODERN);
         const res = await engine.searchToCheckpoint({
             item: TEST_DATA.ITEMS.BOOK,
             xp: 30,
@@ -113,7 +112,7 @@ describe('Integration: Snapshot Integrity', () => {
 
 describe('Integration: Clue Validation', () => {
     it('should reject invalid clue input consistently', async () => {
-        const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
+        const engine = EngineFactory.createForVersion(TEST_DATA.VERSIONS.MODERN);
 
         // Unknown enchantment
         await assert.rejects(async () => {

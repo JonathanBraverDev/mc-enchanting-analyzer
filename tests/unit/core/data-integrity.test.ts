@@ -111,7 +111,7 @@ describe('Data integrity: level ranges', () => {
 });
 
 describe('Data integrity: latest vanilla 1.21.11 spot checks', () => {
-    const engine = EngineFactory.create(DATA, '1.21.11');
+    const engine = EngineFactory.createForVersion('1.21.11');
     const reg = engine.registry;
 
     it('Lunge uses vanilla 1.21.11 costs and remains table-book eligible', () => {
@@ -327,7 +327,7 @@ describe('Data integrity: registry rules reference known data', () => {
         assert.deepStrictEqual(invalidDerived, [], `non-book derived item pools: ${invalidDerived.join(', ')}`);
         assert.deepStrictEqual(emptyGroups, [], `item rules with empty groups: ${emptyGroups.join(', ')}`);
 
-        const latestBookPool = EngineFactory.create(DATA, '1.21.11').registry.itemPool['book'] ?? [];
+        const latestBookPool = EngineFactory.createForVersion('1.21.11').registry.itemPool['book'] ?? [];
         assert.deepStrictEqual([...latestBookPool].sort(), [...enchantNames].sort());
     });
 
@@ -349,7 +349,7 @@ describe('Data integrity: registry rules reference known data', () => {
         const failures: string[] = [];
         for (const version of supportedVersions) {
             try {
-                EngineFactory.create(DATA, version);
+                EngineFactory.createForVersion(version);
             } catch (error: any) {
                 failures.push(`${version}: ${error?.message ?? String(error)}`);
             }
@@ -414,7 +414,7 @@ describe('Data integrity: registry rules reference known data', () => {
 
 describe('Data integrity: conflict symmetry after RegistryFactory.build()', () => {
     // Build with the latest version so all enchantments are active
-    const engine = EngineFactory.create(DATA, '1.21.11');
+    const engine = EngineFactory.createForVersion('1.21.11');
     const reg    = engine.registry;
 
     it('all conflict pairs are symmetric (exhaustive check)', () => {
@@ -482,7 +482,7 @@ describe('Data integrity: conflict symmetry after RegistryFactory.build()', () =
 
 describe('Data integrity: conflict bitsets only include active version enchantments', () => {
     it('older damage enchantments do not conflict with future damage enchantments before those enchants exist', () => {
-        const v18 = EngineFactory.create(DATA, '1.8').registry;
+        const v18 = EngineFactory.createForVersion('1.8').registry;
         const sharpnessId = getEnchantId(v18, 'Sharpness');
         const impalingId = getEnchantId(v18, 'Impaling');
         const densityId = getEnchantId(v18, 'Density');
@@ -495,7 +495,7 @@ describe('Data integrity: conflict bitsets only include active version enchantme
     });
 
     it('conflicts activate as the relevant enchantments enter the table registry', () => {
-        const v13 = EngineFactory.create(DATA, '1.13').registry;
+        const v13 = EngineFactory.createForVersion('1.13').registry;
         const sharpnessId = getEnchantId(v13, 'Sharpness');
         const impalingId = getEnchantId(v13, 'Impaling');
         const densityId = getEnchantId(v13, 'Density');
@@ -531,7 +531,7 @@ describe('Data integrity: material enchantability coverage', () => {
 
     it('every eligible item/material pair in the latest version resolves enchantability without throwing', () => {
         const latestVersion = '1.21.11';
-        const engine = EngineFactory.create(DATA, latestVersion);
+        const engine = EngineFactory.createForVersion(latestVersion);
         const reg = engine.registry;
         const items = Object.keys(reg.itemPool);
         const bad: string[] = [];
@@ -551,7 +551,7 @@ describe('Data integrity: material enchantability coverage', () => {
 
     it('every eligible item/material pair is present in the selected enchantability table', () => {
         const latestVersion = '1.21.11';
-        const engine = EngineFactory.create(DATA, latestVersion);
+        const engine = EngineFactory.createForVersion(latestVersion);
         const reg = engine.registry;
         const bad: string[] = [];
 

@@ -1,5 +1,4 @@
 import { EngineFactory } from '#engine/index.js';
-import { DATA } from '#data/index.js';
 import { TEST_DEFAULTS } from '#constants/testing.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 
@@ -39,7 +38,7 @@ const CASES: PerfCase[] = [
 ];
 
 async function runCase(testCase: PerfCase) {
-    const engine = EngineFactory.create(DATA, testCase.version);
+    const engine = EngineFactory.createForVersion(testCase.version);
     engine.resetCaches();
 
     const timing = { totalMs: 0, searchMs: 0, postProcessingMs: 0 };

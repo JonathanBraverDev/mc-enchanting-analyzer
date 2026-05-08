@@ -1,11 +1,10 @@
 import { EngineFactory } from '#engine/index.js';
-import { DATA } from '#data/index.js';
 import * as fs from 'node:fs';
 import * as assert from 'node:assert';
 import { CalculationStats } from '#types/index.js';
 
 async function debug() {
-    const engine = EngineFactory.create(DATA, '1.7.2');
+    const engine = EngineFactory.createForVersion('1.7.2');
     const item = 'book';
     const level = 30;
     const material = 'book';

@@ -1,6 +1,5 @@
 import { describe, it, before } from 'node:test';
 import assert from 'node:assert';
-import { DATA } from '#data/index.js';
 import { EngineFactory } from '#engine/factory.js';
 import { TargetAnalysisService } from '#services/TargetAnalysisService.js';
 import { ComboUtils, ProbUtils, PRECISION } from '#utils/index.js';
@@ -35,7 +34,7 @@ function pack(enchants: PackedEnchant[]): PackedCombo {
 
 describe('TargetAnalysisService', () => {
     before(() => {
-        registry = EngineFactory.create(DATA, '1.21.11').registry;
+        registry = EngineFactory.createForVersion('1.21.11').registry;
         indexToEnchant = [0, EFF_IV, EFF_V, FORT_III, UNBR_III, SILK_I];
         enchantToIndex = new Map(indexToEnchant.map((enchant, index) => [enchant, index]));
     });

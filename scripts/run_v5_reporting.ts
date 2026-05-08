@@ -6,7 +6,6 @@
  * Usage: npx tsx scripts/run_v5_reporting.ts
  */
 import { EnchantEngine, EngineFactory } from '#engine/index.js';
-import { DATA } from '#data/index.js';
 import { getEligibleMaterials } from '#core/registry.js';
 import { SearchResult, EngineInstrumentation, ExploredMassSample } from '#types/index.js';
 import * as fs from 'node:fs';
@@ -175,7 +174,7 @@ async function main() {
     console.log(`V5 reporting run: version=${version}`);
     console.log(`Output: ${OUT_DIR}\n`);
 
-    const engine = EngineFactory.create(DATA, version);
+    const engine = EngineFactory.createForVersion(version);
     const jobs = getJobs(engine)
         .filter(job => !filterItem || job.item === filterItem)
         .filter(job => !filterMaterial || job.material === filterMaterial);

@@ -1,7 +1,6 @@
 import { test, describe, it } from 'node:test';
 import assert from 'node:assert';
 import { EngineFactory } from '#engine/factory.js';
-import { DATA } from '#data/index.js';
 import { MINECRAFT_RULES } from '#constants/minecraft.js';
 
 describe('Error Path Tests', () => {
@@ -12,7 +11,7 @@ describe('Error Path Tests', () => {
     describe('1. Invalid version strings', () => {
         it('null version throws a clear error', () => {
             assert.throws(
-                () => EngineFactory.create(DATA, null as any),
+                () => EngineFactory.createForVersion(null as any),
                 (err: Error) => {
                     assert.ok(err.message.toLowerCase().includes('version'), `Expected "version" in: ${err.message}`);
                     return true;
@@ -22,7 +21,7 @@ describe('Error Path Tests', () => {
 
         it('undefined version throws a clear error', () => {
             assert.throws(
-                () => EngineFactory.create(DATA, undefined as any),
+                () => EngineFactory.createForVersion(undefined as any),
                 (err: Error) => {
                     assert.ok(err.message.toLowerCase().includes('version'), `Expected "version" in: ${err.message}`);
                     return true;
@@ -32,7 +31,7 @@ describe('Error Path Tests', () => {
 
         it('empty string version throws a clear error', () => {
             assert.throws(
-                () => EngineFactory.create(DATA, ''),
+                () => EngineFactory.createForVersion(''),
                 (err: Error) => {
                     assert.ok(err.message.toLowerCase().includes('version'), `Expected "version" in: ${err.message}`);
                     return true;
@@ -45,7 +44,7 @@ describe('Error Path Tests', () => {
             // Availability windows without valid_until remain open-ended, so
             // unknown future versions reuse the latest known registry model.
             assert.doesNotThrow(() => {
-                const engine = EngineFactory.create(DATA, '99.99');
+                const engine = EngineFactory.createForVersion('99.99');
                 assert.strictEqual(engine.registry.version, '99.99');
             });
         });
@@ -53,7 +52,7 @@ describe('Error Path Tests', () => {
 
     describe('2. Invalid clue inputs', () => {
         it('completely unknown clue name throws clear error', async () => {
-            const engine = EngineFactory.create(DATA, '1.21');
+            const engine = EngineFactory.createForVersion('1.21');
             await assert.rejects(
                 () => engine.calculate({ item: 'sword', xp: 30, material: 'diamond', clue: 'FakeEnchant X' }),
                 (err: Error) => {
@@ -64,7 +63,7 @@ describe('Error Path Tests', () => {
         });
 
         it('valid enchant name not applicable to item throws clear error', async () => {
-            const engine = EngineFactory.create(DATA, '1.21');
+            const engine = EngineFactory.createForVersion('1.21');
             // Aqua Affinity is helmet-only, not applicable to swords
             await assert.rejects(
                 () => engine.calculate({ item: 'sword', xp: 30, material: 'diamond', clue: 'Aqua Affinity I' }),
@@ -76,7 +75,7 @@ describe('Error Path Tests', () => {
         });
 
         it('enchant name with wrong roman numeral throws clear error', async () => {
-            const engine = EngineFactory.create(DATA, '1.21');
+            const engine = EngineFactory.createForVersion('1.21');
             // Sharpness only goes to V, VI is invalid
             await assert.rejects(
                 () => engine.calculate({ item: 'sword', xp: 30, material: 'diamond', clue: 'Sharpness VI' }),
@@ -88,7 +87,7 @@ describe('Error Path Tests', () => {
         });
 
         it('clue with valid signature but impossible mass does not throw (Bayesian logic)', async () => {
-            const engine = EngineFactory.create(DATA, '1.21');
+            const engine = EngineFactory.createForVersion('1.21');
             // Sharpness V is impossible at level 1, but Bayesian p(Combo|Clue) just returns zero mass
             const stats = await engine.calculate({ item: 'sword', xp: 1, material: 'diamond', clue: 'Sharpness V' });
 
@@ -101,7 +100,7 @@ describe('Error Path Tests', () => {
 
     describe('3. Unknown item', () => {
         it('unknown item throws a clear error', async () => {
-            const engine = EngineFactory.create(DATA, '1.21');
+            const engine = EngineFactory.createForVersion('1.21');
             await assert.rejects(
                 () => engine.calculate({ item: 'not_a_real_item', xp: 30, material: 'diamond' }),
                 (err: Error) => {
@@ -112,7 +111,7 @@ describe('Error Path Tests', () => {
         });
 
         it('empty string item throws a clear error', async () => {
-            const engine = EngineFactory.create(DATA, '1.21');
+            const engine = EngineFactory.createForVersion('1.21');
             await assert.rejects(
                 () => engine.calculate({ item: '', xp: 30, material: 'diamond' }),
                 (err: Error) => {
@@ -125,7 +124,7 @@ describe('Error Path Tests', () => {
 
     describe('4. Unknown material', () => {
         it('unknown material throws a clear error', async () => {
-            const engine = EngineFactory.create(DATA, '1.21');
+            const engine = EngineFactory.createForVersion('1.21');
             await assert.rejects(
                 () => engine.calculate({ item: 'sword', xp: 30, material: 'unobtanium' }),
                 (err: Error) => {
@@ -136,7 +135,7 @@ describe('Error Path Tests', () => {
         });
 
         it('empty string material throws a clear error', async () => {
-            const engine = EngineFactory.create(DATA, '1.21');
+            const engine = EngineFactory.createForVersion('1.21');
             await assert.rejects(
                 () => engine.calculate({ item: 'sword', xp: 30, material: '' }),
                 (err: Error) => {
@@ -149,7 +148,7 @@ describe('Error Path Tests', () => {
 
     describe('5. Negative or zero XP levels', () => {
         it('XP = 0 throws a clear error', async () => {
-            const engine = EngineFactory.create(DATA, '1.21');
+            const engine = EngineFactory.createForVersion('1.21');
             await assert.rejects(
                 () => engine.calculate({ item: 'sword', xp: 0, material: 'diamond' }),
                 (err: Error) => {
@@ -160,7 +159,7 @@ describe('Error Path Tests', () => {
         });
 
         it('XP = -1 throws a clear error', async () => {
-            const engine = EngineFactory.create(DATA, '1.21');
+            const engine = EngineFactory.createForVersion('1.21');
             await assert.rejects(
                 () => engine.calculate({ item: 'sword', xp: -1, material: 'diamond' }),
                 (err: Error) => {
@@ -171,7 +170,7 @@ describe('Error Path Tests', () => {
         });
 
         it('XP = -100 throws a clear error', async () => {
-            const engine = EngineFactory.create(DATA, '1.21');
+            const engine = EngineFactory.createForVersion('1.21');
             await assert.rejects(
                 () => engine.calculate({ item: 'sword', xp: -100, material: 'diamond' }),
                 (err: Error) => {
@@ -182,7 +181,7 @@ describe('Error Path Tests', () => {
         });
 
         it('NaN XP throws a clear error', async () => {
-            const engine = EngineFactory.create(DATA, '1.21');
+            const engine = EngineFactory.createForVersion('1.21');
             await assert.rejects(
                 () => engine.calculate({ item: 'sword', xp: NaN, material: 'diamond' }),
                 (err: Error) => {
@@ -195,7 +194,7 @@ describe('Error Path Tests', () => {
 
     describe('6. XP level above the version cap', () => {
         it(`XP = ${MINECRAFT_RULES.XP_CAP_MODERN + 1} throws a clear error`, async () => {
-            const engine = EngineFactory.create(DATA, '1.21');
+            const engine = EngineFactory.createForVersion('1.21');
             await assert.rejects(
                 () => engine.calculate({ item: 'sword', xp: MINECRAFT_RULES.XP_CAP_MODERN + 1, material: 'diamond' }),
                 (err: Error) => {
@@ -206,7 +205,7 @@ describe('Error Path Tests', () => {
         });
 
         it('XP = 1000 throws a clear error', async () => {
-            const engine = EngineFactory.create(DATA, '1.21');
+            const engine = EngineFactory.createForVersion('1.21');
             await assert.rejects(
                 () => engine.calculate({ item: 'sword', xp: 1000, material: 'diamond' }),
                 (err: Error) => {
@@ -217,19 +216,19 @@ describe('Error Path Tests', () => {
         });
 
         it(`XP = ${MINECRAFT_RULES.XP_CAP_MODERN} is valid (boundary check)`, async () => {
-            const engine = EngineFactory.create(DATA, '1.21');
+            const engine = EngineFactory.createForVersion('1.21');
             const stats = await engine.calculate({ item: 'sword', xp: MINECRAFT_RULES.XP_CAP_MODERN, material: 'diamond', threshold: 0.01 });
             assert.ok(Object.keys(stats.any).length > 0, 'Should have enchantment probabilities at max XP');
         });
 
         it(`Legacy: XP = ${MINECRAFT_RULES.XP_CAP_LEGACY} is valid for 1.1`, async () => {
-            const engine = EngineFactory.create(DATA, '1.1');
+            const engine = EngineFactory.createForVersion('1.1');
             const stats = await engine.calculate({ item: 'sword', xp: MINECRAFT_RULES.XP_CAP_LEGACY, material: 'diamond', threshold: 0.01 });
             assert.ok(Object.keys(stats.any).length > 0, 'Legacy should support XP up to 50');
         });
 
         it('XP = 1 is valid (minimum boundary check)', async () => {
-            const engine = EngineFactory.create(DATA, '1.21');
+            const engine = EngineFactory.createForVersion('1.21');
             const stats = await engine.calculate({ item: 'sword', xp: 1, material: 'diamond', threshold: 0.01 });
             // At XP=1, modified levels are very low; may produce empty or minimal results - just check no crash
             assert.ok(stats !== null);

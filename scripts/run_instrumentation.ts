@@ -1,5 +1,4 @@
 import { EngineFactory } from '#engine/index.js';
-import { DATA as data } from '#data/index.js';
 import { EngineInstrumentation } from '#types/index.js';
 
 
@@ -18,7 +17,7 @@ async function run() {
     console.log(`--- Running Enchantment Simulation ---`);
     console.log(`Version: ${version}, Item: ${item}, Material: ${material}, XP: ${xp}\n`);
 
-    const engine = EngineFactory.create(data, version);
+    const engine = EngineFactory.createForVersion(version);
     const instrumentation: EngineInstrumentation = {
         poolCache: { hits: 0, misses: 0 },
         distCache: { hits: 0, misses: 0 },

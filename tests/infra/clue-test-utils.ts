@@ -1,12 +1,11 @@
 import assert from 'node:assert';
 import { ClueValidator } from '#core/clue.js';
-import { DATA } from '#data/index.js';
 import { EngineFactory } from '#engine/factory.js';
 import { SummaryService } from '#services/SummaryService.js';
 import { TEST_DATA } from '#tests/infra/test-data.js';
 import type { CalculationStats } from '#types/index.js';
 
-type TestEngine = ReturnType<typeof EngineFactory.create>;
+type TestEngine = ReturnType<typeof EngineFactory.createForVersion>;
 type CheckpointResult = Awaited<ReturnType<TestEngine['searchToCheckpoint']>>;
 
 export function compareConditionedMaps(
@@ -32,7 +31,7 @@ export async function calculateByFullSearchThenCondition(
     threshold: number,
     xp = 30
 ): Promise<CalculationStats> {
-    const engine = EngineFactory.create(DATA, '1.21.11');
+    const engine = EngineFactory.createForVersion('1.21.11');
     engine.resetCaches();
     const targetClueId = ClueValidator.validate(engine.registry, item, clue);
     const fullSearch = await engine.searchToCheckpoint({
@@ -60,7 +59,7 @@ export async function calculateWithPruning(
     clue: string,
     threshold: number
 ): Promise<CalculationStats> {
-    const engine = EngineFactory.create(DATA, '1.21.11');
+    const engine = EngineFactory.createForVersion('1.21.11');
     engine.resetCaches();
     return engine.calculate({
         item,

@@ -1,5 +1,4 @@
 import { EnchantEngine, EngineFactory } from '#engine/index.js';
-import { DATA } from '#data/index.js';
 import { SnapshotUtils } from '#tests/infra/test-utils.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import { TEST_DEFAULTS } from '#constants/testing.js';
@@ -23,42 +22,42 @@ async function updateSnapshots() {
 
     // 1.8 Diamond Sword @ Level 30
     console.log('Generating 1.8_sword_30_diamond...');
-    const e18 = EngineFactory.create(DATA, '1.8');
+    const e18 = EngineFactory.createForVersion('1.8');
     const s18 = await getStats(e18, 'sword', 30, 'diamond');
     await SnapshotUtils.saveSnapshot('1.8_sword_30_diamond', s18, e18.registry);
 
 
     // 1.21 Mace @ Level 30
     console.log('Generating 1.21_mace_30_mace...');
-    const v121 = EngineFactory.create(DATA, '1.21');
+    const v121 = EngineFactory.createForVersion('1.21');
     const s121 = await getStats(v121, 'mace', 30, 'mace');
     await SnapshotUtils.saveSnapshot('1.21_mace_30_mace', s121, v121.registry);
 
 
     // 1.7.2 Multi-Enchant Book @ Level 30
     console.log('Generating 1.7.2_book_30_book...');
-    const v172 = EngineFactory.create(DATA, '1.7.2');
+    const v172 = EngineFactory.createForVersion('1.7.2');
     const s172 = await getStats(v172, 'book', 30, 'book');
     await SnapshotUtils.saveSnapshot('1.7.2_book_30_book', s172, v172.registry);
 
 
     // 1.21.11 Spear @ Level 30
     console.log('Generating 1.21.11_spear_30_diamond...');
-    const v12111s = EngineFactory.create(DATA, '1.21.11');
+    const v12111s = EngineFactory.createForVersion('1.21.11');
     const s12111s = await getStats(v12111s, 'spear', 30, 'diamond');
     await SnapshotUtils.saveSnapshot('1.21.11_spear_30_diamond', s12111s, v12111s.registry);
 
 
     // 1.21.11 Book @ Level 30
     console.log('Generating 1.21.11_book_30_book...');
-    const v12111b = EngineFactory.create(DATA, '1.21.11');
+    const v12111b = EngineFactory.createForVersion('1.21.11');
     const s12111b = await getStats(v12111b, 'book', 30, 'book');
     await SnapshotUtils.saveSnapshot('1.21.11_book_30_book', s12111b, v12111b.registry);
 
 
     // 1.21 Sword @ Level 30 with Guaranteed Sharpness IV
     console.log('Generating 1.21_sword_30_diamond_clue_sharpness...');
-    const v121g = EngineFactory.create(DATA, '1.21');
+    const v121g = EngineFactory.createForVersion('1.21');
     const s121g = await getStats(v121g, 'sword', 30, 'diamond', 'Sharpness IV');
     await SnapshotUtils.saveSnapshot('1.21_sword_30_diamond_clue_sharpness', s121g, v121g.registry);
 
@@ -66,7 +65,7 @@ async function updateSnapshots() {
 
     // 1.8 Bow @ Level 30 with Guaranteed Power IV
     console.log('Generating 1.8_bow_30_bow_clue_power...');
-    const e18g = EngineFactory.create(DATA, '1.8');
+    const e18g = EngineFactory.createForVersion('1.8');
     const s18g = await getStats(e18g, 'bow', 30, 'bow', 'Power IV');
     await SnapshotUtils.saveSnapshot('1.8_bow_30_bow_clue_power', s18g, e18g.registry);
     e18g.resetCaches();

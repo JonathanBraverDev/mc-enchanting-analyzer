@@ -1,6 +1,5 @@
 import { EnchantEngine } from '#engine/index.js';
 import { EngineFactory } from '#engine/factory.js';
-import { DATA } from '#data/index.js';
 import {
     WorkerRequest,
     RunId,
@@ -107,7 +106,7 @@ export class WorkerShell {
             (globalThis as any).ENCHANTING_DATA = msg.data;
         }
 
-        this.engine = EngineFactory.create(DATA, msg.version);
+        this.engine = EngineFactory.createForVersion(msg.version);
         const ready: WorkerReadyResponse = {
             type: 'ready',
             requestId: msg.requestId,

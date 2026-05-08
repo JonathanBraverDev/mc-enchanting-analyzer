@@ -3,7 +3,6 @@ import assert from 'node:assert';
 import { RefinementService, RefinementPayload } from '#ui/refinement.js';
 import { RegistryFactory } from '#core/factory.js';
 import { WorkerClient } from '#ui/worker-client.js';
-import { DATA } from '#data/index.js';
 
 /** Flush pending macrotasks (AsyncUtils.yield uses setTimeout 0). */
 function flush(): Promise<void> {
@@ -25,7 +24,7 @@ describe('XP Cap Sweep Integration', () => {
     });
 
     it('should sweep up to 30 for modern version (1.21)', async () => {
-        const registry = RegistryFactory.build(DATA, '1.21');
+        const registry = RegistryFactory.build('1.21');
         const service = new RefinementService();
 
         let lastSweepLength = 0;
@@ -65,7 +64,7 @@ describe('XP Cap Sweep Integration', () => {
     });
 
     it('should sweep up to 50 for legacy version (1.1)', async () => {
-        const registry = RegistryFactory.build(DATA, '1.1');
+        const registry = RegistryFactory.build('1.1');
         const service = new RefinementService();
 
         let lastSweepLength = 0;
