@@ -120,17 +120,23 @@ export interface ResolvedRegistry {
   [enchantment: string]: Enchantment;
 }
 
-export interface MergedItems {
+export interface ItemPools {
   [item: string]: string[];
 }
+
+/** @deprecated V6_REMOVE: Use ItemPools. */
+export interface MergedItems extends ItemPools {}
 
 export interface MergedOverrides {
   [enchantment: string]: Partial<Enchantment>;
 }
 
-export interface CategoryMaterials {
+export interface ItemMaterials {
   [item: string]: string[];
 }
+
+/** @deprecated V6_REMOVE: Use ItemMaterials. */
+export interface CategoryMaterials extends ItemMaterials {}
 
 /**
  * Packed representation of a search node to minimize object and array overhead.
@@ -200,25 +206,27 @@ export interface RegistryState {
     data: EnchantmentData;
     version: string;
     mechanics: import('./domain.js').VersionMechanics;
-    itemPool: MergedItems;
-    /** @deprecated Use itemPool. */
+    itemPool: ItemPools;
+    /** @deprecated V6_REMOVE: Use itemPool. */
     mergedItems: MergedItems;
     mergedOverrides: MergedOverrides;
     resolvedRegistry: ResolvedRegistry;
     mergedMaterials: Set<string>;
-    itemMaterials: CategoryMaterials;
-    /** @deprecated Use itemMaterials. */
+    itemMaterials: ItemMaterials;
+    /** @deprecated V6_REMOVE: Use itemMaterials. */
     categoryMaterials: CategoryMaterials;
     multiEnchantBooks: boolean;
     idMap: Map<string, number>;
     revIdMap: string[];
     itemIdMap: Map<string, number>;
-    /** @deprecated Use itemIdMap. */
+    /** @deprecated V6_REMOVE: Use itemIdMap. */
     catIdMap: Map<string, number>;
     matIdMap: Map<string, number>;
     conflictBitsets: BigUint64Array;
     weightMap: Uint32Array;
     sortedRanks: [string, number][];
+    itemPoolByVersion: Map<string, string[]>;
+    /** @deprecated V6_REMOVE: Use itemPoolByVersion. */
     versionPool: Map<string, string[]>;
     enchantToIndex: Map<number, number>;
     indexToEnchant: number[];
@@ -246,15 +254,15 @@ export type ItemSelectionRequest =
     | {
         item: string;
         material: string;
-        /** @deprecated Use item. */
+        /** @deprecated V6_REMOVE: Use item. */
         cat?: never;
-        /** @deprecated Use material. */
+        /** @deprecated V6_REMOVE: Use material. */
         mat?: never;
     }
     | {
-        /** @deprecated Use item. */
+        /** @deprecated V6_REMOVE: Use item. */
         cat: string;
-        /** @deprecated Use material. */
+        /** @deprecated V6_REMOVE: Use material. */
         mat: string;
         item?: never;
         material?: never;

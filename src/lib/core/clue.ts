@@ -34,8 +34,8 @@ export class ClueValidator {
         const rank = parsed.rank ?? 1;
 
         // Applicability check
-        const versionPool = registry.versionPool.get(item);
-        if (versionPool && !versionPool.includes(parsed.name) && item !== 'book') {
+        const itemPool = registry.itemPoolByVersion.get(item);
+        if (itemPool && !itemPool.includes(parsed.name) && item !== 'book') {
             throw new Error(`Enchantment "${parsed.name}" is not applicable to item "${item}"`);
         }
 
