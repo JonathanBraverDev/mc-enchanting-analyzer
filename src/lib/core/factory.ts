@@ -350,7 +350,9 @@ export class RegistryFactory {
         };
 
         const materialValues = data.material_values;
-        [...Object.keys(materialValues.tools), ...Object.keys(materialValues.armor)].forEach(material => addId(state.materialIdMap, material));
+        Object.values(materialValues)
+            .flatMap(table => Object.keys(table))
+            .forEach(material => addId(state.materialIdMap, material));
 
         data.enchantable_item_rules.forEach(rule => {
             addId(state.itemIdMap, rule.item);

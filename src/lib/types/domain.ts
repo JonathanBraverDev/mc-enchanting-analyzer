@@ -69,7 +69,7 @@ export interface MaterialSets {
   [set: string]: string[];
 }
 
-export type EnchantabilityTable = 'tool' | 'armor';
+export type EnchantabilityTable = 'tool' | 'armor' | 'other';
 
 /**
  * Version-ranged enchantable item rule.
@@ -162,6 +162,7 @@ export interface EnchantmentData {
   material_values: {
     tools: { [material: string]: number };
     armor: { [material: string]: number };
+    other: { [material: string]: number };
   };
   constants: {
     ROMAN_MAP: RomanMap;
