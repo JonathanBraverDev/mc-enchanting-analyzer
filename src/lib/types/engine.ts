@@ -1,4 +1,4 @@
-import { Enchantment, EnchantmentData } from '#types/domain.js';
+import { Enchantment, EnchantmentData, RegistryMutation } from '#types/domain.js';
 import { NodeIdSearchFrontier } from '#engine/search/NodeIdSearchFrontier.js';
 import { SearchPoolPlan } from '#engine/search/SearchPoolPlan.js';
 import { SearchNodeGraph } from '#engine/search/SearchNodeGraph.js';
@@ -221,6 +221,17 @@ export interface RegistryState {
     enchantToIndex: Map<number, number>;
     indexToEnchant: number[];
 }
+
+export interface VanillaRegistryState extends RegistryState {
+    readonly source: 'vanilla';
+}
+
+export interface MutatedRegistryState extends RegistryState {
+    readonly source: 'mutated';
+    readonly mutations: readonly RegistryMutation[];
+}
+
+export type BuiltRegistryState = VanillaRegistryState | MutatedRegistryState;
 
 export type PackedEnchant = number & { __brand: "PackedEnchant" };
 export type PackedCombo = number & { __brand: "PackedCombo" };
