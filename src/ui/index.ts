@@ -27,7 +27,7 @@ class AppController {
 
     constructor() {
         this.params = new ParamsView(
-            ["v-select", "cat-select", "mat-select", "clue-select", "target-select", "lvl-range", "chart-metric", "combo-sort"],
+            ["v-select", "item-select", "mat-select", "clue-select", "target-select", "lvl-range", "chart-metric", "combo-sort"],
             (type) => this.onParamsChange(type)
         );
         this.results = new ResultsView();
@@ -70,7 +70,7 @@ class AppController {
             return;
         }
 
-        if (type === 'cat') {
+        if (type === 'item') {
             this.results.showPlaceholder(UI_TEXTS.STATUS_SWITCHING_CATEGORY);
             this.params.updateMaterials();
             this.params.updateClueTarget();
