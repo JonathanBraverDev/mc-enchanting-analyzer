@@ -2,7 +2,18 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { EngineFactory } from '#engine/factory.js';
 import { DATA } from '#data/index.js';
-import { isCategoryAvailable, getEligibleMaterials, getCategoryPool, getEnchantId, hasConflict, getCategoryId, getMaterialId } from '#core/registry.js';
+import {
+    isCategoryAvailable,
+    isItemAvailable,
+    getEligibleMaterials,
+    getCategoryPool,
+    getItemPool,
+    getEnchantId,
+    hasConflict,
+    getCategoryId,
+    getItemId,
+    getMaterialId
+} from '#core/registry.js';
 
 describe('Registry & Data Rules Test Suite', () => {
 
@@ -100,6 +111,15 @@ describe('Registry & Data Rules Test Suite', () => {
                 const registry = EngineFactory.create(DATA, version).registry;
                 for (const cat of available) assert.strictEqual(isCategoryAvailable(registry, cat), true, `${version}: ${cat} should be available`);
                 for (const cat of unavailable) assert.strictEqual(isCategoryAvailable(registry, cat), false, `${version}: ${cat} should not be available`);
+            }
+        });
+
+        it('deprecated category helpers match item-named helpers', () => {
+            const registry = EngineFactory.create(DATA, '1.21.11').registry;
+            for (const item of ['sword', 'book', 'trident', 'mace', 'spear']) {
+                assert.strictEqual(isCategoryAvailable(registry, item), isItemAvailable(registry, item), `${item}: availability mismatch`);
+                assert.strictEqual(getCategoryId(registry, item), getItemId(registry, item), `${item}: id mismatch`);
+                assert.deepStrictEqual(getCategoryPool(registry, item), getItemPool(registry, item), `${item}: pool mismatch`);
             }
         });
 

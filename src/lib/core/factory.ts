@@ -14,19 +14,25 @@ export class RegistryFactory {
         if (version === '') {
             throw new Error('Invalid version: empty string is not allowed.');
         }
+        const itemPool = {};
+        const itemMaterials = {};
+        const itemIdMap = new Map<string, number>();
         const state: RegistryState = {
             data,
             version: "",
             mechanics: {},
-            mergedItems: {},
+            itemPool,
+            mergedItems: itemPool,
             mergedOverrides: {},
             resolvedRegistry: {},
             mergedMaterials: new Set<string>(),
-            categoryMaterials: {},
+            itemMaterials,
+            categoryMaterials: itemMaterials,
             multiEnchantBooks: true,
             idMap: new Map(),
             revIdMap: [],
-            catIdMap: new Map(),
+            itemIdMap,
+            catIdMap: itemIdMap,
             matIdMap: new Map(),
             conflictBitsets: new BigUint64Array(0),
             weightMap: new Uint32Array(0),
@@ -53,7 +59,7 @@ export class RegistryFactory {
         // 3. Initialize mapping lookups
         this.initializeIdMaps(state, data);
 
-        // 4. Apply active category and material rules
+        // 4. Apply active item and material rules
         this.applyRegistryRules(state, data);
 
         // 5. Filter based on version ranges
@@ -172,32 +178,27 @@ export class RegistryFactory {
             if (!map.has(key)) map.set(key, map.size);
         };
 
-        data.enchantment_group_rules.forEach(rule => addId(state.catIdMap, rule.group));
-
         const matValues = data.material_values;
         [...Object.keys(matValues.tools), ...Object.keys(matValues.armor)].forEach(mat => addId(state.matIdMap, mat));
 
-        data.category_pool_rules.forEach(rule => {
-            addId(state.catIdMap, rule.category);
-        });
-
-        data.category_material_rules.forEach(rule => {
-            addId(state.catIdMap, rule.category);
-            rule.materials.forEach(material => addId(state.matIdMap, material));
+        data.enchantable_item_rules.forEach(rule => {
+            addId(state.itemIdMap, rule.item);
+            this.resolveMaterialRefs(data, rule.materials).forEach(material => addId(state.matIdMap, material));
         });
     }
 
     private static applyRegistryRules(state: RegistryState, data: EnchantmentData): void {
-        for (const rule of data.category_pool_rules) {
+        for (const rule of data.enchantable_item_rules) {
             if (!this.isTimelineEntryActive(state.version, rule.valid_from, rule.valid_until)) continue;
 
             if (rule.groups === undefined) {
-                state.mergedItems[rule.category] = this.getActiveRegistryEnchantments(state);
-                continue;
+                state.itemPool[rule.item] = this.getActiveRegistryEnchantments(state);
+            } else {
+                const resolved = rule.groups.flatMap(item => this.resolveGroupOrEnchant(state, data, item));
+                state.itemPool[rule.item] = [...new Set(resolved)];
             }
 
-            const resolved = rule.groups.flatMap(item => this.resolveGroupOrEnchant(state, data, item));
-            state.mergedItems[rule.category] = [...new Set(resolved)];
+            state.itemMaterials[rule.item] = this.resolveMaterialRefs(data, rule.materials);
         }
 
         for (const rule of data.material_rules) {
@@ -205,17 +206,13 @@ export class RegistryFactory {
                 state.mergedMaterials.add(rule.material);
             }
         }
-
-        for (const rule of data.category_material_rules) {
-            state.categoryMaterials[rule.category] = rule.materials;
-        }
     }
 
     private static filterMergedPools(state: RegistryState): void {
-        for (const cat of Object.keys(state.mergedItems)) {
-            const pool = state.mergedItems[cat];
+        for (const item of Object.keys(state.itemPool)) {
+            const pool = state.itemPool[item];
             if (!pool) continue;
-            state.mergedItems[cat] = pool.filter(name => {
+            state.itemPool[item] = pool.filter(name => {
                 const props = state.resolvedRegistry[name];
                 if (!props) return false;
                 return VersionUtils.isInRange(state.version, props.valid_from, props.valid_to);
@@ -253,8 +250,24 @@ export class RegistryFactory {
     }
 
     private static initializeVersionPool(state: RegistryState): void {
-        for (const [cat, pool] of Object.entries(state.mergedItems)) {
-            state.versionPool.set(cat, pool);
+        for (const [item, pool] of Object.entries(state.itemPool)) {
+            state.versionPool.set(item, pool);
         }
+    }
+
+    private static resolveMaterialRefs(data: EnchantmentData, refs: string[]): string[] {
+        const resolved: string[] = [];
+        const seen = new Set<string>();
+
+        for (const ref of refs) {
+            const materials = data.material_sets[ref] ?? [ref];
+            for (const material of materials) {
+                if (seen.has(material)) continue;
+                seen.add(material);
+                resolved.push(material);
+            }
+        }
+
+        return resolved;
     }
 }

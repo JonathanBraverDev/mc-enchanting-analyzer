@@ -1,6 +1,6 @@
 import { CalculationRequest, CalculationStats, CheckpointSearchRequest, EngineInstrumentation, ModifiedLevelSearchRequest, RegistryState, SearchResult, SearchConfig, SearchState, SequentialCheckpointSearchRequest } from '#types/index.js';
 import { KeyUtils, ProbUtils } from '#utils/index.js';
-import { getCategoryId, getMaterialId, isCategoryAvailable, getEligibleListNumeric as getRegistryEligibleListNumeric } from '#core/registry.js';
+import { getItemId, getMaterialId, isItemAvailable, getEligibleListNumeric as getRegistryEligibleListNumeric } from '#core/registry.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import { MINECRAFT_RULES } from '#constants/minecraft.js';
 import { getSearchLimit } from '#engine/utils.js';
@@ -74,30 +74,29 @@ export class EnchantEngine {
      * @param instrumentation Optional performance tracking.
      */
     public async searchModifiedLevel(request: ModifiedLevelSearchRequest): Promise<SearchState> {
+        const { item, material } = this.normalizeItemSelection(request);
         const {
-            cat,
             modLevel,
-            mat,
             threshold = ProbUtils.toBigInt(ENGINE_LIMITS.DEFAULT_THRESHOLD),
             maxIterations,
             resultsLimit = ENGINE_LIMITS.MAX_RESULTS_UNBOUNDED,
             instrumentation
         } = request;
-        const cacheKey = this.getPackedKey(cat, modLevel, mat);
-        const cached = this.cache.getSearchState(cat, this.registry.version, cacheKey) as SearchState | undefined;
+        const cacheKey = this.getPackedKey(item, modLevel, material);
+        const cached = this.cache.getSearchState(item, this.registry.version, cacheKey) as SearchState | undefined;
         // This one-level API returns a frontier directly, so a complete cached frontier is already
         // the full answer. Request-level searches still enter SearchService to preserve reporting.
         if (cached && cached.threshold <= threshold) return cached;
 
         return this.searchService.searchModifiedLevel({
             registry: this.registry,
-            cat,
+            cat: item,
             modLevel,
-            mat,
+            mat: material,
             useCache: true,
             existingState: cached,
             threshold,
-            limit: getSearchLimit(cat, ProbUtils.toNumber(threshold), maxIterations),
+            limit: getSearchLimit(item, ProbUtils.toNumber(threshold), maxIterations),
             resultsLimit,
             instrumentation
         });
@@ -109,10 +108,13 @@ export class EnchantEngine {
      */
     public async searchSequentialCheckpoints(request: SequentialCheckpointSearchRequest): Promise<SearchResult> {
         this.validateRequest(request);
-        const targetClueId = request.clue ? this.getPackedClue(request.cat, request.clue) : undefined;
+        const { item, material } = this.normalizeItemSelection(request);
+        const targetClueId = request.clue ? this.getPackedClue(item, request.clue) : undefined;
 
         return this.searchService.searchSequentialCheckpoints({
             ...request,
+            cat: item,
+            mat: material,
             registry: this.registry,
             targetClueId
         });
@@ -123,10 +125,13 @@ export class EnchantEngine {
      */
     public async searchToCheckpoint(request: CheckpointSearchRequest): Promise<SearchResult> {
         this.validateRequest(request);
-        const targetClueId = request.clue ? this.getPackedClue(request.cat, request.clue) : undefined;
+        const { item, material } = this.normalizeItemSelection(request);
+        const targetClueId = request.clue ? this.getPackedClue(item, request.clue) : undefined;
 
         return this.searchService.searchToCheckpoint({
             ...request,
+            cat: item,
+            mat: material,
             registry: this.registry,
             targetClueId
         });
@@ -144,11 +149,10 @@ export class EnchantEngine {
      */
     public async calculate(request: CalculationRequest): Promise<CalculationStats> {
         this.validateRequest(request);
+        const { item, material } = this.normalizeItemSelection(request);
 
         const {
-            cat,
             xp,
-            mat,
             clue,
             threshold = ENGINE_LIMITS.DEFAULT_THRESHOLD,
             signal,
@@ -161,9 +165,9 @@ export class EnchantEngine {
             timing
         } = request;
 
-        const packedClue = clue ? this.getPackedClue(cat, clue) : null;
+        const packedClue = clue ? this.getPackedClue(item, clue) : null;
 
-        const cacheKey = this.getStatsKey(cat, xp, mat, packedClue);
+        const cacheKey = this.getStatsKey(item, xp, material, packedClue);
 
         const cachedStats = this.cache.getStats(this.registry.version, cacheKey);
         if (cachedStats && cachedStats.threshold <= threshold) return cachedStats;
@@ -181,14 +185,14 @@ export class EnchantEngine {
 
         const finalResult = await this.searchService.searchToCheckpoint({
             registry: this.registry,
-            cat,
+            cat: item,
             xp,
-            mat,
+            mat: material,
             targetClueId: packedClue ?? undefined,
             ...searchConfig
         });
 
-        const isBook = cat === "book";
+        const isBook = item === "book";
         const postProcessingStart = timing ? performance.now() : 0;
         const finalStats = packedClue
             ? SummaryService.summarizeConditioned({
@@ -233,14 +237,14 @@ export class EnchantEngine {
     }
 
     private getPackedKey(cat: string, modLevel: number, mat: string): number {
-        const catId = getCategoryId(this.registry, cat);
+        const catId = getItemId(this.registry, cat);
         const matId = getMaterialId(this.registry, mat);
 
         return KeyUtils.getPackedKey(catId, matId, modLevel);
     }
 
     private getStatsKey(cat: string, xp: number, mat: string, packedClue: number | null = null): number {
-        const catId = getCategoryId(this.registry, cat);
+        const catId = getItemId(this.registry, cat);
         const matId = getMaterialId(this.registry, mat);
 
         let key = KeyUtils.getStatsKey(catId, matId, xp);
@@ -252,7 +256,8 @@ export class EnchantEngine {
     }
 
     private validateRequest(request: CalculationRequest | CheckpointSearchRequest | SequentialCheckpointSearchRequest): void {
-        const { cat, xp, mat } = request;
+        const { item, material } = this.normalizeItemSelection(request);
+        const { xp } = request;
 
         if (!Number.isFinite(xp) || !Number.isInteger(xp) || xp <= 0) {
             throw new Error(`Invalid XP level: ${xp}. XP must be a positive integer.`);
@@ -261,11 +266,11 @@ export class EnchantEngine {
         if (xp > xpCap) {
             throw new Error(`XP level ${xp} exceeds the maximum of ${xpCap} for version ${this.registry.version}.`);
         }
-        if (!isCategoryAvailable(this.registry, cat)) {
-            throw new Error(`Unknown or unavailable category: "${cat}" in version ${this.registry.version}.`);
+        if (!isItemAvailable(this.registry, item)) {
+            throw new Error(`Unknown or unavailable item: "${item}" in version ${this.registry.version}.`);
         }
-        if (getMaterialId(this.registry, mat) === ENGINE_LIMITS.UNKNOWN_MATERIAL_ID) {
-            throw new Error(`Unknown material: "${mat}".`);
+        if (getMaterialId(this.registry, material) === ENGINE_LIMITS.UNKNOWN_MATERIAL_ID) {
+            throw new Error(`Unknown material: "${material}".`);
         }
 
         // Config validation
@@ -282,5 +287,15 @@ export class EnchantEngine {
             throw new Error(`Invalid resultsLimit: ${request.resultsLimit}. Must be between 1 and 1,000,000.`);
         }
 
+    }
+
+    private normalizeItemSelection(request: { item?: string | undefined; material?: string | undefined; cat?: string | undefined; mat?: string | undefined }): { item: string; material: string } {
+        const item = request.item ?? request.cat;
+        const material = request.material ?? request.mat;
+
+        if (!item) throw new Error('Missing item. Use request.item, or deprecated request.cat.');
+        if (!material) throw new Error('Missing material. Use request.material, or deprecated request.mat.');
+
+        return { item, material };
     }
 }

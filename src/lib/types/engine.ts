@@ -121,7 +121,7 @@ export interface ResolvedRegistry {
 }
 
 export interface MergedItems {
-  [category: string]: string[];
+  [item: string]: string[];
 }
 
 export interface MergedOverrides {
@@ -129,7 +129,7 @@ export interface MergedOverrides {
 }
 
 export interface CategoryMaterials {
-  [category: string]: string[];
+  [item: string]: string[];
 }
 
 /**
@@ -200,14 +200,20 @@ export interface RegistryState {
     data: EnchantmentData;
     version: string;
     mechanics: import('./domain.js').VersionMechanics;
+    itemPool: MergedItems;
+    /** @deprecated Use itemPool. */
     mergedItems: MergedItems;
     mergedOverrides: MergedOverrides;
     resolvedRegistry: ResolvedRegistry;
     mergedMaterials: Set<string>;
+    itemMaterials: CategoryMaterials;
+    /** @deprecated Use itemMaterials. */
     categoryMaterials: CategoryMaterials;
     multiEnchantBooks: boolean;
     idMap: Map<string, number>;
     revIdMap: string[];
+    itemIdMap: Map<string, number>;
+    /** @deprecated Use itemIdMap. */
     catIdMap: Map<string, number>;
     matIdMap: Map<string, number>;
     conflictBitsets: BigUint64Array;
@@ -236,35 +242,45 @@ export interface SearchConfig {
     timing?: SearchTiming | undefined;
 }
 
-export interface CalculationRequest extends SearchConfig {
-    cat: string;
-    xp: number;
-    mat: string;
-}
+export type ItemSelectionRequest =
+    | {
+        item: string;
+        material: string;
+        /** @deprecated Use item. */
+        cat?: never;
+        /** @deprecated Use material. */
+        mat?: never;
+    }
+    | {
+        /** @deprecated Use item. */
+        cat: string;
+        /** @deprecated Use material. */
+        mat: string;
+        item?: never;
+        material?: never;
+    };
 
-export interface ModifiedLevelSearchRequest {
-    cat: string;
+export type CalculationRequest = SearchConfig & ItemSelectionRequest & {
+    xp: number;
+};
+
+export type ModifiedLevelSearchRequest = ItemSelectionRequest & {
     modLevel: number;
-    mat: string;
     threshold?: bigint | undefined;
     maxIterations?: number | undefined;
     resultsLimit?: number | undefined;
     instrumentation?: EngineInstrumentation | undefined;
-}
+};
 
-export interface CheckpointSearchRequest extends SearchConfig {
-    cat: string;
+export type CheckpointSearchRequest = SearchConfig & ItemSelectionRequest & {
     xp: number;
-    mat: string;
-}
+};
 
-export interface SequentialCheckpointSearchRequest extends SearchConfig {
-    cat: string;
+export type SequentialCheckpointSearchRequest = SearchConfig & ItemSelectionRequest & {
     xp: number;
-    mat: string;
     checkpoints: SearchCheckpoint[];
     onCheckpointComplete: (result: SearchResult, checkpointIndex: number) => void;
-}
+};
 
 export interface SummaryRequest {
     combos: Map<PackedCombo, bigint>;
