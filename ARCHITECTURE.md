@@ -1,10 +1,10 @@
-# Architecture Map - Minecraft Enchantment Analyzer (V5)
+# Architecture Map - Minecraft Enchantment Analyzer (V6)
 
 ## Entry Points
 
 | Entry point | Purpose |
 |---|---|
-| `src/lib/index.ts` | Public library API: engine, registry, data, types, and utilities |
+| `src/lib/index.ts` | Public library API: engine, registry factories, data, types, and utilities |
 | `src/ui/index.ts` | Browser UI entry: wires DOM controls, workers, refinement, and charts |
 | `src/worker/top-worker.ts` | Worker for the selected XP/top-results view |
 | `src/worker/chart-worker.ts` | Worker for XP sweep chart cells |
@@ -31,9 +31,9 @@ scripts/           Build, profiling, reporting, and snapshot tools
 
 Dependency direction is intentionally one way: data and types sit at the bottom, engine code owns search behavior, services translate engine output into UI/reporting shapes, workers isolate long-running calculations, and the UI consumes worker responses.
 
-The bundled enchantment registry models the active enchanting-table space. Treasure-only or otherwise table-impossible enchantments are intentionally excluded from `global_enchantments` instead of being carried through the registry behind per-item filters.
+The bundled enchantment registry models the active enchanting-table space. Treasure-only or otherwise table-impossible enchantments are intentionally excluded from `global_enchantments` instead of being carried through the registry behind per-item filters. V6 constructs runtime engines from resolved `RegistryState` objects; normal vanilla callers build those states by version, while vanilla-plus-mutation registries are an explicit advanced path.
 
-## V5 Search Flow
+## Checkpoint Search Flow
 
 V5 centers the engine around checkpoint-capable searches. A normal calculation searches to one target checkpoint and summarizes the final result. UI refinement can instead search a sequence of checkpoints and stream a completed result each time a checkpoint is crossed.
 
@@ -65,6 +65,19 @@ UI input
 | `getEligibleListNumeric(item, level, bitset?)` | Returns packed eligible enchant/rank IDs for an item and level |
 
 The public calls use request objects so callers can pass optional search, instrumentation, timing, clue, and abort options without positional argument drift. V6 uses `item` and `material` consistently across engine calls, workers, UI code, tests, and scripts.
+
+## Registry Construction
+
+| API | Purpose |
+|---|---|
+| `RegistryFactory.build(version)` | Builds the bundled vanilla registry for a Minecraft version |
+| `RegistryFactory.buildWithMutations(version, mutations)` | Builds a vanilla registry with targeted rule or enchantment mutations applied |
+| `EngineFactory.createForVersion(version, overrides?)` | Builds or reuses a cached vanilla engine for a version |
+| `EngineFactory.create(registry, overrides?)` | Creates an engine around an already resolved vanilla or mutated registry |
+
+Runtime registry state contains projected lookup data such as active item pools, item/material compatibility, enchantability tables, conflict bitsets, material values, and rank maps. Raw registry data remains in the data/factory layer rather than being carried on each engine registry object.
+
+V6 intentionally keeps custom registry support narrow: the supported extension point is vanilla plus explicit mutations. Full custom data-pack construction is not part of the public runtime surface.
 
 ## Registry Rule Model
 
