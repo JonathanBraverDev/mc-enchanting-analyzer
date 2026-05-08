@@ -49,7 +49,7 @@ export const ThemeManager = {
         const fullName = typeof idOrName === 'number' ? getFullEnchantName(registry, idOrName) : idOrName;
         const rank = typeof idOrName === 'number'
             ? idOrName & 0xFF
-            : registry.data.constants.ROMAN_MAP[fullName.split(' ').pop() || ''] || 1;
+            : registry.romanMap[fullName.split(' ').pop() || ''] || 1;
 
         return {
             color: ThemeManager.getEnchantColor(idOrName, registry),
