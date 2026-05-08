@@ -171,7 +171,7 @@ describe('Registry & Data Rules Test Suite', () => {
         });
     });
 
-    describe('2. Item Categories & Materials', () => {
+    describe('2. Items & Materials', () => {
         const reg = EngineFactory.create(DATA, '1.20').registry;
 
         it('should return correct materials for Swords', () => {

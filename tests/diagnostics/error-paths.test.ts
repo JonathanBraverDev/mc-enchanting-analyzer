@@ -103,7 +103,7 @@ describe('Error Path Tests', () => {
         it('unknown item throws a clear error', async () => {
             const engine = EngineFactory.create(DATA, '1.21');
             await assert.rejects(
-                () => engine.calculate({ item: 'not_a_real_category', xp: 30, material: 'diamond' }),
+                () => engine.calculate({ item: 'not_a_real_item', xp: 30, material: 'diamond' }),
                 (err: Error) => {
                     assert.ok(err.message.toLowerCase().includes('item'), `Expected "item" in: ${err.message}`);
                     return true;

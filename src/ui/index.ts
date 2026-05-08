@@ -71,7 +71,7 @@ class AppController {
         }
 
         if (type === 'item') {
-            this.results.showPlaceholder(UI_TEXTS.STATUS_SWITCHING_CATEGORY);
+            this.results.showPlaceholder(UI_TEXTS.STATUS_SWITCHING_ITEM);
             this.params.updateMaterials();
             this.params.updateClueTarget();
         } else if (type === 'material') {
