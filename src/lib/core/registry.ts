@@ -58,11 +58,11 @@ export function getCategoryId(state: RegistryState, cat: string): number {
 /**
  * Gets the internal ID for a material.
  * @param state The resolved registry state.
- * @param mat The material name (e.g., "diamond", "wood").
+ * @param material The material name (e.g., "diamond", "wood").
  * @returns The material ID, or UNKNOWN_MATERIAL_ID if not found.
  */
-export function getMaterialId(state: RegistryState, mat: string): number {
-    return state.matIdMap.get(mat) ?? ENGINE_LIMITS.UNKNOWN_MATERIAL_ID;
+export function getMaterialId(state: RegistryState, material: string): number {
+    return state.materialIdMap.get(material) ?? ENGINE_LIMITS.UNKNOWN_MATERIAL_ID;
 }
 
 /**
@@ -139,7 +139,7 @@ export function getFullEnchantName(state: RegistryState, idAndRank: number): str
  * Each enchantment is returned as a packed (id << 8 | rank) value.
  *
  * @param state The resolved registry state.
- * @param cat Item type.
+ * @param item Item type.
  * @param level The modified level.
  * @param cache Optional cache for pool results (per-version).
  * @param version Optional version key for cache lookup.
@@ -147,17 +147,17 @@ export function getFullEnchantName(state: RegistryState, idAndRank: number): str
  */
 export function getEligiblePool(
     state: RegistryState,
-    cat: string,
+    item: string,
     level: number,
     cache?: { getPool(v: string, k: string): PackedEnchant[] | undefined; setPool(v: string, k: string, val: PackedEnchant[]): void },
     version?: string
 ): PackedEnchant[] {
-    const cacheKey = `${cat}|${level}`;
+    const cacheKey = `${item}|${level}`;
     const cached = (cache && version) ? cache.getPool(version, cacheKey) : undefined;
     if (cached) return cached;
 
-    const pool = state.itemPoolByVersion.get(cat);
-    if (pool === undefined) throw new Error(`Unknown item "${cat}"`);
+    const pool = state.itemPoolByVersion.get(item);
+    if (pool === undefined) throw new Error(`Unknown item "${item}"`);
     const out: PackedEnchant[] = [];
 
     for (const name of pool) {
@@ -182,13 +182,13 @@ export function getEligiblePool(
 
 export function getEligibleListNumeric(
     state: RegistryState,
-    cat: string,
+    item: string,
     level: number,
     bitset: bigint = 0n,
     cache?: { getPool(v: string, k: string): PackedEnchant[] | undefined; setPool(v: string, k: string, val: PackedEnchant[]): void },
     version?: string
 ): PackedEnchant[] {
-    const pool = getEligiblePool(state, cat, level, cache, version);
+    const pool = getEligiblePool(state, item, level, cache, version);
     if (bitset === 0n) return pool;
 
     return pool.filter(packedEnchant => {
@@ -200,7 +200,7 @@ export function getEligibleListNumeric(
 export function isEnchantmentAchievable(
     state: RegistryState,
     fullName: string,
-    cat: string,
+    item: string,
     levels: number[],
     cache?: { getPool(v: string, k: string): PackedEnchant[] | undefined; setPool(v: string, k: string, val: PackedEnchant[]): void },
     version?: string
@@ -212,18 +212,18 @@ export function isEnchantmentAchievable(
     const targetRank = parsed.rank;
 
     for (const ml of levels) {
-        const pool = getEligiblePool(state, cat, ml, cache, version);
+        const pool = getEligiblePool(state, item, ml, cache, version);
         if (pool.some(p => (p >> PACKING_CONSTANTS.ENCHANT_SHIFT) === targetId && (p & PACKING_CONSTANTS.RANK_MASK) === targetRank)) return true;
     }
     return false;
 }
 
-export function getEnchantability(state: RegistryState, mat: string, cat: string): number {
-    if (cat === 'book') return 1;
+export function getEnchantability(state: RegistryState, material: string, item: string): number {
+    if (item === 'book') return 1;
     const { armor, tools } = state.data.material_values;
-    const isArmor = state.data.constants.ARMOR_CATS.includes(cat);
-    const value = isArmor ? armor[mat] : tools[mat];
-    if (value === undefined) throw new Error(`Unknown material "${mat}" for category "${cat}"`);
+    const isArmor = state.data.constants.ARMOR_CATS.includes(item);
+    const value = isArmor ? armor[material] : tools[material];
+    if (value === undefined) throw new Error(`Unknown material "${material}" for item "${item}"`);
     return value;
 }
 

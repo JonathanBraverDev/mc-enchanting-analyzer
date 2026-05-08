@@ -173,7 +173,7 @@ export interface ForwardingContext {
     timing?: SearchTiming | undefined;
 
     // Search-global parameters
-    cat: string;
+    item: string;
     poolPlan: SearchPoolPlan;
     cluePolicy?: ClueSearchPolicy | undefined;
 }
@@ -221,6 +221,8 @@ export interface RegistryState {
     itemIdMap: Map<string, number>;
     /** @deprecated V6_REMOVE: Use itemIdMap. */
     catIdMap: Map<string, number>;
+    materialIdMap: Map<string, number>;
+    /** @deprecated V6_REMOVE: Use materialIdMap. */
     matIdMap: Map<string, number>;
     conflictBitsets: BigUint64Array;
     weightMap: Uint32Array;
@@ -348,9 +350,9 @@ export interface SearchContext {
 
 export interface ModifiedLevelSearchContext extends SearchContext {
     registry: RegistryState;
-    cat: string;
+    item: string;
     modLevel: number;
-    mat?: string | undefined;
+    material?: string | undefined;
     existingState?: SearchState | undefined;
     useCache?: boolean | undefined;
     targetClueId?: number | undefined;
@@ -358,9 +360,9 @@ export interface ModifiedLevelSearchContext extends SearchContext {
 
 export interface CheckpointSearchContext extends SearchConfig {
     registry: RegistryState;
-    cat: string;
+    item: string;
     xp: number;
-    mat: string;
+    material: string;
     targetClueId?: number | undefined;
 }
 

@@ -70,14 +70,14 @@ export class CacheManager {
     }
 
     /**
-     * Unified accessor: routes to the book or item frontier cache based on category.
-     * Centralizes the `cat === "book"` branch that would otherwise be duplicated at call sites.
+     * Unified accessor: routes to the book or item frontier cache based on item.
+     * Centralizes the `item === "book"` branch that would otherwise be duplicated at call sites.
      */
-    public getSearchState(cat: string, version: string, key: number): SearchFrontier | undefined {
-        return cat === 'book' ? this.getBookFrontier(version, key) : this.getItemFrontier(version, key);
+    public getSearchState(item: string, version: string, key: number): SearchFrontier | undefined {
+        return item === 'book' ? this.getBookFrontier(version, key) : this.getItemFrontier(version, key);
     }
-    public setSearchState(cat: string, version: string, key: number, val: SearchFrontier): void {
-        if (cat === 'book') this.setBookFrontier(version, key, val);
+    public setSearchState(item: string, version: string, key: number, val: SearchFrontier): void {
+        if (item === 'book') this.setBookFrontier(version, key, val);
         else this.setItemFrontier(version, key, val);
     }
 

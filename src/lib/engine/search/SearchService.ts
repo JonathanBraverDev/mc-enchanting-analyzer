@@ -1,5 +1,5 @@
 import { AsyncUtils, KeyUtils, PRECISION, ProbUtils } from '#utils/index.js';
-import { getCategoryId, getEnchantability, getEligiblePool, getMaterialId } from '#core/registry.js';
+import { getEnchantability, getEligiblePool, getItemId, getMaterialId } from '#core/registry.js';
 import { ENGINE_LIMITS, UI_CONSTANTS } from '#constants/engine.js';
 import { CheckpointSearchContext, EngineInstrumentation, ModifiedLevelSearchContext, PackedCombo, RegistryState, SearchContext, SearchFrontierSnapshot, SearchResult, SearchState, ForwardingContext, SequentialCheckpointSearchContext } from '#types/index.js';
 import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
@@ -37,22 +37,22 @@ export class SearchService {
     public async searchModifiedLevel(request: ModifiedLevelSearchContext): Promise<SearchState> {
         const {
             registry,
-            cat,
+            item,
             modLevel,
             threshold = 0n,
             limit = ENGINE_LIMITS.MAX_ITERATIONS_UNBOUNDED,
             resultsLimit = ENGINE_LIMITS.MAX_RESULTS_UNBOUNDED,
             timing: timingResult,
-            mat,
+            material,
             existingState,
             useCache = false,
             targetClueId
         } = request;
 
-        const cacheKey = mat !== undefined ? this.getPackedKey(registry, cat, modLevel, mat) : undefined;
+        const cacheKey = material !== undefined ? this.getPackedKey(registry, item, modLevel, material) : undefined;
         const canUseFrontierCache = useCache && targetClueId === undefined;
         const cached = canUseFrontierCache && cacheKey !== undefined
-            ? this.cache.getSearchState(cat, registry.version, cacheKey) as SearchState | undefined
+            ? this.cache.getSearchState(item, registry.version, cacheKey) as SearchState | undefined
             : undefined;
         let startTime = 0;
         if (timingResult) startTime = performance.now();
@@ -63,7 +63,7 @@ export class SearchService {
         // Minecraft fixes the eligible enchant/rank pool from the initial full modified level once.
         // Later level halving affects only the chance to continue to another enchant slot, not which
         // enchantments can appear in this run, so downstream search nodes must keep reusing this pool.
-        const initialPool = getEligiblePool(registry, cat, modLevel, this.cache, registry.version);
+        const initialPool = getEligiblePool(registry, item, modLevel, this.cache, registry.version);
 
         if (initialPool.length === 0) {
             return targetClueId === undefined
@@ -90,7 +90,7 @@ export class SearchService {
             resultsLimit,
             instrumentation: request.instrumentation,
             timing: timingResult ? { totalMs: 0, searchMs: 0, postProcessingMs: 0 } : undefined,
-            cat,
+            item,
             poolPlan,
             cluePolicy
         };
@@ -108,7 +108,7 @@ export class SearchService {
         }
 
         if (canUseFrontierCache && cacheKey !== undefined) {
-            this.cache.setSearchState(cat, registry.version, cacheKey, state);
+            this.cache.setSearchState(item, registry.version, cacheKey, state);
         }
 
         return state;
@@ -120,9 +120,9 @@ export class SearchService {
     public async searchToCheckpoint(request: CheckpointSearchContext): Promise<SearchResult> {
         const {
             registry,
-            cat,
+            item,
             xp,
-            mat,
+            material,
             threshold = ENGINE_LIMITS.DEFAULT_THRESHOLD,
             signal,
             maxIterations,
@@ -132,10 +132,10 @@ export class SearchService {
         } = request;
 
         const bThreshold = ProbUtils.toBigInt(threshold);
-        const { modDist, levels } = this.getLevelDistribution(registry, cat, xp, mat, instrumentation);
+        const { modDist, levels } = this.getLevelDistribution(registry, item, xp, material, instrumentation);
         const accumulator = this.createCheckpointAccumulator();
         let iterCount = 0;
-        const limit = getSearchLimit(cat, threshold, maxIterations);
+        const limit = getSearchLimit(item, threshold, maxIterations);
 
         this.prepareInstrumentation(instrumentation);
 
@@ -150,9 +150,9 @@ export class SearchService {
 
             const result = await this.searchModifiedLevel({
                 registry,
-                cat,
+                item,
                 modLevel: ml,
-                mat,
+                material,
                 useCache,
                 threshold: bThreshold,
                 limit,
@@ -195,9 +195,9 @@ export class SearchService {
      * Searches a sequence of request checkpoints and streams each aggregated checkpoint result.
      */
     public async searchSequentialCheckpoints(request: SequentialCheckpointSearchContext): Promise<SearchResult> {
-        const { registry, cat, xp, mat, checkpoints, onCheckpointComplete, signal, instrumentation } = request;
+        const { registry, item, xp, material, checkpoints, onCheckpointComplete, signal, instrumentation } = request;
 
-        const { modDist, levels } = this.getLevelDistribution(registry, cat, xp, mat, instrumentation);
+        const { modDist, levels } = this.getLevelDistribution(registry, item, xp, material, instrumentation);
 
         const stateMap = new Map<number, SearchState>();
         const initialTracker = new SearchStateTracker();
@@ -233,7 +233,7 @@ export class SearchService {
 
                 const result = await this.searchModifiedLevel({
                     registry,
-                    cat,
+                    item,
                     modLevel: ml,
                     existingState,
                     threshold: activeThreshold,
@@ -270,8 +270,8 @@ export class SearchService {
         return lastResult;
     }
 
-    private getLevelDistribution(registry: RegistryState, cat: string, xp: number, mat: string, instrumentation?: EngineInstrumentation): { modDist: { [level: number]: bigint }; levels: number[] } {
-        const enchantability = getEnchantability(registry, mat, cat);
+    private getLevelDistribution(registry: RegistryState, item: string, xp: number, material: string, instrumentation?: EngineInstrumentation): { modDist: { [level: number]: bigint }; levels: number[] } {
+        const enchantability = getEnchantability(registry, material, item);
         const modDist = this.distributionService.getModifiedLevelDist(registry, xp, enchantability, this.cache, instrumentation);
         const levels = Object.keys(modDist).map(Number).sort((a, b) => b - a);
 
@@ -353,11 +353,11 @@ export class SearchService {
         };
     }
 
-    private getPackedKey(registry: RegistryState, cat: string, modLevel: number, mat: string): number {
-        const catId = getCategoryId(registry, cat);
-        const matId = getMaterialId(registry, mat);
+    private getPackedKey(registry: RegistryState, item: string, modLevel: number, material: string): number {
+        const itemId = getItemId(registry, item);
+        const materialId = getMaterialId(registry, material);
 
-        return KeyUtils.getPackedKey(catId, matId, modLevel);
+        return KeyUtils.getPackedKey(itemId, materialId, modLevel);
     }
 
     private updateInstrumentation(instr: EngineInstrumentation, state: SearchState): void {

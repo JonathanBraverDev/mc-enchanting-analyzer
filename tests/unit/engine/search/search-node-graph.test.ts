@@ -62,7 +62,7 @@ function makeContext(graph: SearchNodeGraph): ForwardingContext {
         queue: new NodeIdSearchFrontier(),
         graph,
         resultsLimit: 100,
-        cat: 'sword',
+        item: 'sword',
         poolPlan: new SearchPoolPlan(registry, [enchantA, enchantB], 30)
     };
 }
@@ -94,7 +94,7 @@ function makeHighIdContext(graph: SearchNodeGraph, highId = 36): ForwardingConte
         queue: new NodeIdSearchFrontier(),
         graph,
         resultsLimit: 100,
-        cat: 'sword',
+        item: 'sword',
         poolPlan: new SearchPoolPlan(registry, [enchantA, highEnchant], 30)
     };
 }
