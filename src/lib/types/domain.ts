@@ -100,6 +100,7 @@ export type EnchantableItemRuleSelector = Pick<EnchantableItemRule, 'item' | 'va
  * vanilla data pack before the resolved registry is built.
  */
 export type RegistryMutation =
+  | { type: 'patchEnchantment'; enchantment: string; patch: Partial<Enchantment> }
   | { type: 'addConflictRule'; rule: ConflictRule }
   | { type: 'removeConflictRule'; selector: ConflictRuleSelector }
   | { type: 'addEnchantmentGroupRule'; rule: EnchantmentGroupRule }

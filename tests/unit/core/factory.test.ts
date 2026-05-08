@@ -99,6 +99,60 @@ describe('EngineFactory', () => {
         assert.strictEqual(hasConflict(custom, sharpness, smite), false);
     });
 
+    it('patches existing enchantment weight into resolved registry indexes', () => {
+        const custom = RegistryFactory.buildWithMutations('1.21.11', {
+            type: 'patchEnchantment',
+            enchantment: 'Sharpness',
+            patch: { weight: 37 }
+        });
+        const sharpness = getEnchantId(custom, 'Sharpness');
+
+        assert.strictEqual(custom.resolvedRegistry['Sharpness']?.weight, 37);
+        assert.strictEqual(custom.weightMap[sharpness], 37);
+    });
+
+    it('merges patched enchantment levels by rank', () => {
+        const vanilla = RegistryFactory.build('1.21.11');
+        const custom = RegistryFactory.buildWithMutations('1.21.11', {
+            type: 'patchEnchantment',
+            enchantment: 'Sharpness',
+            patch: { levels: { III: [1, 2] } }
+        });
+
+        assert.deepStrictEqual(custom.resolvedRegistry['Sharpness']?.levels['III'], [1, 2]);
+        assert.deepStrictEqual(
+            custom.resolvedRegistry['Sharpness']?.levels['IV'],
+            vanilla.resolvedRegistry['Sharpness']?.levels['IV']
+        );
+    });
+
+    it('patches existing enchantment availability', () => {
+        const hidden = RegistryFactory.buildWithMutations('1.21.11', {
+            type: 'patchEnchantment',
+            enchantment: 'Sharpness',
+            patch: { valid_until: '1.21.11' }
+        });
+        const reintroduced = RegistryFactory.buildWithMutations('1.21', {
+            type: 'patchEnchantment',
+            enchantment: 'Lunge',
+            patch: { valid_from: '1.21' }
+        });
+
+        assert.strictEqual(getItemPool(hidden, 'sword').includes('Sharpness'), false);
+        assert.strictEqual(getItemPool(reintroduced, 'book').includes('Lunge'), true);
+    });
+
+    it('throws when patching an unknown enchantment', () => {
+        assert.throws(
+            () => RegistryFactory.buildWithMutations('1.21.11', {
+                type: 'patchEnchantment',
+                enchantment: 'Not Real',
+                patch: { weight: 1 }
+            }),
+            /cannot patch unknown enchantment "Not Real"/
+        );
+    });
+
     it('throws when a remove mutation matches no rules', () => {
         assert.throws(
             () => RegistryFactory.buildWithMutations('1.21.11', {
