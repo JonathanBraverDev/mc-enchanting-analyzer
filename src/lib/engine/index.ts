@@ -65,9 +65,9 @@ export class EnchantEngine {
     /**
      * Search for enchantment combinations at a specific modified level.
      *
-     * @param item Item type. Deprecated alias: cat.
+     * @param item Item type. @deprecated V6_REMOVE alias: cat.
      * @param modLevel The pre-computed modified level for this search.
-     * @param material Item material. Deprecated alias: mat.
+     * @param material Item material. @deprecated V6_REMOVE alias: mat.
      * @param threshold High-precision bigint threshold (1.0 = 10^18).
      * @param maxIterations Max nodes to process.
      * @param resultsLimit Max unique combinations to retain before recording capped mass.
@@ -141,9 +141,9 @@ export class EnchantEngine {
      * Aggregates all statistics for a given enchantment attempt.
      * Use this for standard single-pass calculations (e.g. standard UI search).
      *
-     * @param item The item type (e.g., 'sword', 'pickaxe'). Deprecated alias: cat.
+     * @param item The item type (e.g., 'sword', 'pickaxe'). @deprecated V6_REMOVE alias: cat.
      * @param xp The base XP level from the enchantment table (1-50).
-     * @param material The item material (e.g., 'diamond', 'netherite'). Deprecated alias: mat.
+     * @param material The item material (e.g., 'diamond', 'netherite'). @deprecated V6_REMOVE alias: mat.
      * @param config Optional search configuration (threshold, signals, etc).
      * @returns A promise resolving to the final aggregated statistics.
      */
@@ -291,6 +291,7 @@ export class EnchantEngine {
 
     /**
      * Compatibility shim for the deprecated `{ cat, mat }` request shape.
+     * @deprecated V6_REMOVE: Delete once public requests require `{ item, material }`.
      * Remove this once the public engine API accepts only `{ item, material }`.
      */
     private normalizeItemSelection(request: { item?: string | undefined; material?: string | undefined; cat?: string | undefined; mat?: string | undefined }): { item: string; material: string } {

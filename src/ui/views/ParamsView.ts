@@ -58,7 +58,7 @@ export class ParamsView {
         return {
             version: (this.elements["v-select"] as HTMLSelectElement)?.value || "",
             item: (this.elements["item-select"] as HTMLSelectElement)?.value || "",
-            material: (this.elements["mat-select"] as HTMLSelectElement)?.value || "",
+            material: (this.elements["material-select"] as HTMLSelectElement)?.value || "",
             clue: (this.elements["clue-select"] as HTMLSelectElement)?.value || "",
             xpLevel: parseInt((this.elements["lvl-range"] as HTMLInputElement)?.value || "0"),
             chartMetric: (this.elements["chart-metric"] as HTMLSelectElement)?.value || "any",
@@ -83,20 +83,20 @@ export class ParamsView {
 
     public updateMaterials(): void {
         const { version, item, material } = this.getValues();
-        const matSelect = this.elements["mat-select"] as HTMLSelectElement;
-        if (!matSelect) return;
+        const materialSelect = this.elements["material-select"] as HTMLSelectElement;
+        if (!materialSelect) return;
 
-        const currentMat = material;
-        matSelect.innerHTML = "";
+        const currentMaterial = material;
+        materialSelect.innerHTML = "";
         const eligibleKeys = UiMetadataService.getEligibleMaterials(version, item);
 
-        let bestMat = currentMat;
-        if (!eligibleKeys.includes(currentMat)) {
-            bestMat = eligibleKeys.includes("diamond") ? "diamond" : (eligibleKeys[0] || "");
+        let bestMaterial = currentMaterial;
+        if (!eligibleKeys.includes(currentMaterial)) {
+            bestMaterial = eligibleKeys.includes("diamond") ? "diamond" : (eligibleKeys[0] || "");
         }
 
         eligibleKeys.forEach(m => {
-            DOMUtils.addOption(matSelect, m, StringUtils.toTitleCase(m), m === bestMat);
+            DOMUtils.addOption(materialSelect, m, StringUtils.toTitleCase(m), m === bestMaterial);
         });
     }
 

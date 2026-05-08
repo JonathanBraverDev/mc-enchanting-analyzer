@@ -64,7 +64,17 @@ UI input
 | `getModifiedLevelDist(xp, enchantability, instrumentation?)` | Returns the BigInt distribution over modified levels |
 | `getEligibleListNumeric(item, level, bitset?)` | Returns packed eligible enchant/rank IDs for an item and level |
 
-The public calls use request objects so callers can pass optional search, instrumentation, timing, clue, and abort options without positional argument drift. Deprecated `{ cat, mat }` request aliases and category-named registry helpers remain as compatibility wrappers for external engine callers; project-owned UI and worker messages use `{ item, material }`.
+The public calls use request objects so callers can pass optional search, instrumentation, timing, clue, and abort options without positional argument drift. Deprecated aliases remain for external engine callers; project-owned UI, workers, tests, and scripts use `{ item, material }`.
+
+### Deprecated Aliases
+
+Compatibility aliases are marked with `@deprecated V6_REMOVE` in source so the next major cleanup can find them with one grep. Planned removals are:
+
+- Request fields: `cat`, `mat`.
+- Registry helpers: `getCategoryId`, `isCategoryAvailable`, `getCategoryPool`.
+- Registry state aliases: `mergedItems`, `categoryMaterials`, `catIdMap`, `matIdMap`, `versionPool`.
+- Type aliases and constants: `MergedItems`, `CategoryMaterials`, `UNKNOWN_CATEGORY_ID`.
+- CLI aliases in profiling/reporting scripts: `--cat`, `--mat`.
 
 ## Registry Rule Model
 
