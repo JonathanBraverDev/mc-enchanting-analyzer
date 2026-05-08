@@ -1,4 +1,18 @@
-import { EnchantmentData, VersionManifest, Enchantment, RegistryState } from '#types/index.js';
+import {
+    ConflictRule,
+    ConflictRuleSelector,
+    EnchantableItemRule,
+    EnchantableItemRuleSelector,
+    Enchantment,
+    EnchantmentData,
+    EnchantmentGroupRule,
+    EnchantmentGroupRuleSelector,
+    MaterialRule,
+    MaterialRuleSelector,
+    RegistryMutation,
+    RegistryState,
+    VersionManifest
+} from '#types/index.js';
 import { isAvailabilityActive } from '#core/availability.js';
 import { resolveManifestVersion, resolveRegistryVersion } from '#core/version-resolution.js';
 import { DATA } from '#data/index.js';
@@ -12,8 +26,135 @@ export class RegistryFactory {
         return this.buildFromData(DATA, version);
     }
 
+    public static buildWithMutations(
+        version: string,
+        mutations: RegistryMutation | RegistryMutation[]
+    ): RegistryState {
+        const data = this.cloneData(DATA);
+        const list = Array.isArray(mutations) ? mutations : [mutations];
+
+        for (const mutation of list) {
+            this.applyRegistryMutation(data, mutation);
+        }
+
+        return this.buildFromData(data, version);
+    }
+
     public static buildFromData(data: EnchantmentData, version: string): RegistryState {
         return this.createState(data, version);
+    }
+
+    private static cloneData(data: EnchantmentData): EnchantmentData {
+        return JSON.parse(JSON.stringify(data)) as EnchantmentData;
+    }
+
+    private static applyRegistryMutation(data: EnchantmentData, mutation: RegistryMutation): void {
+        switch (mutation.type) {
+            case 'addConflictRule':
+                data.conflict_rules.push(this.cloneRule(mutation.rule));
+                break;
+            case 'removeConflictRule':
+                this.removeExactly(
+                    data.conflict_rules,
+                    mutation.selector,
+                    this.matchesConflictRule,
+                    mutation.type
+                );
+                break;
+            case 'addEnchantmentGroupRule':
+                data.enchantment_group_rules.push(this.cloneRule(mutation.rule));
+                break;
+            case 'removeEnchantmentGroupRule':
+                this.removeExactly(
+                    data.enchantment_group_rules,
+                    mutation.selector,
+                    this.matchesEnchantmentGroupRule,
+                    mutation.type
+                );
+                break;
+            case 'addMaterialRule':
+                data.material_rules.push(this.cloneRule(mutation.rule));
+                break;
+            case 'removeMaterialRule':
+                this.removeExactly(
+                    data.material_rules,
+                    mutation.selector,
+                    this.matchesMaterialRule,
+                    mutation.type
+                );
+                break;
+            case 'addEnchantableItemRule':
+                data.enchantable_item_rules.push(this.cloneRule(mutation.rule));
+                break;
+            case 'removeEnchantableItemRule':
+                this.removeExactly(
+                    data.enchantable_item_rules,
+                    mutation.selector,
+                    this.matchesEnchantableItemRule,
+                    mutation.type
+                );
+                break;
+        }
+    }
+
+    private static cloneRule<T>(rule: T): T {
+        return JSON.parse(JSON.stringify(rule)) as T;
+    }
+
+    private static removeExactly<T, S>(
+        rules: T[],
+        selector: S,
+        matches: (rule: T, selector: S) => boolean,
+        operation: string
+    ): void {
+        const indexes: number[] = [];
+        for (const [index, rule] of rules.entries()) {
+            if (matches(rule, selector)) indexes.push(index);
+        }
+
+        if (indexes.length !== 1) {
+            throw new Error(`${operation} expected exactly one matching rule; found ${indexes.length}.`);
+        }
+
+        rules.splice(indexes[0]!, 1);
+    }
+
+    private static matchesConflictRule(rule: ConflictRule, selector: ConflictRuleSelector): boolean {
+        const [leftRule, rightRule] = RegistryFactory.normalizeEnchantPair(rule.enchants);
+        const [leftSelector, rightSelector] = RegistryFactory.normalizeEnchantPair(selector.enchants);
+        return leftRule === leftSelector
+            && rightRule === rightSelector
+            && RegistryFactory.matchesRuleBoundary(rule, selector);
+    }
+
+    private static matchesEnchantmentGroupRule(
+        rule: EnchantmentGroupRule,
+        selector: EnchantmentGroupRuleSelector
+    ): boolean {
+        return rule.group === selector.group && RegistryFactory.matchesRuleBoundary(rule, selector);
+    }
+
+    private static matchesMaterialRule(rule: MaterialRule, selector: MaterialRuleSelector): boolean {
+        return rule.material === selector.material && RegistryFactory.matchesRuleBoundary(rule, selector);
+    }
+
+    private static matchesEnchantableItemRule(
+        rule: EnchantableItemRule,
+        selector: EnchantableItemRuleSelector
+    ): boolean {
+        return rule.item === selector.item && RegistryFactory.matchesRuleBoundary(rule, selector);
+    }
+
+    private static matchesRuleBoundary(
+        rule: { valid_from: string; valid_until?: string },
+        selector: { valid_from: string; valid_until?: string }
+    ): boolean {
+        return rule.valid_from === selector.valid_from
+            && rule.valid_until === selector.valid_until;
+    }
+
+    private static normalizeEnchantPair(pair: [string, string]): [string, string] {
+        return pair[0].localeCompare(pair[1]) <= 0 ? pair : [pair[1], pair[0]];
     }
 
     private static createState(data: EnchantmentData, version: string): RegistryState {

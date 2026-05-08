@@ -1,6 +1,12 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { isItemAvailable } from '#core/registry.js';
+import {
+    getEligibleMaterials,
+    getEnchantId,
+    getItemPool,
+    hasConflict,
+    isItemAvailable
+} from '#core/registry.js';
 import { RegistryFactory } from '#core/factory.js';
 import { EngineFactory } from '#engine/factory.js';
 import { CacheManager } from '#engine/cache/CacheManager.js';
@@ -28,6 +34,74 @@ describe('EngineFactory', () => {
 
         assert.strictEqual(isItemAvailable(vanilla, 'mace'), true);
         assert.strictEqual(isItemAvailable(custom, 'mace'), false);
+    });
+
+    it('applies a single vanilla-data mutation without changing future vanilla builds', () => {
+        const custom = RegistryFactory.buildWithMutations('1.21.11', {
+            type: 'removeEnchantableItemRule',
+            selector: { item: 'mace', valid_from: '1.21' }
+        });
+        const vanilla = RegistryFactory.build('1.21.11');
+
+        assert.strictEqual(isItemAvailable(custom, 'mace'), false);
+        assert.strictEqual(isItemAvailable(vanilla, 'mace'), true);
+    });
+
+    it('applies mutation arrays to rule tables', () => {
+        const custom = RegistryFactory.buildWithMutations('1.15', [
+            {
+                type: 'addMaterialRule',
+                rule: { material: 'netherite', valid_from: '1.15', valid_until: '1.16' }
+            },
+            {
+                type: 'addEnchantmentGroupRule',
+                rule: {
+                    group: 'sword_pool',
+                    enchantments: ['Efficiency'],
+                    valid_from: '1.15',
+                    valid_until: '1.16'
+                }
+            }
+        ]);
+
+        assert.ok(getEligibleMaterials(custom, 'sword').includes('netherite'));
+        assert.ok(getItemPool(custom, 'sword').includes('Efficiency'));
+    });
+
+    it('removing a conflict rule changes compiled conflict bitsets', () => {
+        const vanilla = RegistryFactory.build('1.21.11');
+        const custom = RegistryFactory.buildWithMutations('1.21.11', {
+            type: 'removeConflictRule',
+            selector: { enchants: ['Smite', 'Sharpness'], valid_from: '1.0' }
+        });
+
+        const sharpness = getEnchantId(vanilla, 'Sharpness');
+        const smite = getEnchantId(vanilla, 'Smite');
+
+        assert.strictEqual(hasConflict(vanilla, sharpness, smite), true);
+        assert.strictEqual(hasConflict(custom, sharpness, smite), false);
+    });
+
+    it('throws when a remove mutation matches no rules', () => {
+        assert.throws(
+            () => RegistryFactory.buildWithMutations('1.21.11', {
+                type: 'removeMaterialRule',
+                selector: { material: 'not_real', valid_from: '1.0' }
+            }),
+            /expected exactly one matching rule; found 0/
+        );
+    });
+
+    it('throws when a remove mutation matches multiple rules', () => {
+        const duplicateWoodRule = { material: 'wood', valid_from: '1.0' };
+
+        assert.throws(
+            () => RegistryFactory.buildWithMutations('1.21.11', [
+                { type: 'addMaterialRule', rule: duplicateWoodRule },
+                { type: 'removeMaterialRule', selector: duplicateWoodRule }
+            ]),
+            /expected exactly one matching rule; found 2/
+        );
     });
 
     it('should return a valid engine instance', () => {
