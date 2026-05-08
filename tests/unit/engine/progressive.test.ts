@@ -26,9 +26,9 @@ describe('EnchantEngine: Sequential Checkpoint Search', () => {
         ];
 
         await engine.searchSequentialCheckpoints({
-            cat: TEST_DATA.ITEMS.SWORD,
+            item: TEST_DATA.ITEMS.SWORD,
             xp: 30,
-            mat: TEST_DATA.MATERIALS.DIAMOND,
+            material: TEST_DATA.MATERIALS.DIAMOND,
             checkpoints,
             onCheckpointComplete: (result) => {
                 accuracies.push(result.tracker.mass.toPublic().resolved);
@@ -49,9 +49,9 @@ describe('EnchantEngine: Sequential Checkpoint Search', () => {
         ];
 
         const finalResult = await engine.searchSequentialCheckpoints({
-            cat: TEST_DATA.ITEMS.SWORD,
+            item: TEST_DATA.ITEMS.SWORD,
             xp: 30,
-            mat: TEST_DATA.MATERIALS.DIAMOND,
+            material: TEST_DATA.MATERIALS.DIAMOND,
             checkpoints,
             onCheckpointComplete: () => {
                 checkpointCount++;
@@ -70,9 +70,9 @@ describe('EnchantEngine: Sequential Checkpoint Search', () => {
         ];
 
         await engine.searchSequentialCheckpoints({
-            cat: TEST_DATA.ITEMS.SWORD,
+            item: TEST_DATA.ITEMS.SWORD,
             xp: 30,
-            mat: TEST_DATA.MATERIALS.DIAMOND,
+            material: TEST_DATA.MATERIALS.DIAMOND,
             checkpoints,
             onCheckpointComplete: (result) => {
                 roundingValues.push(result.tracker.mass.toPublic().rounding);

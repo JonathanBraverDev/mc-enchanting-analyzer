@@ -333,7 +333,7 @@ describe('HumanizationService', () => {
     const reg    = engine.registry;
 
     before(async () => {
-        await engine.calculate({ cat: 'pickaxe', xp: 30, mat: 'diamond', threshold: 0.005 });
+        await engine.calculate({ item: 'pickaxe', xp: 30, material: 'diamond', threshold: 0.005 });
     });
 
     it('resolves enchantment names in the any map', () => {

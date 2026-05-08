@@ -99,8 +99,8 @@ export const SnapshotUtils = {
 
         // 3. Check probability categories (Fixed: Restored the missing categories loop)
         const categories = ['ranks', 'any', 'count', 'combos'];
-        for (const cat of categories) {
-            const report = this.compareProbabilityMap(actual[cat] || {}, expected[cat] || {}, cat);
+        for (const item of categories) {
+            const report = this.compareProbabilityMap(actual[item] || {}, expected[item] || {}, item);
             if (report.hasMismatches) {
                 hasMismatches = true;
                 sections.push(report.text);
@@ -304,8 +304,8 @@ export const EngineTestUtils = {
     /**
      * Performs a full enchantment simulation and returns human-readable results.
      */
-    async getHumanStats(engine: EnchantEngine, cat: string, xp: number, mat: string, clue: string | null = null, threshold = 0.0001): Promise<any> {
-        const stats = await engine.calculate({ cat: cat, xp: xp, mat: mat, clue, threshold });
+    async getHumanStats(engine: EnchantEngine, item: string, xp: number, material: string, clue: string | null = null, threshold = 0.0001): Promise<any> {
+        const stats = await engine.calculate({ item: item, xp: xp, material: material, clue, threshold });
         return HumanizationService.humanize(stats, engine.registry);
     }
 };

@@ -517,9 +517,9 @@ describe('Data integrity: material enchantability coverage', () => {
         const armorMats = new Set(Object.keys(material_values.armor));
 
         const missing: string[] = [];
-        for (const mat of allMaterials) {
-            if (!toolMats.has(mat) && !armorMats.has(mat)) {
-                missing.push(mat);
+        for (const material of allMaterials) {
+            if (!toolMats.has(material) && !armorMats.has(material)) {
+                missing.push(material);
             }
         }
 
@@ -539,17 +539,17 @@ describe('Data integrity: material enchantability coverage', () => {
 
         const validMaterials = collectVersionMaterials(latestVersion);
 
-        for (const cat of items) {
+        for (const item of items) {
             // Only test materials that make sense for this category type
-            const candidateMats = cat === 'book' ? ['book']
-                : armorCats.includes(cat) ? [...validMaterials].filter(m => m in material_values.armor)
+            const candidateMats = item === 'book' ? ['book']
+                : armorCats.includes(item) ? [...validMaterials].filter(m => m in material_values.armor)
                 : [...validMaterials].filter(m => m in material_values.tools);
 
-            for (const mat of candidateMats) {
+            for (const material of candidateMats) {
                 try {
-                    getEnchantability(reg, mat, cat);
+                    getEnchantability(reg, material, item);
                 } catch (e: any) {
-                    bad.push(`${cat}/${mat}: ${e.message}`);
+                    bad.push(`${item}/${material}: ${e.message}`);
                 }
             }
         }

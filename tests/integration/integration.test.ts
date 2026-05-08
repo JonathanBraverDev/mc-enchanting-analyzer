@@ -70,9 +70,9 @@ describe('Integration: Snapshot Integrity', () => {
     it('unconditioned snapshot masses should match engine summary exactly', async () => {
         const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
         const res = await engine.searchToCheckpoint({
-            cat: TEST_DATA.ITEMS.BOOK,
+            item: TEST_DATA.ITEMS.BOOK,
             xp: 30,
-            mat: TEST_DATA.MATERIALS.DIAMOND,
+            material: TEST_DATA.MATERIALS.DIAMOND,
             threshold: 1n // Very low threshold to ensure many combinations
         });
 
@@ -117,17 +117,17 @@ describe('Integration: Clue Validation', () => {
 
         // Unknown enchantment
         await assert.rejects(async () => {
-            await engine.calculate({ cat: TEST_DATA.ITEMS.SWORD, xp: 30, mat: TEST_DATA.MATERIALS.DIAMOND, clue: 'FakeEnchant X' });
+            await engine.calculate({ item: TEST_DATA.ITEMS.SWORD, xp: 30, material: TEST_DATA.MATERIALS.DIAMOND, clue: 'FakeEnchant X' });
         }, /Unknown enchantment/);
 
         // Inapplicable category
         await assert.rejects(async () => {
-            await engine.calculate({ cat: TEST_DATA.ITEMS.SWORD, xp: 30, mat: TEST_DATA.MATERIALS.DIAMOND, clue: 'Aqua Affinity I' });
+            await engine.calculate({ item: TEST_DATA.ITEMS.SWORD, xp: 30, material: TEST_DATA.MATERIALS.DIAMOND, clue: 'Aqua Affinity I' });
         }, /not applicable to category/);
 
         // Rank above max
         await assert.rejects(async () => {
-            await engine.calculate({ cat: TEST_DATA.ITEMS.SWORD, xp: 30, mat: TEST_DATA.MATERIALS.DIAMOND, clue: 'Sharpness VI' });
+            await engine.calculate({ item: TEST_DATA.ITEMS.SWORD, xp: 30, material: TEST_DATA.MATERIALS.DIAMOND, clue: 'Sharpness VI' });
         }, /exceeds max/);
     });
 });

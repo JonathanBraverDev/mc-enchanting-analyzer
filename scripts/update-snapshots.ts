@@ -8,11 +8,11 @@ async function updateSnapshots() {
     console.log('Updating Regression Snapshots...');
 
     // Helper to generate snapshots with new API signature
-    const getStats = async (engine: EnchantEngine, cat: string, xp: number, mat: string, clue: string | null = null) => {
+    const getStats = async (engine: EnchantEngine, item: string, xp: number, material: string, clue: string | null = null) => {
         return await engine.calculate({
-            cat,
+            item,
             xp,
-            mat,
+            material,
             clue,
             threshold: TEST_DEFAULTS.SNAPSHOT_THRESHOLD,
             maxIterations: ENGINE_LIMITS.MAX_ITERATIONS_UNBOUNDED,

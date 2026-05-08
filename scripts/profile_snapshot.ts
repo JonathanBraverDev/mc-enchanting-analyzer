@@ -18,9 +18,9 @@ async function profile() {
     const timing = { totalMs: 0, searchMs: 0, postProcessingMs: 0 };
     console.time('TargetSnapshot');
     const stats = await engine.calculate({
-            cat: 'book',
+            item: 'book',
             xp: 30,
-            mat: 'book',
+            material: 'book',
             threshold: TEST_DEFAULTS.SNAPSHOT_THRESHOLD,
             maxIterations: ENGINE_LIMITS.MAX_ITERATIONS_UNBOUNDED,
             summaryLimit: ENGINE_LIMITS.MAX_RESULTS_UNBOUNDED,
