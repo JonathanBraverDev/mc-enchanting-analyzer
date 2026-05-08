@@ -153,6 +153,71 @@ describe('EngineFactory', () => {
         );
     });
 
+    it('validates patched enchantment weights', () => {
+        assert.throws(
+            () => RegistryFactory.buildWithMutations('1.21.11', {
+                type: 'patchEnchantment',
+                enchantment: 'Sharpness',
+                patch: { weight: 0 }
+            }),
+            /weight must be >= 1/
+        );
+    });
+
+    it('validates patched enchantment level ranges', () => {
+        assert.throws(
+            () => RegistryFactory.buildWithMutations('1.21.11', {
+                type: 'patchEnchantment',
+                enchantment: 'Sharpness',
+                patch: { levels: { III: [5, 5] } }
+            }),
+            /expected \[min, max\] with 1 <= min < max/
+        );
+    });
+
+    it('validates mutated availability ordering', () => {
+        assert.throws(
+            () => RegistryFactory.buildWithMutations('1.21.11', {
+                type: 'patchEnchantment',
+                enchantment: 'Sharpness',
+                patch: { valid_from: '1.21', valid_until: '1.0' }
+            }),
+            /valid_until must be after valid_from/
+        );
+    });
+
+    it('validates mutated item rule group references', () => {
+        assert.throws(
+            () => RegistryFactory.buildWithMutations('1.21.11', {
+                type: 'addEnchantableItemRule',
+                rule: {
+                    item: 'custom_sword',
+                    valid_from: '1.21',
+                    groups: ['missing_group'],
+                    materials: ['tool'],
+                    enchantability: 'tool'
+                }
+            }),
+            /unknown group or enchantment "missing_group"/
+        );
+    });
+
+    it('validates mutated item rule material references', () => {
+        assert.throws(
+            () => RegistryFactory.buildWithMutations('1.21.11', {
+                type: 'addEnchantableItemRule',
+                rule: {
+                    item: 'custom_sword',
+                    valid_from: '1.21',
+                    groups: ['sword_pool'],
+                    materials: ['missing_material'],
+                    enchantability: 'tool'
+                }
+            }),
+            /unknown material or material set "missing_material"/
+        );
+    });
+
     it('throws when a remove mutation matches no rules', () => {
         assert.throws(
             () => RegistryFactory.buildWithMutations('1.21.11', {
