@@ -153,6 +153,20 @@ describe('EngineFactory', () => {
         );
     });
 
+    it('rejects inherited enchantment names without mutating object prototypes', () => {
+        const mutation = JSON.parse(JSON.stringify({
+            type: 'patchEnchantment',
+            enchantment: '__proto__',
+            patch: { polluted: true, weight: 2 }
+        })) as RegistryMutation;
+
+        assert.throws(
+            () => RegistryFactory.buildWithMutations('1.21.11', mutation),
+            /cannot patch unknown enchantment "__proto__"/
+        );
+        assert.strictEqual(({} as any).polluted, undefined);
+    });
+
     it('validates patched enchantment weights', () => {
         assert.throws(
             () => RegistryFactory.buildWithMutations('1.21.11', {
@@ -172,6 +186,26 @@ describe('EngineFactory', () => {
                 patch: { levels: { III: [5, 5] } }
             }),
             /expected \[min, max\] with 1 <= min < max/
+        );
+    });
+
+    it('validates patched enchantment rank names and continuity', () => {
+        assert.throws(
+            () => RegistryFactory.buildWithMutations('1.21.11', {
+                type: 'patchEnchantment',
+                enchantment: 'Sharpness',
+                patch: { levels: { Max: [1, 2] } }
+            }),
+            /unknown rank name/
+        );
+
+        assert.throws(
+            () => RegistryFactory.buildWithMutations('1.21.11', {
+                type: 'patchEnchantment',
+                enchantment: 'Sharpness',
+                patch: { levels: { X: [1, 2] } }
+            }),
+            /level ranks must be contiguous from I/
         );
     });
 

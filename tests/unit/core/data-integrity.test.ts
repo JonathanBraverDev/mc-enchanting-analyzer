@@ -23,6 +23,7 @@ import { DATA } from '#data/index.js';
 import { hasConflict, getEnchantId, getEnchantability, getEligibleMaterials } from '#core/registry.js';
 import { versions } from '#data/versions.js';
 import { material_values } from '#data/materials.js';
+import { constants } from '#data/cosmetics.js';
 import { VersionUtils } from '#utils/index.js';
 import { getRegistryVersionBoundaries } from '#core/version-resolution.js';
 import type { EnchantmentData } from '#types/index.js';
@@ -116,6 +117,31 @@ describe('Data integrity: level ranges', () => {
             }
         }
         assert.deepStrictEqual(bad, [], `level ranges where min >= max: ${bad.join('; ')}`);
+    });
+
+    it('all level ranks are known and contiguous from I', () => {
+        const bad: string[] = [];
+        const romanMap = constants.ROMAN_MAP as Record<string, number>;
+        for (const [name, ench] of Object.entries(registryEnchantments)) {
+            const values: number[] = [];
+            for (const roman of Object.keys(ench.levels)) {
+                const value = romanMap[roman];
+                if (typeof value !== 'number') {
+                    bad.push(`${name} ${roman}: unknown rank`);
+                } else {
+                    values.push(value);
+                }
+            }
+            values.sort((a, b) => a - b);
+            for (let i = 0; i < values.length; i++) {
+                if (values[i] !== i + 1) {
+                    bad.push(`${name}: non-contiguous ranks ${values.join(',')}`);
+                    break;
+                }
+            }
+        }
+
+        assert.deepStrictEqual(bad, [], `level rank issues: ${bad.join('; ')}`);
     });
 });
 

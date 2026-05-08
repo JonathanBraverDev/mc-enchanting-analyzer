@@ -114,13 +114,21 @@ export class RegistryFactory {
         enchantment: string,
         patch: Partial<Enchantment>
     ): void {
-        const existing = data.global_enchantments[enchantment];
-        if (!existing) {
+        if (!Object.hasOwn(data.global_enchantments, enchantment)) {
             throw new Error(`patchEnchantment cannot patch unknown enchantment "${enchantment}".`);
         }
 
-        const { levels, ...rest } = patch;
-        Object.assign(existing, rest);
+        const existing = data.global_enchantments[enchantment]!;
+        const { levels } = patch;
+        if (Object.hasOwn(patch, 'weight')) existing.weight = patch.weight!;
+        if (Object.hasOwn(patch, 'valid_from')) {
+            if (patch.valid_from === undefined) delete existing.valid_from;
+            else existing.valid_from = patch.valid_from;
+        }
+        if (Object.hasOwn(patch, 'valid_until')) {
+            if (patch.valid_until === undefined) delete existing.valid_until;
+            else existing.valid_until = patch.valid_until;
+        }
         if (levels) {
             existing.levels = {
                 ...existing.levels,
@@ -139,6 +147,7 @@ export class RegistryFactory {
         const materialNames = new Set(Object.values(data.material_values).flatMap(table => Object.keys(table)));
         const materialRefs = new Set([...materialNames, ...Object.keys(data.material_sets)]);
         const enchantabilityTables = new Set(['tool', 'armor', 'other']);
+        const romanMap = data.constants.ROMAN_MAP;
 
         for (const [name, enchantment] of Object.entries(data.global_enchantments)) {
             this.assertAvailabilityOrder(enchantment, `enchantment "${name}"`);
@@ -149,9 +158,21 @@ export class RegistryFactory {
             if (levelEntries.length === 0) {
                 throw new Error(`Invalid enchantment "${name}": levels must not be empty.`);
             }
+            const rankValues: number[] = [];
             for (const [rank, range] of levelEntries) {
+                const rankValue = romanMap[rank];
+                if (typeof rankValue !== 'number') {
+                    throw new Error(`Invalid enchantment "${name}" level "${rank}": unknown rank name.`);
+                }
+                rankValues.push(rankValue);
                 if (!Array.isArray(range) || range.length !== 2 || range[0] < 1 || range[0] >= range[1]) {
                     throw new Error(`Invalid enchantment "${name}" level "${rank}": expected [min, max] with 1 <= min < max.`);
+                }
+            }
+            rankValues.sort((a, b) => a - b);
+            for (let i = 0; i < rankValues.length; i++) {
+                if (rankValues[i] !== i + 1) {
+                    throw new Error(`Invalid enchantment "${name}": level ranks must be contiguous from I.`);
                 }
             }
         }
