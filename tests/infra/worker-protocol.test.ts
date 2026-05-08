@@ -79,7 +79,7 @@ describe('Worker: Protocol Hardening (v5)', () => {
                 requestId: 2,
                 runId,
                 input: {
-                    category: TEST_DATA.ITEMS.SWORD,
+                    item: TEST_DATA.ITEMS.SWORD,
                     xpLevel: 30,
                     material: TEST_DATA.MATERIALS.DIAMOND,
                     clue: null,
@@ -105,7 +105,7 @@ describe('Worker: Protocol Hardening (v5)', () => {
                 requestId: 3,
                 runId,
                 input: {
-                    category: TEST_DATA.ITEMS.SWORD,
+                    item: TEST_DATA.ITEMS.SWORD,
                     xpLevel: 30,
                     material: TEST_DATA.MATERIALS.DIAMOND,
                     clue: 'FakeEnchant X',
@@ -122,7 +122,7 @@ describe('Worker: Protocol Hardening (v5)', () => {
         it('should re-project target-only top changes from the cached checkpoint result', async () => {
             const baseRunId = 'run-target-base' as RunId;
             const baseInput = {
-                category: TEST_DATA.ITEMS.SWORD,
+                item: TEST_DATA.ITEMS.SWORD,
                 xpLevel: 30,
                 material: TEST_DATA.MATERIALS.DIAMOND,
                 clue: null,
@@ -181,7 +181,7 @@ describe('Worker: Protocol Hardening (v5)', () => {
                 requestId: 7,
                 runId,
                 input: {
-                    category: TEST_DATA.ITEMS.SWORD,
+                    item: TEST_DATA.ITEMS.SWORD,
                     material: TEST_DATA.MATERIALS.DIAMOND,
                     clue: null,
                     version: TEST_DATA.VERSIONS.MODERN
@@ -208,7 +208,7 @@ describe('Worker: Protocol Hardening (v5)', () => {
                 requestId: 8,
                 runId,
                 input: {
-                    category: TEST_DATA.ITEMS.SWORD,
+                    item: TEST_DATA.ITEMS.SWORD,
                     material: TEST_DATA.MATERIALS.DIAMOND,
                     clue: null,
                     version: TEST_DATA.VERSIONS.MODERN,

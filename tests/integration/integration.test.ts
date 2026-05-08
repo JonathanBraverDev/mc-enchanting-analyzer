@@ -90,7 +90,7 @@ describe('Integration: Snapshot Integrity', () => {
             {
                 snapshotType: 'top',
                 input: {
-                    category: TEST_DATA.ITEMS.BOOK,
+                    item: TEST_DATA.ITEMS.BOOK,
                     xpLevel: 30,
                     material: TEST_DATA.MATERIALS.DIAMOND,
                     clue: null,

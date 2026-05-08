@@ -41,29 +41,29 @@ export class UiMetadataService {
     return this.getRegistry(version).mechanics.xp_cap || 30;
   }
 
-  /** Gets eligible materials for a version and category. */
-  public static getEligibleMaterials(version: string, category: string): string[] {
-    return getEligibleMaterials(this.getRegistry(version), category);
+  /** Gets eligible materials for a version and item. */
+  public static getEligibleMaterials(version: string, item: string): string[] {
+    return getEligibleMaterials(this.getRegistry(version), item);
   }
 
-  /** Gets the base enchantability for a version, material, and category. */
-  public static getEnchantability(version: string, material: string, category: string): number {
-    return getEnchantability(this.getRegistry(version), material, category);
+  /** Gets the base enchantability for a version, material, and item. */
+  public static getEnchantability(version: string, material: string, item: string): number {
+    return getEnchantability(this.getRegistry(version), material, item);
   }
 
   /**
    * Gets all possible enchantments that could appear in the clue slot.
    * Performs a lightweight modified-level distribution to find eligible pools.
    */
-  public static getClueOptions(version: string, category: string, material: string, xpLevel: number): string[] {
+  public static getClueOptions(version: string, item: string, material: string, xpLevel: number): string[] {
     const registry = this.getRegistry(version);
-    const ench = getEnchantability(registry, material, category);
+    const ench = getEnchantability(registry, material, item);
     const dist = this.distributionService.getModifiedLevelDist(registry, xpLevel, ench);
 
     const allPossible = new Set<string>();
     for (const mlStr of Object.keys(dist)) {
       const ml = parseInt(mlStr);
-      const pool = getEligiblePool(registry, category, ml);
+      const pool = getEligiblePool(registry, item, ml);
       for (const p of pool) {
         allPossible.add(getFullEnchantName(registry, p));
       }
@@ -75,17 +75,17 @@ export class UiMetadataService {
   /**
    * Gets all minimum-rank target options that can appear somewhere in this table setup.
    */
-  public static getTargetOptions(version: string, category: string, material: string, xpLevel: number): TargetOptionView[] {
+  public static getTargetOptions(version: string, item: string, material: string, xpLevel: number): TargetOptionView[] {
     if (!material) return [];
 
     const registry = this.getRegistry(version);
-    const ench = getEnchantability(registry, material, category);
+    const ench = getEnchantability(registry, material, item);
     const dist = this.distributionService.getModifiedLevelDist(registry, xpLevel, ench);
     const byKey = new Map<string, TargetRequirementInput>();
 
     for (const mlStr of Object.keys(dist)) {
       const ml = parseInt(mlStr);
-      const pool = getEligiblePool(registry, category, ml);
+      const pool = getEligiblePool(registry, item, ml);
       for (const packed of pool) {
         const option = TargetAnalysisService.makeTargetInput(registry, packed);
         for (let rank = 1; rank <= option.rank; rank++) {

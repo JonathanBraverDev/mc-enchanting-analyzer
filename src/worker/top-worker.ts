@@ -35,7 +35,7 @@ shell.onRun = async (msg: WorkerRequest, engine, signal) => {
         const baseKey = getProjectionBaseKey(input, refinementLevels);
 
         if (input.clue) {
-            ClueValidator.validate(engine.registry, input.category, input.clue);
+            ClueValidator.validate(engine.registry, input.item, input.clue);
         }
 
         if (!latestTopRun || latestTopRun.baseKey !== baseKey || latestTopRun.checkpoints.length === 0) {
@@ -54,7 +54,7 @@ shell.onRun = async (msg: WorkerRequest, engine, signal) => {
     if (msg.type !== 'topRunStart') return;
 
     const { requestId, runId, input, refinementLevels } = msg;
-    const isBook = input.category === 'book';
+    const isBook = input.item === 'book';
     const baseKey = getProjectionBaseKey(input, refinementLevels);
     const cachedCheckpoints: CachedTopCheckpoint[] = [];
 
@@ -62,15 +62,15 @@ shell.onRun = async (msg: WorkerRequest, engine, signal) => {
 
     // Upfront clue validation
     if (input.clue) {
-        ClueValidator.validate(engine.registry, input.category, input.clue);
+        ClueValidator.validate(engine.registry, input.item, input.clue);
     }
 
     const checkpoints = refinementLevels.map(level => getSearchCheckpointForRefinement(level, isBook));
 
     await engine.searchSequentialCheckpoints({
-        cat: input.category,
+        item: input.item,
         xp: input.xpLevel,
-        mat: input.material,
+        material: input.material,
         checkpoints,
         onCheckpointComplete: (result, checkpointIndex) => {
             if (signal.aborted || shell.runId !== runId) return;
@@ -91,7 +91,7 @@ shell.onRun = async (msg: WorkerRequest, engine, signal) => {
 function getProjectionBaseKey(input: TopInputSignature, refinementLevels: RefinementLevelName[]): string {
     return JSON.stringify({
         version: input.version,
-        category: input.category,
+        item: input.item,
         material: input.material,
         xpLevel: input.xpLevel,
         clue: input.clue,
