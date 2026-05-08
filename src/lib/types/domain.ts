@@ -60,6 +60,18 @@ export interface MaterialRule {
 }
 
 /**
+ * Version-ranged membership rule for an enchantment group.
+ * Active rules for the same group are unioned in declaration order.
+ * @property valid_until First version where this membership rule no longer applies.
+ */
+export interface EnchantmentGroupRule {
+  group: string;
+  enchantments: string[];
+  valid_from: string;
+  valid_until?: string;
+}
+
+/**
  * Category-to-material compatibility rule.
  * Version availability is still controlled by category and material rules.
  */
@@ -110,12 +122,10 @@ export interface EnchantmentData {
     [name: string]: Enchantment;
   };
   conflict_rules: ConflictRule[];
+  enchantment_group_rules: EnchantmentGroupRule[];
   category_pool_rules: CategoryPoolRule[];
   material_rules: MaterialRule[];
   category_material_rules: CategoryMaterialRule[];
-  enchantment_groups: {
-    [groupName: string]: string[];
-  };
   versions: {
     [version: string]: VersionManifest;
   };

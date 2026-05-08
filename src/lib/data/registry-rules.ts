@@ -40,25 +40,40 @@ export const conflict_rules = [
   { enchants: ["Breach", "Impaling"], valid_from: "1.21" }
 ] satisfies EnchantmentData["conflict_rules"];
 
+export const enchantment_group_rules = [
+  { group: "armor_pool", valid_from: "1.0", enchantments: ["Protection", "Fire Protection", "Blast Protection", "Projectile Protection"] },
+  { group: "armor_pool", valid_from: "1.7.2", enchantments: ["Unbreaking"] },
+  { group: "chestplate_extras", valid_from: "1.4.6", enchantments: ["Thorns"] },
+  { group: "boot_extras", valid_from: "1.0", enchantments: ["Feather Falling"] },
+  { group: "boot_extras", valid_from: "1.8", enchantments: ["Depth Strider"] },
+  { group: "helmet_extras", valid_from: "1.0", enchantments: ["Respiration", "Aqua Affinity"] },
+
+  { group: "sword_pool", valid_from: "1.0", enchantments: ["Sharpness", "Smite", "Bane of Arthropods", "Knockback", "Fire Aspect", "Looting"] },
+  { group: "sword_pool", valid_from: "1.8", enchantments: ["Unbreaking"] },
+  { group: "sword_pool", valid_from: "1.11.1", enchantments: ["Sweeping Edge"] },
+
+  { group: "bow_pool", valid_from: "1.1", enchantments: ["Power", "Punch", "Flame", "Infinity"] },
+  { group: "bow_pool", valid_from: "1.8", enchantments: ["Unbreaking"] },
+  { group: "tool_pool", valid_from: "1.0", enchantments: ["Efficiency", "Unbreaking", "Fortune", "Silk Touch"] },
+  { group: "fishing_pool", valid_from: "1.7.2", enchantments: ["Luck of the Sea", "Lure", "Unbreaking"] },
+  { group: "trident_pool", valid_from: "1.13", enchantments: ["Impaling", "Loyalty", "Riptide", "Channeling", "Unbreaking"] },
+  { group: "crossbow_pool", valid_from: "1.14", enchantments: ["Quick Charge", "Multishot", "Piercing", "Unbreaking"] },
+  { group: "mace_pool", valid_from: "1.21", enchantments: ["Density", "Breach", "Smite", "Bane of Arthropods", "Fire Aspect", "Unbreaking"] },
+  { group: "spear_pool", valid_from: "1.21.11", enchantments: ["Lunge", "Sharpness", "Smite", "Bane of Arthropods", "Knockback", "Fire Aspect", "Looting", "Unbreaking"] }
+] satisfies EnchantmentData["enchantment_group_rules"];
+
 export const category_pool_rules = [
-  { category: "sword", valid_from: "1.0", valid_until: "1.8", groups: ["legacy_sword_pool"] },
-  { category: "sword", valid_from: "1.8", groups: ["sword_pool"] },
+  { category: "sword", valid_from: "1.0", groups: ["sword_pool"] },
   { category: "pickaxe", valid_from: "1.0", groups: ["tool_pool"] },
   { category: "axe", valid_from: "1.0", groups: ["tool_pool"] },
   { category: "shovel", valid_from: "1.0", groups: ["tool_pool"] },
 
-  { category: "helmet", valid_from: "1.0", valid_until: "1.7.2", groups: ["legacy_armor_pool", "helmet_extras"] },
-  { category: "helmet", valid_from: "1.7.2", groups: ["armor_pool", "helmet_extras"] },
-  { category: "chestplate", valid_from: "1.0", valid_until: "1.4.6", groups: ["legacy_armor_pool"] },
-  { category: "chestplate", valid_from: "1.4.6", valid_until: "1.7.2", groups: ["legacy_armor_pool", "chestplate_extras"] },
-  { category: "chestplate", valid_from: "1.7.2", groups: ["armor_pool", "chestplate_extras"] },
-  { category: "leggings", valid_from: "1.0", valid_until: "1.7.2", groups: ["legacy_armor_pool"] },
-  { category: "leggings", valid_from: "1.7.2", groups: ["armor_pool"] },
-  { category: "boots", valid_from: "1.0", valid_until: "1.7.2", groups: ["legacy_armor_pool", "boot_extras"] },
-  { category: "boots", valid_from: "1.7.2", groups: ["armor_pool", "boot_extras"] },
+  { category: "helmet", valid_from: "1.0", groups: ["armor_pool", "helmet_extras"] },
+  { category: "chestplate", valid_from: "1.0", groups: ["armor_pool", "chestplate_extras"] },
+  { category: "leggings", valid_from: "1.0", groups: ["armor_pool"] },
+  { category: "boots", valid_from: "1.0", groups: ["armor_pool", "boot_extras"] },
 
-  { category: "bow", valid_from: "1.1", valid_until: "1.8", groups: ["legacy_bow_pool"] },
-  { category: "bow", valid_from: "1.8", groups: ["bow_pool"] },
+  { category: "bow", valid_from: "1.1", groups: ["bow_pool"] },
   { category: "book", valid_from: "1.4.6" },
   { category: "fishing_rod", valid_from: "1.7.2", groups: ["fishing_pool"] },
   { category: "trident", valid_from: "1.13", groups: ["trident_pool"] },

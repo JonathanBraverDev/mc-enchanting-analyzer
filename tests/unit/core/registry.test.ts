@@ -35,6 +35,39 @@ describe('Registry & Data Rules Test Suite', () => {
             assert.ok(getCategoryPool(v111, 'sword').includes('Sweeping Edge'), '1.11.1: Sword pool SHOULD include Sweeping Edge');
         });
 
+        it('should derive legacy and modern sword pools from group rules', () => {
+            const v172 = EngineFactory.create(DATA, '1.7.2').registry;
+            const v18 = EngineFactory.create(DATA, '1.8').registry;
+            const v111 = EngineFactory.create(DATA, '1.11.1').registry;
+
+            assert.ok(!getCategoryPool(v172, 'sword').includes('Unbreaking'), '1.7.2: Sword pool should not include Unbreaking');
+            assert.ok(getCategoryPool(v18, 'sword').includes('Unbreaking'), '1.8: Sword pool should include Unbreaking');
+            assert.ok(!getCategoryPool(v18, 'sword').includes('Sweeping Edge'), '1.8: Sword pool should not include Sweeping Edge');
+            assert.ok(getCategoryPool(v111, 'sword').includes('Sweeping Edge'), '1.11.1: Sword pool should include Sweeping Edge');
+        });
+
+        it('should derive bow Unbreaking membership from group rules', () => {
+            const v172 = EngineFactory.create(DATA, '1.7.2').registry;
+            const v18 = EngineFactory.create(DATA, '1.8').registry;
+
+            assert.ok(!getCategoryPool(v172, 'bow').includes('Unbreaking'), '1.7.2: Bow pool should not include Unbreaking');
+            assert.ok(getCategoryPool(v18, 'bow').includes('Unbreaking'), '1.8: Bow pool should include Unbreaking');
+        });
+
+        it('should derive armor Unbreaking and extras from group rules', () => {
+            const v146 = EngineFactory.create(DATA, '1.4.6').registry;
+            const v172 = EngineFactory.create(DATA, '1.7.2').registry;
+            const v18 = EngineFactory.create(DATA, '1.8').registry;
+
+            assert.ok(!getCategoryPool(v146, 'chestplate').includes('Unbreaking'), '1.4.6: Chestplate should not include Unbreaking');
+            assert.ok(getCategoryPool(v146, 'chestplate').includes('Thorns'), '1.4.6: Chestplate should include Thorns');
+            assert.ok(getCategoryPool(v172, 'leggings').includes('Unbreaking'), '1.7.2: Leggings should include Unbreaking');
+            assert.ok(getCategoryPool(v172, 'helmet').includes('Respiration'), '1.7.2: Helmet should include Respiration');
+            assert.ok(getCategoryPool(v172, 'boots').includes('Feather Falling'), '1.7.2: Boots should include Feather Falling');
+            assert.ok(!getCategoryPool(v172, 'boots').includes('Depth Strider'), '1.7.2: Boots should not include Depth Strider');
+            assert.ok(getCategoryPool(v18, 'boots').includes('Depth Strider'), '1.8: Boots should include Depth Strider');
+        });
+
         it('should correctly handle Netherite availability (1.16+)', () => {
              const v115 = EngineFactory.create(DATA, '1.15').registry;
              assert.ok(!getEligibleMaterials(v115, 'sword').includes('netherite'), '1.15: Should not have netherite');

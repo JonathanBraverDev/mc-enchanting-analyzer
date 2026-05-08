@@ -172,7 +172,7 @@ export class RegistryFactory {
             if (!map.has(key)) map.set(key, map.size);
         };
 
-        Object.keys(data.enchantment_groups).forEach(cat => addId(state.catIdMap, cat));
+        data.enchantment_group_rules.forEach(rule => addId(state.catIdMap, rule.group));
 
         const matValues = data.material_values;
         [...Object.keys(matValues.tools), ...Object.keys(matValues.armor)].forEach(mat => addId(state.matIdMap, mat));
@@ -196,7 +196,7 @@ export class RegistryFactory {
                 continue;
             }
 
-            const resolved = rule.groups.flatMap(item => data.enchantment_groups[item] || [item]);
+            const resolved = rule.groups.flatMap(item => this.resolveGroupOrEnchant(state, data, item));
             state.mergedItems[rule.category] = [...new Set(resolved)];
         }
 
@@ -221,6 +221,28 @@ export class RegistryFactory {
                 return VersionUtils.isInRange(state.version, props.valid_from, props.valid_to);
             });
         }
+    }
+
+    private static resolveGroupOrEnchant(state: RegistryState, data: EnchantmentData, entry: string): string[] {
+        const groupMembers = this.getActiveGroupMembers(state, data, entry);
+        return groupMembers.length > 0 ? groupMembers : [entry];
+    }
+
+    private static getActiveGroupMembers(state: RegistryState, data: EnchantmentData, group: string): string[] {
+        const members: string[] = [];
+        const seen = new Set<string>();
+
+        for (const rule of data.enchantment_group_rules) {
+            if (rule.group !== group) continue;
+            if (!this.isTimelineEntryActive(state.version, rule.valid_from, rule.valid_until)) continue;
+            for (const enchantment of rule.enchantments) {
+                if (seen.has(enchantment)) continue;
+                seen.add(enchantment);
+                members.push(enchantment);
+            }
+        }
+
+        return members;
     }
 
     private static getActiveRegistryEnchantments(state: RegistryState): string[] {

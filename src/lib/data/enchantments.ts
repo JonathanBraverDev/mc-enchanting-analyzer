@@ -184,21 +184,3 @@ export const global_enchantments = {
     "valid_from": "1.21.11"
   }
 } satisfies EnchantmentData["global_enchantments"];
-
-export const enchantment_groups = {
-  "armor_pool": ["Protection", "Fire Protection", "Blast Protection", "Projectile Protection", "Unbreaking"],
-  "legacy_armor_pool": ["Protection", "Fire Protection", "Blast Protection", "Projectile Protection"],
-  "chestplate_extras": ["Thorns"],
-  "boot_extras": ["Feather Falling", "Depth Strider"],
-  "helmet_extras": ["Respiration", "Aqua Affinity"],
-  "sword_pool": ["Sharpness", "Smite", "Bane of Arthropods", "Knockback", "Fire Aspect", "Looting", "Sweeping Edge", "Unbreaking"],
-  "legacy_sword_pool": ["Sharpness", "Smite", "Bane of Arthropods", "Knockback", "Fire Aspect", "Looting"],
-  "bow_pool": ["Power", "Punch", "Flame", "Infinity", "Unbreaking"],
-  "legacy_bow_pool": ["Power", "Punch", "Flame", "Infinity"],
-  "tool_pool": ["Efficiency", "Unbreaking", "Fortune", "Silk Touch"],
-  "fishing_pool": ["Luck of the Sea", "Lure", "Unbreaking"],
-  "trident_pool": ["Impaling", "Loyalty", "Riptide", "Channeling", "Unbreaking"],
-  "crossbow_pool": ["Quick Charge", "Multishot", "Piercing", "Unbreaking"],
-  "mace_pool": ["Density", "Breach", "Smite", "Bane of Arthropods", "Fire Aspect", "Unbreaking"],
-  "spear_pool": ["Lunge", "Sharpness", "Smite", "Bane of Arthropods", "Knockback", "Fire Aspect", "Looting", "Unbreaking"]
-} satisfies EnchantmentData["enchantment_groups"];
