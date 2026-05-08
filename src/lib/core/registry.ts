@@ -42,14 +42,14 @@ export function getRankRoman(state: RegistryState, rank: number): string {
  * Gets the internal ID for an enchantable item.
  * @param state The resolved registry state.
  * @param item The item name (e.g., "sword", "helmet").
- * @returns The item ID, or UNKNOWN_CATEGORY_ID if not found.
+ * @returns The item ID, or UNKNOWN_ITEM_ID if not found.
  */
 export function getItemId(state: RegistryState, item: string): number {
-    return state.itemIdMap.get(item) ?? ENGINE_LIMITS.UNKNOWN_CATEGORY_ID;
+    return state.itemIdMap.get(item) ?? ENGINE_LIMITS.UNKNOWN_ITEM_ID;
 }
 
 /**
- * @deprecated Use getItemId.
+ * @deprecated V6_REMOVE: Use getItemId.
  */
 export function getCategoryId(state: RegistryState, cat: string): number {
     return getItemId(state, cat);
@@ -98,7 +98,7 @@ export function isItemAvailable(state: RegistryState, item: string): boolean {
 }
 
 /**
- * @deprecated Use isItemAvailable.
+ * @deprecated V6_REMOVE: Use isItemAvailable.
  */
 export function isCategoryAvailable(state: RegistryState, cat: string): boolean {
     return isItemAvailable(state, cat);
@@ -115,7 +115,7 @@ export function getItemPool(state: RegistryState, item: string): string[] {
 }
 
 /**
- * @deprecated Use getItemPool.
+ * @deprecated V6_REMOVE: Use getItemPool.
  */
 export function getCategoryPool(state: RegistryState, cat: string): string[] {
     return getItemPool(state, cat);
@@ -156,7 +156,7 @@ export function getEligiblePool(
     const cached = (cache && version) ? cache.getPool(version, cacheKey) : undefined;
     if (cached) return cached;
 
-    const pool = state.versionPool.get(cat);
+    const pool = state.itemPoolByVersion.get(cat);
     if (pool === undefined) throw new Error(`Unknown item "${cat}"`);
     const out: PackedEnchant[] = [];
 

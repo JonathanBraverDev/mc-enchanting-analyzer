@@ -27,7 +27,7 @@ export class TargetAnalysisService {
     ): PackedTargetRequirement[] {
         if (!targets || targets.length === 0) return [];
 
-        const pool = registry.versionPool.get(item);
+        const pool = registry.itemPoolByVersion.get(item);
         if (pool === undefined) throw new Error(`Unknown item "${item}"`);
 
         const byEnchant = new Map<number, PackedTargetRequirement>();
@@ -163,7 +163,7 @@ export class TargetAnalysisService {
     }
 
     public static getTargetOptions(registry: RegistryState, item: string): TargetRequirementInput[] {
-        const pool = registry.versionPool.get(item) ?? [];
+        const pool = registry.itemPoolByVersion.get(item) ?? [];
         const options: TargetRequirementInput[] = [];
 
         for (const enchantment of pool) {

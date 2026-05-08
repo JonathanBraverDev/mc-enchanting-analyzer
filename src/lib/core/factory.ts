@@ -17,27 +17,33 @@ export class RegistryFactory {
         const itemPool = {};
         const itemMaterials = {};
         const itemIdMap = new Map<string, number>();
+        const itemPoolByVersion = new Map<string, string[]>();
         const state: RegistryState = {
             data,
             version: "",
             mechanics: {},
             itemPool,
+            // V6_REMOVE: Deprecated alias for itemPool.
             mergedItems: itemPool,
             mergedOverrides: {},
             resolvedRegistry: {},
             mergedMaterials: new Set<string>(),
             itemMaterials,
+            // V6_REMOVE: Deprecated alias for itemMaterials.
             categoryMaterials: itemMaterials,
             multiEnchantBooks: true,
             idMap: new Map(),
             revIdMap: [],
             itemIdMap,
+            // V6_REMOVE: Deprecated alias for itemIdMap.
             catIdMap: itemIdMap,
             matIdMap: new Map(),
             conflictBitsets: new BigUint64Array(0),
             weightMap: new Uint32Array(0),
             sortedRanks: [],
-            versionPool: new Map(),
+            itemPoolByVersion,
+            // V6_REMOVE: Deprecated alias for itemPoolByVersion.
+            versionPool: itemPoolByVersion,
             enchantToIndex: new Map(),
             indexToEnchant: [0]
         };
@@ -65,8 +71,8 @@ export class RegistryFactory {
         // 5. Filter based on version ranges
         this.filterMergedPools(state);
 
-        // 6. Initialize active version pool
-        this.initializeVersionPool(state);
+        // 6. Initialize active item pool lookup
+        this.initializeItemPoolByVersion(state);
 
         return state;
     }
@@ -249,9 +255,9 @@ export class RegistryFactory {
         });
     }
 
-    private static initializeVersionPool(state: RegistryState): void {
+    private static initializeItemPoolByVersion(state: RegistryState): void {
         for (const [item, pool] of Object.entries(state.itemPool)) {
-            state.versionPool.set(item, pool);
+            state.itemPoolByVersion.set(item, pool);
         }
     }
 

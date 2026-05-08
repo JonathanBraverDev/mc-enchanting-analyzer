@@ -128,12 +128,12 @@ describe('Data integrity: latest vanilla 1.21.11 spot checks', () => {
             II: [13, 33],
             III: [21, 41]
         });
-        assert.ok(reg.versionPool.get('book')?.includes('Lunge'), 'Lunge should be in the book pool');
+        assert.ok(reg.itemPoolByVersion.get('book')?.includes('Lunge'), 'Lunge should be in the book pool');
     });
 
     it('treasure-only enchantments are not active table registry entries', () => {
         assert.ok(!('Frost Walker' in global_enchantments), 'Frost Walker should not be in the active table registry');
-        assert.ok(!reg.versionPool.get('book')?.includes('Frost Walker'), 'Frost Walker should be excluded from the book pool');
+        assert.ok(!reg.itemPoolByVersion.get('book')?.includes('Frost Walker'), 'Frost Walker should be excluded from the book pool');
     });
 
     it('omits vanilla empty rank ranges that cannot be rolled by the table', () => {
@@ -335,7 +335,7 @@ describe('Data integrity: registry rules reference known data', () => {
         assert.deepStrictEqual(invalidDerived, [], `non-book derived item pools: ${invalidDerived.join(', ')}`);
         assert.deepStrictEqual(emptyGroups, [], `item rules with empty groups: ${emptyGroups.join(', ')}`);
 
-        const latestBookPool = EngineFactory.create(DATA, '1.21.11').registry.versionPool.get('book') ?? [];
+        const latestBookPool = EngineFactory.create(DATA, '1.21.11').registry.itemPoolByVersion.get('book') ?? [];
         assert.deepStrictEqual([...latestBookPool].sort(), [...enchantNames].sort());
     });
 
@@ -533,13 +533,13 @@ describe('Data integrity: material enchantability coverage', () => {
         const latestVersion = '1.21.11';
         const engine = EngineFactory.create(DATA, latestVersion);
         const reg = engine.registry;
-        const cats = [...reg.versionPool.keys()];
+        const items = [...reg.itemPoolByVersion.keys()];
         const armorCats = DATA.constants.ARMOR_CATS as readonly string[];
         const bad: string[] = [];
 
         const validMaterials = collectVersionMaterials(latestVersion);
 
-        for (const cat of cats) {
+        for (const cat of items) {
             // Only test materials that make sense for this category type
             const candidateMats = cat === 'book' ? ['book']
                 : armorCats.includes(cat) ? [...validMaterials].filter(m => m in material_values.armor)
