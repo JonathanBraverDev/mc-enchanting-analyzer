@@ -89,6 +89,26 @@ export interface EnchantableItemRule {
   enchantability: EnchantabilityTable;
 }
 
+export type ConflictRuleSelector = Pick<ConflictRule, 'enchants' | 'valid_from' | 'valid_until'>;
+export type EnchantmentGroupRuleSelector = Pick<EnchantmentGroupRule, 'group' | 'valid_from' | 'valid_until'>;
+export type MaterialRuleSelector = Pick<MaterialRule, 'material' | 'valid_from' | 'valid_until'>;
+export type EnchantableItemRuleSelector = Pick<EnchantableItemRule, 'item' | 'valid_from' | 'valid_until'>;
+
+/**
+ * Small vanilla-data mutations for custom registry experiments.
+ * These operate on version-ranged rule tables only; full custom data packs remain
+ * available through RegistryFactory.buildFromData().
+ */
+export type RegistryMutation =
+  | { type: 'addConflictRule'; rule: ConflictRule }
+  | { type: 'removeConflictRule'; selector: ConflictRuleSelector }
+  | { type: 'addEnchantmentGroupRule'; rule: EnchantmentGroupRule }
+  | { type: 'removeEnchantmentGroupRule'; selector: EnchantmentGroupRuleSelector }
+  | { type: 'addMaterialRule'; rule: MaterialRule }
+  | { type: 'removeMaterialRule'; selector: MaterialRuleSelector }
+  | { type: 'addEnchantableItemRule'; rule: EnchantableItemRule }
+  | { type: 'removeEnchantableItemRule'; selector: EnchantableItemRuleSelector };
+
 /**
  * Game mechanics configuration for a version.
  * @property enchantability_bonus_divisor Divisor for the enchantability stat (default 15).
