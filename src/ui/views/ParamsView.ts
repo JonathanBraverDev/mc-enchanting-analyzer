@@ -57,7 +57,7 @@ export class ParamsView {
     public getValues() {
         return {
             version: (this.elements["v-select"] as HTMLSelectElement)?.value || "",
-            item: (this.elements["cat-select"] as HTMLSelectElement)?.value || "",
+            item: (this.elements["item-select"] as HTMLSelectElement)?.value || "",
             material: (this.elements["mat-select"] as HTMLSelectElement)?.value || "",
             clue: (this.elements["clue-select"] as HTMLSelectElement)?.value || "",
             xpLevel: parseInt((this.elements["lvl-range"] as HTMLInputElement)?.value || "0"),

@@ -289,6 +289,10 @@ export class EnchantEngine {
 
     }
 
+    /**
+     * Compatibility shim for the deprecated `{ cat, mat }` request shape.
+     * Remove this once the public engine API accepts only `{ item, material }`.
+     */
     private normalizeItemSelection(request: { item?: string | undefined; material?: string | undefined; cat?: string | undefined; mat?: string | undefined }): { item: string; material: string } {
         const item = request.item ?? request.cat;
         const material = request.material ?? request.mat;
