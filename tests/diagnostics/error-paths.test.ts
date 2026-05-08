@@ -42,8 +42,8 @@ describe('Error Path Tests', () => {
 
         it('"99.99" does not throw during construction', () => {
             // "99.99" resolves to the latest known version for inheritance.
-            // Note: enchantment pools will be empty because all enchantments have
-            // valid_to defaulting to "99.9", and "99.99" exceeds that range.
+            // Availability windows without valid_until remain open-ended, so
+            // unknown future versions reuse the latest known registry model.
             assert.doesNotThrow(() => {
                 const engine = EngineFactory.create(DATA, '99.99');
                 assert.strictEqual(engine.registry.version, '99.99');

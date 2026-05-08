@@ -169,7 +169,7 @@ export class ResultsView {
 
             const tooltipEntries = [`Weight: ${props?.weight ?? '?'}`];
             if (props?.valid_from) tooltipEntries.push(`From: ${props.valid_from}`);
-            if (props?.valid_to) tooltipEntries.push(`Until: ${props.valid_to}`);
+            if (props?.valid_until) tooltipEntries.push(`Until: ${props.valid_until}`);
             item.title = tooltipEntries.join('\n');
 
             item.innerHTML = `
@@ -503,7 +503,7 @@ export class ResultsView {
             } else {
                 const tooltipEntries = [`Weight: ${props?.weight ?? '?'}`];
                 if (props?.valid_from) tooltipEntries.push(`From: ${props.valid_from}`);
-                if (props?.valid_to) tooltipEntries.push(`Until: ${props.valid_to}`);
+                if (props?.valid_until) tooltipEntries.push(`Until: ${props.valid_until}`);
                 item.title = tooltipEntries.join('\n');
             }
 

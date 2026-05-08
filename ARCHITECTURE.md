@@ -74,6 +74,7 @@ Compatibility aliases are marked with `@deprecated V6_REMOVE` in source so the n
 - Registry helpers: `getCategoryId`, `isCategoryAvailable`, `getCategoryPool`.
 - Registry state aliases: `mergedItems`, `categoryMaterials`, `catIdMap`, `matIdMap`, `versionPool`.
 - Type aliases and constants: `MergedItems`, `CategoryMaterials`, `UNKNOWN_CATEGORY_ID`.
+- Enchantment timeline field: `valid_to` for legacy custom data; use exclusive `valid_until`.
 - CLI aliases in profiling/reporting scripts: `--cat`, `--mat`.
 
 ## Registry Rule Model
@@ -84,6 +85,8 @@ Registry data is assembled from version-ranged rule tables:
 - `enchantable_item_rules` define each enchantable item, its active version range, the groups or direct enchantments it can roll, and the material keys or material aliases it accepts.
 - `material_rules` define when concrete material keys exist.
 - `conflict_rules` define version-ranged enchantment conflicts and are compiled into symmetric conflict bitsets.
+
+Rule tables use inclusive `valid_from` and exclusive `valid_until`. Legacy enchantment custom data may still use inclusive `valid_to`, but only when it can be converted to the next known boundary.
 
 Missing `groups` on an enchantable item rule means “all active table enchantments” and is reserved for books. Material aliases such as `tool` and `armor` expand to concrete material keys before version filtering, so item/material compatibility is declared once instead of split across parallel pool and binding tables.
 
