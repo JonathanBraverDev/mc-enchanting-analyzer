@@ -22,13 +22,13 @@ export interface TargetAnalysisRequest {
 export class TargetAnalysisService {
     public static packTargets(
         registry: RegistryState,
-        cat: string,
+        item: string,
         targets: TargetRequirementInput[] | undefined
     ): PackedTargetRequirement[] {
         if (!targets || targets.length === 0) return [];
 
-        const pool = registry.versionPool.get(cat);
-        if (pool === undefined) throw new Error(`Unknown category "${cat}"`);
+        const pool = registry.versionPool.get(item);
+        if (pool === undefined) throw new Error(`Unknown item "${item}"`);
 
         const byEnchant = new Map<number, PackedTargetRequirement>();
         for (const target of targets) {
@@ -38,7 +38,7 @@ export class TargetAnalysisService {
             }
 
             if (!pool.includes(target.enchantment)) {
-                throw new Error(`Target enchantment "${target.enchantment}" is not applicable to category "${cat}"`);
+                throw new Error(`Target enchantment "${target.enchantment}" is not applicable to item "${item}"`);
             }
 
             const enchant = registry.resolvedRegistry[target.enchantment];
@@ -162,8 +162,8 @@ export class TargetAnalysisService {
         };
     }
 
-    public static getTargetOptions(registry: RegistryState, cat: string): TargetRequirementInput[] {
-        const pool = registry.versionPool.get(cat) ?? [];
+    public static getTargetOptions(registry: RegistryState, item: string): TargetRequirementInput[] {
+        const pool = registry.versionPool.get(item) ?? [];
         const options: TargetRequirementInput[] = [];
 
         for (const enchantment of pool) {

@@ -57,14 +57,25 @@ UI input
 
 | API | Purpose |
 |---|---|
-| `calculate({ cat, xp, mat, ...config })` | Runs a standard calculation and returns summarized `CalculationStats` |
-| `searchToCheckpoint({ cat, xp, mat, ...config })` | Searches one target checkpoint and returns a `SearchResult` |
-| `searchSequentialCheckpoints({ cat, xp, mat, checkpoints, onCheckpointComplete, ...config })` | Searches multiple checkpoints in order and streams each completed `SearchResult` |
-| `searchModifiedLevel({ cat, modLevel, mat, ...config })` | Searches one modified level and returns its reusable `SearchState` |
+| `calculate({ item, xp, material, ...config })` | Runs a standard calculation and returns summarized `CalculationStats` |
+| `searchToCheckpoint({ item, xp, material, ...config })` | Searches one target checkpoint and returns a `SearchResult` |
+| `searchSequentialCheckpoints({ item, xp, material, checkpoints, onCheckpointComplete, ...config })` | Searches multiple checkpoints in order and streams each completed `SearchResult` |
+| `searchModifiedLevel({ item, modLevel, material, ...config })` | Searches one modified level and returns its reusable `SearchState` |
 | `getModifiedLevelDist(xp, enchantability, instrumentation?)` | Returns the BigInt distribution over modified levels |
-| `getEligibleListNumeric(cat, level, bitset?)` | Returns packed eligible enchant/rank IDs for a category and level |
+| `getEligibleListNumeric(item, level, bitset?)` | Returns packed eligible enchant/rank IDs for an item and level |
 
-The public calls use request objects so callers can pass optional search, instrumentation, timing, clue, and abort options without positional argument drift.
+The public calls use request objects so callers can pass optional search, instrumentation, timing, clue, and abort options without positional argument drift. Deprecated `{ cat, mat }` request aliases and category-named registry helpers remain as compatibility wrappers for external engine callers; project-owned UI and worker messages use `{ item, material }`.
+
+## Registry Rule Model
+
+Registry data is assembled from version-ranged rule tables:
+
+- `enchantment_group_rules` define additive enchantment group membership over time, such as `sword_pool`, `armor_pool`, and item-specific extras.
+- `enchantable_item_rules` define each enchantable item, its active version range, the groups or direct enchantments it can roll, and the material keys or material aliases it accepts.
+- `material_rules` define when concrete material keys exist.
+- `conflict_rules` define version-ranged enchantment conflicts and are compiled into symmetric conflict bitsets.
+
+Missing `groups` on an enchantable item rule means “all active table enchantments” and is reserved for books. Material aliases such as `tool` and `armor` expand to concrete material keys before version filtering, so item/material compatibility is declared once instead of split across parallel pool and binding tables.
 
 ## Search Components
 
@@ -153,11 +164,11 @@ The browser uses two dedicated workers:
 | Cache | Purpose |
 |---|---|
 | distribution cache | Modified-level distributions by version/xp/enchantability |
-| pool cache | Eligible enchant pools by version/category/level/material |
-| frontier cache | Reusable modified-level search states |
-| stats cache | Final `CalculationStats` summaries |
+| pool cache | Eligible enchant pools by version/item/level; material is intentionally absent because it affects modified-level distribution, not per-level eligibility |
+| frontier cache | Reusable modified-level search states keyed by version/item/material/modified level |
+| stats cache | Final `CalculationStats` summaries keyed by version/item/material/xp and clue when relevant |
 
-Search-state cache keys include version, category, material, modified level, and clue where relevant. Threshold-aware reads can reuse more precise cached state when it already satisfies the requested checkpoint.
+The registry rule model declares item/material compatibility together, but the engine cache keys still follow the computation they cache. Pool entries only depend on the fixed enchantable item pool at a modified level. Frontier and stats entries include material because material changes enchantability, which changes the modified-level distribution and therefore the final weighted result. Threshold-aware reads can reuse more precise cached state when it already satisfies the requested checkpoint.
 
 ## Release Documentation Rule
 

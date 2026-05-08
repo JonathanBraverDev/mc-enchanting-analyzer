@@ -63,7 +63,7 @@ describe('Error Path Tests', () => {
             );
         });
 
-        it('valid enchant name not applicable to category throws clear error', async () => {
+        it('valid enchant name not applicable to item throws clear error', async () => {
             const engine = EngineFactory.create(DATA, '1.21');
             // Aqua Affinity is helmet-only, not applicable to swords
             await assert.rejects(
@@ -99,24 +99,24 @@ describe('Error Path Tests', () => {
         });
     });
 
-    describe('3. Unknown category', () => {
-        it('unknown category throws a clear error', async () => {
+    describe('3. Unknown item', () => {
+        it('unknown item throws a clear error', async () => {
             const engine = EngineFactory.create(DATA, '1.21');
             await assert.rejects(
                 () => engine.calculate({ cat: 'not_a_real_category', xp: 30, mat: 'diamond' }),
                 (err: Error) => {
-                    assert.ok(err.message.toLowerCase().includes('category'), `Expected "category" in: ${err.message}`);
+                    assert.ok(err.message.toLowerCase().includes('item'), `Expected "item" in: ${err.message}`);
                     return true;
                 }
             );
         });
 
-        it('empty string category throws a clear error', async () => {
+        it('empty string item throws a clear error', async () => {
             const engine = EngineFactory.create(DATA, '1.21');
             await assert.rejects(
                 () => engine.calculate({ cat: '', xp: 30, mat: 'diamond' }),
                 (err: Error) => {
-                    assert.ok(err.message.toLowerCase().includes('category'), `Expected "category" in: ${err.message}`);
+                    assert.ok(err.message.toLowerCase().includes('item'), `Expected "item" in: ${err.message}`);
                     return true;
                 }
             );
