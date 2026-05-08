@@ -39,5 +39,7 @@ jobs:
     - name: Install Playwright Chromium
       run: npx playwright install chromium --with-deps
     - run: npm run build
+    - name: Verify engine test discovery
+      run: npm run test:engine:check
     - name: Run All Tests
       run: npm run test:engine && npm run test:ui
