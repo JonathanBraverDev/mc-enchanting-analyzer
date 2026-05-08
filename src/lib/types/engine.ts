@@ -124,9 +124,6 @@ export interface ItemPools {
   [item: string]: string[];
 }
 
-/** @deprecated V6_REMOVE: Use ItemPools. */
-export interface MergedItems extends ItemPools {}
-
 export interface MergedOverrides {
   [enchantment: string]: Partial<Enchantment>;
 }
@@ -138,9 +135,6 @@ export interface ItemMaterials {
 export interface ItemEnchantabilityTables {
   [item: string]: import('./domain.js').EnchantabilityTable;
 }
-
-/** @deprecated V6_REMOVE: Use ItemMaterials. */
-export interface CategoryMaterials extends ItemMaterials {}
 
 /**
  * Packed representation of a search node to minimize object and array overhead.
@@ -211,29 +205,19 @@ export interface RegistryState {
     version: string;
     mechanics: import('./domain.js').VersionMechanics;
     itemPool: ItemPools;
-    /** @deprecated V6_REMOVE: Use itemPool. */
-    mergedItems: MergedItems;
     mergedOverrides: MergedOverrides;
     resolvedRegistry: ResolvedRegistry;
     mergedMaterials: Set<string>;
     itemMaterials: ItemMaterials;
     itemEnchantability: ItemEnchantabilityTables;
-    /** @deprecated V6_REMOVE: Use itemMaterials. */
-    categoryMaterials: CategoryMaterials;
     multiEnchantBooks: boolean;
     idMap: Map<string, number>;
     revIdMap: string[];
     itemIdMap: Map<string, number>;
-    /** @deprecated V6_REMOVE: Use itemIdMap. */
-    catIdMap: Map<string, number>;
     materialIdMap: Map<string, number>;
-    /** @deprecated V6_REMOVE: Use materialIdMap. */
-    matIdMap: Map<string, number>;
     conflictBitsets: BigUint64Array;
     weightMap: Uint32Array;
     sortedRanks: [string, number][];
-    /** @deprecated V6_REMOVE: Historical active item-pool map; use itemPool. */
-    versionPool: Map<string, string[]>;
     enchantToIndex: Map<number, number>;
     indexToEnchant: number[];
 }
@@ -256,23 +240,10 @@ export interface SearchConfig {
     timing?: SearchTiming | undefined;
 }
 
-export type ItemSelectionRequest =
-    | {
-        item: string;
-        material: string;
-        /** @deprecated V6_REMOVE: Use item. */
-        cat?: never;
-        /** @deprecated V6_REMOVE: Use material. */
-        mat?: never;
-    }
-    | {
-        /** @deprecated V6_REMOVE: Use item. */
-        cat: string;
-        /** @deprecated V6_REMOVE: Use material. */
-        mat: string;
-        item?: never;
-        material?: never;
-    };
+export interface ItemSelectionRequest {
+    item: string;
+    material: string;
+}
 
 export type CalculationRequest = SearchConfig & ItemSelectionRequest & {
     xp: number;

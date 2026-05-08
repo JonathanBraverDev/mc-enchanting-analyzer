@@ -10,8 +10,8 @@ async function run() {
         return (idx !== -1 && args[idx + 1]) ? args[idx + 1] : null;
     };
 
-    const item = findArg('--item') ?? findArg('--cat') ?? 'book'; // V6_REMOVE: --cat is a deprecated CLI alias.
-    const material = findArg('--material') ?? findArg('--mat') ?? 'book'; // V6_REMOVE: --mat is a deprecated CLI alias.
+    const item = findArg('--item') ?? 'book';
+    const material = findArg('--material') ?? 'book';
     const xp = parseInt(findArg('--xp') ?? '30');
     const version = findArg('--version') ?? '1.21.11';
 

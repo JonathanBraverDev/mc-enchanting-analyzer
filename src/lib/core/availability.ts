@@ -4,13 +4,6 @@ import { VersionUtils } from '#utils/index.js';
 export interface RegistryAvailability {
     valid_from?: string | undefined;
     valid_until?: string | undefined;
-    /** @deprecated V6_REMOVE: Legacy enchantment custom data only; use exclusive valid_until. */
-    valid_to?: string | undefined;
-}
-
-export interface NormalizedRegistryAvailability {
-    valid_from?: string | undefined;
-    valid_until?: string | undefined;
 }
 
 export function getKnownRegistryBoundaries(data: EnchantmentData): string[] {
@@ -24,55 +17,12 @@ export function getKnownRegistryBoundaries(data: EnchantmentData): string[] {
     return [...versions].sort(VersionUtils.compare);
 }
 
-export function assertRegistryAvailability(data: EnchantmentData, boundaries = getKnownRegistryBoundaries(data)): void {
-    for (const { entry, context } of getRegistryAvailabilityEntries(data)) {
-        normalizeAvailability(entry, boundaries, context);
-    }
-}
-
-export function normalizeAvailability(
-    entry: RegistryAvailability,
-    boundaries: readonly string[],
-    context = 'registry entry'
-): NormalizedRegistryAvailability {
-    if (entry.valid_to !== undefined && entry.valid_until !== undefined) {
-        throw new Error(`${context} cannot define both valid_to and valid_until; valid_to is deprecated, use valid_until.`);
-    }
-
-    if (entry.valid_to === undefined) {
-        return {
-            valid_from: entry.valid_from,
-            valid_until: entry.valid_until
-        };
-    }
-
-    const validUntil = findNextBoundary(boundaries, entry.valid_to);
-    if (validUntil === undefined) {
-        throw new Error(`${context} valid_to is deprecated and cannot be converted; use valid_until.`);
-    }
-
-    return {
-        valid_from: entry.valid_from,
-        valid_until: validUntil
-    };
-}
-
 export function isAvailabilityActive(
     version: string,
-    entry: RegistryAvailability,
-    boundaries: readonly string[],
-    context = 'registry entry'
+    entry: RegistryAvailability
 ): boolean {
-    const normalized = normalizeAvailability(entry, boundaries, context);
-    if (normalized.valid_from && VersionUtils.compare(version, normalized.valid_from) < 0) return false;
-    return normalized.valid_until === undefined || VersionUtils.compare(version, normalized.valid_until) < 0;
-}
-
-function findNextBoundary(boundaries: readonly string[], validTo: string): string | undefined {
-    for (const boundary of boundaries) {
-        if (VersionUtils.compare(boundary, validTo) > 0) return boundary;
-    }
-    return undefined;
+    if (entry.valid_from && VersionUtils.compare(version, entry.valid_from) < 0) return false;
+    return entry.valid_until === undefined || VersionUtils.compare(version, entry.valid_until) < 0;
 }
 
 function getRegistryAvailabilityEntries(data: EnchantmentData): { entry: RegistryAvailability; context: string }[] {

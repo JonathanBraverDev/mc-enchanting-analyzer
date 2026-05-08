@@ -32,15 +32,6 @@ describe('Enchantment Engine Test Suite', () => {
             assert.ok(!hasUndefined, '"undefined" should not appear in results');
         });
 
-        // V6_REMOVE: This is the intentional coverage for deprecated `{ cat, mat }` requests.
-        it('accepts deprecated category/material request aliases', async () => {
-            const preferred = await engine.calculate({ item: TEST_DATA.ITEMS.SWORD, xp: 1, material: TEST_DATA.MATERIALS.DIAMOND });
-            const deprecated = await engine.calculate({ cat: TEST_DATA.ITEMS.SWORD, xp: 1, mat: TEST_DATA.MATERIALS.DIAMOND });
-
-            assert.strictEqual(deprecated.accuracy, preferred.accuracy);
-            assert.deepStrictEqual(deprecated.combos, preferred.combos);
-        });
-
         it('reports search and post-processing timing separately', async () => {
             const timing = { totalMs: 0, searchMs: 0, postProcessingMs: 0 };
             const stats = await engine.calculate({

@@ -65,16 +65,16 @@ export class EnchantEngine {
     /**
      * Search for enchantment combinations at a specific modified level.
      *
-     * @param item Item type. @deprecated V6_REMOVE alias: cat.
+     * @param item Item type.
      * @param modLevel The pre-computed modified level for this search.
-     * @param material Item material. @deprecated V6_REMOVE alias: mat.
+     * @param material Item material.
      * @param threshold High-precision bigint threshold (1.0 = 10^18).
      * @param maxIterations Max nodes to process.
      * @param resultsLimit Max unique combinations to retain before recording capped mass.
      * @param instrumentation Optional performance tracking.
      */
     public async searchModifiedLevel(request: ModifiedLevelSearchRequest): Promise<SearchState> {
-        const { item, material } = this.normalizeItemSelection(request);
+        const { item, material } = request;
         const {
             modLevel,
             threshold = ProbUtils.toBigInt(ENGINE_LIMITS.DEFAULT_THRESHOLD),
@@ -108,7 +108,7 @@ export class EnchantEngine {
      */
     public async searchSequentialCheckpoints(request: SequentialCheckpointSearchRequest): Promise<SearchResult> {
         this.validateRequest(request);
-        const { item, material } = this.normalizeItemSelection(request);
+        const { item, material } = request;
         const targetClueId = request.clue ? this.getPackedClue(item, request.clue) : undefined;
 
         return this.searchService.searchSequentialCheckpoints({
@@ -125,7 +125,7 @@ export class EnchantEngine {
      */
     public async searchToCheckpoint(request: CheckpointSearchRequest): Promise<SearchResult> {
         this.validateRequest(request);
-        const { item, material } = this.normalizeItemSelection(request);
+        const { item, material } = request;
         const targetClueId = request.clue ? this.getPackedClue(item, request.clue) : undefined;
 
         return this.searchService.searchToCheckpoint({
@@ -141,15 +141,15 @@ export class EnchantEngine {
      * Aggregates all statistics for a given enchantment attempt.
      * Use this for standard single-pass calculations (e.g. standard UI search).
      *
-     * @param item The item type (e.g., 'sword', 'pickaxe'). @deprecated V6_REMOVE alias: cat.
+     * @param item The item type (e.g., 'sword', 'pickaxe').
      * @param xp The base XP level from the enchantment table (1-50).
-     * @param material The item material (e.g., 'diamond', 'netherite'). @deprecated V6_REMOVE alias: mat.
+     * @param material The item material (e.g., 'diamond', 'netherite').
      * @param config Optional search configuration (threshold, signals, etc).
      * @returns A promise resolving to the final aggregated statistics.
      */
     public async calculate(request: CalculationRequest): Promise<CalculationStats> {
         this.validateRequest(request);
-        const { item, material } = this.normalizeItemSelection(request);
+        const { item, material } = request;
 
         const {
             xp,
@@ -256,7 +256,7 @@ export class EnchantEngine {
     }
 
     private validateRequest(request: CalculationRequest | CheckpointSearchRequest | SequentialCheckpointSearchRequest): void {
-        const { item, material } = this.normalizeItemSelection(request);
+        const { item, material } = request;
         const { xp } = request;
 
         if (!Number.isFinite(xp) || !Number.isInteger(xp) || xp <= 0) {
@@ -287,20 +287,5 @@ export class EnchantEngine {
             throw new Error(`Invalid resultsLimit: ${request.resultsLimit}. Must be between 1 and 1,000,000.`);
         }
 
-    }
-
-    /**
-     * Compatibility shim for the deprecated `{ cat, mat }` request shape.
-     * @deprecated V6_REMOVE: Delete once public requests require `{ item, material }`.
-     * Remove this once the public engine API accepts only `{ item, material }`.
-     */
-    private normalizeItemSelection(request: { item?: string | undefined; material?: string | undefined; cat?: string | undefined; mat?: string | undefined }): { item: string; material: string } {
-        const item = request.item ?? request.cat;
-        const material = request.material ?? request.mat;
-
-        if (!item) throw new Error('Missing item. Use request.item, or deprecated request.cat.');
-        if (!material) throw new Error('Missing material. Use request.material, or deprecated request.mat.');
-
-        return { item, material };
     }
 }

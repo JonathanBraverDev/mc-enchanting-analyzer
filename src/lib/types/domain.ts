@@ -23,8 +23,6 @@ export interface Enchantment {
   levels: EnchantmentLevels;
   valid_from?: string;
   valid_until?: string;
-  /** @deprecated V6_REMOVE: Use exclusive valid_until. */
-  valid_to?: string;
 }
 
 /**
