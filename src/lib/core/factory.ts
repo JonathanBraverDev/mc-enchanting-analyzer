@@ -17,6 +17,7 @@ export class RegistryFactory {
         }
         const itemPool = {};
         const itemMaterials = {};
+        const itemEnchantability = {};
         const itemIdMap = new Map<string, number>();
         const materialIdMap = new Map<string, number>();
         const versionPool = new Map<string, string[]>();
@@ -31,6 +32,7 @@ export class RegistryFactory {
             resolvedRegistry: {},
             mergedMaterials: new Set<string>(),
             itemMaterials,
+            itemEnchantability,
             // V6_REMOVE: Deprecated alias for itemMaterials.
             categoryMaterials: itemMaterials,
             multiEnchantBooks: true,
@@ -239,6 +241,7 @@ export class RegistryFactory {
             const materials = this.resolveMaterialRefs(data, rule.materials)
                 .filter(material => activeMaterials.has(material));
             state.itemMaterials[rule.item] = materials;
+            state.itemEnchantability[rule.item] = rule.enchantability;
             state.versionPool.set(rule.item, state.itemPool[rule.item] ?? []);
         }
     }

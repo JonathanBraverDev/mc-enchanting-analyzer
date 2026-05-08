@@ -135,6 +135,10 @@ export interface ItemMaterials {
   [item: string]: string[];
 }
 
+export interface ItemEnchantabilityTables {
+  [item: string]: import('./domain.js').EnchantabilityTable;
+}
+
 /** @deprecated V6_REMOVE: Use ItemMaterials. */
 export interface CategoryMaterials extends ItemMaterials {}
 
@@ -213,6 +217,7 @@ export interface RegistryState {
     resolvedRegistry: ResolvedRegistry;
     mergedMaterials: Set<string>;
     itemMaterials: ItemMaterials;
+    itemEnchantability: ItemEnchantabilityTables;
     /** @deprecated V6_REMOVE: Use itemMaterials. */
     categoryMaterials: CategoryMaterials;
     multiEnchantBooks: boolean;

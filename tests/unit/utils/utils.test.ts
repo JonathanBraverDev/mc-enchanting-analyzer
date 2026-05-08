@@ -8,7 +8,7 @@ import { ProbUtils, PRECISION } from '#utils/math/ProbUtils.js';
 import { VersionUtils } from '#utils/domain/VersionUtils.js';
 import { StringUtils, UIUtils } from '#utils/format/FormatUtils.js';
 import { RomanUtils } from '#utils/format/RomanUtils.js';
-import { KeyUtils, KEY_SHIFT_LEVEL } from '#utils/domain/KeyUtils.js';
+import { KeyUtils, KEY_SHIFT_ITEM, KEY_SHIFT_MATERIAL, KEY_SHIFT_LEVEL } from '#utils/domain/KeyUtils.js';
 import { EnchantUtils } from '#utils/domain/EnchantUtils.js';
 
 const ROMAN_MAP = { "I": 1, "II": 2, "III": 3, "IV": 4, "V": 5 };
@@ -273,13 +273,13 @@ describe('KeyUtils.getPackedKey', () => {
         assert.strictEqual(k1, k2);
     });
 
-    it('produces different keys for different catId', () => {
+    it('produces different keys for different itemId', () => {
         const k1 = KeyUtils.getPackedKey(0, 2, 15);
         const k2 = KeyUtils.getPackedKey(1, 2, 15);
         assert.notStrictEqual(k1, k2);
     });
 
-    it('produces different keys for different matId', () => {
+    it('produces different keys for different materialId', () => {
         const k1 = KeyUtils.getPackedKey(1, 0, 15);
         const k2 = KeyUtils.getPackedKey(1, 1, 15);
         assert.notStrictEqual(k1, k2);
@@ -305,6 +305,10 @@ describe('KeyUtils.getPackedKey', () => {
         assert.strictEqual(extracted, modLevel);
     });
 
+    it('preserves the existing item/material/level bit layout', () => {
+        assert.strictEqual(KeyUtils.getPackedKey(1, 2, 15), (1 << KEY_SHIFT_ITEM) | (2 << KEY_SHIFT_MATERIAL) | (15 << KEY_SHIFT_LEVEL));
+    });
+
 });
 
 describe('KeyUtils.getStatsKey', () => {
@@ -314,13 +318,13 @@ describe('KeyUtils.getStatsKey', () => {
         assert.strictEqual(k1, k2);
     });
 
-    it('produces different keys for different catId', () => {
+    it('produces different keys for different itemId', () => {
         const k1 = KeyUtils.getStatsKey(0, 2, 15);
         const k2 = KeyUtils.getStatsKey(1, 2, 15);
         assert.notStrictEqual(k1, k2);
     });
 
-    it('produces different keys for different matId', () => {
+    it('produces different keys for different materialId', () => {
         const k1 = KeyUtils.getStatsKey(1, 0, 15);
         const k2 = KeyUtils.getStatsKey(1, 1, 15);
         assert.notStrictEqual(k1, k2);
@@ -337,6 +341,10 @@ describe('KeyUtils.getStatsKey', () => {
         const kCoarse = KeyUtils.getStatsKey(1, 2, 15);
         const kUltra = KeyUtils.getStatsKey(1, 2, 15);
         assert.strictEqual(kCoarse, kUltra);
+    });
+
+    it('preserves the existing item/material/level bit layout', () => {
+        assert.strictEqual(KeyUtils.getStatsKey(1, 2, 15), (1 << KEY_SHIFT_ITEM) | (2 << KEY_SHIFT_MATERIAL) | (15 << KEY_SHIFT_LEVEL));
     });
 
 });

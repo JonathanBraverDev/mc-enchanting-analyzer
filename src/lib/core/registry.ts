@@ -229,9 +229,10 @@ export function getEnchantability(state: RegistryState, material: string, item: 
         throw new Error(`Material "${material}" is not available for item "${item}" in version ${state.version}.`);
     }
     if (item === 'book') return 1;
-    const { armor, tools } = state.data.material_values;
-    const isArmor = state.data.constants.ARMOR_CATS.includes(item);
-    const value = isArmor ? armor[material] : tools[material];
+    const tableName = state.itemEnchantability[item];
+    if (tableName === undefined) throw new Error(`Unknown item "${item}"`);
+    const table = tableName === 'armor' ? state.data.material_values.armor : state.data.material_values.tools;
+    const value = table[material];
     if (value === undefined) throw new Error(`Unknown material "${material}" for item "${item}"`);
     return value;
 }

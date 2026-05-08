@@ -82,7 +82,7 @@ Compatibility aliases are marked with `@deprecated V6_REMOVE` in source so the n
 Registry data is assembled from version-ranged rule tables:
 
 - `enchantment_group_rules` define additive enchantment group membership over time, such as `sword_pool`, `armor_pool`, and item-specific extras.
-- `enchantable_item_rules` define each enchantable item, its active version range, the groups or direct enchantments it can roll, and the material keys or material aliases it accepts.
+- `enchantable_item_rules` define each enchantable item, its active version range, the groups or direct enchantments it can roll, the material keys or aliases it accepts, and which enchantability table it uses.
 - `material_rules` define when concrete material keys exist.
 - `conflict_rules` define version-ranged enchantment conflicts and are compiled into symmetric conflict bitsets.
 

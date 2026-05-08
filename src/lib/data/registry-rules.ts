@@ -90,22 +90,22 @@ export const material_sets = {
 } satisfies EnchantmentData["material_sets"];
 
 export const enchantable_item_rules = [
-  { item: "sword", valid_from: "1.0", groups: ["sword_pool"], materials: ["tool"] },
-  { item: "pickaxe", valid_from: "1.0", groups: ["tool_pool"], materials: ["tool"] },
-  { item: "axe", valid_from: "1.0", groups: ["tool_pool"], materials: ["tool"] },
-  { item: "shovel", valid_from: "1.0", groups: ["tool_pool"], materials: ["tool"] },
+  { item: "sword", valid_from: "1.0", groups: ["sword_pool"], materials: ["tool"], enchantability: "tool" },
+  { item: "pickaxe", valid_from: "1.0", groups: ["tool_pool"], materials: ["tool"], enchantability: "tool" },
+  { item: "axe", valid_from: "1.0", groups: ["tool_pool"], materials: ["tool"], enchantability: "tool" },
+  { item: "shovel", valid_from: "1.0", groups: ["tool_pool"], materials: ["tool"], enchantability: "tool" },
 
-  { item: "helmet", valid_from: "1.0", groups: ["armor_pool", "helmet_extras"], materials: ["armor", "turtle_shell"] },
-  { item: "chestplate", valid_from: "1.0", groups: ["armor_pool", "chestplate_extras"], materials: ["armor"] },
-  { item: "leggings", valid_from: "1.0", groups: ["armor_pool"], materials: ["armor"] },
-  { item: "boots", valid_from: "1.0", groups: ["armor_pool", "boot_extras"], materials: ["armor"] },
+  { item: "helmet", valid_from: "1.0", groups: ["armor_pool", "helmet_extras"], materials: ["armor", "turtle_shell"], enchantability: "armor" },
+  { item: "chestplate", valid_from: "1.0", groups: ["armor_pool", "chestplate_extras"], materials: ["armor"], enchantability: "armor" },
+  { item: "leggings", valid_from: "1.0", groups: ["armor_pool"], materials: ["armor"], enchantability: "armor" },
+  { item: "boots", valid_from: "1.0", groups: ["armor_pool", "boot_extras"], materials: ["armor"], enchantability: "armor" },
 
-  { item: "bow", valid_from: "1.1", groups: ["bow_pool"], materials: ["bow"] },
-  { item: "book", valid_from: "1.4.6", materials: ["book"] },
-  { item: "fishing_rod", valid_from: "1.7.2", groups: ["fishing_pool"], materials: ["fishing_rod"] },
-  { item: "trident", valid_from: "1.13", groups: ["trident_pool"], materials: ["trident"] },
-  { item: "crossbow", valid_from: "1.14", groups: ["crossbow_pool"], materials: ["crossbow"] },
-  { item: "hoe", valid_from: "1.16", groups: ["tool_pool"], materials: ["tool"] },
-  { item: "mace", valid_from: "1.21", groups: ["mace_pool"], materials: ["mace"] },
-  { item: "spear", valid_from: "1.21.11", groups: ["spear_pool"], materials: ["tool"] }
+  { item: "bow", valid_from: "1.1", groups: ["bow_pool"], materials: ["bow"], enchantability: "tool" },
+  { item: "book", valid_from: "1.4.6", materials: ["book"], enchantability: "tool" },
+  { item: "fishing_rod", valid_from: "1.7.2", groups: ["fishing_pool"], materials: ["fishing_rod"], enchantability: "tool" },
+  { item: "trident", valid_from: "1.13", groups: ["trident_pool"], materials: ["trident"], enchantability: "tool" },
+  { item: "crossbow", valid_from: "1.14", groups: ["crossbow_pool"], materials: ["crossbow"], enchantability: "tool" },
+  { item: "hoe", valid_from: "1.16", groups: ["tool_pool"], materials: ["tool"], enchantability: "tool" },
+  { item: "mace", valid_from: "1.21", groups: ["mace_pool"], materials: ["mace"], enchantability: "tool" },
+  { item: "spear", valid_from: "1.21.11", groups: ["spear_pool"], materials: ["tool"], enchantability: "tool" }
 ] satisfies EnchantmentData["enchantable_item_rules"];
