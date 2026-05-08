@@ -71,11 +71,14 @@ export interface MaterialSets {
   [set: string]: string[];
 }
 
+export type EnchantabilityTable = 'tool' | 'armor';
+
 /**
  * Version-ranged enchantable item rule.
  * Missing groups means the item uses every active table enchantment.
  * That derived mode is currently valid only for enchanted books.
  * Materials may reference concrete material keys or material set aliases.
+ * Enchantability selects the material-value table used by this item.
  * @property valid_from First version where this item rule applies, inclusive.
  * @property valid_until First version where this item rule no longer applies, exclusive.
  */
@@ -85,6 +88,7 @@ export interface EnchantableItemRule {
   valid_until?: string;
   groups?: string[];
   materials: string[];
+  enchantability: EnchantabilityTable;
 }
 
 /**

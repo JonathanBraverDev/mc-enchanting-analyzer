@@ -418,6 +418,14 @@ describe('Data integrity: registry rules reference known data', () => {
         assert.deepStrictEqual(unknown, [], `item rule materials with unknown entries: ${unknown.join(', ')}`);
     });
 
+    it('enchantable item rules declare a valid enchantability table', () => {
+        const invalid = registryItemRules
+            .filter(rule => rule.enchantability !== 'tool' && rule.enchantability !== 'armor')
+            .map(rule => `${rule.item}: ${rule.enchantability}`);
+
+        assert.deepStrictEqual(invalid, [], `item rules with invalid enchantability table: ${invalid.join(', ')}`);
+    });
+
     it('material aliases reference known material entries', () => {
         const toolMats = new Set(Object.keys(material_values.tools));
         const armorMats = new Set(Object.keys(material_values.armor));
@@ -571,5 +579,28 @@ describe('Data integrity: material enchantability coverage', () => {
         }
 
         assert.deepStrictEqual(bad, [], `Enchantability lookup failures:\n${bad.join('\n')}`);
+    });
+
+    it('every eligible item/material pair is present in the selected enchantability table', () => {
+        const latestVersion = '1.21.11';
+        const engine = EngineFactory.create(DATA, latestVersion);
+        const reg = engine.registry;
+        const bad: string[] = [];
+
+        for (const item of Object.keys(reg.itemPool)) {
+            const tableName = reg.itemEnchantability[item];
+            if (tableName === undefined) {
+                bad.push(`${item}: missing enchantability table`);
+                continue;
+            }
+            for (const material of getEligibleMaterials(reg, item)) {
+                const enchantability = tableName === 'armor'
+                    ? material_values.armor[material as keyof typeof material_values.armor]
+                    : material_values.tools[material as keyof typeof material_values.tools];
+                if (enchantability === undefined) bad.push(`${item}/${material}: missing from ${tableName}`);
+            }
+        }
+
+        assert.deepStrictEqual(bad, [], `Eligible item/material pairs missing from selected enchantability table:\n${bad.join('\n')}`);
     });
 });

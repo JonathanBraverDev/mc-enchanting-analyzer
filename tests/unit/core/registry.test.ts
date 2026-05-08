@@ -313,11 +313,21 @@ describe('Registry & Data Rules Test Suite', () => {
             });
         });
 
-        it('should return correct enchantability values for classic materials', () => {
-            // Diamond sword enchantability is 10
-            assert.strictEqual(reg.data.material_values.tools['diamond'], 10);
-            // Gold sword enchantability is 22
-            assert.strictEqual(reg.data.material_values.tools['gold'], 22);
+        it('should return correct enchantability values for classic item/material pairs', () => {
+            assert.strictEqual(getEnchantability(reg, 'diamond', 'sword'), 10);
+            assert.strictEqual(getEnchantability(reg, 'gold', 'sword'), 22);
+            assert.strictEqual(getEnchantability(reg, 'diamond', 'chestplate'), 10);
+            assert.strictEqual(getEnchantability(reg, 'gold', 'chestplate'), 25);
+        });
+
+        it('should use explicit enchantability tables for armor and unique items', () => {
+            const v121 = EngineFactory.create(DATA, '1.21').registry;
+            assert.strictEqual(getEnchantability(v121, 'turtle_shell', 'helmet'), 9);
+            assert.strictEqual(getEnchantability(v121, 'book', 'book'), 1);
+            assert.strictEqual(getEnchantability(v121, 'bow', 'bow'), 1);
+            assert.strictEqual(getEnchantability(v121, 'crossbow', 'crossbow'), 1);
+            assert.strictEqual(getEnchantability(v121, 'trident', 'trident'), 1);
+            assert.strictEqual(getEnchantability(v121, 'mace', 'mace'), 15);
         });
     });
 });
