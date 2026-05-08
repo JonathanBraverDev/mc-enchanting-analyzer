@@ -1,10 +1,9 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { DATA } from '#data/index.js';
-import { EngineFactory } from '#engine/factory.js';
+import { RegistryFactory } from '#core/factory.js';
 import { ThemeManager } from '#ui/theme.js';
 
-const registry = EngineFactory.create(DATA, '1.21.11').registry;
+const registry = RegistryFactory.build('1.21.11');
 
 describe('ThemeManager', () => {
     it('keeps enchantment color stable across ranks', () => {
