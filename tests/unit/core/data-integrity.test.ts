@@ -20,7 +20,7 @@ import { global_enchantments } from '#data/enchantments.js';
 import { conflict_rules, enchantment_group_rules, enchantable_item_rules, material_rules, material_sets } from '#data/registry-rules.js';
 import { EngineFactory } from '#engine/factory.js';
 import { DATA } from '#data/index.js';
-import { hasConflict, getEnchantId, getEnchantability } from '#core/registry.js';
+import { hasConflict, getEnchantId, getEnchantability, getEligibleMaterials } from '#core/registry.js';
 import { versions } from '#data/versions.js';
 import { material_values } from '#data/materials.js';
 import { VersionUtils } from '#utils/index.js';
@@ -37,14 +37,6 @@ const registryMaterialSets: EnchantmentData["material_sets"] = material_sets;
 const enchantNames = Object.keys(registryEnchantments);
 const versionEntries = Object.entries(registryVersions);
 const supportedVersions = getRegistryVersionBoundaries(DATA);
-
-function collectVersionMaterials(version: string): Set<string> {
-    const materials = new Set<string>();
-    for (const rule of registryMaterialRules) {
-        if (isTimelineEntryActive(version, rule.valid_from, rule.valid_until)) materials.add(rule.material);
-    }
-    return materials;
-}
 
 function isTimelineEntryActive(version: string, validFrom: string, validUntil?: string): boolean {
     if (VersionUtils.compare(version, validFrom) < 0) return false;
@@ -529,23 +521,15 @@ describe('Data integrity: material enchantability coverage', () => {
         );
     });
 
-    it('every category+material in the latest version resolves enchantability without throwing', () => {
+    it('every eligible item/material pair in the latest version resolves enchantability without throwing', () => {
         const latestVersion = '1.21.11';
         const engine = EngineFactory.create(DATA, latestVersion);
         const reg = engine.registry;
         const items = [...reg.itemPoolByVersion.keys()];
-        const armorCats = DATA.constants.ARMOR_CATS as readonly string[];
         const bad: string[] = [];
 
-        const validMaterials = collectVersionMaterials(latestVersion);
-
         for (const item of items) {
-            // Only test materials that make sense for this category type
-            const candidateMats = item === 'book' ? ['book']
-                : armorCats.includes(item) ? [...validMaterials].filter(m => m in material_values.armor)
-                : [...validMaterials].filter(m => m in material_values.tools);
-
-            for (const material of candidateMats) {
+            for (const material of getEligibleMaterials(reg, item)) {
                 try {
                     getEnchantability(reg, material, item);
                 } catch (e: any) {

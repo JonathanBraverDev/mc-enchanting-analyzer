@@ -1,6 +1,6 @@
 import { CalculationRequest, CalculationStats, CheckpointSearchRequest, EngineInstrumentation, ModifiedLevelSearchRequest, RegistryState, SearchResult, SearchConfig, SearchState, SequentialCheckpointSearchRequest } from '#types/index.js';
 import { KeyUtils, ProbUtils } from '#utils/index.js';
-import { getItemId, getMaterialId, isItemAvailable, getEligibleListNumeric as getRegistryEligibleListNumeric } from '#core/registry.js';
+import { getItemId, getMaterialId, isItemAvailable, isMaterialEligible, getEligibleListNumeric as getRegistryEligibleListNumeric } from '#core/registry.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import { MINECRAFT_RULES } from '#constants/minecraft.js';
 import { getSearchLimit } from '#engine/utils.js';
@@ -269,8 +269,8 @@ export class EnchantEngine {
         if (!isItemAvailable(this.registry, item)) {
             throw new Error(`Unknown or unavailable item: "${item}" in version ${this.registry.version}.`);
         }
-        if (getMaterialId(this.registry, material) === ENGINE_LIMITS.UNKNOWN_MATERIAL_ID) {
-            throw new Error(`Unknown material: "${material}".`);
+        if (!isMaterialEligible(this.registry, item, material)) {
+            throw new Error(`Material "${material}" is not available for item "${item}" in version ${this.registry.version}.`);
         }
 
         // Config validation

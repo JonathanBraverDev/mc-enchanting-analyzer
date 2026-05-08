@@ -68,13 +68,10 @@ export class RegistryFactory {
         // 3. Initialize mapping lookups
         this.initializeIdMaps(state, data);
 
-        // 4. Apply active item and material rules
+        // 4. Project active item, material, and group rules for this version
         this.applyRegistryRules(state, data);
 
-        // 5. Filter based on version ranges
-        this.filterMergedPools(state);
-
-        // 6. Initialize active item pool lookup
+        // 5. Initialize active item pool lookup
         this.initializeItemPoolByVersion(state);
 
         return state;
@@ -140,7 +137,7 @@ export class RegistryFactory {
         const activeNames = new Set(
             allEnchNames.filter(name => {
                 const entry = state.resolvedRegistry[name];
-                return entry !== undefined && VersionUtils.isInRange(state.version, entry.valid_from, entry.valid_to);
+                return entry !== undefined && this.isEnchantmentActive(state, entry);
             })
         );
 
@@ -161,6 +158,10 @@ export class RegistryFactory {
     private static isTimelineEntryActive(version: string, validFrom: string, validUntil?: string): boolean {
         if (VersionUtils.compare(version, validFrom) < 0) return false;
         return validUntil === undefined || VersionUtils.compare(version, validUntil) < 0;
+    }
+
+    private static isEnchantmentActive(state: RegistryState, enchantment: Enchantment): boolean {
+        return VersionUtils.isInRange(state.version, enchantment.valid_from, enchantment.valid_to);
     }
 
     private static initializeEnchantmentPairs(state: RegistryState, data: EnchantmentData, allEnchNames: string[]): void {
@@ -197,50 +198,53 @@ export class RegistryFactory {
     }
 
     private static applyRegistryRules(state: RegistryState, data: EnchantmentData): void {
-        for (const rule of data.enchantable_item_rules) {
-            if (!this.isTimelineEntryActive(state.version, rule.valid_from, rule.valid_until)) continue;
-
-            if (rule.groups === undefined) {
-                state.itemPool[rule.item] = this.getActiveRegistryEnchantments(state);
-            } else {
-                const resolved = rule.groups.flatMap(item => this.resolveGroupOrEnchant(state, data, item));
-                state.itemPool[rule.item] = [...new Set(resolved)];
-            }
-
-            state.itemMaterials[rule.item] = this.resolveMaterialRefs(data, rule.materials);
-        }
+        const activeEnchantments = this.getActiveRegistryEnchantments(state);
+        const activeEnchantmentSet = new Set(activeEnchantments);
+        const activeGroupMembers = this.getActiveGroupMembers(state, data);
+        const groupNames = new Set(data.enchantment_group_rules.map(rule => rule.group));
 
         for (const rule of data.material_rules) {
             if (this.isTimelineEntryActive(state.version, rule.valid_from, rule.valid_until)) {
                 state.mergedMaterials.add(rule.material);
             }
         }
-    }
 
-    private static filterMergedPools(state: RegistryState): void {
-        for (const item of Object.keys(state.itemPool)) {
-            const pool = state.itemPool[item];
-            if (!pool) continue;
-            state.itemPool[item] = pool.filter(name => {
-                const props = state.resolvedRegistry[name];
-                if (!props) return false;
-                return VersionUtils.isInRange(state.version, props.valid_from, props.valid_to);
-            });
+        for (const rule of data.enchantable_item_rules) {
+            if (!this.isTimelineEntryActive(state.version, rule.valid_from, rule.valid_until)) continue;
+
+            if (rule.groups === undefined) {
+                state.itemPool[rule.item] = activeEnchantments;
+            } else {
+                state.itemPool[rule.item] = this.resolveItemPoolEntries(
+                    data,
+                    rule.item,
+                    rule.groups,
+                    activeGroupMembers,
+                    groupNames,
+                    activeEnchantmentSet
+                );
+            }
+
+            state.itemMaterials[rule.item] = this.resolveMaterialRefs(data, rule.materials)
+                .filter(material => state.mergedMaterials.has(material));
         }
     }
 
-    private static resolveGroupOrEnchant(state: RegistryState, data: EnchantmentData, entry: string): string[] {
-        const groupMembers = this.getActiveGroupMembers(state, data, entry);
-        return groupMembers.length > 0 ? groupMembers : [entry];
-    }
-
-    private static getActiveGroupMembers(state: RegistryState, data: EnchantmentData, group: string): string[] {
-        const members: string[] = [];
-        const seen = new Set<string>();
-
+    private static getActiveGroupMembers(state: RegistryState, data: EnchantmentData): Map<string, string[]> {
+        const groups = new Map<string, string[]>();
+        const seenByGroup = new Map<string, Set<string>>();
         for (const rule of data.enchantment_group_rules) {
-            if (rule.group !== group) continue;
             if (!this.isTimelineEntryActive(state.version, rule.valid_from, rule.valid_until)) continue;
+            let members = groups.get(rule.group);
+            if (!members) {
+                members = [];
+                groups.set(rule.group, members);
+            }
+            let seen = seenByGroup.get(rule.group);
+            if (!seen) {
+                seen = new Set<string>();
+                seenByGroup.set(rule.group, seen);
+            }
             for (const enchantment of rule.enchantments) {
                 if (seen.has(enchantment)) continue;
                 seen.add(enchantment);
@@ -248,13 +252,57 @@ export class RegistryFactory {
             }
         }
 
-        return members;
+        return groups;
+    }
+
+    private static resolveItemPoolEntries(
+        data: EnchantmentData,
+        item: string,
+        entries: string[],
+        activeGroupMembers: Map<string, string[]>,
+        groupNames: Set<string>,
+        activeEnchantments: Set<string>
+    ): string[] {
+        const resolved: string[] = [];
+        const seen = new Set<string>();
+
+        for (const entry of entries) {
+            const groupMembers = activeGroupMembers.get(entry);
+            if (groupMembers) {
+                this.addActivePoolEntries(resolved, seen, groupMembers, activeEnchantments);
+                continue;
+            }
+
+            if (groupNames.has(entry)) continue;
+
+            if (Object.hasOwn(data.global_enchantments, entry)) {
+                this.addActivePoolEntries(resolved, seen, [entry], activeEnchantments);
+                continue;
+            }
+
+            throw new Error(`Unknown enchantment group or enchantment "${entry}" in item rule "${item}".`);
+        }
+
+        return resolved;
+    }
+
+    private static addActivePoolEntries(
+        resolved: string[],
+        seen: Set<string>,
+        entries: string[],
+        activeEnchantments: Set<string>
+    ): void {
+        for (const enchantment of entries) {
+            if (!activeEnchantments.has(enchantment) || seen.has(enchantment)) continue;
+            seen.add(enchantment);
+            resolved.push(enchantment);
+        }
     }
 
     private static getActiveRegistryEnchantments(state: RegistryState): string[] {
         return Object.keys(state.resolvedRegistry).filter(name => {
             const props = state.resolvedRegistry[name];
-            return props !== undefined && VersionUtils.isInRange(state.version, props.valid_from, props.valid_to);
+            return props !== undefined && this.isEnchantmentActive(state, props);
         });
     }
 

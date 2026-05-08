@@ -11,8 +11,14 @@ import { PACKING_CONSTANTS, ENGINE_LIMITS } from '#constants/engine.js';
  */
 export function getEligibleMaterials(state: RegistryState, item: string): string[] {
     const materials = state.itemMaterials[item] ?? [];
-    const eligible = materials.filter(material => state.mergedMaterials.has(material));
-    return sortMaterials(state.data, eligible);
+    return sortMaterials(state.data, [...materials]);
+}
+
+/**
+ * Checks whether a material is valid for an item in the resolved registry version.
+ */
+export function isMaterialEligible(state: RegistryState, item: string, material: string): boolean {
+    return (state.itemMaterials[item] ?? []).includes(material);
 }
 
 /**
@@ -219,6 +225,9 @@ export function isEnchantmentAchievable(
 }
 
 export function getEnchantability(state: RegistryState, material: string, item: string): number {
+    if (!isMaterialEligible(state, item, material)) {
+        throw new Error(`Material "${material}" is not available for item "${item}" in version ${state.version}.`);
+    }
     if (item === 'book') return 1;
     const { armor, tools } = state.data.material_values;
     const isArmor = state.data.constants.ARMOR_CATS.includes(item);

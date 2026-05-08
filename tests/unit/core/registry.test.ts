@@ -8,11 +8,13 @@ import {
     getEligibleMaterials,
     getCategoryPool,
     getItemPool,
+    getEnchantability,
     getEnchantId,
     hasConflict,
     getCategoryId,
     getItemId,
-    getMaterialId
+    getMaterialId,
+    isMaterialEligible
 } from '#core/registry.js';
 
 describe('Registry & Data Rules Test Suite', () => {
@@ -144,6 +146,49 @@ describe('Registry & Data Rules Test Suite', () => {
 
             const v121 = EngineFactory.create(DATA, '1.21').registry;
             assert.deepStrictEqual(getEligibleMaterials(v121, 'mace'), ['mace']);
+        });
+
+        it('should reject known materials that are not active for the item and version', async () => {
+            const cases = [
+                { version: '1.15', item: 'sword', material: 'netherite' },
+                { version: '1.21', item: 'sword', material: 'copper' },
+                { version: '1.0', item: 'helmet', material: 'turtle_shell' },
+                { version: '1.0', item: 'sword', material: 'book' }
+            ];
+
+            for (const { version, item, material } of cases) {
+                const engine = EngineFactory.create(DATA, version);
+                const registry = engine.registry;
+                assert.strictEqual(isMaterialEligible(registry, item, material), false, `${version}: ${item}/${material} should be ineligible`);
+                assert.throws(
+                    () => getEnchantability(registry, material, item),
+                    /not available/,
+                    `${version}: helper should reject ${item}/${material}`
+                );
+                await assert.rejects(
+                    () => engine.calculate({ item, material, xp: 1, threshold: 0.5, resultsLimit: 10 }),
+                    /not available/,
+                    `${version}: engine should reject ${item}/${material}`
+                );
+            }
+        });
+
+        it('should accept materials once their item and version rules allow them', async () => {
+            const cases = [
+                { version: '1.16', item: 'sword', material: 'netherite' },
+                { version: '1.21.9', item: 'sword', material: 'copper' },
+                { version: '1.13', item: 'helmet', material: 'turtle_shell' },
+                { version: '1.4.6', item: 'book', material: 'book' }
+            ];
+
+            for (const { version, item, material } of cases) {
+                const engine = EngineFactory.create(DATA, version);
+                const registry = engine.registry;
+                assert.strictEqual(isMaterialEligible(registry, item, material), true, `${version}: ${item}/${material} should be eligible`);
+                assert.doesNotThrow(() => getEnchantability(registry, material, item));
+                const stats = await engine.calculate({ item, material, xp: 1, threshold: 0.5, resultsLimit: 10 });
+                assert.ok(stats.accuracy >= 0, `${version}: ${item}/${material} should calculate`);
+            }
         });
 
         it('should correctly handle Protection conflicts (1.14 vs 1.14.3)', () => {
