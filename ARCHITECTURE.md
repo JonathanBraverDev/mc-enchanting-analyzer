@@ -72,7 +72,7 @@ Compatibility aliases are marked with `@deprecated V6_REMOVE` in source so the n
 
 - Request fields: `cat`, `mat`.
 - Registry helpers: `getCategoryId`, `isCategoryAvailable`, `getCategoryPool`.
-- Registry state aliases: `mergedItems`, `categoryMaterials`, `catIdMap`, `matIdMap`, `versionPool`.
+- Registry state aliases: `mergedItems`, `categoryMaterials`, `catIdMap`, `matIdMap`, `versionPool`. Despite the historical name, `versionPool` is just the active item-pool map for one resolved registry version.
 - Type aliases and constants: `MergedItems`, `CategoryMaterials`, `UNKNOWN_CATEGORY_ID`.
 - Enchantment timeline field: `valid_to` for legacy custom data; use exclusive `valid_until`.
 - CLI aliases in profiling/reporting scripts: `--cat`, `--mat`.

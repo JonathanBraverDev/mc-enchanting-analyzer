@@ -162,7 +162,7 @@ export function getEligiblePool(
     const cached = (cache && version) ? cache.getPool(version, cacheKey) : undefined;
     if (cached) return cached;
 
-    const pool = state.itemPoolByVersion.get(item);
+    const pool = state.itemPool[item];
     if (pool === undefined) throw new Error(`Unknown item "${item}"`);
     const out: PackedEnchant[] = [];
 

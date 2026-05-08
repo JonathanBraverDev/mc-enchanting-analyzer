@@ -19,7 +19,7 @@ export class RegistryFactory {
         const itemMaterials = {};
         const itemIdMap = new Map<string, number>();
         const materialIdMap = new Map<string, number>();
-        const itemPoolByVersion = new Map<string, string[]>();
+        const versionPool = new Map<string, string[]>();
         const state: RegistryState = {
             data,
             version: "",
@@ -45,9 +45,8 @@ export class RegistryFactory {
             conflictBitsets: new BigUint64Array(0),
             weightMap: new Uint32Array(0),
             sortedRanks: [],
-            itemPoolByVersion,
-            // V6_REMOVE: Deprecated alias for itemPoolByVersion.
-            versionPool: itemPoolByVersion,
+            // V6_REMOVE: Historical active item-pool map; use itemPool.
+            versionPool,
             enchantToIndex: new Map(),
             indexToEnchant: [0]
         };
@@ -72,9 +71,6 @@ export class RegistryFactory {
 
         // 4. Project active item, material, and group rules for this version
         this.applyRegistryRules(state, data, registryBoundaries);
-
-        // 5. Initialize active item pool lookup
-        this.initializeItemPoolByVersion(state);
 
         return state;
     }
@@ -215,12 +211,14 @@ export class RegistryFactory {
         const activeEnchantmentSet = new Set(activeEnchantments);
         const activeGroupMembers = this.getActiveGroupMembers(state, data, registryBoundaries);
         const groupNames = new Set(data.enchantment_group_rules.map(rule => rule.group));
+        const activeMaterials = new Set<string>();
 
         for (const rule of data.material_rules) {
             if (this.isTimelineEntryActive(state.version, rule, registryBoundaries, `material rule "${rule.material}"`)) {
-                state.mergedMaterials.add(rule.material);
+                activeMaterials.add(rule.material);
             }
         }
+        state.mergedMaterials = activeMaterials;
 
         for (const rule of data.enchantable_item_rules) {
             if (!this.isTimelineEntryActive(state.version, rule, registryBoundaries, `enchantable item rule "${rule.item}"`)) continue;
@@ -238,8 +236,10 @@ export class RegistryFactory {
                 );
             }
 
-            state.itemMaterials[rule.item] = this.resolveMaterialRefs(data, rule.materials)
-                .filter(material => state.mergedMaterials.has(material));
+            const materials = this.resolveMaterialRefs(data, rule.materials)
+                .filter(material => activeMaterials.has(material));
+            state.itemMaterials[rule.item] = materials;
+            state.versionPool.set(rule.item, state.itemPool[rule.item] ?? []);
         }
     }
 
@@ -321,12 +321,6 @@ export class RegistryFactory {
             const props = state.resolvedRegistry[name];
             return props !== undefined && this.isTimelineEntryActive(state.version, props, registryBoundaries, `enchantment "${name}"`);
         });
-    }
-
-    private static initializeItemPoolByVersion(state: RegistryState): void {
-        for (const [item, pool] of Object.entries(state.itemPool)) {
-            state.itemPoolByVersion.set(item, pool);
-        }
     }
 
     private static resolveMaterialRefs(data: EnchantmentData, refs: string[]): string[] {
