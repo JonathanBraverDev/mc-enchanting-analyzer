@@ -58,8 +58,8 @@ export class EnchantEngine {
     /**
      * Returns a list of eligible enchantments filtered by conflict bitset.
      */
-    public getEligibleListNumeric(cat: string, level: number, bitset: bigint = 0n): number[] {
-        return getRegistryEligibleListNumeric(this._registry, cat, level, bitset, this.cache, this._registry.version);
+    public getEligibleListNumeric(item: string, level: number, bitset: bigint = 0n): number[] {
+        return getRegistryEligibleListNumeric(this._registry, item, level, bitset, this.cache, this._registry.version);
     }
 
     /**
@@ -90,9 +90,9 @@ export class EnchantEngine {
 
         return this.searchService.searchModifiedLevel({
             registry: this.registry,
-            cat: item,
+            item,
             modLevel,
-            mat: material,
+            material,
             useCache: true,
             existingState: cached,
             threshold,
@@ -113,8 +113,8 @@ export class EnchantEngine {
 
         return this.searchService.searchSequentialCheckpoints({
             ...request,
-            cat: item,
-            mat: material,
+            item,
+            material,
             registry: this.registry,
             targetClueId
         });
@@ -130,8 +130,8 @@ export class EnchantEngine {
 
         return this.searchService.searchToCheckpoint({
             ...request,
-            cat: item,
-            mat: material,
+            item,
+            material,
             registry: this.registry,
             targetClueId
         });
@@ -185,9 +185,9 @@ export class EnchantEngine {
 
         const finalResult = await this.searchService.searchToCheckpoint({
             registry: this.registry,
-            cat: item,
+            item,
             xp,
-            mat: material,
+            material,
             targetClueId: packedClue ?? undefined,
             ...searchConfig
         });
@@ -232,24 +232,24 @@ export class EnchantEngine {
         return finalStats;
     }
 
-    private getPackedClue(cat: string, clue: string): number {
-        return ClueValidator.validate(this.registry, cat, clue);
+    private getPackedClue(item: string, clue: string): number {
+        return ClueValidator.validate(this.registry, item, clue);
     }
 
-    private getPackedKey(cat: string, modLevel: number, mat: string): number {
-        const catId = getItemId(this.registry, cat);
-        const matId = getMaterialId(this.registry, mat);
+    private getPackedKey(item: string, modLevel: number, material: string): number {
+        const itemId = getItemId(this.registry, item);
+        const materialId = getMaterialId(this.registry, material);
 
-        return KeyUtils.getPackedKey(catId, matId, modLevel);
+        return KeyUtils.getPackedKey(itemId, materialId, modLevel);
     }
 
-    private getStatsKey(cat: string, xp: number, mat: string, packedClue: number | null = null): number {
-        const catId = getItemId(this.registry, cat);
-        const matId = getMaterialId(this.registry, mat);
+    private getStatsKey(item: string, xp: number, material: string, packedClue: number | null = null): number {
+        const itemId = getItemId(this.registry, item);
+        const materialId = getMaterialId(this.registry, material);
 
-        let key = KeyUtils.getStatsKey(catId, matId, xp);
+        let key = KeyUtils.getStatsKey(itemId, materialId, xp);
         if (packedClue !== null) {
-            // Encode the clue into the high bits above the cat/material/level fields.
+            // Encode the clue into the high bits above the item/material/level fields.
             key |= (packedClue << 18);
         }
         return key;

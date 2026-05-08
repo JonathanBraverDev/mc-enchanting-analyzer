@@ -30,8 +30,8 @@ async function searchCurrentBookPool(identityModeOverride?: SearchIdentityMode):
 
     return service.searchModifiedLevel({
         registry,
-        cat: 'book',
-        mat: 'book',
+        item: 'book',
+        material: 'book',
         modLevel: 30,
         threshold: ProbUtils.toBigInt(0.001),
         limit: ENGINE_LIMITS.MAX_ITERATIONS_UNBOUNDED,

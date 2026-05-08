@@ -17,6 +17,7 @@ export class RegistryFactory {
         const itemPool = {};
         const itemMaterials = {};
         const itemIdMap = new Map<string, number>();
+        const materialIdMap = new Map<string, number>();
         const itemPoolByVersion = new Map<string, string[]>();
         const state: RegistryState = {
             data,
@@ -37,7 +38,9 @@ export class RegistryFactory {
             itemIdMap,
             // V6_REMOVE: Deprecated alias for itemIdMap.
             catIdMap: itemIdMap,
-            matIdMap: new Map(),
+            materialIdMap,
+            // V6_REMOVE: Deprecated alias for materialIdMap.
+            matIdMap: materialIdMap,
             conflictBitsets: new BigUint64Array(0),
             weightMap: new Uint32Array(0),
             sortedRanks: [],
@@ -184,12 +187,12 @@ export class RegistryFactory {
             if (!map.has(key)) map.set(key, map.size);
         };
 
-        const matValues = data.material_values;
-        [...Object.keys(matValues.tools), ...Object.keys(matValues.armor)].forEach(mat => addId(state.matIdMap, mat));
+        const materialValues = data.material_values;
+        [...Object.keys(materialValues.tools), ...Object.keys(materialValues.armor)].forEach(material => addId(state.materialIdMap, material));
 
         data.enchantable_item_rules.forEach(rule => {
             addId(state.itemIdMap, rule.item);
-            this.resolveMaterialRefs(data, rule.materials).forEach(material => addId(state.matIdMap, material));
+            this.resolveMaterialRefs(data, rule.materials).forEach(material => addId(state.materialIdMap, material));
         });
     }
 
