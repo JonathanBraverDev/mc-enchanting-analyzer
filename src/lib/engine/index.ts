@@ -1,4 +1,4 @@
-import { CalculationRequest, CalculationStats, CheckpointSearchRequest, EngineInstrumentation, ModifiedLevelSearchRequest, RegistryState, SearchResult, SearchConfig, SearchState, SequentialCheckpointSearchRequest } from '#types/index.js';
+import { BuiltRegistryState, CalculationRequest, CalculationStats, CheckpointSearchRequest, EngineInstrumentation, ModifiedLevelSearchRequest, SearchResult, SearchConfig, SearchState, SequentialCheckpointSearchRequest } from '#types/index.js';
 import { KeyUtils, ProbUtils } from '#utils/index.js';
 import { getItemId, getMaterialId, isItemAvailable, isMaterialEligible, getEligibleListNumeric as getRegistryEligibleListNumeric } from '#core/registry.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
@@ -17,11 +17,11 @@ export { EngineFactory } from './factory.js';
  * Optimized for high-speed calculation via Dependency Injection.
  */
 export class EnchantEngine {
-    private readonly _registry: RegistryState;
-    get registry(): RegistryState { return this._registry; }
+    private readonly _registry: BuiltRegistryState;
+    get registry(): BuiltRegistryState { return this._registry; }
 
     constructor(
-        registry: RegistryState,
+        registry: BuiltRegistryState,
         private readonly cache: CacheManager,
         private readonly distributionService: ModifiedLevelDistributionService,
         private readonly searchService: SearchService

@@ -10,12 +10,15 @@ import {
 import { RegistryFactory } from '#core/factory.js';
 import { EngineFactory } from '#engine/factory.js';
 import { CacheManager } from '#engine/cache/CacheManager.js';
+import type { RegistryMutation } from '#types/index.js';
 
 describe('EngineFactory', () => {
     it('builds the bundled vanilla registry by version', () => {
         const registry = RegistryFactory.build('1.21.11');
 
         assert.strictEqual(registry.version, '1.21.11');
+        assert.strictEqual(registry.source, 'vanilla');
+        assert.strictEqual('mutations' in registry, false);
         assert.ok(isItemAvailable(registry, 'book'));
     });
 
@@ -26,8 +29,39 @@ describe('EngineFactory', () => {
         });
         const vanilla = RegistryFactory.build('1.21.11');
 
+        assert.strictEqual(custom.source, 'mutated');
+        assert.deepStrictEqual(custom.mutations, [
+            {
+                type: 'removeEnchantableItemRule',
+                selector: { item: 'mace', valid_from: '1.21' }
+            }
+        ]);
         assert.strictEqual(isItemAvailable(custom, 'mace'), false);
         assert.strictEqual(isItemAvailable(vanilla, 'mace'), true);
+    });
+
+    it('keeps mutated registry provenance separate from caller-owned mutation objects', () => {
+        const originalSelector = { item: 'mace', valid_from: '1.21' };
+        const mutations: RegistryMutation[] = [
+            {
+                type: 'removeEnchantableItemRule',
+                selector: originalSelector
+            }
+        ];
+
+        const custom = RegistryFactory.buildWithMutations('1.21.11', mutations);
+        originalSelector.item = 'book';
+        mutations[0] = {
+            type: 'removeMaterialRule',
+            selector: { material: 'diamond', valid_from: '1.0' }
+        };
+
+        assert.deepStrictEqual(custom.mutations, [
+            {
+                type: 'removeEnchantableItemRule',
+                selector: { item: 'mace', valid_from: '1.21' }
+            }
+        ]);
     });
 
     it('applies mutation arrays to rule tables', () => {

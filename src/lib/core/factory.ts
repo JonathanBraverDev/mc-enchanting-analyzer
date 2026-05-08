@@ -7,10 +7,12 @@ import {
     EnchantmentData,
     EnchantmentGroupRule,
     EnchantmentGroupRuleSelector,
+    MutatedRegistryState,
     MaterialRule,
     MaterialRuleSelector,
     RegistryMutation,
     RegistryState,
+    VanillaRegistryState,
     VersionManifest
 } from '#types/index.js';
 import { isAvailabilityActive } from '#core/availability.js';
@@ -22,22 +24,30 @@ import { DATA } from '#data/index.js';
  * Factory for building a fully initialized Registry state.
  */
 export class RegistryFactory {
-    public static build(version: string): RegistryState {
-        return this.createState(DATA, version);
+    public static build(version: string): VanillaRegistryState {
+        return {
+            ...this.createState(DATA, version),
+            source: 'vanilla'
+        };
     }
 
     public static buildWithMutations(
         version: string,
         mutations: RegistryMutation | RegistryMutation[]
-    ): RegistryState {
+    ): MutatedRegistryState {
         const data = this.cloneData(DATA);
         const list = Array.isArray(mutations) ? mutations : [mutations];
+        const appliedMutations = list.map(mutation => this.cloneRule(mutation));
 
-        for (const mutation of list) {
+        for (const mutation of appliedMutations) {
             this.applyRegistryMutation(data, mutation);
         }
 
-        return this.createState(data, version);
+        return {
+            ...this.createState(data, version),
+            source: 'mutated',
+            mutations: Object.freeze(appliedMutations)
+        };
     }
 
     private static cloneData(data: EnchantmentData): EnchantmentData {

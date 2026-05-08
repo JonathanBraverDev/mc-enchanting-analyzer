@@ -1,4 +1,4 @@
-import { RegistryState } from '#types/index.js';
+import { BuiltRegistryState } from '#types/index.js';
 import { EnchantEngine } from '#engine/index.js';
 import { CacheManager } from '#engine/cache/CacheManager.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
@@ -40,7 +40,7 @@ export class EngineFactory {
     /**
      * Creates a fully-wired engine around an already resolved registry.
      */
-    public static create(registry: RegistryState, overrides: Partial<EngineRuntimeOverrides> = {}): EnchantEngine {
+    public static create(registry: BuiltRegistryState, overrides: Partial<EngineRuntimeOverrides> = {}): EnchantEngine {
         const cache = overrides.cache || new CacheManager({
             comboOtherSize: CACHE_CONFIG.COMBO_OTHER_SIZE,
             comboBookSize: CACHE_CONFIG.COMBO_BOOK_SIZE,
