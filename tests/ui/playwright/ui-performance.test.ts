@@ -120,6 +120,11 @@ test.describe('UI Performance & Stability', () => {
             await analyzer.addTarget('Efficiency I+');
         });
         await analyzer.waitForChartIdle();
+        await page.waitForFunction(() => {
+            const sweep = (window as any).App?.currentSweep ?? [];
+            const cell = sweep[24];
+            return !!cell && (!!cell.target || !!cell.clueAdvisor);
+        }, undefined, { timeout: 30000 });
 
         await page.evaluate(() => {
             const refinement = (window as any).App?.refinement;

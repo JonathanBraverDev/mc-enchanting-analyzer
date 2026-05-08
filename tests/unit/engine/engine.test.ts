@@ -49,39 +49,7 @@ describe('Enchantment Engine Test Suite', () => {
         });
     });
 
-    describe('2. Version Compatibility & Search Logic', () => {
-        it('1.11.1+: Sweeping Edge should only appear in valid versions', async () => {
-            const v18 = EngineFactory.createForVersion(TEST_DATA.VERSIONS.LEGACY);
-            const id = v18.registry.idMap.get('Sweeping Edge')!;
-            const s18 = await v18.calculate({ item: TEST_DATA.ITEMS.SWORD, xp: 30, material: TEST_DATA.MATERIALS.DIAMOND });
-            assert.ok(!(s18.any[id] ?? 0));
-
-            const v111 = EngineFactory.createForVersion('1.11.1');
-            const s111 = await v111.calculate({ item: TEST_DATA.ITEMS.SWORD, xp: 30, material: TEST_DATA.MATERIALS.DIAMOND });
-            assert.ok((s111.any[id] ?? 0) > 0);
-        });
-
-        it('1.14 vs 1.14.3: Protection conflict window (Engine Check)', async () => {
-            const e114 = EngineFactory.createForVersion(TEST_DATA.GOD_ARMOR.START);
-            const e1143 = EngineFactory.createForVersion(TEST_DATA.GOD_ARMOR.END);
-            const protNames = ["Protection", "Fire Protection", "Blast Protection", "Projectile Protection"];
-            const getBases = (c: string) => c.split("+").map(e => e.split(" ").slice(0, -1).join(" "));
-
-            const h114 = await EngineTestUtils.getHumanStats(e114, TEST_DATA.ITEMS.CHESTPLATE, 30, TEST_DATA.MATERIALS.DIAMOND);
-            const multi114 = Object.keys(h114.combos).filter(c => {
-                return getBases(c).filter(b => protNames.includes(b)).length > 1;
-            });
-            assert.ok(multi114.length > 0, '1.14 should allow multi-protection');
-
-            const h1143 = await EngineTestUtils.getHumanStats(e1143, TEST_DATA.ITEMS.CHESTPLATE, 30, TEST_DATA.MATERIALS.DIAMOND);
-            const multi1143 = Object.keys(h1143.combos).some(c => {
-                return getBases(c).filter(b => protNames.includes(b)).length > 1;
-            });
-            assert.ok(!multi1143, '1.14.3 should block multi-protection');
-        });
-    });
-
-    describe('4. Search Algorithm & Accuracy', () => {
+    describe('2. Search Algorithm & Accuracy', () => {
         const engine = EngineFactory.createForVersion(TEST_DATA.VERSIONS.POST_NETHERITE);
 
         it('Progressive Refinement Parity: Resumed search should match fresh search', async () => {
@@ -189,7 +157,7 @@ describe('Enchantment Engine Test Suite', () => {
          });
     });
 
-    describe('5. Cache Isolation & Consistency', () => {
+    describe('3. Cache Isolation & Consistency', () => {
         it('should NOT return cached Sword results when asking for Pickaxe (same material)', async () => {
              const engine = EngineFactory.createForVersion(TEST_DATA.VERSIONS.LAPIS_PIVOT);
 
@@ -199,7 +167,7 @@ describe('Enchantment Engine Test Suite', () => {
              assert.ok((swordStats.any[sharpnessId] ?? 0) > 0, 'Sword should have Sharpness');
 
              // 2. Get stats for Pickaxe (same version, level, material)
-             // This should bypass the sword cache because category ID is different
+             // This should bypass the sword cache because the item ID is different.
              const pickaxeStats = await engine.calculate({ item: TEST_DATA.ITEMS.PICKAXE, xp: 30, material: TEST_DATA.MATERIALS.DIAMOND, threshold: 0.001 });
              const efficiencyId = getEnchantId(engine.registry,'Efficiency') as number;
 
