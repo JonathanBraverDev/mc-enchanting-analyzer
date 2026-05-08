@@ -101,7 +101,7 @@ export type MaterialRuleSelector = Pick<MaterialRule, 'material' | 'valid_from' 
 export type EnchantableItemRuleSelector = Pick<EnchantableItemRule, 'item' | 'valid_from' | 'valid_until'>;
 
 /**
- * Small vanilla-data mutations for custom registry experiments.
+ * Small vanilla-data mutations for vanilla registry variants.
  * These operate on version-ranged rule tables only and are applied to a cloned
  * vanilla data pack before the resolved registry is built.
  */

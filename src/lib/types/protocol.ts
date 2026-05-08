@@ -37,7 +37,8 @@ export interface InitRequest {
   type: 'init';
   requestId: RequestId;
   version: string;
-  data?: any; // Standalone builds pass the shared DATA registry here
+  /** Standalone builds pass shared registry bootstrap data here to avoid bundling it into each worker. */
+  bootstrapData?: any;
 }
 
 export interface TopRunStartRequest {

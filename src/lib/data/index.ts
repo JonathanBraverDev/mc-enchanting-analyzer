@@ -3,7 +3,7 @@ import { RAW_DATA } from '#data/registry.js';
 
 /**
  * Smart Data Loader (Lazy Resolution).
- * In standalone builds, we prefer the global ENCHANTING_DATA to avoid 3x duplication.
+ * In standalone builds, we prefer the global ENCHANTING_DATA bootstrap payload to avoid 3x duplication.
  * We use a Proxy to ensure that even if the UI initializes before the global data
  * is fully bound, we can still resolve it at the moment of first use.
  */

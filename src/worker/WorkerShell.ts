@@ -102,8 +102,8 @@ export class WorkerShell {
     }
 
     private initializeEngine(msg: WorkerRequest & { type: 'init' }): void {
-        if (msg.data) {
-            (globalThis as any).ENCHANTING_DATA = msg.data;
+        if (msg.bootstrapData) {
+            (globalThis as any).ENCHANTING_DATA = msg.bootstrapData;
         }
 
         this.engine = EngineFactory.createForVersion(msg.version);
