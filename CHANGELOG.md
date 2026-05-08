@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## v6.0.0 (2026-05-08)
+
+### Changed
+- **Registry-first engine API**: The library now uses `item` and `material` request fields consistently across engine calls, scripts, workers, and UI internals.
+- **Cleaner vanilla registry model**: Enchanting data is organized around versioned item, material, enchantment group, and conflict rules, making historical version behavior easier to audit and maintain.
+
+### Developer Experience
+- **Resolved registry construction**: Normal callers build vanilla registries by version, while advanced callers can create vanilla-plus-mutation registries for targeted experiments.
+- **Runtime registry state**: Engine instances now receive resolved registry state instead of carrying raw data packs through runtime objects.
+- **Explicit item/material validation**: Direct engine calls reject known materials that are not valid for the selected item and version.
+
+### Breaking
+- Removed deprecated `cat` / `mat` request aliases and category-named registry helpers. Use `item` / `material` and item-named helpers instead.
+- Removed full custom registry data-pack construction. Use `RegistryFactory.build(version)` for vanilla data or `RegistryFactory.buildWithMutations(version, mutations)` for vanilla-based variants.
+
 ## v5.4.3 (2026-05-07)
 
 ### Fixed
