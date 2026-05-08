@@ -24,7 +24,6 @@ import { hasConflict, getEnchantId, getEnchantability, getEligibleMaterials } fr
 import { versions } from '#data/versions.js';
 import { material_values } from '#data/materials.js';
 import { VersionUtils } from '#utils/index.js';
-import { normalizeAvailability } from '#core/availability.js';
 import { getRegistryVersionBoundaries } from '#core/version-resolution.js';
 import type { EnchantmentData } from '#types/index.js';
 
@@ -38,34 +37,6 @@ const registryMaterialSets: EnchantmentData["material_sets"] = material_sets;
 const enchantNames = Object.keys(registryEnchantments);
 const versionEntries = Object.entries(registryVersions);
 const supportedVersions = getRegistryVersionBoundaries(DATA);
-
-describe('Data integrity: availability normalization', () => {
-    const boundaries = ['1.0', '1.1', '1.2'];
-
-    it('uses valid_until as an exclusive boundary', () => {
-        const normalized = normalizeAvailability({ valid_from: '1.0', valid_until: '1.2' }, boundaries, 'test entry');
-        assert.deepStrictEqual(normalized, { valid_from: '1.0', valid_until: '1.2' });
-    });
-
-    it('converts deprecated valid_to to the next known boundary', () => {
-        const normalized = normalizeAvailability({ valid_from: '1.0', valid_to: '1.1' }, boundaries, 'test entry');
-        assert.deepStrictEqual(normalized, { valid_from: '1.0', valid_until: '1.2' });
-    });
-
-    it('rejects deprecated valid_to when no next boundary exists', () => {
-        assert.throws(
-            () => normalizeAvailability({ valid_from: '1.0', valid_to: '1.2' }, boundaries, 'test entry'),
-            /valid_to is deprecated and cannot be converted; use valid_until/
-        );
-    });
-
-    it('rejects entries that mix valid_to and valid_until', () => {
-        assert.throws(
-            () => normalizeAvailability({ valid_from: '1.0', valid_to: '1.1', valid_until: '1.2' }, boundaries, 'test entry'),
-            /cannot define both valid_to and valid_until/
-        );
-    });
-});
 
 function isTimelineEntryActive(version: string, validFrom: string, validUntil?: string): boolean {
     if (VersionUtils.compare(version, validFrom) < 0) return false;
@@ -101,17 +72,14 @@ describe('Data integrity: enchantment required fields', () => {
 
     it('all enchantment availability boundaries are selectable registry versions', () => {
         const versionKeys = new Set(supportedVersions);
-        const deprecatedValidTo: string[] = [];
         const missing = Object.entries(registryEnchantments).flatMap(([name, ench]) => {
             const bad: string[] = [];
             if (!versionKeys.has(ench.valid_from ?? '')) bad.push(`${name} valid_from: ${ench.valid_from}`);
             if (ench.valid_until && !versionKeys.has(ench.valid_until)) bad.push(`${name} valid_until: ${ench.valid_until}`);
-            if (ench.valid_to) deprecatedValidTo.push(name);
             return bad;
         });
 
         assert.deepStrictEqual(missing, [], `enchantment versions missing from versions manifest: ${missing.join(', ')}`);
-        assert.deepStrictEqual(deprecatedValidTo, [], `bundled enchantments using deprecated valid_to: ${deprecatedValidTo.join(', ')}`);
     });
 });
 

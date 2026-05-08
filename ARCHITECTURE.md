@@ -64,18 +64,7 @@ UI input
 | `getModifiedLevelDist(xp, enchantability, instrumentation?)` | Returns the BigInt distribution over modified levels |
 | `getEligibleListNumeric(item, level, bitset?)` | Returns packed eligible enchant/rank IDs for an item and level |
 
-The public calls use request objects so callers can pass optional search, instrumentation, timing, clue, and abort options without positional argument drift. Deprecated aliases remain for external engine callers; project-owned UI, workers, tests, and scripts use `{ item, material }`.
-
-### Deprecated Aliases
-
-Compatibility aliases are marked with `@deprecated V6_REMOVE` in source so the next major cleanup can find them with one grep. Planned removals are:
-
-- Request fields: `cat`, `mat`.
-- Registry helpers: `getCategoryId`, `isCategoryAvailable`, `getCategoryPool`.
-- Registry state aliases: `mergedItems`, `categoryMaterials`, `catIdMap`, `matIdMap`, `versionPool`. Despite the historical name, `versionPool` is just the active item-pool map for one resolved registry version.
-- Type aliases and constants: `MergedItems`, `CategoryMaterials`, `UNKNOWN_CATEGORY_ID`.
-- Enchantment timeline field: `valid_to` for legacy custom data; use exclusive `valid_until`.
-- CLI aliases in profiling/reporting scripts: `--cat`, `--mat`.
+The public calls use request objects so callers can pass optional search, instrumentation, timing, clue, and abort options without positional argument drift. V6 uses `item` and `material` consistently across engine calls, workers, UI code, tests, and scripts.
 
 ## Registry Rule Model
 
@@ -86,7 +75,7 @@ Registry data is assembled from version-ranged rule tables:
 - `material_rules` define when concrete material keys exist.
 - `conflict_rules` define version-ranged enchantment conflicts and are compiled into symmetric conflict bitsets.
 
-Rule tables use inclusive `valid_from` and exclusive `valid_until`. Legacy enchantment custom data may still use inclusive `valid_to`, but only when it can be converted to the next known boundary.
+Rule tables use inclusive `valid_from` and exclusive `valid_until`.
 
 Missing `groups` on an enchantable item rule means “all active table enchantments” and is reserved for books. Material aliases such as `tool` and `armor` expand to concrete material keys before version filtering, so item/material compatibility is declared once instead of split across parallel pool and binding tables.
 

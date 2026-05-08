@@ -55,13 +55,6 @@ export function getItemId(state: RegistryState, item: string): number {
 }
 
 /**
- * @deprecated V6_REMOVE: Use getItemId.
- */
-export function getCategoryId(state: RegistryState, item: string): number {
-    return getItemId(state, item);
-}
-
-/**
  * Gets the internal ID for a material.
  * @param state The resolved registry state.
  * @param material The material name (e.g., "diamond", "wood").
@@ -104,13 +97,6 @@ export function isItemAvailable(state: RegistryState, item: string): boolean {
 }
 
 /**
- * @deprecated V6_REMOVE: Use isItemAvailable.
- */
-export function isCategoryAvailable(state: RegistryState, item: string): boolean {
-    return isItemAvailable(state, item);
-}
-
-/**
  * Gets the list of enchantment names available for an item.
  * @param state The resolved registry state.
  * @param item The item name.
@@ -118,13 +104,6 @@ export function isCategoryAvailable(state: RegistryState, item: string): boolean
  */
 export function getItemPool(state: RegistryState, item: string): string[] {
     return state.itemPool[item] || [];
-}
-
-/**
- * @deprecated V6_REMOVE: Use getItemPool.
- */
-export function getCategoryPool(state: RegistryState, item: string): string[] {
-    return getItemPool(state, item);
 }
 
 /**

@@ -1,11 +1,9 @@
 import type { EnchantmentData } from '#types/index.js';
 import { VersionUtils } from '#utils/index.js';
-import { assertRegistryAvailability, getKnownRegistryBoundaries } from '#core/availability.js';
+import { getKnownRegistryBoundaries } from '#core/availability.js';
 
 export function getRegistryVersionBoundaries(data: EnchantmentData): string[] {
-    const boundaries = getKnownRegistryBoundaries(data);
-    assertRegistryAvailability(data, boundaries);
-    return boundaries;
+    return getKnownRegistryBoundaries(data);
 }
 
 export function resolveRegistryVersion(data: EnchantmentData, version: string): string {

@@ -167,8 +167,8 @@ async function runOne(engine: EnchantEngine, item: string, material: string, xp:
 
 async function main() {
     const version = findArg('--version') ?? DEFAULT_VERSION;
-    const filterItem = findArg('--item') ?? findArg('--cat'); // V6_REMOVE: --cat is a deprecated CLI alias.
-    const filterMaterial = findArg('--material') ?? findArg('--mat'); // V6_REMOVE: --mat is a deprecated CLI alias.
+    const filterItem = findArg('--item');
+    const filterMaterial = findArg('--material');
     const xpArg = findArg('--xp');
     const xpLevels = xpArg ? [parseInt(xpArg)] : DEFAULT_XP_LEVELS;
 

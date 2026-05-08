@@ -18,7 +18,7 @@ const findArg = (key: string) => {
     return next && !next.startsWith('--') ? next : null;
 };
 
-const filterItem = findArg('--item') ?? findArg('--cat'); // V6_REMOVE: --cat is a deprecated CLI alias.
+const filterItem = findArg('--item');
 const xpArg = findArg('--xp');
 const filterXp = xpArg ? parseInt(xpArg) : null;
 

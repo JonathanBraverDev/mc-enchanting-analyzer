@@ -1,7 +1,6 @@
 import { EnchantmentData, VersionManifest, Enchantment, RegistryState } from '#types/index.js';
-import { isAvailabilityActive, normalizeAvailability } from '#core/availability.js';
-import type { RegistryAvailability } from '#core/availability.js';
-import { getRegistryVersionBoundaries, resolveManifestVersion, resolveRegistryVersion } from '#core/version-resolution.js';
+import { isAvailabilityActive } from '#core/availability.js';
+import { resolveManifestVersion, resolveRegistryVersion } from '#core/version-resolution.js';
 
 
 /**
@@ -20,41 +19,29 @@ export class RegistryFactory {
         const itemEnchantability = {};
         const itemIdMap = new Map<string, number>();
         const materialIdMap = new Map<string, number>();
-        const versionPool = new Map<string, string[]>();
         const state: RegistryState = {
             data,
             version: "",
             mechanics: {},
             itemPool,
-            // V6_REMOVE: Deprecated alias for itemPool.
-            mergedItems: itemPool,
             mergedOverrides: {},
             resolvedRegistry: {},
             mergedMaterials: new Set<string>(),
             itemMaterials,
             itemEnchantability,
-            // V6_REMOVE: Deprecated alias for itemMaterials.
-            categoryMaterials: itemMaterials,
             multiEnchantBooks: true,
             idMap: new Map(),
             revIdMap: [],
             itemIdMap,
-            // V6_REMOVE: Deprecated alias for itemIdMap.
-            catIdMap: itemIdMap,
             materialIdMap,
-            // V6_REMOVE: Deprecated alias for materialIdMap.
-            matIdMap: materialIdMap,
             conflictBitsets: new BigUint64Array(0),
             weightMap: new Uint32Array(0),
             sortedRanks: [],
-            // V6_REMOVE: Historical active item-pool map; use itemPool.
-            versionPool,
             enchantToIndex: new Map(),
             indexToEnchant: [0]
         };
 
         const resolvedVersion = resolveRegistryVersion(data, version);
-        const registryBoundaries = getRegistryVersionBoundaries(data);
         state.version = version;
 
         const chain = this.getInheritanceChain(data, resolveManifestVersion(data, resolvedVersion));
@@ -66,13 +53,13 @@ export class RegistryFactory {
         }
 
         // 2. Finalize Registry data structure
-        this.finalizeEnchantmentRegistry(state, data, registryBoundaries);
+        this.finalizeEnchantmentRegistry(state, data);
 
         // 3. Initialize mapping lookups
         this.initializeIdMaps(state, data);
 
         // 4. Project active item, material, and group rules for this version
-        this.applyRegistryRules(state, data, registryBoundaries);
+        this.applyRegistryRules(state, data);
 
         return state;
     }
@@ -100,7 +87,7 @@ export class RegistryFactory {
         }
     }
 
-    private static finalizeEnchantmentRegistry(state: RegistryState, data: EnchantmentData, registryBoundaries: readonly string[]): void {
+    private static finalizeEnchantmentRegistry(state: RegistryState, data: EnchantmentData): void {
         const enchantmentData = data.global_enchantments;
         const allEnchNames = Object.keys(enchantmentData);
 
@@ -111,10 +98,10 @@ export class RegistryFactory {
         state.weightMap = new Uint32Array(allEnchNames.length);
 
         // First pass: resolve all props (applying version overrides)
-        this.resolveEnchantmentProps(state, data, allEnchNames, registryBoundaries);
+        this.resolveEnchantmentProps(state, data, allEnchNames);
 
         // Build symmetric conflict map and bitsets for enchantments active in this version.
-        this.buildConflictBitsets(state, allEnchNames, registryBoundaries);
+        this.buildConflictBitsets(state, allEnchNames);
 
         const romanMap = data.constants.ROMAN_MAP;
         // Sorted descending by rank value so getEligiblePool finds the highest achievable rank first.
@@ -127,33 +114,26 @@ export class RegistryFactory {
     private static resolveEnchantmentProps(
         state: RegistryState,
         data: EnchantmentData,
-        allEnchNames: string[],
-        registryBoundaries: readonly string[]
+        allEnchNames: string[]
     ): void {
         for (const [i, name] of allEnchNames.entries()) {
             if (name === undefined) continue;
             const props = Object.assign({}, data.global_enchantments[name], state.mergedOverrides[name] || {}) as Enchantment;
-            const availability = normalizeAvailability(props, registryBoundaries, `enchantment "${name}"`);
-            if (availability.valid_from !== undefined) props.valid_from = availability.valid_from;
-            else delete props.valid_from;
-            if (availability.valid_until !== undefined) props.valid_until = availability.valid_until;
-            else delete props.valid_until;
-            delete props.valid_to;
             state.resolvedRegistry[name] = props;
             state.weightMap[i] = props.weight;
         }
     }
 
-    private static buildConflictBitsets(state: RegistryState, allEnchNames: string[], registryBoundaries: readonly string[]): void {
+    private static buildConflictBitsets(state: RegistryState, allEnchNames: string[]): void {
         const activeNames = new Set(
             allEnchNames.filter(name => {
                 const entry = state.resolvedRegistry[name];
-                return entry !== undefined && this.isTimelineEntryActive(state.version, entry, registryBoundaries, `enchantment "${name}"`);
+                return entry !== undefined && isAvailabilityActive(state.version, entry);
             })
         );
 
         for (const rule of state.data.conflict_rules) {
-            if (!this.isTimelineEntryActive(state.version, rule, registryBoundaries, `conflict rule "${rule.enchants.join(' <-> ')}"`)) continue;
+            if (!isAvailabilityActive(state.version, rule)) continue;
             const [left, right] = rule.enchants;
             if (!activeNames.has(left) || !activeNames.has(right)) continue;
 
@@ -164,15 +144,6 @@ export class RegistryFactory {
             state.conflictBitsets[leftId] = (state.conflictBitsets[leftId] ?? 0n) | (1n << BigInt(rightId));
             state.conflictBitsets[rightId] = (state.conflictBitsets[rightId] ?? 0n) | (1n << BigInt(leftId));
         }
-    }
-
-    private static isTimelineEntryActive(
-        version: string,
-        entry: RegistryAvailability,
-        registryBoundaries: readonly string[],
-        context: string
-    ): boolean {
-        return isAvailabilityActive(version, entry, registryBoundaries, context);
     }
 
     private static initializeEnchantmentPairs(state: RegistryState, data: EnchantmentData, allEnchNames: string[]): void {
@@ -208,22 +179,22 @@ export class RegistryFactory {
         });
     }
 
-    private static applyRegistryRules(state: RegistryState, data: EnchantmentData, registryBoundaries: readonly string[]): void {
-        const activeEnchantments = this.getActiveRegistryEnchantments(state, registryBoundaries);
+    private static applyRegistryRules(state: RegistryState, data: EnchantmentData): void {
+        const activeEnchantments = this.getActiveRegistryEnchantments(state);
         const activeEnchantmentSet = new Set(activeEnchantments);
-        const activeGroupMembers = this.getActiveGroupMembers(state, data, registryBoundaries);
+        const activeGroupMembers = this.getActiveGroupMembers(state, data);
         const groupNames = new Set(data.enchantment_group_rules.map(rule => rule.group));
         const activeMaterials = new Set<string>();
 
         for (const rule of data.material_rules) {
-            if (this.isTimelineEntryActive(state.version, rule, registryBoundaries, `material rule "${rule.material}"`)) {
+            if (isAvailabilityActive(state.version, rule)) {
                 activeMaterials.add(rule.material);
             }
         }
         state.mergedMaterials = activeMaterials;
 
         for (const rule of data.enchantable_item_rules) {
-            if (!this.isTimelineEntryActive(state.version, rule, registryBoundaries, `enchantable item rule "${rule.item}"`)) continue;
+            if (!isAvailabilityActive(state.version, rule)) continue;
 
             if (rule.groups === undefined) {
                 state.itemPool[rule.item] = activeEnchantments;
@@ -242,19 +213,17 @@ export class RegistryFactory {
                 .filter(material => activeMaterials.has(material));
             state.itemMaterials[rule.item] = materials;
             state.itemEnchantability[rule.item] = rule.enchantability;
-            state.versionPool.set(rule.item, state.itemPool[rule.item] ?? []);
         }
     }
 
     private static getActiveGroupMembers(
         state: RegistryState,
-        data: EnchantmentData,
-        registryBoundaries: readonly string[]
+        data: EnchantmentData
     ): Map<string, string[]> {
         const groups = new Map<string, string[]>();
         const seenByGroup = new Map<string, Set<string>>();
         for (const rule of data.enchantment_group_rules) {
-            if (!this.isTimelineEntryActive(state.version, rule, registryBoundaries, `enchantment group rule "${rule.group}"`)) continue;
+            if (!isAvailabilityActive(state.version, rule)) continue;
             let members = groups.get(rule.group);
             if (!members) {
                 members = [];
@@ -319,10 +288,10 @@ export class RegistryFactory {
         }
     }
 
-    private static getActiveRegistryEnchantments(state: RegistryState, registryBoundaries: readonly string[]): string[] {
+    private static getActiveRegistryEnchantments(state: RegistryState): string[] {
         return Object.keys(state.resolvedRegistry).filter(name => {
             const props = state.resolvedRegistry[name];
-            return props !== undefined && this.isTimelineEntryActive(state.version, props, registryBoundaries, `enchantment "${name}"`);
+            return props !== undefined && isAvailabilityActive(state.version, props);
         });
     }
 

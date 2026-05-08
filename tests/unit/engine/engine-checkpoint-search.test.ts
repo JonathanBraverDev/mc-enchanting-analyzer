@@ -218,15 +218,4 @@ describe('EnchantEngine checkpoint search', () => {
         assert.strictEqual(futureResult.tracker.mass.toPublic().resolved, ultraAccuracy);
     });
 
-    // V6_REMOVE: This is the intentional coverage for deprecated `{ cat, mat }` checkpoint requests.
-    it('checkpoint APIs accept deprecated category/material request aliases', async () => {
-        const engine = EngineFactory.create(DATA, VERSION);
-        engine.resetCaches();
-
-        const preferred = await engine.searchToCheckpoint({ item: ITEM, xp: XP, material: MATERIAL, threshold: 0.01 });
-        engine.resetCaches();
-        const deprecated = await engine.searchToCheckpoint({ cat: ITEM, xp: XP, mat: MATERIAL, threshold: 0.01 });
-
-        assert.strictEqual(deprecated.tracker.mass.toPublic().resolved, preferred.tracker.mass.toPublic().resolved);
-    });
 });
