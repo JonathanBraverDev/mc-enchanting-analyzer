@@ -58,7 +58,7 @@ export class ChartManager {
 
     public generateDatasets(sweep: ChartCellView[], metric: string, registry: RegistryState): ChartDataset[] {
         const datasets: ChartDataset[] = [];
-        const romanMap = registry.data.constants.ROMAN_MAP;
+        const romanMap = registry.romanMap;
 
         if (metric === "any") {
             const allEnchants = new Set<number>();

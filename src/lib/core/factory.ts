@@ -199,9 +199,11 @@ export class RegistryFactory {
         const itemIdMap = new Map<string, number>();
         const materialIdMap = new Map<string, number>();
         const state: RegistryState = {
-            data,
             version: "",
             mechanics: {},
+            romanMap: data.constants.ROMAN_MAP,
+            materialPriority: data.constants.MATERIAL_PRIORITY,
+            materialValues: data.material_values,
             itemPool,
             mergedOverrides: {},
             resolvedRegistry: {},
@@ -280,7 +282,7 @@ export class RegistryFactory {
         this.resolveEnchantmentProps(state, data, allEnchNames);
 
         // Build symmetric conflict map and bitsets for enchantments active in this version.
-        this.buildConflictBitsets(state, allEnchNames);
+        this.buildConflictBitsets(state, data, allEnchNames);
 
         const romanMap = data.constants.ROMAN_MAP;
         // Sorted descending by rank value so getEligiblePool finds the highest achievable rank first.
@@ -303,7 +305,7 @@ export class RegistryFactory {
         }
     }
 
-    private static buildConflictBitsets(state: RegistryState, allEnchNames: string[]): void {
+    private static buildConflictBitsets(state: RegistryState, data: EnchantmentData, allEnchNames: string[]): void {
         const activeNames = new Set(
             allEnchNames.filter(name => {
                 const entry = state.resolvedRegistry[name];
@@ -311,7 +313,7 @@ export class RegistryFactory {
             })
         );
 
-        for (const rule of state.data.conflict_rules) {
+        for (const rule of data.conflict_rules) {
             if (!isAvailabilityActive(state.version, rule)) continue;
             const [left, right] = rule.enchants;
             if (!activeNames.has(left) || !activeNames.has(right)) continue;

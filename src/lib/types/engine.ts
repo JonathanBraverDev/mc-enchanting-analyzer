@@ -1,4 +1,4 @@
-import { Enchantment, EnchantmentData, RegistryMutation } from '#types/domain.js';
+import { Enchantment, MaterialValues, RegistryMutation, RomanMap } from '#types/domain.js';
 import { NodeIdSearchFrontier } from '#engine/search/NodeIdSearchFrontier.js';
 import { SearchPoolPlan } from '#engine/search/SearchPoolPlan.js';
 import { SearchNodeGraph } from '#engine/search/SearchNodeGraph.js';
@@ -201,9 +201,11 @@ export interface SearchFrontierSnapshot {
  * Internal state of a Registry, containing pre-computed mapping and conflict data.
  */
 export interface RegistryState {
-    data: EnchantmentData;
     version: string;
     mechanics: import('./domain.js').VersionMechanics;
+    romanMap: RomanMap;
+    materialPriority: string[];
+    materialValues: MaterialValues;
     itemPool: ItemPools;
     mergedOverrides: MergedOverrides;
     resolvedRegistry: ResolvedRegistry;
