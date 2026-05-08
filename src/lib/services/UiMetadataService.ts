@@ -30,7 +30,7 @@ export class UiMetadataService {
   public static getRegistry(version: string): RegistryState {
     let registry = this.registries.get(version);
     if (!registry) {
-      registry = RegistryFactory.build(DATA, version);
+      registry = RegistryFactory.build(version);
       this.registries.set(version, registry);
     }
     return registry;

@@ -1,10 +1,9 @@
 import { performance } from 'node:perf_hooks';
 import { EngineFactory } from '#engine/factory.js';
-import { DATA } from '#data/index.js';
 
 async function runBenchmark() {
     console.log('--- Enchantment Engine Performance Benchmark ---');
-    const engine = EngineFactory.create(DATA, '1.21');
+    const engine = EngineFactory.createForVersion('1.21');
 
     const scenarios = [
         { name: 'Diamond Sword @ Level 30', item: 'sword', xp: 30, material: 'diamond' },

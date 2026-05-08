@@ -1,13 +1,22 @@
 import { EnchantmentData, VersionManifest, Enchantment, RegistryState } from '#types/index.js';
 import { isAvailabilityActive } from '#core/availability.js';
 import { resolveManifestVersion, resolveRegistryVersion } from '#core/version-resolution.js';
+import { DATA } from '#data/index.js';
 
 
 /**
  * Factory for building a fully initialized Registry state.
  */
 export class RegistryFactory {
-    public static build(data: EnchantmentData, version: string): RegistryState {
+    public static build(version: string): RegistryState {
+        return this.buildFromData(DATA, version);
+    }
+
+    public static buildFromData(data: EnchantmentData, version: string): RegistryState {
+        return this.createState(data, version);
+    }
+
+    private static createState(data: EnchantmentData, version: string): RegistryState {
         if (version == null || typeof version !== 'string') {
             throw new Error(`Invalid version: expected a string, got ${version == null ? 'null/undefined' : typeof version}.`);
         }

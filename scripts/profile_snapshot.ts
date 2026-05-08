@@ -1,5 +1,4 @@
 import { EngineFactory } from '#engine/index.js';
-import { DATA } from '#data/index.js';
 import { TEST_DEFAULTS } from '#constants/testing.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 
@@ -13,7 +12,7 @@ async function profile() {
     const version = findArg('--version') ?? '1.21.11';
 
     console.log(`Profiling ${version} search performance...`);
-    const engine = EngineFactory.create(DATA, version);
+    const engine = EngineFactory.createForVersion(version);
 
     const timing = { totalMs: 0, searchMs: 0, postProcessingMs: 0 };
     console.time('TargetSnapshot');

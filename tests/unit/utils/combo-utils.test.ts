@@ -8,12 +8,11 @@
 import { describe, it, before } from 'node:test';
 import assert from 'node:assert';
 import { EngineFactory } from '#engine/factory.js';
-import { DATA } from '#data/index.js';
 import { PackedEnchant, PackedCombo } from '#types/index.js';
 import { ComboUtils } from '#utils/domain/ComboUtils.js';
 
 // Build once at module level.
-const engine = EngineFactory.create(DATA, '1.21');
+const engine = EngineFactory.createForVersion('1.21');
 const reg = engine.registry;
 
 /** Returns a PackedEnchant value: (enchant_id << 8) | rank */

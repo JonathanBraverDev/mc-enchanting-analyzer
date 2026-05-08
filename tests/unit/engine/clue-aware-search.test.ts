@@ -4,7 +4,6 @@ import { EngineFactory } from '#engine/factory.js';
 import { ClueValidator } from '#core/clue.js';
 import { SearchProcessor } from '#engine/search/SearchProcessor.js';
 import { ClueSearchPolicy } from '#engine/search/ClueSearchPolicy.js';
-import { DATA } from '#data/index.js';
 import { ComboUtils } from '#utils/domain/ComboUtils.js';
 import { TEST_DATA } from '#tests/infra/test-data.js';
 import {
@@ -19,7 +18,7 @@ describe('Clue-aware search optimization', () => {
     const assertMatchesFullSearchConditioning = async (item: string, material: string, clue: string, threshold = 0.005) => {
         const baseline = await calculateByFullSearchThenCondition(item, material, clue, threshold);
         const optimized = await calculateWithPruning(item, material, clue, threshold);
-        const targetClueId = ClueValidator.validate(EngineFactory.create(DATA, '1.21.11').registry, item, clue);
+        const targetClueId = ClueValidator.validate(EngineFactory.createForVersion('1.21.11').registry, item, clue);
 
         assert.strictEqual(optimized.clue?.knownSpace, baseline.clue?.knownSpace);
         compareConditionedMaps(optimized.any, baseline.any, `${clue} any`);
@@ -49,7 +48,7 @@ describe('Clue-aware search optimization', () => {
         const clue = 'Sharpness IV';
         const threshold = 0.005;
         const baseline = await calculateByFullSearchThenCondition(item, material, clue, threshold);
-        const engine = EngineFactory.create(DATA, '1.21.11');
+        const engine = EngineFactory.createForVersion('1.21.11');
         engine.resetCaches();
         const targetClueId = ClueValidator.validate(engine.registry, item, clue);
 
@@ -84,7 +83,7 @@ describe('Clue-aware search optimization', () => {
         const baselines = await Promise.all(
             checkpoints.map(checkpoint => calculateByFullSearchThenCondition(item, material, clue, checkpoint.threshold))
         );
-        const engine = EngineFactory.create(DATA, '1.21.11');
+        const engine = EngineFactory.createForVersion('1.21.11');
         engine.resetCaches();
         const targetClueId = ClueValidator.validate(engine.registry, item, clue);
         const streamed: CalculationStats[] = [];

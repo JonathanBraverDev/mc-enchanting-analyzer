@@ -1,7 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { EngineFactory } from '#engine/factory.js';
-import { DATA } from '#data/index.js';
 import {
     isItemAvailable,
     getEligibleMaterials,
@@ -18,37 +17,37 @@ describe('Registry & Data Rules Test Suite', () => {
 
     describe('1. Version Availability', () => {
         it('should correctly identify Mace availability (1.21+)', () => {
-            const v116 = EngineFactory.create(DATA, '1.16').registry;
+            const v116 = EngineFactory.createForVersion('1.16').registry;
             assert.strictEqual(isItemAvailable(v116, 'mace'), false, '1.16 should NOT have mace');
 
-            const v121 = EngineFactory.create(DATA, '1.21').registry;
+            const v121 = EngineFactory.createForVersion('1.21').registry;
             assert.strictEqual(isItemAvailable(v121, 'mace'), true, '1.21 SHOULD have mace');
         });
 
         it('should handle Book eligibility across versions (1.3.1 - 1.7.2)', () => {
-             const v131 = EngineFactory.create(DATA, '1.3.1').registry;
+             const v131 = EngineFactory.createForVersion('1.3.1').registry;
              assert.ok(!getEligibleMaterials(v131, 'book').includes('book'), '1.3.1: Book should not be enchantable');
 
-             const v146 = EngineFactory.create(DATA, '1.4.6').registry;
+             const v146 = EngineFactory.createForVersion('1.4.6').registry;
              assert.ok(getEligibleMaterials(v146, 'book').includes('book'), '1.4.6: Book SHOULD be enchantable');
              assert.strictEqual(v146.multiEnchantBooks, false, '1.4.6: Books should be single-only');
 
-             const v172 = EngineFactory.create(DATA, '1.7.2').registry;
+             const v172 = EngineFactory.createForVersion('1.7.2').registry;
              assert.strictEqual(v172.multiEnchantBooks, true, '1.7.2: Books SHOULD allow multi-enchant');
         });
 
         it('should correctly handle Sweeping Edge availability (1.11.1+)', () => {
-            const v18 = EngineFactory.create(DATA, '1.8').registry;
+            const v18 = EngineFactory.createForVersion('1.8').registry;
             assert.ok(!getItemPool(v18, 'sword').includes('Sweeping Edge'), '1.8: Sword pool should not include Sweeping Edge');
 
-            const v111 = EngineFactory.create(DATA, '1.11.1').registry;
+            const v111 = EngineFactory.createForVersion('1.11.1').registry;
             assert.ok(getItemPool(v111, 'sword').includes('Sweeping Edge'), '1.11.1: Sword pool SHOULD include Sweeping Edge');
         });
 
         it('should derive legacy and modern sword pools from group rules', () => {
-            const v172 = EngineFactory.create(DATA, '1.7.2').registry;
-            const v18 = EngineFactory.create(DATA, '1.8').registry;
-            const v111 = EngineFactory.create(DATA, '1.11.1').registry;
+            const v172 = EngineFactory.createForVersion('1.7.2').registry;
+            const v18 = EngineFactory.createForVersion('1.8').registry;
+            const v111 = EngineFactory.createForVersion('1.11.1').registry;
 
             assert.ok(!getItemPool(v172, 'sword').includes('Unbreaking'), '1.7.2: Sword pool should not include Unbreaking');
             assert.ok(getItemPool(v18, 'sword').includes('Unbreaking'), '1.8: Sword pool should include Unbreaking');
@@ -57,17 +56,17 @@ describe('Registry & Data Rules Test Suite', () => {
         });
 
         it('should derive bow Unbreaking membership from group rules', () => {
-            const v172 = EngineFactory.create(DATA, '1.7.2').registry;
-            const v18 = EngineFactory.create(DATA, '1.8').registry;
+            const v172 = EngineFactory.createForVersion('1.7.2').registry;
+            const v18 = EngineFactory.createForVersion('1.8').registry;
 
             assert.ok(!getItemPool(v172, 'bow').includes('Unbreaking'), '1.7.2: Bow pool should not include Unbreaking');
             assert.ok(getItemPool(v18, 'bow').includes('Unbreaking'), '1.8: Bow pool should include Unbreaking');
         });
 
         it('should derive armor Unbreaking and extras from group rules', () => {
-            const v146 = EngineFactory.create(DATA, '1.4.6').registry;
-            const v172 = EngineFactory.create(DATA, '1.7.2').registry;
-            const v18 = EngineFactory.create(DATA, '1.8').registry;
+            const v146 = EngineFactory.createForVersion('1.4.6').registry;
+            const v172 = EngineFactory.createForVersion('1.7.2').registry;
+            const v18 = EngineFactory.createForVersion('1.8').registry;
 
             assert.ok(!getItemPool(v146, 'chestplate').includes('Unbreaking'), '1.4.6: Chestplate should not include Unbreaking');
             assert.ok(getItemPool(v146, 'chestplate').includes('Thorns'), '1.4.6: Chestplate should include Thorns');
@@ -79,18 +78,18 @@ describe('Registry & Data Rules Test Suite', () => {
         });
 
         it('should correctly handle Netherite availability (1.16+)', () => {
-             const v115 = EngineFactory.create(DATA, '1.15').registry;
+             const v115 = EngineFactory.createForVersion('1.15').registry;
              assert.ok(!getEligibleMaterials(v115, 'sword').includes('netherite'), '1.15: Should not have netherite');
 
-             const v116 = EngineFactory.create(DATA, '1.16').registry;
+             const v116 = EngineFactory.createForVersion('1.16').registry;
              assert.ok(getEligibleMaterials(v116, 'sword').includes('netherite'), '1.16: SHOULD have netherite');
         });
 
         it('should correctly handle Copper availability (1.21.9+)', () => {
-             const v121 = EngineFactory.create(DATA, '1.21').registry;
+             const v121 = EngineFactory.createForVersion('1.21').registry;
              assert.ok(!getEligibleMaterials(v121, 'sword').includes('copper'), '1.21: Should not have copper');
 
-             const v1219 = EngineFactory.create(DATA, '1.21.9').registry;
+             const v1219 = EngineFactory.createForVersion('1.21.9').registry;
              assert.ok(getEligibleMaterials(v1219, 'sword').includes('copper'), '1.21.9: SHOULD have copper');
         });
 
@@ -107,31 +106,31 @@ describe('Registry & Data Rules Test Suite', () => {
             ];
 
             for (const { version, available, unavailable } of cases) {
-                const registry = EngineFactory.create(DATA, version).registry;
+                const registry = EngineFactory.createForVersion(version).registry;
                 for (const item of available) assert.strictEqual(isItemAvailable(registry, item), true, `${version}: ${item} should be available`);
                 for (const item of unavailable) assert.strictEqual(isItemAvailable(registry, item), false, `${version}: ${item} should not be available`);
             }
         });
 
         it('should expose material availability from registry rules', () => {
-            const v10 = EngineFactory.create(DATA, '1.0').registry;
+            const v10 = EngineFactory.createForVersion('1.0').registry;
             assert.deepStrictEqual(getEligibleMaterials(v10, 'sword'), ['diamond', 'gold', 'iron', 'stone', 'wood']);
             assert.ok(getEligibleMaterials(v10, 'helmet').includes('leather'), '1.0: armor should include leather');
 
-            const v11 = EngineFactory.create(DATA, '1.1').registry;
+            const v11 = EngineFactory.createForVersion('1.1').registry;
             assert.deepStrictEqual(getEligibleMaterials(v11, 'bow'), ['bow']);
 
-            const v172 = EngineFactory.create(DATA, '1.7.2').registry;
+            const v172 = EngineFactory.createForVersion('1.7.2').registry;
             assert.deepStrictEqual(getEligibleMaterials(v172, 'fishing_rod'), ['fishing_rod']);
 
-            const v113 = EngineFactory.create(DATA, '1.13').registry;
+            const v113 = EngineFactory.createForVersion('1.13').registry;
             assert.deepStrictEqual(getEligibleMaterials(v113, 'trident'), ['trident']);
             assert.deepStrictEqual(getEligibleMaterials(v113, 'helmet').filter(material => material === 'turtle_shell'), ['turtle_shell']);
 
-            const v114 = EngineFactory.create(DATA, '1.14').registry;
+            const v114 = EngineFactory.createForVersion('1.14').registry;
             assert.deepStrictEqual(getEligibleMaterials(v114, 'crossbow'), ['crossbow']);
 
-            const v121 = EngineFactory.create(DATA, '1.21').registry;
+            const v121 = EngineFactory.createForVersion('1.21').registry;
             assert.deepStrictEqual(getEligibleMaterials(v121, 'mace'), ['mace']);
         });
 
@@ -144,7 +143,7 @@ describe('Registry & Data Rules Test Suite', () => {
             ];
 
             for (const { version, item, material } of cases) {
-                const engine = EngineFactory.create(DATA, version);
+                const engine = EngineFactory.createForVersion(version);
                 const registry = engine.registry;
                 assert.strictEqual(isMaterialEligible(registry, item, material), false, `${version}: ${item}/${material} should be ineligible`);
                 assert.throws(
@@ -169,7 +168,7 @@ describe('Registry & Data Rules Test Suite', () => {
             ];
 
             for (const { version, item, material } of cases) {
-                const engine = EngineFactory.create(DATA, version);
+                const engine = EngineFactory.createForVersion(version);
                 const registry = engine.registry;
                 assert.strictEqual(isMaterialEligible(registry, item, material), true, `${version}: ${item}/${material} should be eligible`);
                 assert.doesNotThrow(() => getEnchantability(registry, material, item));
@@ -179,19 +178,19 @@ describe('Registry & Data Rules Test Suite', () => {
         });
 
         it('should correctly handle Protection conflicts (1.14 vs 1.14.3)', () => {
-            const reg113 = EngineFactory.create(DATA, '1.13').registry;
+            const reg113 = EngineFactory.createForVersion('1.13').registry;
             const prot113Id = getEnchantId(reg113, 'Protection')!;
             const fireProt113Id = getEnchantId(reg113, 'Fire Protection')!;
             assert.strictEqual(hasConflict(reg113, prot113Id, fireProt113Id), true, '1.13: Protection vs Fire Protection should conflict');
 
-            const reg114 = EngineFactory.create(DATA, '1.14').registry;
+            const reg114 = EngineFactory.createForVersion('1.14').registry;
             const protId = getEnchantId(reg114, 'Protection')!;
             const fireProtId = getEnchantId(reg114, 'Fire Protection')!;
 
             assert.strictEqual(hasConflict(reg114, protId, fireProtId), false, '1.14: Protection vs Fire Protection should NOT conflict');
 
             // 1.14.3: ALL protections conflict
-            const reg1143 = EngineFactory.create(DATA, '1.14.3').registry;
+            const reg1143 = EngineFactory.createForVersion('1.14.3').registry;
             const enchs = ["Protection", "Fire Protection", "Blast Protection", "Projectile Protection"];
             const ids = enchs.map(e => getEnchantId(reg1143, e)!);
 
@@ -205,7 +204,7 @@ describe('Registry & Data Rules Test Suite', () => {
     });
 
     describe('2. Items & Materials', () => {
-        const reg = EngineFactory.create(DATA, '1.20').registry;
+        const reg = EngineFactory.createForVersion('1.20').registry;
 
         it('should return correct materials for Swords', () => {
             const mats = getEligibleMaterials(reg, 'sword');
@@ -239,7 +238,7 @@ describe('Registry & Data Rules Test Suite', () => {
     });
 
     describe('3. Item & Material ID Mapping', () => {
-        const reg = EngineFactory.create(DATA, '1.20').registry;
+        const reg = EngineFactory.createForVersion('1.20').registry;
 
         it('should assign unique item IDs to common item types', () => {
             const items = ["sword", "pickaxe", "axe", "shovel", "helmet", "chestplate", "leggings", "boots", "hoe", "bow"];
@@ -273,7 +272,7 @@ describe('Registry & Data Rules Test Suite', () => {
         });
 
         it('should use explicit enchantability tables for armor and unique items', () => {
-            const v121 = EngineFactory.create(DATA, '1.21').registry;
+            const v121 = EngineFactory.createForVersion('1.21').registry;
             assert.strictEqual(getEnchantability(v121, 'turtle_shell', 'helmet'), 9);
             assert.strictEqual(getEnchantability(v121, 'book', 'book'), 1);
             assert.strictEqual(getEnchantability(v121, 'bow', 'bow'), 1);

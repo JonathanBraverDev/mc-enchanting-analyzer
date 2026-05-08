@@ -1,11 +1,10 @@
 import { EngineFactory } from '#engine/index.js';
-import { DATA } from '#data/index.js';
 
 async function runProfile() {
     console.log('--- Enchantment Engine Performance Profile ---');
 
     const version = '1.21';
-    const engine = EngineFactory.create(DATA, version);
+    const engine = EngineFactory.createForVersion(version);
 
     const categories = ['helmet', 'sword', 'book'];
     const materials = ['netherite', 'diamond'];

@@ -1,7 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import { EngineFactory } from '#engine/factory.js';
-import { DATA } from '#data/index.js';
 import { SnapshotService } from '#services/SnapshotService.js';
 import { SearchResult, EngineInstrumentation } from '#types/index.js';
 
@@ -22,7 +21,7 @@ function freshInstrumentation(): EngineInstrumentation {
 }
 
 test('V5 native reporting can reproduce the obsolete matrix runner payload', async () => {
-    const engine = EngineFactory.create(DATA, '1.21.11');
+    const engine = EngineFactory.createForVersion('1.21.11');
     const instrumentation = freshInstrumentation();
     instrumentation.exploredMassTargets = EXPLORED_MASS_TARGETS;
     instrumentation.exploredMassSamples = [];

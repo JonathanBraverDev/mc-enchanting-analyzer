@@ -16,7 +16,6 @@ import { UiMetadataService } from '#services/UiMetadataService.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { EngineFactory } from '#engine/factory.js';
 import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
-import { DATA } from '#data/index.js';
 import { ComboUtils } from '#utils/domain/ComboUtils.js';
 import { ProbUtils } from '#utils/index.js';
 import { makeFrontierSnapshot } from '#tests/infra/frontier-test-utils.js';
@@ -233,7 +232,7 @@ describe('SummaryService', () => {
     });
 
     it('chart-cell snapshots expose aggregate buckets without a combo payload', () => {
-        const engine = EngineFactory.create(DATA, '1.20');
+        const engine = EngineFactory.createForVersion('1.20');
         const registry = engine.registry;
         const sharpness = registry.idMap.get('Sharpness')!;
         const sharpnessRank = ((sharpness << 8) | 1) as PackedEnchant;
@@ -329,7 +328,7 @@ describe('SerializationService', () => {
 // ── HumanizationService ────────────────────────────────────────────────────
 
 describe('HumanizationService', () => {
-    const engine = EngineFactory.create(DATA, '1.20');
+    const engine = EngineFactory.createForVersion('1.20');
     const reg    = engine.registry;
 
     before(async () => {

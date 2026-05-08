@@ -17,7 +17,6 @@
 import { describe, it, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { EngineFactory } from '#engine/factory.js';
-import { DATA } from '#data/index.js';
 import { TEST_DATA } from '#tests/infra/test-data.js';
 
 // Matches the tolerance used in engine.test.ts "Frontier Mass Tracking" test.
@@ -36,7 +35,7 @@ function massTotal(stats: any): number {
 describe('Probability Conservation', () => {
 
     it('pending mass is non-negative for a partially-converged search', async () => {
-        const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
+        const engine = EngineFactory.createForVersion(TEST_DATA.VERSIONS.MODERN);
         const stats  = await engine.calculate({ item: 'chestplate', xp: 15, material: 'iron', threshold: 0.01 });
 
         assert.ok(
@@ -46,7 +45,7 @@ describe('Probability Conservation', () => {
     });
 
     it('sum(buckets) ≈ 1.0 for a partially-converged search', async () => {
-        const engine = EngineFactory.create(DATA, '1.21');
+        const engine = EngineFactory.createForVersion('1.21');
         const stats  = await engine.calculate({ item: 'chestplate', xp: 15, material: 'iron', threshold: 0.01 });
 
         const total = massTotal(stats);
@@ -57,7 +56,7 @@ describe('Probability Conservation', () => {
     });
 
     it('sum(buckets) ≈ 1.0 for a fully-converged book search (modern)', async () => {
-        const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
+        const engine = EngineFactory.createForVersion(TEST_DATA.VERSIONS.MODERN);
         const stats  = await engine.calculate({ item: TEST_DATA.ITEMS.BOOK, xp: 30, material: TEST_DATA.MATERIALS.BOOK, threshold: TEST_DATA.THRESHOLDS.PROB_MIN });
 
         const total = massTotal(stats);
@@ -76,7 +75,7 @@ describe('Probability Conservation', () => {
         ];
 
         for (const { version, item, level, material } of cases) {
-            const engine = EngineFactory.create(DATA, version);
+            const engine = EngineFactory.createForVersion(version);
             const stats  = await engine.calculate({ item: item, xp: level, material: material, threshold: 0.001 });
             const label  = `${version} ${item}@${level} ${material}`;
 
@@ -94,7 +93,7 @@ describe('Probability Conservation', () => {
     });
 
     it('guaranteed clue result remains complete for bow (Power IV)', async () => {
-        const engine  = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
+        const engine  = EngineFactory.createForVersion(TEST_DATA.VERSIONS.MODERN);
         const stats   = await engine.calculate({
             item: 'bow',
             xp: 30,
