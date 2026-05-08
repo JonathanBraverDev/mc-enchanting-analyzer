@@ -51,8 +51,8 @@ export function getItemId(state: RegistryState, item: string): number {
 /**
  * @deprecated V6_REMOVE: Use getItemId.
  */
-export function getCategoryId(state: RegistryState, cat: string): number {
-    return getItemId(state, cat);
+export function getCategoryId(state: RegistryState, item: string): number {
+    return getItemId(state, item);
 }
 
 /**
@@ -100,8 +100,8 @@ export function isItemAvailable(state: RegistryState, item: string): boolean {
 /**
  * @deprecated V6_REMOVE: Use isItemAvailable.
  */
-export function isCategoryAvailable(state: RegistryState, cat: string): boolean {
-    return isItemAvailable(state, cat);
+export function isCategoryAvailable(state: RegistryState, item: string): boolean {
+    return isItemAvailable(state, item);
 }
 
 /**
@@ -117,8 +117,8 @@ export function getItemPool(state: RegistryState, item: string): string[] {
 /**
  * @deprecated V6_REMOVE: Use getItemPool.
  */
-export function getCategoryPool(state: RegistryState, cat: string): string[] {
-    return getItemPool(state, cat);
+export function getCategoryPool(state: RegistryState, item: string): string[] {
+    return getItemPool(state, item);
 }
 
 /**
