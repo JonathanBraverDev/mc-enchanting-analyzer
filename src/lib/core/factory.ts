@@ -56,6 +56,9 @@ export class RegistryFactory {
 
     private static applyRegistryMutation(data: EnchantmentData, mutation: RegistryMutation): void {
         switch (mutation.type) {
+            case 'patchEnchantment':
+                this.patchEnchantment(data, mutation.enchantment, mutation.patch);
+                break;
             case 'addConflictRule':
                 data.conflict_rules.push(this.cloneRule(mutation.rule));
                 break;
@@ -100,6 +103,26 @@ export class RegistryFactory {
                     mutation.type
                 );
                 break;
+        }
+    }
+
+    private static patchEnchantment(
+        data: EnchantmentData,
+        enchantment: string,
+        patch: Partial<Enchantment>
+    ): void {
+        const existing = data.global_enchantments[enchantment];
+        if (!existing) {
+            throw new Error(`patchEnchantment cannot patch unknown enchantment "${enchantment}".`);
+        }
+
+        const { levels, ...rest } = patch;
+        Object.assign(existing, rest);
+        if (levels) {
+            existing.levels = {
+                ...existing.levels,
+                ...levels
+            };
         }
     }
 
