@@ -16,10 +16,10 @@ import {
 import type { CalculationStats, PackedCombo, PackedEnchant } from '#types/index.js';
 
 describe('Clue-aware search optimization', () => {
-    const assertMatchesFullSearchConditioning = async (cat: string, mat: string, clue: string, threshold = 0.005) => {
-        const baseline = await calculateByFullSearchThenCondition(cat, mat, clue, threshold);
-        const optimized = await calculateWithPruning(cat, mat, clue, threshold);
-        const targetClueId = ClueValidator.validate(EngineFactory.create(DATA, '1.21.11').registry, cat, clue);
+    const assertMatchesFullSearchConditioning = async (item: string, material: string, clue: string, threshold = 0.005) => {
+        const baseline = await calculateByFullSearchThenCondition(item, material, clue, threshold);
+        const optimized = await calculateWithPruning(item, material, clue, threshold);
+        const targetClueId = ClueValidator.validate(EngineFactory.create(DATA, '1.21.11').registry, item, clue);
 
         assert.strictEqual(optimized.clue?.knownSpace, baseline.clue?.knownSpace);
         compareConditionedMaps(optimized.any, baseline.any, `${clue} any`);
@@ -44,24 +44,24 @@ describe('Clue-aware search optimization', () => {
     });
 
     it('searchToCheckpoint forwards clue pruning through the public checkpoint API', async () => {
-        const cat = TEST_DATA.ITEMS.SWORD;
-        const mat = TEST_DATA.MATERIALS.DIAMOND;
+        const item = TEST_DATA.ITEMS.SWORD;
+        const material = TEST_DATA.MATERIALS.DIAMOND;
         const clue = 'Sharpness IV';
         const threshold = 0.005;
-        const baseline = await calculateByFullSearchThenCondition(cat, mat, clue, threshold);
+        const baseline = await calculateByFullSearchThenCondition(item, material, clue, threshold);
         const engine = EngineFactory.create(DATA, '1.21.11');
         engine.resetCaches();
-        const targetClueId = ClueValidator.validate(engine.registry, cat, clue);
+        const targetClueId = ClueValidator.validate(engine.registry, item, clue);
 
         const result = await engine.searchToCheckpoint({
-            cat,
+            item,
             xp: 30,
-            mat,
+            material,
             clue,
             threshold,
             useCache: false
         });
-        const optimized = summarizeCheckpoint(engine, result, cat, clue);
+        const optimized = summarizeCheckpoint(engine, result, item, clue);
 
         assert.strictEqual(optimized.clue?.knownSpace, baseline.clue?.knownSpace);
         compareConditionedMaps(optimized.any, baseline.any, `${clue} checkpoint any`);
@@ -74,31 +74,31 @@ describe('Clue-aware search optimization', () => {
     });
 
     it('searchSequentialCheckpoints forwards clue pruning for every streamed checkpoint', async () => {
-        const cat = TEST_DATA.ITEMS.BOOK;
-        const mat = TEST_DATA.MATERIALS.BOOK;
+        const item = TEST_DATA.ITEMS.BOOK;
+        const material = TEST_DATA.MATERIALS.BOOK;
         const clue = 'Protection III';
         const checkpoints = [
             { threshold: 0.05, limit: 15_000 },
             { threshold: 0.01, limit: 40_000 }
         ];
         const baselines = await Promise.all(
-            checkpoints.map(checkpoint => calculateByFullSearchThenCondition(cat, mat, clue, checkpoint.threshold))
+            checkpoints.map(checkpoint => calculateByFullSearchThenCondition(item, material, clue, checkpoint.threshold))
         );
         const engine = EngineFactory.create(DATA, '1.21.11');
         engine.resetCaches();
-        const targetClueId = ClueValidator.validate(engine.registry, cat, clue);
+        const targetClueId = ClueValidator.validate(engine.registry, item, clue);
         const streamed: CalculationStats[] = [];
         const clueIncompatibleMass: number[] = [];
 
         await engine.searchSequentialCheckpoints({
-            cat,
+            item,
             xp: 30,
-            mat,
+            material,
             clue,
             checkpoints,
             useCache: false,
             onCheckpointComplete: (result) => {
-                streamed.push(summarizeCheckpoint(engine, result, cat, clue));
+                streamed.push(summarizeCheckpoint(engine, result, item, clue));
                 clueIncompatibleMass.push(result.tracker.mass.toPublic().clueIncompatible);
             }
         });

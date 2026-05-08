@@ -32,13 +32,13 @@ const findArg = (key: string) => {
     return next && !next.startsWith('--') ? next : null;
 };
 
-function getJobs(engine: EnchantEngine): Array<{ cat: string; mat: string }> {
+function getJobs(engine: EnchantEngine): Array<{ item: string; material: string }> {
     const registry = engine.registry;
-    const categories = Object.keys(registry.mergedItems);
-    const jobs: Array<{ cat: string; mat: string }> = [];
+    const items = Object.keys(registry.itemPool);
+    const jobs: Array<{ item: string; material: string }> = [];
 
-    for (const cat of categories) {
-        for (const mat of getEligibleMaterials(registry, cat)) jobs.push({ cat, mat });
+    for (const item of items) {
+        for (const material of getEligibleMaterials(registry, item)) jobs.push({ item, material });
     }
 
     return jobs;
@@ -118,8 +118,8 @@ function summarizeSamples(samples: ExploredMassSample[]): ExploredMassSample[] {
     return summarized;
 }
 
-async function runOne(engine: EnchantEngine, cat: string, mat: string, xp: number): Promise<void> {
-    const outFile = path.join(OUT_DIR, `${cat}_${mat}_xp${xp}.json`);
+async function runOne(engine: EnchantEngine, item: string, material: string, xp: number): Promise<void> {
+    const outFile = path.join(OUT_DIR, `${item}_${material}_xp${xp}.json`);
     const instrumentation = freshInstrumentation();
     let report: ReturnType<typeof toReport> | null = null;
     const start = performance.now();
@@ -127,9 +127,9 @@ async function runOne(engine: EnchantEngine, cat: string, mat: string, xp: numbe
 
     try {
         const result = await engine.searchToCheckpoint({
-                cat,
+                item,
                 xp,
-                mat,
+                material,
                 threshold: THRESHOLD,
                 maxIterations: MAX_ITERATIONS,
                 instrumentation,
@@ -143,8 +143,8 @@ async function runOne(engine: EnchantEngine, cat: string, mat: string, xp: numbe
     const samples = summarizeSamples(instrumentation.exploredMassSamples ?? []);
     const result = {
         version: engine.registry.version,
-        cat,
-        mat,
+        item,
+        material,
         xp,
         exploredMassTargets: EXPLORED_MASS_TARGETS,
         elapsedMs: Math.round(performance.now() - start),
@@ -162,13 +162,13 @@ async function runOne(engine: EnchantEngine, cat: string, mat: string, xp: numbe
     const status = error
         ? 'ERROR'
         : `uncertainty=${((report?.uncertainty ?? 0) * 100).toFixed(4)}% iters=${report?.instrumentation.totalIterations ?? 0} samples=${samples.length} ${result.elapsedMs}ms`;
-    console.log(`  ${cat}/${mat}/xp=${xp}: ${status}`);
+    console.log(`  ${item}/${material}/xp=${xp}: ${status}`);
 }
 
 async function main() {
     const version = findArg('--version') ?? DEFAULT_VERSION;
-    const filterCat = findArg('--cat');
-    const filterMat = findArg('--mat');
+    const filterItem = findArg('--item') ?? findArg('--cat'); // V6_REMOVE: --cat is a deprecated CLI alias.
+    const filterMaterial = findArg('--material') ?? findArg('--mat'); // V6_REMOVE: --mat is a deprecated CLI alias.
     const xpArg = findArg('--xp');
     const xpLevels = xpArg ? [parseInt(xpArg)] : DEFAULT_XP_LEVELS;
 
@@ -177,15 +177,15 @@ async function main() {
 
     const engine = EngineFactory.create(DATA, version);
     const jobs = getJobs(engine)
-        .filter(job => !filterCat || job.cat === filterCat)
-        .filter(job => !filterMat || job.mat === filterMat);
+        .filter(job => !filterItem || job.item === filterItem)
+        .filter(job => !filterMaterial || job.material === filterMaterial);
     const total = jobs.length * xpLevels.length;
     let done = 0;
 
-    for (const { cat, mat } of jobs) {
-        console.log(`${cat}/${mat}`);
+    for (const { item, material } of jobs) {
+        console.log(`${item}/${material}`);
         for (const xp of xpLevels) {
-            await runOne(engine, cat, mat, xp);
+            await runOne(engine, item, material, xp);
             done++;
         }
     }

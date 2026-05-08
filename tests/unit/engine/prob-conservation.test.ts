@@ -37,7 +37,7 @@ describe('Probability Conservation', () => {
 
     it('pending mass is non-negative for a partially-converged search', async () => {
         const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
-        const stats  = await engine.calculate({ cat: 'chestplate', xp: 15, mat: 'iron', threshold: 0.01 });
+        const stats  = await engine.calculate({ item: 'chestplate', xp: 15, material: 'iron', threshold: 0.01 });
 
         assert.ok(
             stats.accounting.pending >= 0,
@@ -47,7 +47,7 @@ describe('Probability Conservation', () => {
 
     it('sum(buckets) ≈ 1.0 for a partially-converged search', async () => {
         const engine = EngineFactory.create(DATA, '1.21');
-        const stats  = await engine.calculate({ cat: 'chestplate', xp: 15, mat: 'iron', threshold: 0.01 });
+        const stats  = await engine.calculate({ item: 'chestplate', xp: 15, material: 'iron', threshold: 0.01 });
 
         const total = massTotal(stats);
         assert.ok(
@@ -58,7 +58,7 @@ describe('Probability Conservation', () => {
 
     it('sum(buckets) ≈ 1.0 for a fully-converged book search (modern)', async () => {
         const engine = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
-        const stats  = await engine.calculate({ cat: TEST_DATA.ITEMS.BOOK, xp: 30, mat: TEST_DATA.MATERIALS.BOOK, threshold: TEST_DATA.THRESHOLDS.PROB_MIN });
+        const stats  = await engine.calculate({ item: TEST_DATA.ITEMS.BOOK, xp: 30, material: TEST_DATA.MATERIALS.BOOK, threshold: TEST_DATA.THRESHOLDS.PROB_MIN });
 
         const total = massTotal(stats);
         assert.ok(
@@ -68,17 +68,17 @@ describe('Probability Conservation', () => {
     });
 
     it('accuracy >= 0 and sum(buckets) ≈ 1.0 across items/versions', async () => {
-        const cases: Array<{ version: string; cat: string; level: number; mat: string }> = [
-            { version: TEST_DATA.VERSIONS.CLASSIC, cat: TEST_DATA.ITEMS.SWORD, level: 30, mat: TEST_DATA.MATERIALS.DIAMOND },
-            { version: '1.14.3', cat: 'chestplate', level: 30, mat: TEST_DATA.MATERIALS.NETHERITE }, // Custom boundary
-            { version: TEST_DATA.VERSIONS.MODERN,  cat: TEST_DATA.ITEMS.MACE, level: 15, mat: TEST_DATA.MATERIALS.MACE },
-            { version: TEST_DATA.VERSIONS.BOOK_MULTI_LIMIT, cat: TEST_DATA.ITEMS.BOOK, level: 30, mat: TEST_DATA.MATERIALS.BOOK },
+        const cases: Array<{ version: string; item: string; level: number; material: string }> = [
+            { version: TEST_DATA.VERSIONS.CLASSIC, item: TEST_DATA.ITEMS.SWORD, level: 30, material: TEST_DATA.MATERIALS.DIAMOND },
+            { version: '1.14.3', item: 'chestplate', level: 30, material: TEST_DATA.MATERIALS.NETHERITE }, // Custom boundary
+            { version: TEST_DATA.VERSIONS.MODERN,  item: TEST_DATA.ITEMS.MACE, level: 15, material: TEST_DATA.MATERIALS.MACE },
+            { version: TEST_DATA.VERSIONS.BOOK_MULTI_LIMIT, item: TEST_DATA.ITEMS.BOOK, level: 30, material: TEST_DATA.MATERIALS.BOOK },
         ];
 
-        for (const { version, cat, level, mat } of cases) {
+        for (const { version, item, level, material } of cases) {
             const engine = EngineFactory.create(DATA, version);
-            const stats  = await engine.calculate({ cat: cat, xp: level, mat: mat, threshold: 0.001 });
-            const label  = `${version} ${cat}@${level} ${mat}`;
+            const stats  = await engine.calculate({ item: item, xp: level, material: material, threshold: 0.001 });
+            const label  = `${version} ${item}@${level} ${material}`;
 
             assert.ok(
                 stats.accuracy >= 0,
@@ -96,9 +96,9 @@ describe('Probability Conservation', () => {
     it('guaranteed clue result remains complete for bow (Power IV)', async () => {
         const engine  = EngineFactory.create(DATA, TEST_DATA.VERSIONS.MODERN);
         const stats   = await engine.calculate({
-            cat: 'bow',
+            item: 'bow',
             xp: 30,
-            mat: 'bow',
+            material: 'bow',
             clue: 'Power IV',
             threshold: TEST_DATA.THRESHOLDS.PROB_MIN,
         });

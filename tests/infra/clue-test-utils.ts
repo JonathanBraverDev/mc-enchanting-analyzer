@@ -26,19 +26,19 @@ export function compareConditionedMaps(
 }
 
 export async function calculateByFullSearchThenCondition(
-    cat: string,
-    mat: string,
+    item: string,
+    material: string,
     clue: string,
     threshold: number,
     xp = 30
 ): Promise<CalculationStats> {
     const engine = EngineFactory.create(DATA, '1.21.11');
     engine.resetCaches();
-    const targetClueId = ClueValidator.validate(engine.registry, cat, clue);
+    const targetClueId = ClueValidator.validate(engine.registry, item, clue);
     const fullSearch = await engine.searchToCheckpoint({
-        cat,
+        item,
         xp,
-        mat,
+        material,
         threshold,
         useCache: false
     });
@@ -49,23 +49,23 @@ export async function calculateByFullSearchThenCondition(
         indexToEnchant: engine.registry.indexToEnchant,
         targetClueId,
         frontiers: fullSearch.frontiers,
-        isBook: cat === TEST_DATA.ITEMS.BOOK,
+        isBook: item === TEST_DATA.ITEMS.BOOK,
         comboLimit: 1000
     });
 }
 
 export async function calculateWithPruning(
-    cat: string,
-    mat: string,
+    item: string,
+    material: string,
     clue: string,
     threshold: number
 ): Promise<CalculationStats> {
     const engine = EngineFactory.create(DATA, '1.21.11');
     engine.resetCaches();
     return engine.calculate({
-        cat,
+        item,
         xp: 30,
-        mat,
+        material,
         clue,
         threshold,
         useCache: false,
@@ -76,10 +76,10 @@ export async function calculateWithPruning(
 export function summarizeCheckpoint(
     engine: TestEngine,
     result: CheckpointResult,
-    cat: string,
+    item: string,
     clue: string
 ): CalculationStats {
-    const targetClueId = ClueValidator.validate(engine.registry, cat, clue);
+    const targetClueId = ClueValidator.validate(engine.registry, item, clue);
 
     return SummaryService.summarizeConditioned({
         combos: result.combos,
@@ -87,7 +87,7 @@ export function summarizeCheckpoint(
         indexToEnchant: engine.registry.indexToEnchant,
         targetClueId,
         frontiers: result.frontiers,
-        isBook: cat === TEST_DATA.ITEMS.BOOK,
+        isBook: item === TEST_DATA.ITEMS.BOOK,
         comboLimit: 1000
     });
 }

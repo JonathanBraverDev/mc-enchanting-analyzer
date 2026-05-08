@@ -20,10 +20,10 @@ describe('Registry & Data Rules Test Suite', () => {
     describe('1. Version Availability', () => {
         it('should correctly identify Mace availability (1.21+)', () => {
             const v116 = EngineFactory.create(DATA, '1.16').registry;
-            assert.strictEqual(isCategoryAvailable(v116, 'mace'), false, '1.16 should NOT have mace');
+            assert.strictEqual(isItemAvailable(v116, 'mace'), false, '1.16 should NOT have mace');
 
             const v121 = EngineFactory.create(DATA, '1.21').registry;
-            assert.strictEqual(isCategoryAvailable(v121, 'mace'), true, '1.21 SHOULD have mace');
+            assert.strictEqual(isItemAvailable(v121, 'mace'), true, '1.21 SHOULD have mace');
         });
 
         it('should handle Book eligibility across versions (1.3.1 - 1.7.2)', () => {
@@ -40,10 +40,10 @@ describe('Registry & Data Rules Test Suite', () => {
 
         it('should correctly handle Sweeping Edge availability (1.11.1+)', () => {
             const v18 = EngineFactory.create(DATA, '1.8').registry;
-            assert.ok(!getCategoryPool(v18, 'sword').includes('Sweeping Edge'), '1.8: Sword pool should not include Sweeping Edge');
+            assert.ok(!getItemPool(v18, 'sword').includes('Sweeping Edge'), '1.8: Sword pool should not include Sweeping Edge');
 
             const v111 = EngineFactory.create(DATA, '1.11.1').registry;
-            assert.ok(getCategoryPool(v111, 'sword').includes('Sweeping Edge'), '1.11.1: Sword pool SHOULD include Sweeping Edge');
+            assert.ok(getItemPool(v111, 'sword').includes('Sweeping Edge'), '1.11.1: Sword pool SHOULD include Sweeping Edge');
         });
 
         it('should derive legacy and modern sword pools from group rules', () => {
@@ -51,18 +51,18 @@ describe('Registry & Data Rules Test Suite', () => {
             const v18 = EngineFactory.create(DATA, '1.8').registry;
             const v111 = EngineFactory.create(DATA, '1.11.1').registry;
 
-            assert.ok(!getCategoryPool(v172, 'sword').includes('Unbreaking'), '1.7.2: Sword pool should not include Unbreaking');
-            assert.ok(getCategoryPool(v18, 'sword').includes('Unbreaking'), '1.8: Sword pool should include Unbreaking');
-            assert.ok(!getCategoryPool(v18, 'sword').includes('Sweeping Edge'), '1.8: Sword pool should not include Sweeping Edge');
-            assert.ok(getCategoryPool(v111, 'sword').includes('Sweeping Edge'), '1.11.1: Sword pool should include Sweeping Edge');
+            assert.ok(!getItemPool(v172, 'sword').includes('Unbreaking'), '1.7.2: Sword pool should not include Unbreaking');
+            assert.ok(getItemPool(v18, 'sword').includes('Unbreaking'), '1.8: Sword pool should include Unbreaking');
+            assert.ok(!getItemPool(v18, 'sword').includes('Sweeping Edge'), '1.8: Sword pool should not include Sweeping Edge');
+            assert.ok(getItemPool(v111, 'sword').includes('Sweeping Edge'), '1.11.1: Sword pool should include Sweeping Edge');
         });
 
         it('should derive bow Unbreaking membership from group rules', () => {
             const v172 = EngineFactory.create(DATA, '1.7.2').registry;
             const v18 = EngineFactory.create(DATA, '1.8').registry;
 
-            assert.ok(!getCategoryPool(v172, 'bow').includes('Unbreaking'), '1.7.2: Bow pool should not include Unbreaking');
-            assert.ok(getCategoryPool(v18, 'bow').includes('Unbreaking'), '1.8: Bow pool should include Unbreaking');
+            assert.ok(!getItemPool(v172, 'bow').includes('Unbreaking'), '1.7.2: Bow pool should not include Unbreaking');
+            assert.ok(getItemPool(v18, 'bow').includes('Unbreaking'), '1.8: Bow pool should include Unbreaking');
         });
 
         it('should derive armor Unbreaking and extras from group rules', () => {
@@ -70,13 +70,13 @@ describe('Registry & Data Rules Test Suite', () => {
             const v172 = EngineFactory.create(DATA, '1.7.2').registry;
             const v18 = EngineFactory.create(DATA, '1.8').registry;
 
-            assert.ok(!getCategoryPool(v146, 'chestplate').includes('Unbreaking'), '1.4.6: Chestplate should not include Unbreaking');
-            assert.ok(getCategoryPool(v146, 'chestplate').includes('Thorns'), '1.4.6: Chestplate should include Thorns');
-            assert.ok(getCategoryPool(v172, 'leggings').includes('Unbreaking'), '1.7.2: Leggings should include Unbreaking');
-            assert.ok(getCategoryPool(v172, 'helmet').includes('Respiration'), '1.7.2: Helmet should include Respiration');
-            assert.ok(getCategoryPool(v172, 'boots').includes('Feather Falling'), '1.7.2: Boots should include Feather Falling');
-            assert.ok(!getCategoryPool(v172, 'boots').includes('Depth Strider'), '1.7.2: Boots should not include Depth Strider');
-            assert.ok(getCategoryPool(v18, 'boots').includes('Depth Strider'), '1.8: Boots should include Depth Strider');
+            assert.ok(!getItemPool(v146, 'chestplate').includes('Unbreaking'), '1.4.6: Chestplate should not include Unbreaking');
+            assert.ok(getItemPool(v146, 'chestplate').includes('Thorns'), '1.4.6: Chestplate should include Thorns');
+            assert.ok(getItemPool(v172, 'leggings').includes('Unbreaking'), '1.7.2: Leggings should include Unbreaking');
+            assert.ok(getItemPool(v172, 'helmet').includes('Respiration'), '1.7.2: Helmet should include Respiration');
+            assert.ok(getItemPool(v172, 'boots').includes('Feather Falling'), '1.7.2: Boots should include Feather Falling');
+            assert.ok(!getItemPool(v172, 'boots').includes('Depth Strider'), '1.7.2: Boots should not include Depth Strider');
+            assert.ok(getItemPool(v18, 'boots').includes('Depth Strider'), '1.8: Boots should include Depth Strider');
         });
 
         it('should correctly handle Netherite availability (1.16+)', () => {
@@ -95,7 +95,7 @@ describe('Registry & Data Rules Test Suite', () => {
              assert.ok(getEligibleMaterials(v1219, 'sword').includes('copper'), '1.21.9: SHOULD have copper');
         });
 
-        it('should expose category availability from registry rules', () => {
+        it('should expose item availability from registry rules', () => {
             const cases = [
                 { version: '1.0', available: ['sword', 'pickaxe'], unavailable: ['book', 'fishing_rod', 'trident', 'crossbow', 'hoe', 'mace', 'spear'] },
                 { version: '1.4.6', available: ['book'], unavailable: ['fishing_rod'] },
@@ -109,11 +109,12 @@ describe('Registry & Data Rules Test Suite', () => {
 
             for (const { version, available, unavailable } of cases) {
                 const registry = EngineFactory.create(DATA, version).registry;
-                for (const cat of available) assert.strictEqual(isCategoryAvailable(registry, cat), true, `${version}: ${cat} should be available`);
-                for (const cat of unavailable) assert.strictEqual(isCategoryAvailable(registry, cat), false, `${version}: ${cat} should not be available`);
+                for (const item of available) assert.strictEqual(isItemAvailable(registry, item), true, `${version}: ${item} should be available`);
+                for (const item of unavailable) assert.strictEqual(isItemAvailable(registry, item), false, `${version}: ${item} should not be available`);
             }
         });
 
+        // V6_REMOVE: This is the intentional coverage for deprecated category helper wrappers.
         it('deprecated category helpers match item-named helpers', () => {
             const registry = EngineFactory.create(DATA, '1.21.11').registry;
             for (const item of ['sword', 'book', 'trident', 'mace', 'spear']) {
@@ -136,7 +137,7 @@ describe('Registry & Data Rules Test Suite', () => {
 
             const v113 = EngineFactory.create(DATA, '1.13').registry;
             assert.deepStrictEqual(getEligibleMaterials(v113, 'trident'), ['trident']);
-            assert.deepStrictEqual(getEligibleMaterials(v113, 'helmet').filter(mat => mat === 'turtle_shell'), ['turtle_shell']);
+            assert.deepStrictEqual(getEligibleMaterials(v113, 'helmet').filter(material => material === 'turtle_shell'), ['turtle_shell']);
 
             const v114 = EngineFactory.create(DATA, '1.14').registry;
             assert.deepStrictEqual(getEligibleMaterials(v114, 'crossbow'), ['crossbow']);
@@ -189,32 +190,32 @@ describe('Registry & Data Rules Test Suite', () => {
             assert.strictEqual(hasConflict(reg, riptideId, channelingId), true, 'Riptide vs Channeling conflict');
         });
 
-        it('should enforce illegal enchantments on categories', () => {
-            const swordPool = getCategoryPool(reg, 'sword');
+        it('should enforce illegal enchantments on items', () => {
+            const swordPool = getItemPool(reg, 'sword');
             assert.strictEqual(swordPool.includes('Fortune'), false, 'Swords should not have Fortune');
             assert.strictEqual(swordPool.includes('Efficiency'), false, 'Swords should not have Efficiency');
 
-            const pickaxePool = getCategoryPool(reg, 'pickaxe');
+            const pickaxePool = getItemPool(reg, 'pickaxe');
             assert.strictEqual(pickaxePool.includes('Sharpness'), false, 'Pickaxes should not have Sharpness');
             assert.strictEqual(pickaxePool.includes('Sweeping Edge'), false, 'Pickaxes should not have Sweeping Edge');
 
-            const chestplatePool = getCategoryPool(reg, 'chestplate');
+            const chestplatePool = getItemPool(reg, 'chestplate');
             assert.strictEqual(chestplatePool.includes('Power'), false, 'Chestplates should not have Power');
             assert.strictEqual(chestplatePool.includes('Lure'), false, 'Chestplates should not have Lure');
         });
     });
 
-    describe('3. Category & Material ID Mapping', () => {
+    describe('3. Item & Material ID Mapping', () => {
         const reg = EngineFactory.create(DATA, '1.20').registry;
 
-        it('should assign unique Category IDs to common item types', () => {
-            const categories = ["sword", "pickaxe", "axe", "shovel", "helmet", "chestplate", "leggings", "boots", "hoe", "bow"];
+        it('should assign unique item IDs to common item types', () => {
+            const items = ["sword", "pickaxe", "axe", "shovel", "helmet", "chestplate", "leggings", "boots", "hoe", "bow"];
             const ids = new Set<number>();
 
-            categories.forEach(cat => {
-                const id = getCategoryId(reg, cat);
-                assert.notStrictEqual(id, 63, `Category "${cat}" should not have the default unknown ID (63)`);
-                assert.ok(!ids.has(id), `Category "${cat}" should have a unique ID, but ${id} is already taken`);
+            items.forEach(item => {
+                const id = getItemId(reg, item);
+                assert.notStrictEqual(id, 63, `Item "${item}" should not have the default unknown ID (63)`);
+                assert.ok(!ids.has(id), `Item "${item}" should have a unique ID, but ${id} is already taken`);
                 ids.add(id);
             });
         });
@@ -223,10 +224,10 @@ describe('Registry & Data Rules Test Suite', () => {
             const materials = ["wood", "stone", "iron", "gold", "diamond", "netherite", "leather", "chain"];
             const ids = new Set<number>();
 
-            materials.forEach(mat => {
-                const id = getMaterialId(reg, mat);
-                assert.notStrictEqual(id, 63, `Material "${mat}" should not have the default unknown ID (63)`);
-                assert.ok(!ids.has(id), `Material "${mat}" should have a unique ID, but ${id} is already taken`);
+            materials.forEach(material => {
+                const id = getMaterialId(reg, material);
+                assert.notStrictEqual(id, 63, `Material "${material}" should not have the default unknown ID (63)`);
+                assert.ok(!ids.has(id), `Material "${material}" should have a unique ID, but ${id} is already taken`);
                 ids.add(id);
             });
         });

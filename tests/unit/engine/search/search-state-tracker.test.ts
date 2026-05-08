@@ -81,7 +81,7 @@ describe('SearchStateTracker', () => {
             queue: { pushOrMerge: () => {} },
             graph,
             instrumentation: {},
-            cat: 'sword',
+            item: 'sword',
             results: new Map()
         };
 
