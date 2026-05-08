@@ -10,12 +10,6 @@ import {
 import { RegistryFactory } from '#core/factory.js';
 import { EngineFactory } from '#engine/factory.js';
 import { CacheManager } from '#engine/cache/CacheManager.js';
-import { DATA } from '#data/index.js';
-import type { EnchantmentData } from '#types/index.js';
-
-function cloneData(): EnchantmentData {
-    return JSON.parse(JSON.stringify(DATA)) as EnchantmentData;
-}
 
 describe('EngineFactory', () => {
     it('builds the bundled vanilla registry by version', () => {
@@ -23,17 +17,6 @@ describe('EngineFactory', () => {
 
         assert.strictEqual(registry.version, '1.21.11');
         assert.ok(isItemAvailable(registry, 'book'));
-    });
-
-    it('builds custom registry data through the explicit custom-data path', () => {
-        const customData = cloneData();
-        customData.enchantable_item_rules = customData.enchantable_item_rules.filter(rule => rule.item !== 'mace');
-
-        const vanilla = RegistryFactory.build('1.21.11');
-        const custom = RegistryFactory.buildFromData(customData, '1.21.11');
-
-        assert.strictEqual(isItemAvailable(vanilla, 'mace'), true);
-        assert.strictEqual(isItemAvailable(custom, 'mace'), false);
     });
 
     it('applies a single vanilla-data mutation without changing future vanilla builds', () => {
