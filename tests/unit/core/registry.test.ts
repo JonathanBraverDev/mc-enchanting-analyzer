@@ -129,6 +129,7 @@ describe('Registry & Data Rules Test Suite', () => {
                 assert.strictEqual(isCategoryAvailable(registry, item), isItemAvailable(registry, item), `${item}: availability mismatch`);
                 assert.strictEqual(getCategoryId(registry, item), getItemId(registry, item), `${item}: id mismatch`);
                 assert.deepStrictEqual(getCategoryPool(registry, item), getItemPool(registry, item), `${item}: pool mismatch`);
+                assert.deepStrictEqual(registry.versionPool.get(item), registry.itemPool[item], `${item}: versionPool compatibility mismatch`);
             }
         });
 

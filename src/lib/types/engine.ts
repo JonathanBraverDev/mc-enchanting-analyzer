@@ -227,8 +227,7 @@ export interface RegistryState {
     conflictBitsets: BigUint64Array;
     weightMap: Uint32Array;
     sortedRanks: [string, number][];
-    itemPoolByVersion: Map<string, string[]>;
-    /** @deprecated V6_REMOVE: Use itemPoolByVersion. */
+    /** @deprecated V6_REMOVE: Historical active item-pool map; use itemPool. */
     versionPool: Map<string, string[]>;
     enchantToIndex: Map<number, number>;
     indexToEnchant: number[];
