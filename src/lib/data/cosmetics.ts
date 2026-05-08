@@ -2,7 +2,6 @@ import type { EnchantmentData } from '#types/index.js';
 
 export const constants = {
   "ROMAN_MAP": { "I": 1, "II": 2, "III": 3, "IV": 4, "V": 5, "VI": 6, "VII": 7, "VIII": 8, "IX": 9, "X": 10 },
-  "ARMOR_CATS": ["helmet", "chestplate", "leggings", "boots"],
   "MATERIAL_PRIORITY": ["netherite", "diamond", "gold", "iron", "stone", "wood", "leather", "chain"]
 } satisfies EnchantmentData["constants"];
 

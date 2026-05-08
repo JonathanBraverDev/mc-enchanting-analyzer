@@ -168,7 +168,6 @@ export interface EnchantmentData {
   material_values: MaterialValues;
   constants: {
     ROMAN_MAP: RomanMap;
-    ARMOR_CATS: string[];
     MATERIAL_PRIORITY: string[];
   };
   cosmetics: {
