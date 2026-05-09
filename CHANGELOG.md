@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## v6.1.0 (2026-05-09)
+
+### Added
+- **Chart click selection**: Clicking inside the probability chart now updates the selected enchanting level and reuses the existing selected-level refinement flow.
+
+### Improved
+- **Tiny probability display**: Very small top-combination odds now stay distinguishable instead of collapsing into the same low-percentage label.
+- **Chart interaction affordance**: The chart now exposes a clearer hover/click cue for the new level-selection behavior.
+
+### Fixed
+- **Pending book result identities**: Pending book branches still contribute aggregate probability estimates, but raw pre-removal book combos no longer appear as visible target or clue-conditioned combo rows.
+
+### Developer Experience
+- **Release branch tags**: The release archive workflow can now transfer working tags from version branches to the history branch.
+
 ## v6.0.1 (2026-05-09)
 
 ### Fixed
