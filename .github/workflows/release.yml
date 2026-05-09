@@ -193,8 +193,21 @@ jobs:
             exit 1
           fi
 
+          mapfile -t RELEASE_COMMITS < <(git rev-list --reverse "$RELEASE_BASE"..refs/remotes/origin/release-branch-head)
+          TRANSFERRED_TAGS=()
+
           git switch --detach origin/release-history
-          git cherry-pick "$RELEASE_BASE"..refs/remotes/origin/release-branch-head
+          for RELEASE_COMMIT in "${RELEASE_COMMITS[@]}"; do
+            git cherry-pick "$RELEASE_COMMIT"
+            ARCHIVED_COMMIT=$(git rev-parse HEAD)
+
+            mapfile -t COMMIT_TAGS < <(git tag --points-at "$RELEASE_COMMIT" | grep -Ev '^v[0-9]+\.[0-9]+\.[0-9]+$' || true)
+            for COMMIT_TAG in "${COMMIT_TAGS[@]}"; do
+              git tag -f "$COMMIT_TAG" "$ARCHIVED_COMMIT"
+              TRANSFERRED_TAGS+=("$COMMIT_TAG")
+              echo "Mapped tag $COMMIT_TAG from $RELEASE_COMMIT to archived commit $ARCHIVED_COMMIT."
+            done
+          done
 
           if ! git diff --quiet HEAD "$RELEASE_REF"; then
             echo "::error::Archived release history does not match the released tree."
@@ -202,6 +215,9 @@ jobs:
           fi
 
           git push origin "HEAD:refs/heads/release-history"
+          for TRANSFERRED_TAG in "${TRANSFERRED_TAGS[@]}"; do
+            git push --force origin "refs/tags/$TRANSFERRED_TAG"
+          done
 
       - name: Delete archived release branch
         if: github.event_name == 'push'
