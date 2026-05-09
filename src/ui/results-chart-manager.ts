@@ -29,10 +29,25 @@ export class ChartManager {
     get chartInstance(): ChartInstance | null { return this.chart; }
     private canvas: HTMLCanvasElement | null = null;
     private onLevelSelect: ((level: number) => void) | null = null;
+    private readonly handleCanvasMouseMove = (event: MouseEvent): void => {
+        if (!this.canvas || !this.chart || !this.onLevelSelect) return;
+
+        const bounds = this.canvas.getBoundingClientRect();
+        const pointer = {
+            x: event.clientX - bounds.left,
+            y: event.clientY - bounds.top
+        };
+        this.canvas.style.cursor = this.isInChartArea(pointer, this.chart) ? 'pointer' : '';
+    };
+    private readonly handleCanvasMouseLeave = (): void => {
+        if (this.canvas) this.canvas.style.cursor = '';
+    };
 
     constructor(canvasId: string, onLevelSelect?: (level: number) => void) {
         this.canvas = document.getElementById(canvasId) as HTMLCanvasElement;
         this.onLevelSelect = onLevelSelect || null;
+        this.canvas?.addEventListener('mousemove', this.handleCanvasMouseMove);
+        this.canvas?.addEventListener('mouseleave', this.handleCanvasMouseLeave);
     }
 
     public destroy(): void {
@@ -168,8 +183,7 @@ export class ChartManager {
     private handleChartClick(event: ChartPointerEvent, chart: ChartInstance): void {
         if (!this.onLevelSelect || event.x === undefined || event.y === undefined) return;
 
-        const { left, right, top, bottom } = chart.chartArea;
-        if (event.x < left || event.x > right || event.y < top || event.y > bottom) return;
+        if (!this.isInChartArea(event, chart)) return;
 
         const xScale = chart.scales.x;
         if (!xScale) return;
@@ -186,5 +200,12 @@ export class ChartManager {
         const level = Math.max(minLevel, Math.min(maxLevel, Math.round(rawLevel)));
 
         this.onLevelSelect(level);
+    }
+
+    private isInChartArea(event: ChartPointerEvent, chart: ChartInstance): boolean {
+        if (event.x === undefined || event.y === undefined) return false;
+
+        const { left, right, top, bottom } = chart.chartArea;
+        return event.x >= left && event.x <= right && event.y >= top && event.y <= bottom;
     }
 }
