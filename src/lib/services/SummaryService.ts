@@ -111,7 +111,7 @@ export class SummaryService {
         };
 
         // 1. Perform Bayesian conditioning
-        const conditioned = ClueAnalysisService.conditionOnClue(combos, targetClueId, indexToEnchant, frontiers);
+        const conditioned = ClueAnalysisService.conditionOnClue(combos, targetClueId, indexToEnchant, frontiers, request.isBook ?? false);
 
         // 2. Preserve observed-clue diagnostics used for Bayesian conditioning.
         stats.clue = {

@@ -213,6 +213,59 @@ describe('UIUtils.formatPercent', () => {
         const result = UIUtils.formatPercent(0.0001);
         assert.ok(result.endsWith('%'), 'should always end with %');
     });
+
+    it('formats combo percentages below 0.1% with enough precision', () => {
+        assert.strictEqual(UIUtils.formatComboPercent(0.0001), '0.01%');
+        assert.strictEqual(UIUtils.formatComboPercent(0.000999), '0.1%');
+        assert.strictEqual(UIUtils.formatComboPercent(0.5), '50.0%');
+    });
+
+    it('uses tiny odds notation only below 0.01%', () => {
+        assert.strictEqual(UIUtils.shouldUseTinyProbabilityOdds(0.0001), false);
+        assert.strictEqual(UIUtils.shouldUseTinyProbabilityOdds(0.0000999), true);
+        assert.strictEqual(UIUtils.shouldUseTinyProbabilityOdds(0), false);
+    });
+
+    it('formats sub-million odds as full comma-separated numbers', () => {
+        const odds = UIUtils.formatTinyProbabilityOdds(0.000012);
+
+        assert.strictEqual(odds.human, '1 in 83,334');
+        assert.strictEqual(odds.shouldFadeScientific, false);
+    });
+
+    it('formats tiny odds with human and scientific reciprocal notation', () => {
+        const odds = UIUtils.formatTinyProbabilityOdds(1 / 14_000_000);
+
+        assert.strictEqual(odds.human, '1 in 14 million');
+        assert.strictEqual(odds.scientificText, '1 in 1.4 × 10^7');
+        assert.strictEqual(odds.scientificMantissa, '1.4');
+        assert.strictEqual(odds.scientificExponent, 7);
+        assert.strictEqual(odds.shouldFadeScientific, false);
+    });
+
+    it('starts fading to scientific notation when odds reach a billion', () => {
+        assert.strictEqual(UIUtils.formatTinyProbabilityOdds(1 / 999_999_999).shouldFadeScientific, false);
+        assert.strictEqual(UIUtils.formatTinyProbabilityOdds(1 / 1_000_000_000).shouldFadeScientific, true);
+    });
+
+    it('ceilings odds displays to three significant digits', () => {
+        const tenMillions = UIUtils.formatTinyProbabilityOdds(1 / 12_345_678);
+        assert.strictEqual(tenMillions.human, '1 in 12.4 million');
+        assert.strictEqual(tenMillions.scientificText, '1 in 1.24 × 10^7');
+
+        const hundredMillions = UIUtils.formatTinyProbabilityOdds(1 / 123_456_789);
+        assert.strictEqual(hundredMillions.human, '1 in 124 million');
+        assert.strictEqual(hundredMillions.scientificText, '1 in 1.24 × 10^8');
+
+        const billions = UIUtils.formatTinyProbabilityOdds(1 / 1_056_000_000);
+        assert.strictEqual(billions.human, '1 in 1.06 billion');
+        assert.strictEqual(billions.scientificText, '1 in 1.06 × 10^9');
+    });
+
+    it('rejects non-tiny odds formatting inputs', () => {
+        assert.throws(() => UIUtils.formatTinyProbabilityOdds(0.0001), /not a positive tiny probability/);
+        assert.throws(() => UIUtils.formatTinyProbabilityOdds(0), /not a positive tiny probability/);
+    });
 });
 
 // ── RomanUtils ───────────────────────────────────────────────────────────────

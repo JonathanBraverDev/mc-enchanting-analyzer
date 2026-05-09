@@ -17,6 +17,7 @@ export interface TargetAnalysisRequest {
     frontiers?: SearchFrontierSnapshot[] | undefined;
     comboLimit?: number | undefined;
     registry?: RegistryState | undefined;
+    isBook?: boolean | undefined;
 }
 
 export class TargetAnalysisService {
@@ -110,12 +111,15 @@ export class TargetAnalysisService {
             targets = [],
             frontiers = [],
             comboLimit = 50,
-            registry
+            registry,
+            isBook = false
         } = request;
 
         if (targets.length === 0) return undefined;
 
         let matchMass = 0n;
+        let pendingNearMissMass = 0n;
+        let pendingBlockedMass = 0n;
         const matchingCombos = new Map<PackedCombo, bigint>();
         const nearMissCombos = new Map<PackedCombo, bigint>();
         const blockedCombos = new Map<PackedCombo, bigint>();
@@ -138,10 +142,16 @@ export class TargetAnalysisService {
                 const mass = ProbUtils.scale(prob, scale);
                 if (classification.matches) {
                     matchMass += mass;
-                    this.addComboMass(matchingCombos, packed, mass);
+                    if (!isBook) this.addComboMass(matchingCombos, packed, mass);
                 } else {
-                    if (classification.nearMiss) this.addComboMass(nearMissCombos, packed, mass);
-                    if (classification.blockedByConflict) this.addComboMass(blockedCombos, packed, mass);
+                    if (classification.nearMiss) {
+                        if (isBook) pendingNearMissMass += mass;
+                        else this.addComboMass(nearMissCombos, packed, mass);
+                    }
+                    if (classification.blockedByConflict) {
+                        if (isBook) pendingBlockedMass += mass;
+                        else this.addComboMass(blockedCombos, packed, mass);
+                    }
                 }
             });
         }
@@ -154,9 +164,9 @@ export class TargetAnalysisService {
         return {
             matchMass,
             matchingComboCount: matchingCombos.size,
-            nearMissMass: this.sumComboMass(nearMissCombos),
+            nearMissMass: this.sumComboMass(nearMissCombos) + pendingNearMissMass,
             nearMissComboCount: nearMissCombos.size,
-            blockedMass: this.sumComboMass(blockedCombos),
+            blockedMass: this.sumComboMass(blockedCombos) + pendingBlockedMass,
             blockedComboCount: blockedCombos.size,
             combos: new Map(topCombos)
         };

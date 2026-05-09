@@ -5,9 +5,15 @@ import { RomanUtils } from '#utils/index.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 
 interface ChartInstance {
+    chartArea: { bottom: number; left: number; right: number; top: number };
     data: { labels: unknown[]; datasets: unknown[] };
     destroy(): void;
+    scales: { x?: { getValueForPixel(pixel: number): number } };
     update(mode: string): void;
+}
+interface ChartPointerEvent {
+    x?: number;
+    y?: number;
 }
 interface ChartConstructor {
     new(ctx: CanvasRenderingContext2D | null, config: Record<string, unknown>): ChartInstance;
@@ -22,9 +28,26 @@ export class ChartManager {
     private chart: ChartInstance | null = null;
     get chartInstance(): ChartInstance | null { return this.chart; }
     private canvas: HTMLCanvasElement | null = null;
+    private onLevelSelect: ((level: number) => void) | null = null;
+    private readonly handleCanvasMouseMove = (event: MouseEvent): void => {
+        if (!this.canvas || !this.chart || !this.onLevelSelect) return;
 
-    constructor(canvasId: string) {
+        const bounds = this.canvas.getBoundingClientRect();
+        const pointer = {
+            x: event.clientX - bounds.left,
+            y: event.clientY - bounds.top
+        };
+        this.canvas.style.cursor = this.isInChartArea(pointer, this.chart) ? 'pointer' : '';
+    };
+    private readonly handleCanvasMouseLeave = (): void => {
+        if (this.canvas) this.canvas.style.cursor = '';
+    };
+
+    constructor(canvasId: string, onLevelSelect?: (level: number) => void) {
         this.canvas = document.getElementById(canvasId) as HTMLCanvasElement;
+        this.onLevelSelect = onLevelSelect || null;
+        this.canvas?.addEventListener('mousemove', this.handleCanvasMouseMove);
+        this.canvas?.addEventListener('mouseleave', this.handleCanvasMouseLeave);
     }
 
     public destroy(): void {
@@ -133,6 +156,7 @@ export class ChartManager {
             animation: false, // Performance: Disable animations to enable Path2D caching
             spanGaps: true,   // Performance: Avoid line segmentation
             interaction: { mode: 'index', intersect: false },
+            onClick: (event: ChartPointerEvent, _elements: unknown[], chart: ChartInstance) => this.handleChartClick(event, chart),
             scales: {
                 y: {
                     beginAtZero: true,
@@ -153,5 +177,35 @@ export class ChartManager {
                 }
             }
         };
+    }
+
+
+    private handleChartClick(event: ChartPointerEvent, chart: ChartInstance): void {
+        if (!this.onLevelSelect || event.x === undefined || event.y === undefined) return;
+
+        if (!this.isInChartArea(event, chart)) return;
+
+        const xScale = chart.scales.x;
+        if (!xScale) return;
+
+        const rawIndex = xScale.getValueForPixel(event.x);
+        const index = Math.round(rawIndex);
+        const label = chart.data.labels[index];
+        const rawLevel = label === undefined ? index + 1 : Number(label);
+        if (!Number.isFinite(rawLevel)) return;
+
+        const numericLabels = chart.data.labels.map(Number).filter(Number.isFinite);
+        const minLevel = Math.min(...numericLabels);
+        const maxLevel = Math.max(...numericLabels);
+        const level = Math.max(minLevel, Math.min(maxLevel, Math.round(rawLevel)));
+
+        this.onLevelSelect(level);
+    }
+
+    private isInChartArea(event: ChartPointerEvent, chart: ChartInstance): boolean {
+        if (event.x === undefined || event.y === undefined) return false;
+
+        const { left, right, top, bottom } = chart.chartArea;
+        return event.x >= left && event.x <= right && event.y >= top && event.y <= bottom;
     }
 }

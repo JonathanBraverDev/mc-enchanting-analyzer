@@ -19,7 +19,8 @@ export class ClueAnalysisService {
         combos: Map<PackedCombo, bigint>,
         targetClueId: number,
         indexToEnchant: number[],
-        frontiers: SearchFrontierSnapshot[] = []
+        frontiers: SearchFrontierSnapshot[] = [],
+        isBook = false
     ): {
         combos: Map<PackedCombo, bigint>,
         anyMass: Map<number, bigint>,
@@ -52,8 +53,16 @@ export class ClueAnalysisService {
 
         for (const { frontier, graph, scale } of frontiers) {
             frontier.forEachNode((nodeId, prob) => {
-            totalMass += this.processConditionedNode(graph.getCombo(nodeId), ProbUtils.scale(prob, scale), targetClueId, pClue, indexToEnchant, conditionedCombos, anyMass, rankMass, countMass);
-        });
+                const packed = graph.getCombo(nodeId);
+                const mass = ProbUtils.scale(prob, scale);
+
+                if (isBook && ComboUtils.getCount(packed) > 1) {
+                    totalMass += this.processPendingBookAggregate(packed, mass, targetClueId, pClue, indexToEnchant, anyMass, rankMass, countMass);
+                    return;
+                }
+
+                totalMass += this.processConditionedNode(packed, mass, targetClueId, pClue, indexToEnchant, conditionedCombos, anyMass, rankMass, countMass);
+            });
         }
 
         // Final normalization to exactly 1.0.
@@ -119,5 +128,44 @@ export class ClueAnalysisService {
             return pConditioned;
         }
         return 0n;
+    }
+
+    private static processPendingBookAggregate(
+        packed: PackedCombo,
+        pOriginal: bigint,
+        targetClueId: number,
+        pClue: bigint,
+        indexToEnchant: number[],
+        anyMass: Map<number, bigint>,
+        rankMass: Map<number, bigint>,
+        countMass: Map<number, bigint>
+    ): bigint {
+        const count = ComboUtils.getCount(packed);
+        const n = BigInt(count);
+        let clueIndex = -1;
+
+        ComboUtils.forEachEnchant(packed, indexToEnchant, (e, i) => {
+            if (e === targetClueId) clueIndex = i;
+        });
+        if (clueIndex === -1) return 0n;
+
+        const share = (pOriginal / n) + (BigInt(clueIndex) < (pOriginal % n) ? 1n : 0n);
+        if (share <= 0n) return 0n;
+
+        const pConditioned = (share * PRECISION) / pClue;
+
+        // Pending book nodes are pre-removal branches. Resolved book outcomes are exactly
+        // post-processed in the engine; snapshots only keep this aggregate expected value.
+        // Richer pending combo harvesting would need a projection-layer design rather than
+        // replaying engine blueprints/residue forwarding here.
+        const aggregateMass = (pConditioned * BigInt(count - 1)) / n;
+        ProbUtils.addItemMass(countMass, count - 1, pConditioned);
+        ComboUtils.forEachEnchant(packed, indexToEnchant, e => {
+            const id = ComboUtils.getEnchantId(e as PackedEnchant);
+            ProbUtils.addItemMass(anyMass, id, aggregateMass);
+            ProbUtils.addItemMass(rankMass, e as number, aggregateMass);
+        });
+
+        return pConditioned;
     }
 }

@@ -106,7 +106,7 @@ describe('Clue Conditioning Scaling diagnostics', () => {
         assert.ok(Math.abs(Number(stats.combos[packed.toString(16)] ?? 0) - 1.0) < 1e-12);
     });
 
-    it('includes pending book frontier mass in clue-known space', () => {
+    it('uses pending book frontier mass for aggregate clue estimates without raw combo identities', () => {
         const enchantC = 3 as PackedEnchant;
         const bookIndexToEnchant = [0, targetClueId, 2, enchantC];
         const enchantToIndex = new Map<number, number>([
@@ -130,6 +130,12 @@ describe('Clue Conditioning Scaling diagnostics', () => {
         });
 
         assert.ok(Math.abs((stats.clue?.knownSpace ?? 0) - (1 / 3)) < 1e-12);
-        assert.ok(Math.abs(Number(stats.combos[packed.toString(16)] ?? 0) - 1.0) < 1e-12);
+        assert.strictEqual(stats.combos[packed.toString(16)], undefined);
+        assert.strictEqual(Object.keys(stats.combos).length, 0);
+        assert.ok(Math.abs((stats.count[2] ?? 0) - 1.0) < 1e-12);
+        assert.ok(Math.abs((stats.ranks[1] ?? 0) - (2 / 3)) < 1e-12);
+        assert.ok(Math.abs((stats.ranks[2] ?? 0) - (2 / 3)) < 1e-12);
+        assert.ok(Math.abs((stats.ranks[3] ?? 0) - (2 / 3)) < 1e-12);
+        assert.ok(Math.abs((stats.any[0] ?? 0) - 2.0) < 1e-12);
     });
 });
