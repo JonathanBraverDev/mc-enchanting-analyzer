@@ -141,6 +141,26 @@ test.describe('UI Regression & Edge Cases', () => {
         await expect(analyzer.rankSection).toContainText('Any Efficiency');
     });
 
+    test('should preserve conflicting shown clues and targets while showing no matching combinations', async () => {
+        await analyzer.selectCategory('sword');
+        await analyzer.selectMaterial(TEST_DATA.MATERIALS.DIAMOND);
+        await analyzer.waitForRefinementComplete();
+
+        await analyzer.triggerAndAwaitRefinement(async () => {
+            await analyzer.addTarget('Sharpness I+');
+        });
+        await expect(analyzer.targetChips).toContainText(['Sharpness I+']);
+
+        await analyzer.triggerAndAwaitRefinement(async () => {
+            await analyzer.selectClue('Smite IV');
+        });
+
+        await expect(analyzer.clueSelect).toHaveValue('Smite IV');
+        await expect(analyzer.targetChips).toContainText(['Sharpness I+']);
+        await expect(analyzer.comboList).toContainText('No matching combinations found at this checkpoint.');
+        await expect(analyzer.comboList).toContainText('Target Match (Sharpness I+)');
+    });
+
     test('should update enchantability display when material changes', async () => {
         await analyzer.selectCategory('sword');
 
