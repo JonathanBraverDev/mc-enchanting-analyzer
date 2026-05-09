@@ -22,7 +22,7 @@ export interface TinyProbabilityOdds {
  * Utility for UI-specific formatting.
  */
 export class UIUtils {
-    private static readonly TINY_PROBABILITY_THRESHOLD = 0.001;
+    private static readonly TINY_PROBABILITY_THRESHOLD = 0.0001;
     private static readonly SCIENTIFIC_ODDS_THRESHOLD = 1e9;
 
     /**
@@ -30,6 +30,18 @@ export class UIUtils {
      */
     static formatPercent(prob: number): string {
         return (prob * 100).toFixed(1) + "%";
+    }
+
+    /**
+     * Formats a result-list probability without rounding small visible percentages to 0.0%.
+     */
+    static formatComboPercent(prob: number): string {
+        const percent = prob * 100;
+        if (percent > 0 && percent < 0.1) {
+            return UIUtils.trimFixed(percent, 2) + "%";
+        }
+
+        return UIUtils.formatPercent(prob);
     }
 
     /**
@@ -65,7 +77,6 @@ export class UIUtils {
             [1e12, 'trillion'],
             [1e9, 'billion'],
             [1e6, 'million'],
-            [1e3, 'thousand'],
         ];
 
         for (const [unitValue, unitName] of units) {
@@ -74,7 +85,7 @@ export class UIUtils {
             }
         }
 
-        return Math.round(value).toLocaleString('en-US');
+        return Math.ceil(value).toLocaleString('en-US');
     }
 
     private static formatCompactNumber(value: number, maxSignificantDigits: number): string {
@@ -83,6 +94,10 @@ export class UIUtils {
         return ceiled.toLocaleString('en-US', {
             maximumSignificantDigits: maxSignificantDigits,
         });
+    }
+
+    private static trimFixed(value: number, digits: number): string {
+        return value.toFixed(digits).replace(/\.?0+$/, '');
     }
 
     private static ceilToSignificantDigits(value: number, significantDigits: number): number {
