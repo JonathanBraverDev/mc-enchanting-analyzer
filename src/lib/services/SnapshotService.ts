@@ -103,7 +103,8 @@ export class SnapshotService {
       targets: packedTargets,
       frontiers: isConditioned ? [] : frontiers,
       comboLimit: includeCombos ? comboLimit ?? ENGINE_LIMITS.MAX_RESULTS_SUMMARY : 0,
-      registry: state
+      registry: state,
+      isBook
     });
     const targetDiagnostics: TargetDiagnosticsView | undefined = targetAnalysis
       ? {
