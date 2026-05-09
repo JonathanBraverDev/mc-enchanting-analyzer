@@ -713,6 +713,53 @@ Mitigation for first-pass V6 is architectural: keep sections separable, avoid fi
   - This is infrastructure hygiene, not V6 design.
   - It should land early because it makes future UI work safer.
 
+- `refinement-checkpoint-calibration`
+  - This is engine/service research, not UI design.
+  - It should instrument checkpoint accuracy, resolved graph distribution, iteration limits, and threshold choices across items.
+  - The UI should consume the resulting confidence/status model, but should not own the search-threshold tuning.
+
+### Imported current UI pointers
+
+The following notes were deduped against the plan above. Items already covered by existing sections are listed here only when they add concrete behavior or acceptance detail.
+
+- **Chart legibility and interaction**
+  - Covered by: Design color as a semantic system, Charts and Information Displays, Charting Library Alternatives, Light Mode and Color System.
+  - Carry forward: add axis labels; sort tooltips by visible value; use filled legend swatches; highlight the hovered chart line; when hovering a legend label, highlight that series and mute or desaturate the rest.
+  - Carry forward: make enchant ranks distinguishable by more than small lightness changes, using larger color deltas plus dash/shape/marker differences.
+  - Carry forward: choose palettes so enchantments likely to appear together do not receive confusingly similar encodings. Crossbow and tool charts are good stress cases.
+  - Carry forward: remove the current specific-rank discoverability trap where lower-priority series can be excluded by an alphabetical/top-N cutoff.
+
+- **Version and material affordances**
+  - Covered by: Input Model / Version, Input Model / Item category and material.
+  - Carry forward: tint or otherwise mark versions that do not support the currently selected item while keeping them selectable.
+  - Carry forward: add material colors or tints so material choices are easier to scan.
+
+- **Layout and polish**
+  - Covered by: Responsive / Mobile Stretch Goal and Phase 6.
+  - Carry forward: remove brittle fixed sizing in the redesigned shell; keep desktop/tablet first, but preserve a clean path to an adaptive mobile presentation.
+  - Carry forward: add a custom tab icon/favicon as polish.
+
+- **Explorer display modes**
+  - Covered by: Probability Explorer and Charts and Information Displays.
+  - Carry forward: add a grouped-by-level sidebar/list mode similar to the first list on minecraft.tools, separate from the grouped rank legend.
+
+- **Run status model**
+  - Covered by: Charts and Information Displays / Status displays and UI / Data / Engine Decoupling.
+  - Carry forward: top-combination refinement and full chart sweep progress may finish at different times, especially for books. They should be derived from one status model, but the UI must make each run's state legible.
+
+### Notes not carried forward as V6 todos
+
+These notes describe behavior that is already present in the current app, or was fixed during the 6.0.1 patch, so they should not be re-added as new UI-plan work unless later regression evidence appears.
+
+- Multi-enchant target filtering with non-100% filtered totals.
+- Target clue advisor / desired-roll recommendation and high-roll clue signals.
+- Top-combination sort modes for most enchants and highest total rank.
+- Item/version repair when switching to unsupported items such as trident in `1.0`.
+- Single-material item locking for trident-like items.
+- Preserving conflicting shown clue + target selections and showing the existing no-match state.
+- Separate selected-level/top-result status and chart sweep status.
+- Simple-item completion status reaching `Complete`.
+
 ### Candidate future branches
 
 - `v6-ui-shell`
@@ -737,6 +784,7 @@ Mitigation for first-pass V6 is architectural: keep sections separable, avoid fi
 - Introduce layout tokens and theme tokens.
 - Add light/dark/system theme support.
 - Port color-refresh decisions into tokens.
+- Define semantic chart encodings for enchant identity, rank identity, hover state, and material identity.
 - Validate contrast in both themes.
 
 ### Phase 2 — UI shell and mode split
@@ -744,6 +792,7 @@ Mitigation for first-pass V6 is architectural: keep sections separable, avoid fi
 - Add top-level Explore / Plan mode switch.
 - Move global scenario controls into a clearer setup rail/drawer.
 - Preserve existing V5 panels inside Explore mode first.
+- Avoid fixed desktop-only sizing that would block later adaptive layouts.
 
 ### Phase 3 — Probability Explorer
 
@@ -751,6 +800,8 @@ Mitigation for first-pass V6 is architectural: keep sections separable, avoid fi
 - Add target chance chart metric.
 - Integrate click-to-level behavior.
 - Integrate grouped rank legend behavior.
+- Add grouped-by-level sidebar/list behavior.
+- Add chart axis labels, value-sorted tooltips, filled legend swatches, legend/line hover highlighting, and discoverable controls for hidden series.
 - Move technical accounting into a detail drawer.
 
 ### Phase 4 — Advisor / Optimizer
@@ -865,4 +916,4 @@ Jonathan Braver
 
 ## Last Updated
 
-2026-05-07
+2026-05-09
