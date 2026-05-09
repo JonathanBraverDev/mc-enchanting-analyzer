@@ -81,6 +81,26 @@ export class ParamsView {
         }
     }
 
+    public updateItems(): void {
+        const { version, item } = this.getValues();
+        const itemSelect = this.elements["item-select"] as HTMLSelectElement;
+        if (!itemSelect) return;
+
+        const eligibleItems = new Set(UiMetadataService.getEligibleItems(version));
+        let firstEligible = "";
+
+        for (const option of Array.from(itemSelect.options)) {
+            const isEligible = eligibleItems.has(option.value);
+            option.disabled = !isEligible;
+            option.hidden = !isEligible;
+            if (isEligible && !firstEligible) firstEligible = option.value;
+        }
+
+        if (eligibleItems.has(item)) return;
+
+        itemSelect.value = eligibleItems.has("sword") ? "sword" : firstEligible;
+    }
+
     public updateMaterials(): void {
         const { version, item, material } = this.getValues();
         const materialSelect = this.elements["material-select"] as HTMLSelectElement;
@@ -98,6 +118,9 @@ export class ParamsView {
         eligibleKeys.forEach(m => {
             DOMUtils.addOption(materialSelect, m, StringUtils.toTitleCase(m), m === bestMaterial);
         });
+
+        materialSelect.disabled = eligibleKeys.length <= 1;
+        materialSelect.title = materialSelect.disabled ? "This item has only one supported material." : "";
     }
 
     public updateClueTarget(): void {

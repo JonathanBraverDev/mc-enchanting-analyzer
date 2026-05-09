@@ -3,7 +3,7 @@ import assert from 'node:assert';
 import { RefinementService } from '#ui/refinement.js';
 import { WorkerClient } from '#ui/worker-client.js';
 
-describe('RefinementService (V5 Hardened)', () => {
+describe('RefinementService checkpoint orchestration', () => {
     let service: RefinementService;
     let originalStartTop: typeof WorkerClient.startTopRun;
     let originalStartChart: typeof WorkerClient.startChartRun;

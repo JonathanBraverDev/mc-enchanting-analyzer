@@ -12,6 +12,7 @@ import { SummaryAggregationService } from '#services/SummaryAggregationService.j
 import { SerializationService } from '#services/SerializationService.js';
 import { HumanizationService } from '#services/HumanizationService.js';
 import { SnapshotService } from '#services/SnapshotService.js';
+import { TopComboSortService } from '#services/TopComboSortService.js';
 import { UiMetadataService } from '#services/UiMetadataService.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { EngineFactory } from '#engine/factory.js';
@@ -19,7 +20,7 @@ import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
 import { ComboUtils } from '#utils/domain/ComboUtils.js';
 import { ProbUtils } from '#utils/index.js';
 import { makeFrontierSnapshot } from '#tests/infra/frontier-test-utils.js';
-import type { CalculationStats, MassAccountingBreakdown, PackedCombo, PackedEnchant } from '#types/index.js';
+import type { CalculationStats, MassAccountingBreakdown, PackedCombo, PackedEnchant, TopComboView } from '#types/index.js';
 
 describe('UiMetadataService', () => {
     it('includes version boundaries used by registry data', () => {
@@ -43,6 +44,46 @@ describe('UiMetadataService', () => {
         ]);
         assert.ok(versions.includes('1.11.1'), 'enchantment-boundary versions should be selectable');
         assert.ok(versions.includes('1.14'), 'conflict cutoff boundary versions should be selectable');
+    });
+
+    it('exposes version-gated material options used by the UI', () => {
+        assert.ok(!UiMetadataService.getEligibleMaterials('1.15', 'sword').includes('netherite'));
+        assert.ok(UiMetadataService.getEligibleMaterials('1.16', 'sword').includes('netherite'));
+
+        assert.ok(!UiMetadataService.getEligibleMaterials('1.21', 'sword').includes('copper'));
+        assert.ok(UiMetadataService.getEligibleMaterials('1.21.9', 'sword').includes('copper'));
+    });
+
+    it('exposes version-gated item options used by the UI', () => {
+        assert.ok(!UiMetadataService.getEligibleItems('1.0').includes('trident'));
+        assert.ok(UiMetadataService.getEligibleItems('1.13').includes('trident'));
+        assert.ok(UiMetadataService.getEligibleItems('1.0').includes('sword'));
+    });
+
+    it('exposes enchantability values used by the UI summary field', () => {
+        assert.strictEqual(UiMetadataService.getEnchantability('1.21', 'diamond', 'sword'), 10);
+        assert.strictEqual(UiMetadataService.getEnchantability('1.21', 'gold', 'sword'), 22);
+    });
+
+    it('exposes clue and target options for the current table setup', () => {
+        const clueOptions = UiMetadataService.getClueOptions('1.21', 'pickaxe', 'diamond', 30);
+        assert.ok(clueOptions.includes('Efficiency IV'));
+
+        const targetOptions = UiMetadataService.getTargetOptions('1.21', 'sword', 'diamond', 30);
+        assert.ok(targetOptions.some(option => option.label === 'Sharpness I+'));
+    });
+
+    it('filters target options that conflict with selected targets', () => {
+        const selectedTargets = [{ enchantment: 'Sharpness', rank: 1, rankMode: 'atLeast' as const }];
+
+        assert.strictEqual(
+            UiMetadataService.isTargetCompatible('1.21', { enchantment: 'Smite' }, selectedTargets),
+            false
+        );
+        assert.strictEqual(
+            UiMetadataService.isTargetCompatible('1.21', { enchantment: 'Unbreaking' }, selectedTargets),
+            true
+        );
     });
 });
 
@@ -368,6 +409,40 @@ describe('HumanizationService', () => {
 });
 
 // ── ModifiedLevelDistributionService edge case ─────────────────────────────────────────
+
+describe('TopComboSortService', () => {
+    const combos: TopComboView[] = [
+        { enchants: ['Efficiency IV'], share: 0.4, enchantCount: 1, rankSum: 4 },
+        { enchants: ['Unbreaking III', 'Fortune III', 'Efficiency IV'], share: 0.1, enchantCount: 3, rankSum: 10 },
+        { enchants: ['Silk Touch I', 'Unbreaking III'], share: 0.2, enchantCount: 2, rankSum: 4 },
+        { enchants: ['Fortune III', 'Unbreaking III'], share: 0.3, enchantCount: 2, rankSum: 6 }
+    ];
+
+    it('sorts top combos by probability by default', () => {
+        const sorted = TopComboSortService.sort(combos);
+
+        assert.deepStrictEqual(sorted.map(combo => combo.enchants.join('+')), [
+            'Efficiency IV',
+            'Fortune III+Unbreaking III',
+            'Silk Touch I+Unbreaking III',
+            'Unbreaking III+Fortune III+Efficiency IV'
+        ]);
+    });
+
+    it('sorts top combos by enchantment count for the "most enchants" UI mode', () => {
+        const sorted = TopComboSortService.sort(combos, 'count');
+
+        assert.deepStrictEqual(sorted.map(combo => combo.enchantCount), [3, 2, 2, 1]);
+        assert.strictEqual(sorted[0]?.enchants.join('+'), 'Unbreaking III+Fortune III+Efficiency IV');
+    });
+
+    it('sorts top combos by rank sum for the "highest total rank" UI mode', () => {
+        const sorted = TopComboSortService.sort(combos, 'rank');
+
+        assert.deepStrictEqual(sorted.map(combo => combo.rankSum), [10, 6, 4, 4]);
+        assert.strictEqual(sorted[0]?.enchants.join('+'), 'Unbreaking III+Fortune III+Efficiency IV');
+    });
+});
 
 describe('ModifiedLevelDistributionService', () => {
     it('enchantability <= 0 returns single entry at the XP level with PRECISION probability', () => {

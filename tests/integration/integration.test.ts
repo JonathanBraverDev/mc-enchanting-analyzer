@@ -6,10 +6,14 @@ import { EngineFactory } from '#engine/factory.js';
 import { TEST_DATA } from '#tests/infra/test-data.js';
 import { SnapshotService } from '#services/SnapshotService.js';
 import { SummaryService } from '#services/SummaryService.js';
+import { getEnchantId } from '#core/registry.js';
+import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
+import { ComboUtils, PRECISION } from '#utils/index.js';
+import type { PackedEnchant, TopRunView } from '#types/index.js';
 
 const BASE_PAYLOAD = TEST_DATA.PAYLOADS.BASE_SWORD;
 
-describe('Integration: RefinementService V5 Contract', () => {
+describe('Integration: RefinementService Checkpoint Contract', () => {
     let originalStartTop: typeof WorkerClient.startTopRun;
     let originalStartChart: typeof WorkerClient.startChartRun;
 
@@ -110,23 +114,60 @@ describe('Integration: Snapshot Integrity', () => {
     });
 });
 
-describe('Integration: Clue Validation', () => {
-    it('should reject invalid clue input consistently', async () => {
+describe('Integration: Clue-Conditioned Calculation', () => {
+    it('conditions the public calculation result on the shown clue', async () => {
         const engine = EngineFactory.createForVersion(TEST_DATA.VERSIONS.MODERN);
+        const stats = await engine.calculate({
+            item: TEST_DATA.ITEMS.SWORD,
+            xp: 30,
+            material: TEST_DATA.MATERIALS.DIAMOND,
+            clue: 'Sharpness IV',
+            threshold: 0.001
+        });
 
-        // Unknown enchantment
-        await assert.rejects(async () => {
-            await engine.calculate({ item: TEST_DATA.ITEMS.SWORD, xp: 30, material: TEST_DATA.MATERIALS.DIAMOND, clue: 'FakeEnchant X' });
-        }, /Unknown enchantment/);
+        const sharpnessId = getEnchantId(engine.registry, 'Sharpness');
+        assert.ok(stats.clue, 'conditioned stats should expose clue metadata');
+        assert.strictEqual(stats.clue.idAndRank, (sharpnessId << 8) | 4);
+        assert.ok(stats.clue.knownSpace > 0, 'conditioned stats should record the observed clue mass');
+        assert.strictEqual(stats.shownClueDistribution, undefined, 'conditioned stats should not expose a prior clue distribution');
+        assert.ok((stats.any[sharpnessId] ?? 0) > 0.9999, 'Sharpness should be certain after conditioning on Sharpness IV');
+    });
 
-        // Inapplicable item
-        await assert.rejects(async () => {
-            await engine.calculate({ item: TEST_DATA.ITEMS.SWORD, xp: 30, material: TEST_DATA.MATERIALS.DIAMOND, clue: 'Aqua Affinity I' });
-        }, /not applicable to item/);
+    it('keeps conflicting shown clues and targets as an empty filtered projection', () => {
+        const engine = EngineFactory.createForVersion(TEST_DATA.VERSIONS.MODERN);
+        const smiteId = getEnchantId(engine.registry, 'Smite');
+        const smiteIv = ((smiteId << 8) | 4) as PackedEnchant;
+        const combos = new Map([
+            [ComboUtils.pack([smiteIv], engine.registry.enchantToIndex), PRECISION]
+        ]);
+        const tracker = new SearchStateTracker();
+        tracker.mass.record('resolved', PRECISION);
 
-        // Rank above max
-        await assert.rejects(async () => {
-            await engine.calculate({ item: TEST_DATA.ITEMS.SWORD, xp: 30, material: TEST_DATA.MATERIALS.DIAMOND, clue: 'Sharpness VI' });
-        }, /exceeds max/);
+        const snapshot = SnapshotService.create(
+            engine.registry,
+            tracker,
+            combos,
+            {
+                snapshotType: 'top',
+                input: {
+                    item: TEST_DATA.ITEMS.SWORD,
+                    xpLevel: 30,
+                    material: TEST_DATA.MATERIALS.DIAMOND,
+                    clue: 'Smite IV',
+                    version: TEST_DATA.VERSIONS.MODERN,
+                    targets: [{ enchantment: 'Sharpness', rank: 1, rankMode: 'atLeast' }]
+                },
+                refinementLevel: 'ultra',
+                clue: 'Smite IV'
+            }
+        ) as TopRunView;
+
+        assert.strictEqual(snapshot.clueConditioned, true);
+        assert.strictEqual(snapshot.input.clue, 'Smite IV');
+        assert.deepStrictEqual(snapshot.input.targets, [{ enchantment: 'Sharpness', rank: 1, rankMode: 'atLeast' }]);
+        assert.strictEqual(snapshot.target?.labels[0], 'Sharpness I+');
+        assert.strictEqual(snapshot.target?.matchShare, 0);
+        assert.strictEqual(snapshot.target?.matchingComboCount, 0);
+        assert.deepStrictEqual(snapshot.combos, []);
     });
 });

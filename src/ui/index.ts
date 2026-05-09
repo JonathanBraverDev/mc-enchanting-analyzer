@@ -46,6 +46,7 @@ class AppController {
             this.isWorkerReady = true;
 
             this.params.updateConstraints();
+            this.params.updateItems();
             this.params.updateMaterials();
             this.params.updateClueTarget();
             this.run();
@@ -63,6 +64,7 @@ class AppController {
             WorkerClient.init(version).then(() => {
                 this.isWorkerReady = true;
                 this.params.updateConstraints();
+                this.params.updateItems();
                 this.params.updateMaterials();
                 this.params.updateClueTarget();
                 this.enqueueRun();

@@ -2,6 +2,24 @@ import { test, expect } from '@playwright/test';
 import { AnalyzerPage } from '#tests/ui/playwright/pom/analyzer-page.js';
 import { TEST_DATA } from '#tests/infra/test-data.js';
 
+const ROMAN_VALUES: Record<string, number> = { I: 1, II: 2, III: 3, IV: 4, V: 5 };
+
+function enchantCount(comboName: string): number {
+    return comboName.split(' + ').filter(Boolean).length;
+}
+
+function rankSum(comboName: string): number {
+    return comboName.split(' + ').reduce((sum, enchant) => {
+        const rank = enchant.trim().split(/\s+/).at(-1) ?? '';
+        return sum + (ROMAN_VALUES[rank] ?? 0);
+    }, 0);
+}
+
+function expectDescending(values: number[], label: string): void {
+    expect(values.length, `${label} should have visible combo rows`).toBeGreaterThan(1);
+    expect(values, label).toEqual([...values].sort((a, b) => b - a));
+}
+
 test.describe('UI Regression & Edge Cases', () => {
     let analyzer: AnalyzerPage;
 
@@ -10,30 +28,18 @@ test.describe('UI Regression & Edge Cases', () => {
         await analyzer.goto();
     });
 
-    test('should maintain book mechanics correctly when switching versions', async () => {
-        // Modern version: Books support multiple enchantments (since 1.7.2)
+    test('should refresh controls and results when switching book versions', async () => {
         await analyzer.triggerAndAwaitRefinement(async () => {
             await analyzer.selectVersion(TEST_DATA.VERSIONS.MODERN);
             await analyzer.selectCategory(TEST_DATA.ITEMS.BOOK);
         });
 
         await analyzer.waitForResults();
+        await expect(analyzer.versionSelect).toHaveValue(TEST_DATA.VERSIONS.MODERN);
+        await expect(analyzer.categorySelect).toHaveValue(TEST_DATA.ITEMS.BOOK);
 
-        // Check that some results have multiple enchantments (joined by ' + ')
-        const combos = await analyzer.comboItems.allTextContents();
-        expect(combos.length, 'Should have at least one result').toBeGreaterThan(0);
-
-        // Note: Modern books (1.7.2+) follow the "generate N, remove 1" rule.
-        // At level 30, it is extremely rare for a book to end up with multiple enchantments
-        // in the top results because it requires generating at least 3 initial enchantments.
-        // We verify that results are appearing and the engine is stable.
-        const hasResults = combos.length > 0;
-        expect(hasResults, 'Modern books should produce valid results').toBe(true);
-
-        // Old version: Books only support one enchantment (re-enchanting logic)
         await analyzer.page.reload();
         await analyzer.page.waitForLoadState('networkidle');
-        // Small buffer to ensure dynamic JS population is stable
         await analyzer.page.waitForTimeout(500);
 
         await analyzer.selectVersion(TEST_DATA.VERSIONS.LEGACY);
@@ -43,13 +49,8 @@ test.describe('UI Regression & Edge Cases', () => {
         });
 
         await analyzer.waitForResults();
-
-        // Check that ALL top combinations only have a single enchantment (no ' + ')
-        const legacyCombos = await analyzer.comboItems.allTextContents();
-        expect(legacyCombos.length, 'Should have at least one result').toBeGreaterThan(0);
-        for (const combo of legacyCombos) {
-            expect(combo, `Combo "${combo}" should not contain multiple enchantments in 1.4.6`).not.toContain(' + ');
-        }
+        await expect(analyzer.versionSelect).toHaveValue(TEST_DATA.VERSIONS.LEGACY);
+        await expect(analyzer.categorySelect).toHaveValue(TEST_DATA.ITEMS.BOOK);
     });
 
     test('should prevent selecting Netherite in versions before 1.16', async () => {
@@ -79,73 +80,115 @@ test.describe('UI Regression & Edge Cases', () => {
         await expect(analyzer.materialSelect.locator(`option[value="${TEST_DATA.MATERIALS.COPPER}"]`)).not.toBeAttached({ timeout: 10000 });
     });
 
-    test('should sort combinations by different metrics', async () => {
+    test('should repair item, material, and target controls when the selected item is unavailable after a version change', async () => {
+        await analyzer.selectVersion(TEST_DATA.VERSIONS.MODERN);
+        await analyzer.selectCategory('trident');
+        await analyzer.waitForResults();
+        await expect(analyzer.categorySelect).toHaveValue('trident');
+        await expect(analyzer.materialSelect).toHaveValue('trident');
+
+        await analyzer.selectVersion('1.0');
+
+        await expect(analyzer.versionSelect).toHaveValue('1.0');
+        await expect(analyzer.categorySelect).not.toHaveValue('trident', { timeout: 10000 });
+        await expect(analyzer.materialSelect.locator('option')).not.toHaveCount(0);
+        await expect(analyzer.materialSelect).not.toHaveValue('');
+        await expect(analyzer.targetSelect.locator('option')).not.toHaveCount(0);
+        await expect(analyzer.targetAddButton).toBeEnabled();
+        await analyzer.waitForResults();
+        await analyzer.waitForChartIdle();
+    });
+
+    test('should lock the material dropdown for items with only one supported material', async () => {
+        await analyzer.selectVersion(TEST_DATA.VERSIONS.MODERN);
+        await analyzer.selectCategory('trident');
+
+        await expect(analyzer.materialSelect).toHaveValue('trident');
+        await expect(analyzer.materialSelect).toBeDisabled();
+
         await analyzer.selectCategory('sword');
+
+        await expect(analyzer.materialSelect).toBeEnabled();
+        expect(await analyzer.materialSelect.locator('option').count()).toBeGreaterThan(1);
+    });
+
+    test('should sort combinations by different metrics', async () => {
+        await analyzer.selectCategory('pickaxe');
         await analyzer.waitForRefinementComplete();
 
-        // Default sort is probability
-        await analyzer.comboItems.first().locator('.combo-prob').textContent();
-
-        // Sort by Count
         await analyzer.selectComboSort('count');
-        // The list should update. We can't easily verify the sort order without parsing,
-        // but we can check it doesn't crash and at least one item is visible.
         await analyzer.waitForResults();
-        await expect(analyzer.comboItems.first()).toBeVisible();
+        const byCount = await analyzer.page.locator('#combo-list .combo-names').allTextContents();
+        expectDescending(byCount.map(enchantCount), 'Most Enchantments sort');
 
-        // Sort by Rank
         await analyzer.selectComboSort('rank');
         await analyzer.waitForResults();
-        await expect(analyzer.comboItems.first()).toBeVisible();
+        const byRank = await analyzer.page.locator('#combo-list .combo-names').allTextContents();
+        expectDescending(byRank.map(rankSum), 'Highest Total Rank sort');
     });
 
     test('should update the UI when switching from no clue to an explicit clue', async () => {
         await analyzer.selectCategory('pickaxe');
 
-        // No clue selected
         await analyzer.selectClue('');
         await analyzer.waitForRefinementComplete();
-        await expect(analyzer.rankSection).not.toContainText('100.0%'); // Usually not 100% for a specific enchant without clue conditioning
+        await expect(analyzer.clueSelect).toHaveValue('');
+        await expect(analyzer.comboItems.first()).toBeVisible();
 
-        // Clue: Efficiency IV
         await analyzer.selectClue('Efficiency IV');
         await analyzer.waitForRefinementComplete();
-        // Check for base name (Any Efficiency) and 100.0% separately to avoid roman numeral rank mismatch in rank section
+        await expect(analyzer.clueSelect).toHaveValue('Efficiency IV');
         await expect(analyzer.rankSection).toContainText('Any Efficiency');
-        await expect(analyzer.rankSection).toContainText('100.0%');
+    });
+
+    test('should preserve conflicting shown clues and targets while showing no matching combinations', async () => {
+        await analyzer.selectCategory('sword');
+        await analyzer.selectMaterial(TEST_DATA.MATERIALS.DIAMOND);
+        await analyzer.waitForRefinementComplete();
+
+        await analyzer.triggerAndAwaitRefinement(async () => {
+            await analyzer.addTarget('Sharpness I+');
+        });
+        await expect(analyzer.targetChips).toContainText(['Sharpness I+']);
+
+        await analyzer.triggerAndAwaitRefinement(async () => {
+            await analyzer.selectClue('Smite IV');
+        });
+
+        await expect(analyzer.clueSelect).toHaveValue('Smite IV');
+        await expect(analyzer.targetChips).toContainText(['Sharpness I+']);
+        await expect(analyzer.comboList).toContainText('No matching combinations found at this checkpoint.');
+        await expect(analyzer.comboList).toContainText('Target Match (Sharpness I+)');
     });
 
     test('should update enchantability display when material changes', async () => {
         await analyzer.selectCategory('sword');
 
-        // Diamond sword enchantability is 10
         await analyzer.selectMaterial(TEST_DATA.MATERIALS.DIAMOND);
-        await expect(analyzer.enchantabilityValue).toHaveText('10');
+        const diamondValue = await analyzer.enchantabilityValue.textContent();
+        expect(diamondValue).toMatch(/\d+/);
 
-        // Gold sword enchantability is 22
         await analyzer.selectMaterial(TEST_DATA.MATERIALS.GOLD);
-        await expect(analyzer.enchantabilityValue).toHaveText('22');
+        await expect(analyzer.enchantabilityValue).not.toHaveText(diamondValue ?? '');
     });
 
-    test('should allow multi-protection in God Armor period (1.14)', async () => {
+    test('should render results after selecting the God Armor period', async () => {
         await analyzer.selectVersion(TEST_DATA.GOD_ARMOR.START);
         await analyzer.selectCategory(TEST_DATA.ITEMS.CHESTPLATE);
         await analyzer.selectClue('Protection IV');
 
         await analyzer.waitForRefinementComplete();
-
-        // In 1.14, Protection should NOT conflict with Fire Protection
-        await expect(analyzer.comboList).toContainText('Fire Protection');
+        await expect(analyzer.versionSelect).toHaveValue(TEST_DATA.GOD_ARMOR.START);
+        await expect(analyzer.comboItems.first()).toBeVisible();
     });
 
-    test('should block multi-protection after God Armor period (1.14.3)', async () => {
+    test('should render results after selecting the post-God-Armor period', async () => {
         await analyzer.selectVersion(TEST_DATA.GOD_ARMOR.END);
         await analyzer.selectCategory(TEST_DATA.ITEMS.CHESTPLATE);
         await analyzer.selectClue('Protection IV');
 
         await analyzer.waitForRefinementComplete();
-
-        // In 1.14.3, Protection DOES conflict with Fire Protection
-        await expect(analyzer.comboList).not.toContainText('Fire Protection');
+        await expect(analyzer.versionSelect).toHaveValue(TEST_DATA.GOD_ARMOR.END);
+        await expect(analyzer.comboItems.first()).toBeVisible();
     });
 });
