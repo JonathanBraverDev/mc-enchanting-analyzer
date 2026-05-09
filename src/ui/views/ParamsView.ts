@@ -118,6 +118,9 @@ export class ParamsView {
         eligibleKeys.forEach(m => {
             DOMUtils.addOption(materialSelect, m, StringUtils.toTitleCase(m), m === bestMaterial);
         });
+
+        materialSelect.disabled = eligibleKeys.length <= 1;
+        materialSelect.title = materialSelect.disabled ? "This item has only one supported material." : "";
     }
 
     public updateClueTarget(): void {
