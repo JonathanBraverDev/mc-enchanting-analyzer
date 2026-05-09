@@ -44,6 +44,40 @@ describe('UiMetadataService', () => {
         assert.ok(versions.includes('1.11.1'), 'enchantment-boundary versions should be selectable');
         assert.ok(versions.includes('1.14'), 'conflict cutoff boundary versions should be selectable');
     });
+
+    it('exposes version-gated material options used by the UI', () => {
+        assert.ok(!UiMetadataService.getEligibleMaterials('1.15', 'sword').includes('netherite'));
+        assert.ok(UiMetadataService.getEligibleMaterials('1.16', 'sword').includes('netherite'));
+
+        assert.ok(!UiMetadataService.getEligibleMaterials('1.21', 'sword').includes('copper'));
+        assert.ok(UiMetadataService.getEligibleMaterials('1.21.9', 'sword').includes('copper'));
+    });
+
+    it('exposes enchantability values used by the UI summary field', () => {
+        assert.strictEqual(UiMetadataService.getEnchantability('1.21', 'diamond', 'sword'), 10);
+        assert.strictEqual(UiMetadataService.getEnchantability('1.21', 'gold', 'sword'), 22);
+    });
+
+    it('exposes clue and target options for the current table setup', () => {
+        const clueOptions = UiMetadataService.getClueOptions('1.21', 'pickaxe', 'diamond', 30);
+        assert.ok(clueOptions.includes('Efficiency IV'));
+
+        const targetOptions = UiMetadataService.getTargetOptions('1.21', 'sword', 'diamond', 30);
+        assert.ok(targetOptions.some(option => option.label === 'Sharpness I+'));
+    });
+
+    it('filters target options that conflict with selected targets', () => {
+        const selectedTargets = [{ enchantment: 'Sharpness', rank: 1, rankMode: 'atLeast' as const }];
+
+        assert.strictEqual(
+            UiMetadataService.isTargetCompatible('1.21', { enchantment: 'Smite' }, selectedTargets),
+            false
+        );
+        assert.strictEqual(
+            UiMetadataService.isTargetCompatible('1.21', { enchantment: 'Unbreaking' }, selectedTargets),
+            true
+        );
+    });
 });
 
 // ── SummaryService ────────────────────────────────────────────────────────────
