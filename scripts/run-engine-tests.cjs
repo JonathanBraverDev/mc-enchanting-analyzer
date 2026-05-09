@@ -4,12 +4,8 @@ const { join, relative } = require('node:path');
 const { spawnSync } = require('node:child_process');
 
 const root = process.cwd();
-const testRoots = [
-  'tests/unit',
-  'tests/infra',
-  'tests/integration',
-  'tests/diagnostics',
-];
+const testRoot = 'tests';
+const excludedDirs = new Set(['ui']);
 
 function walk(dir) {
   const entries = readdirSync(dir, { withFileTypes: true });
@@ -18,6 +14,7 @@ function walk(dir) {
   for (const entry of entries) {
     const fullPath = join(dir, entry.name);
     if (entry.isDirectory()) {
+      if (excludedDirs.has(entry.name)) continue;
       files.push(...walk(fullPath));
     } else if (entry.isFile() && entry.name.endsWith('.test.ts')) {
       files.push(relative(root, fullPath));
@@ -27,10 +24,9 @@ function walk(dir) {
   return files;
 }
 
-const testFiles = testRoots
-  .filter(path => statSync(path, { throwIfNoEntry: false })?.isDirectory())
-  .flatMap(walk)
-  .sort();
+const testFiles = statSync(testRoot, { throwIfNoEntry: false })?.isDirectory()
+  ? walk(testRoot).sort()
+  : [];
 
 if (testFiles.length === 0) {
   console.error('No engine test files found.');

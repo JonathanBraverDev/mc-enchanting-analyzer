@@ -99,6 +99,17 @@ describe('Error Path Tests', () => {
     });
 
     describe('3. Unknown item', () => {
+        it('missing item throws a clear error', async () => {
+            const engine = EngineFactory.createForVersion('1.21');
+            await assert.rejects(
+                () => engine.calculate({ xp: 30, material: 'diamond' } as any),
+                (err: Error) => {
+                    assert.ok(err.message.toLowerCase().includes('item'), `Expected "item" in: ${err.message}`);
+                    return true;
+                }
+            );
+        });
+
         it('unknown item throws a clear error', async () => {
             const engine = EngineFactory.createForVersion('1.21');
             await assert.rejects(
@@ -123,6 +134,17 @@ describe('Error Path Tests', () => {
     });
 
     describe('4. Unknown material', () => {
+        it('missing material throws a clear error', async () => {
+            const engine = EngineFactory.createForVersion('1.21');
+            await assert.rejects(
+                () => engine.calculate({ item: 'sword', xp: 30 } as any),
+                (err: Error) => {
+                    assert.ok(err.message.toLowerCase().includes('material'), `Expected "material" in: ${err.message}`);
+                    return true;
+                }
+            );
+        });
+
         it('unknown material throws a clear error', async () => {
             const engine = EngineFactory.createForVersion('1.21');
             await assert.rejects(
@@ -147,37 +169,18 @@ describe('Error Path Tests', () => {
     });
 
     describe('5. Negative or zero XP levels', () => {
-        it('XP = 0 throws a clear error', async () => {
+        it('non-positive XP values throw clear errors', async () => {
             const engine = EngineFactory.createForVersion('1.21');
-            await assert.rejects(
-                () => engine.calculate({ item: 'sword', xp: 0, material: 'diamond' }),
-                (err: Error) => {
-                    assert.ok(err.message.toLowerCase().includes('xp'), `Expected "xp" in: ${err.message}`);
-                    return true;
-                }
-            );
-        });
-
-        it('XP = -1 throws a clear error', async () => {
-            const engine = EngineFactory.createForVersion('1.21');
-            await assert.rejects(
-                () => engine.calculate({ item: 'sword', xp: -1, material: 'diamond' }),
-                (err: Error) => {
-                    assert.ok(err.message.toLowerCase().includes('xp'), `Expected "xp" in: ${err.message}`);
-                    return true;
-                }
-            );
-        });
-
-        it('XP = -100 throws a clear error', async () => {
-            const engine = EngineFactory.createForVersion('1.21');
-            await assert.rejects(
-                () => engine.calculate({ item: 'sword', xp: -100, material: 'diamond' }),
-                (err: Error) => {
-                    assert.ok(err.message.toLowerCase().includes('xp'), `Expected "xp" in: ${err.message}`);
-                    return true;
-                }
-            );
+            for (const xp of [0, -1, -100]) {
+                await assert.rejects(
+                    () => engine.calculate({ item: 'sword', xp, material: 'diamond' }),
+                    (err: Error) => {
+                        assert.ok(err.message.toLowerCase().includes('xp'), `Expected "xp" in: ${err.message}`);
+                        return true;
+                    },
+                    `XP = ${xp} should throw`
+                );
+            }
         });
 
         it('NaN XP throws a clear error', async () => {
