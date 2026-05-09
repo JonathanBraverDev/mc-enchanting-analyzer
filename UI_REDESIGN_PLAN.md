@@ -1,10 +1,10 @@
-# V6 UI Design Plan
+# UI Redesign Plan
 
 ## Common Description
 
-This document is the working design plan for a V6 user-interface redesign of Minecraft Enchantment Analyzer.
+This document is the working design plan for a user-interface redesign of Minecraft Enchantment Analyzer.
 
-V6 should turn the current V5 interface from a single probability dashboard with advisor features attached into two clear workflows: a probability explorer for understanding distributions, and a planner/advisor for deciding what enchanting action to take next.
+The redesign should turn the current interface from a single probability dashboard with advisor features attached into two clear workflows: a probability explorer for understanding distributions, and a planner/advisor for deciding what enchanting action to take next.
 
 ## Table of Contents
 
@@ -14,7 +14,7 @@ V6 should turn the current V5 interface from a single probability dashboard with
 - [Background](#background)
 - [Current V5 UI Inventory](#current-v5-ui-inventory)
 - [Design Principles](#design-principles)
-- [V6 Information Architecture](#v6-information-architecture)
+- [UI Information Architecture](#ui-information-architecture)
 - [Probability Explorer](#probability-explorer)
 - [Advisor / Optimizer](#advisor--optimizer)
 - [Input Model](#input-model)
@@ -157,7 +157,7 @@ V6 colors should support both dark and light mode. Chart line identity should no
 
 The UI must be decoupled from data generation, engine execution, and worker/process orchestration. V6 should make the interface a replaceable presentation layer over stable typed data, so large UI experiments can happen without risking the probability engine.
 
-## V6 Information Architecture
+## UI Information Architecture
 
 ### Shell layout
 

@@ -39,7 +39,7 @@ This tool uses the V5 checkpoint search engine. It prioritizes the most likely o
 For implementation details and design plans, see:
 - `ARCHITECTURE.md` for the engine, worker, and checkpoint flow.
 - `MASS_HANDLING.md` for probability conservation and accounting.
-- `V6_UI_DESIGN.md` for the proposed V6 UI redesign and planner/advisor direction.
+- `UI_REDESIGN_PLAN.md` for the proposed UI redesign and planner/advisor direction.
 
 ---
 Created by **Jonathan Braver**
