@@ -80,6 +80,25 @@ test.describe('UI Regression & Edge Cases', () => {
         await expect(analyzer.materialSelect.locator(`option[value="${TEST_DATA.MATERIALS.COPPER}"]`)).not.toBeAttached({ timeout: 10000 });
     });
 
+    test('should repair item, material, and target controls when the selected item is unavailable after a version change', async () => {
+        await analyzer.selectVersion(TEST_DATA.VERSIONS.MODERN);
+        await analyzer.selectCategory('trident');
+        await analyzer.waitForResults();
+        await expect(analyzer.categorySelect).toHaveValue('trident');
+        await expect(analyzer.materialSelect).toHaveValue('trident');
+
+        await analyzer.selectVersion('1.0');
+
+        await expect(analyzer.versionSelect).toHaveValue('1.0');
+        await expect(analyzer.categorySelect).not.toHaveValue('trident', { timeout: 10000 });
+        await expect(analyzer.materialSelect.locator('option')).not.toHaveCount(0);
+        await expect(analyzer.materialSelect).not.toHaveValue('');
+        await expect(analyzer.targetSelect.locator('option')).not.toHaveCount(0);
+        await expect(analyzer.targetAddButton).toBeEnabled();
+        await analyzer.waitForResults();
+        await analyzer.waitForChartIdle();
+    });
+
     test('should sort combinations by different metrics', async () => {
         await analyzer.selectCategory('pickaxe');
         await analyzer.waitForRefinementComplete();

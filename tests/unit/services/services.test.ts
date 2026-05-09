@@ -54,6 +54,12 @@ describe('UiMetadataService', () => {
         assert.ok(UiMetadataService.getEligibleMaterials('1.21.9', 'sword').includes('copper'));
     });
 
+    it('exposes version-gated item options used by the UI', () => {
+        assert.ok(!UiMetadataService.getEligibleItems('1.0').includes('trident'));
+        assert.ok(UiMetadataService.getEligibleItems('1.13').includes('trident'));
+        assert.ok(UiMetadataService.getEligibleItems('1.0').includes('sword'));
+    });
+
     it('exposes enchantability values used by the UI summary field', () => {
         assert.strictEqual(UiMetadataService.getEnchantability('1.21', 'diamond', 'sword'), 10);
         assert.strictEqual(UiMetadataService.getEnchantability('1.21', 'gold', 'sword'), 22);

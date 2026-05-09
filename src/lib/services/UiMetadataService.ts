@@ -2,6 +2,7 @@ import { DATA } from '#data/index.js';
 import { RegistryState, TargetOptionView, TargetRequirementInput } from '#types/index.js';
 import {
   getEligibleMaterials,
+  isItemAvailable,
   getEnchantability,
   getEnchantId,
   getFullEnchantName,
@@ -44,6 +45,13 @@ export class UiMetadataService {
   /** Gets eligible materials for a version and item. */
   public static getEligibleMaterials(version: string, item: string): string[] {
     return getEligibleMaterials(this.getRegistry(version), item);
+  }
+
+  /** Gets items with an active enchantment pool and at least one selectable material. */
+  public static getEligibleItems(version: string): string[] {
+    const registry = this.getRegistry(version);
+    return Object.keys(registry.itemMaterials)
+      .filter(item => isItemAvailable(registry, item) && getEligibleMaterials(registry, item).length > 0);
   }
 
   /** Gets the base enchantability for a version, material, and item. */
