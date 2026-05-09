@@ -70,6 +70,9 @@ export class SummaryAggregationService {
         let aggregateMass = mass;
         let displayCount = count;
         if (isPending && isBook && count > 1) {
+            // Resolved book combos are exactly post-processed by the engine. Pending book
+            // frontier nodes are only safe to harvest as aggregate buckets here: each enchant
+            // survives random removal in N-1 of N outcomes, but the raw combo is not final.
             aggregateMass = (mass * BigInt(count - 1)) / BigInt(count);
             displayCount = count - 1;
         }

@@ -69,7 +69,7 @@ export class SnapshotService {
 
     if (isConditioned) {
       // Conditioned views derive from top combos and any pending frontier mass.
-      const conditioned = ClueAnalysisService.conditionOnClue(combos, targetClueId!, state.indexToEnchant, frontiers);
+      const conditioned = ClueAnalysisService.conditionOnClue(combos, targetClueId!, state.indexToEnchant, frontiers, isBook);
       knownSpace = ProbUtils.toNumber(conditioned.knownSpace);
       result = conditioned;
     } else {
