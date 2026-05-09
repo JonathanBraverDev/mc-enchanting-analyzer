@@ -1,5 +1,6 @@
 import { UIUtils, RomanUtils } from '#utils/index.js';
 import { UI_DEFAULTS, UI_TEXTS, REFINEMENT_LEVEL_COLORS, RefinementStatusLevel } from '#core/config.js';
+import { TopComboSortService } from '#services/TopComboSortService.js';
 import {
     LevelClueSignalAdvisorView,
     RegistryState,
@@ -97,7 +98,8 @@ export class ResultsView {
                 registry,
                 advisorMode ? levelClueAdvisor : undefined,
                 advisorMode ? levelClueSignalAdvisor : undefined,
-                advisorMode
+                advisorMode,
+                displayMode
             );
             this.renderEnchantsV5(view, registry);
         } else {
@@ -191,7 +193,8 @@ export class ResultsView {
         _registry: RegistryState,
         levelClueAdvisor?: TargetLevelClueAdvisorView | undefined,
         levelClueSignalAdvisor?: LevelClueSignalAdvisorView | undefined,
-        advisorMode = false
+        advisorMode = false,
+        displayMode = 'prob'
     ): void {
         if (!this.comboEl) return;
 
@@ -208,7 +211,7 @@ export class ResultsView {
                 if (!view.clueSignalAdvisor && !levelClueSignalAdvisor) this.appendAdvisorPlaceholder(fragment);
             }
         } else {
-            view.combos.slice(0, UI_DEFAULTS.MAX_TOP_COMBOS_DISPLAY).forEach((combo) => {
+            TopComboSortService.sort(view.combos, displayMode).slice(0, UI_DEFAULTS.MAX_TOP_COMBOS_DISPLAY).forEach((combo) => {
                 const item = document.createElement("div");
                 item.className = "combo-item";
 

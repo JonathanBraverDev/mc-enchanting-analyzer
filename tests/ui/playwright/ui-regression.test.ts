@@ -2,6 +2,24 @@ import { test, expect } from '@playwright/test';
 import { AnalyzerPage } from '#tests/ui/playwright/pom/analyzer-page.js';
 import { TEST_DATA } from '#tests/infra/test-data.js';
 
+const ROMAN_VALUES: Record<string, number> = { I: 1, II: 2, III: 3, IV: 4, V: 5 };
+
+function enchantCount(comboName: string): number {
+    return comboName.split(' + ').filter(Boolean).length;
+}
+
+function rankSum(comboName: string): number {
+    return comboName.split(' + ').reduce((sum, enchant) => {
+        const rank = enchant.trim().split(/\s+/).at(-1) ?? '';
+        return sum + (ROMAN_VALUES[rank] ?? 0);
+    }, 0);
+}
+
+function expectDescending(values: number[], label: string): void {
+    expect(values.length, `${label} should have visible combo rows`).toBeGreaterThan(1);
+    expect(values, label).toEqual([...values].sort((a, b) => b - a));
+}
+
 test.describe('UI Regression & Edge Cases', () => {
     let analyzer: AnalyzerPage;
 
@@ -63,23 +81,18 @@ test.describe('UI Regression & Edge Cases', () => {
     });
 
     test('should sort combinations by different metrics', async () => {
-        await analyzer.selectCategory('sword');
+        await analyzer.selectCategory('pickaxe');
         await analyzer.waitForRefinementComplete();
 
-        // Default sort is probability
-        await analyzer.comboItems.first().locator('.combo-prob').textContent();
-
-        // Sort by Count
         await analyzer.selectComboSort('count');
-        // The list should update. We can't easily verify the sort order without parsing,
-        // but we can check it doesn't crash and at least one item is visible.
         await analyzer.waitForResults();
-        await expect(analyzer.comboItems.first()).toBeVisible();
+        const byCount = await analyzer.page.locator('#combo-list .combo-names').allTextContents();
+        expectDescending(byCount.map(enchantCount), 'Most Enchantments sort');
 
-        // Sort by Rank
         await analyzer.selectComboSort('rank');
         await analyzer.waitForResults();
-        await expect(analyzer.comboItems.first()).toBeVisible();
+        const byRank = await analyzer.page.locator('#combo-list .combo-names').allTextContents();
+        expectDescending(byRank.map(rankSum), 'Highest Total Rank sort');
     });
 
     test('should update the UI when switching from no clue to an explicit clue', async () => {
