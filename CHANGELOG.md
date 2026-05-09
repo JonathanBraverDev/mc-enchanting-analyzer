@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## v6.0.1 (2026-05-09)
+
+### Fixed
+- **Top combination sorting**: Restored the Most Enchantments and Highest Total Rank sort modes in the results list.
+- **Version/item repair**: Switching to a version where the selected item is unavailable now repairs item, material, target, and chart state together.
+- **Single-material items**: Items such as Trident now lock the material dropdown when only one material is valid.
+- **Clue and target friction**: Conflicting shown clues and target selections are preserved and surface the existing no-match state instead of silently clearing user choices.
+
+### Developer Experience
+- **V6 test coverage cleanup**: Wired dormant engine suites into CI discovery, added a missed-test guard, reduced redundant behavioral assertions, and kept UI tests focused on UI behavior.
+- **Release PR hygiene**: Release CI now checks that PR notes mirror the changelog entry and that release branches end with a version-bump commit covering package metadata, changelog notes, and any known release docs.
+
 ## v6.0.0 (2026-05-08)
 
 ### Changed
