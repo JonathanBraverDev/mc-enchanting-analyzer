@@ -214,10 +214,23 @@ describe('UIUtils.formatPercent', () => {
         assert.ok(result.endsWith('%'), 'should always end with %');
     });
 
-    it('uses tiny odds notation only below 0.1%', () => {
-        assert.strictEqual(UIUtils.shouldUseTinyProbabilityOdds(0.001), false);
-        assert.strictEqual(UIUtils.shouldUseTinyProbabilityOdds(0.000999), true);
+    it('formats combo percentages below 0.1% with enough precision', () => {
+        assert.strictEqual(UIUtils.formatComboPercent(0.0001), '0.01%');
+        assert.strictEqual(UIUtils.formatComboPercent(0.000999), '0.1%');
+        assert.strictEqual(UIUtils.formatComboPercent(0.5), '50.0%');
+    });
+
+    it('uses tiny odds notation only below 0.01%', () => {
+        assert.strictEqual(UIUtils.shouldUseTinyProbabilityOdds(0.0001), false);
+        assert.strictEqual(UIUtils.shouldUseTinyProbabilityOdds(0.0000999), true);
         assert.strictEqual(UIUtils.shouldUseTinyProbabilityOdds(0), false);
+    });
+
+    it('formats sub-million odds as full comma-separated numbers', () => {
+        const odds = UIUtils.formatTinyProbabilityOdds(0.000012);
+
+        assert.strictEqual(odds.human, '1 in 83,334');
+        assert.strictEqual(odds.shouldFadeScientific, false);
     });
 
     it('formats tiny odds with human and scientific reciprocal notation', () => {
@@ -250,7 +263,7 @@ describe('UIUtils.formatPercent', () => {
     });
 
     it('rejects non-tiny odds formatting inputs', () => {
-        assert.throws(() => UIUtils.formatTinyProbabilityOdds(0.001), /not a positive tiny probability/);
+        assert.throws(() => UIUtils.formatTinyProbabilityOdds(0.0001), /not a positive tiny probability/);
         assert.throws(() => UIUtils.formatTinyProbabilityOdds(0), /not a positive tiny probability/);
     });
 });

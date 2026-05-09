@@ -261,7 +261,7 @@ export class ResultsView {
         value.className = 'combo-prob';
 
         if (!UIUtils.shouldUseTinyProbabilityOdds(probability)) {
-            value.textContent = UIUtils.formatPercent(probability);
+            value.textContent = UIUtils.formatComboPercent(probability);
             return value;
         }
 
