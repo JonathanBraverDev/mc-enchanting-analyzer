@@ -82,6 +82,11 @@ select optgroup {
     font-style: normal;
 }
 
+select:disabled {
+    cursor: not-allowed;
+    opacity: 0.65;
+}
+
 input[type="range"] {
     padding: 0;
     cursor: ew-resize;

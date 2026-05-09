@@ -99,6 +99,19 @@ test.describe('UI Regression & Edge Cases', () => {
         await analyzer.waitForChartIdle();
     });
 
+    test('should lock the material dropdown for items with only one supported material', async () => {
+        await analyzer.selectVersion(TEST_DATA.VERSIONS.MODERN);
+        await analyzer.selectCategory('trident');
+
+        await expect(analyzer.materialSelect).toHaveValue('trident');
+        await expect(analyzer.materialSelect).toBeDisabled();
+
+        await analyzer.selectCategory('sword');
+
+        await expect(analyzer.materialSelect).toBeEnabled();
+        expect(await analyzer.materialSelect.locator('option').count()).toBeGreaterThan(1);
+    });
+
     test('should sort combinations by different metrics', async () => {
         await analyzer.selectCategory('pickaxe');
         await analyzer.waitForRefinementComplete();
