@@ -82,13 +82,16 @@ Current branch state after the first stack-adapter checkpoint and V7-first direc
   - V7 structural `SearchProgram` cache plus XP-cell `SearchRun` cache: one-at-a-time chart worker calls can now resume the same XP run across refinement passes while sharing structural programs across fresh runs.
 - Direction change:
   - V7 is now the upgrade path and source of truth.
-  - Treat V6 internals, telemetry shape, snapshots, and worker granularity as obsolete until re-evaluated.
+  - Treat V6 internals, telemetry shape, and snapshots as obsolete until re-evaluated.
+  - Keep the existing engine API semantics where they fit: `searchToCheckpoint` means advance one search to one checkpoint and return; `searchSequentialCheckpoints` means advance the same search through multiple checkpoints and report along the way.
+  - Do not introduce a separate V7 worker/request abstraction unless a concrete feature cannot be expressed through the existing checkpoint interfaces.
   - Do not force native V7 results or telemetry into V6 output shapes unless a temporary bridge still requires it.
 - Not implemented yet:
-  - True shared batch/chart-cell execution; chart worker currently uses the V7 single-cell adapter per XP cell.
   - Fully native V7 projection contracts beyond the compatibility adapter.
-  - Cross-request V7 search-state/program caching and resume beyond sequential checkpoints.
+  - Serialized/cross-worker V7 search snapshots if live run caching proves insufficient.
   - Full V7 replacement tests.
+- Optional/post-release:
+  - Engine-owned chart batch scheduling. Current direction is that the chart worker owns matrix orchestration and repeatedly calls checkpoint APIs; V7 caching provides XP-cell resume underneath.
 
 ## Validation Findings
 
@@ -332,21 +335,21 @@ Only for hot/high-value fully explored subtrees. Avoid unbounded memory growth.
 
 ## Worker Model
 
-Workers should submit search intents, not dictate per-XP/per-modified-level granularity.
-
-Desired model:
+Do not add a separate V7 worker/request abstraction for now. The existing engine interface already expresses the two useful execution modes:
 
 ```text
-UI input
-  -> worker search intent
-  -> SearchRun cells
-  -> streamed SearchSnapshots
-  -> projection to top/chart/target views
+searchToCheckpoint(request)
+  -> advance the requested version/item/material/xp/clue run to one checkpoint
+  -> return one result/snapshot
+
+searchSequentialCheckpoints(request)
+  -> advance the requested version/item/material/xp/clue run through ordered checkpoints
+  -> report each checkpoint while continuing the same run
 ```
 
-Top selected level is a one-cell batch. Chart sweep is a multi-cell batch. Refinement advances the same compatible run through stricter checkpoints instead of restarting unrelated searches.
+Top selected level should continue to use sequential checkpoints when it wants uninterrupted coarse → standard → deep progress. Chart sweep should stay worker-orchestrated: the chart worker loops refinement passes and XP levels, calls `searchToCheckpoint` for each cell, and relies on the V7 XP-cell run cache so later refinement calls resume the same `SearchRun` instead of recomputing from scratch.
 
-Current bridge state: workers still speak the existing protocol, but choose `engine: 'v7'` for both unclued and clue-conditioned top/chart searches. The compatibility adapter keeps `SummaryService`, `SnapshotService`, and existing UI contracts stable as migration scaffolding. It now projects V7 pending frontier entries back into the existing frontier scanner shape so pending mass remains visible to summaries, target analysis, clue conditioning, and chart cells. The adapter also caches V7 XP-cell `SearchRun`s, so repeated one-at-a-time calls for the same version/item/material/xp/clue can resume across refinement levels. New V7 work should prefer native `SearchRun` / `V7SearchRunSnapshot` semantics and add projection contracts from there rather than conforming telemetry to V6.
+Current bridge state: workers still speak the existing protocol, but choose `engine: 'v7'` for both unclued and clue-conditioned top/chart searches. The compatibility adapter keeps `SummaryService`, `SnapshotService`, and existing UI contracts stable as migration scaffolding. It now projects V7 pending frontier entries back into the existing frontier scanner shape so pending mass remains visible to summaries, target analysis, clue conditioning, and chart cells. The adapter also caches V7 XP-cell `SearchRun`s, so repeated one-at-a-time calls for the same version/item/material/xp/clue can resume across refinement levels. New V7 work should prefer native `SearchRun` / `V7SearchRunSnapshot` semantics inside these checkpoint APIs rather than inventing an intermediate worker contract.
 
 ## Remainder and Equivalence Rules
 
@@ -404,11 +407,12 @@ Commit after each stable slice:
 5. V6/V7 comparison harness.
 6. Matched-resolved and budgeted-resolution diagnostics.
 7. Projection/snapshot output.
-8. Global modified-level scheduler for multi-cell/batch requests.
-9. Direct weighted accounting hardening and compatibility adapters. ✅ first adapter checkpoint
-10. Worker adapter for top results. ✅ unclued top path routed through V7
-11. Chart batch mode. ⏳ unclued chart path routed through V7 per XP cell; true batch mode remains
+8. Direct weighted accounting hardening and compatibility adapters. ✅ first adapter checkpoint
+9. Worker adapter for top results. ✅ top path routed through V7
+10. Chart worker V7 routing. ✅ chart path routed through V7 per XP cell
+11. XP-cell run caching for chart-style refinement resume. ✅ live `SearchRun` cache
 12. Projection cleanup and obsolete-test pruning.
+13. Optional later: engine-owned chart batch scheduling if profiling proves worker orchestration insufficient.
 
 ## References / Related Docs
 
