@@ -5,6 +5,101 @@ import { RegistryKernel, V7PoolEntry, V7PoolProjection, V7PoolSignature } from '
 
 export type V7ProgramNodeId = number & { readonly __brand: 'V7ProgramNodeId' };
 
+
+class V7NumericNodeIndex {
+    private static readonly INITIAL_CAPACITY = 131072;
+    private static readonly MAX_LOAD_FACTOR = 0.7;
+
+    private keys: Float64Array;
+    private values: Int32Array;
+    private used: Uint8Array;
+    private mask: number;
+    private resizeAt: number;
+    private count = 0;
+
+    public constructor(capacity: number = V7NumericNodeIndex.INITIAL_CAPACITY) {
+        const size = V7NumericNodeIndex.nextPowerOfTwo(capacity);
+        this.keys = new Float64Array(size);
+        this.values = new Int32Array(size);
+        this.values.fill(-1);
+        this.used = new Uint8Array(size);
+        this.mask = size - 1;
+        this.resizeAt = Math.floor(size * V7NumericNodeIndex.MAX_LOAD_FACTOR);
+    }
+
+    public get(key: number): V7ProgramNodeId | undefined {
+        let idx = this.hash(key) & this.mask;
+
+        while (this.used[idx] !== 0) {
+            if (this.keys[idx] === key) {
+                const value = this.values[idx]!;
+                return value === -1 ? undefined : value as V7ProgramNodeId;
+            }
+            idx = (idx + 1) & this.mask;
+        }
+
+        return undefined;
+    }
+
+    public set(key: number, value: V7ProgramNodeId): void {
+        if (this.count >= this.resizeAt) this.grow();
+        this.insert(key, value);
+    }
+
+    private insert(key: number, value: V7ProgramNodeId): void {
+        let idx = this.hash(key) & this.mask;
+
+        while (this.used[idx] !== 0) {
+            if (this.keys[idx] === key) {
+                this.values[idx] = value;
+                return;
+            }
+            idx = (idx + 1) & this.mask;
+        }
+
+        this.used[idx] = 1;
+        this.keys[idx] = key;
+        this.values[idx] = value;
+        this.count++;
+    }
+
+    private grow(): void {
+        const oldKeys = this.keys;
+        const oldValues = this.values;
+        const oldUsed = this.used;
+        const nextSize = oldKeys.length * 2;
+
+        this.keys = new Float64Array(nextSize);
+        this.values = new Int32Array(nextSize);
+        this.values.fill(-1);
+        this.used = new Uint8Array(nextSize);
+        this.mask = nextSize - 1;
+        this.resizeAt = Math.floor(nextSize * V7NumericNodeIndex.MAX_LOAD_FACTOR);
+        this.count = 0;
+
+        for (let i = 0; i < oldKeys.length; i++) {
+            if (oldUsed[i] !== 0) this.insert(oldKeys[i]!, oldValues[i]! as V7ProgramNodeId);
+        }
+    }
+
+    private hash(key: number): number {
+        const low = key >>> 0;
+        const high = Math.floor(key / 0x100000000) >>> 0;
+        let h = (low ^ Math.imul(high, 0x9E3779B1)) >>> 0;
+        h ^= h >>> 16;
+        h = Math.imul(h, 0x7FEB352D) >>> 0;
+        h ^= h >>> 15;
+        h = Math.imul(h, 0x846CA68B) >>> 0;
+        return (h ^ (h >>> 16)) >>> 0;
+    }
+
+    private static nextPowerOfTwo(value: number): number {
+        let size = 1;
+        while (size < value) size <<= 1;
+        return size;
+    }
+}
+
 export interface V7ProgramKey {
     readonly version: string;
     readonly item: string;
@@ -55,7 +150,10 @@ export class SearchProgram {
     private readonly currentLevels: number[] = [];
     private readonly combos: PackedCombo[] = [];
     private readonly counts: number[] = [];
-    private readonly nodeIndex = new Map<bigint, V7ProgramNodeId>();
+    private static readonly MAX_NUMERIC_MASK = BigInt(Math.floor(Number.MAX_SAFE_INTEGER / 256));
+
+    private readonly numericNodeIndex = new V7NumericNodeIndex();
+    private readonly bigintNodeIndex = new Map<bigint, V7ProgramNodeId>();
     private readonly expansionCache: Array<V7ProgramExpansion | undefined> = [];
 
     public constructor(
@@ -196,9 +294,15 @@ export class SearchProgram {
         combo: PackedCombo,
         count: number
     ): V7ProgramNodeId {
-        const key = this.createNodeKey(selectedMask, currentLevel);
-        const existing = this.nodeIndex.get(key);
-        if (existing !== undefined) return existing;
+        const numericKey = this.createNumericNodeKey(selectedMask, currentLevel);
+        if (numericKey !== undefined) {
+            const existing = this.numericNodeIndex.get(numericKey);
+            if (existing !== undefined) return existing;
+        } else {
+            const key = this.createBigIntNodeKey(selectedMask, currentLevel);
+            const existing = this.bigintNodeIndex.get(key);
+            if (existing !== undefined) return existing;
+        }
 
         const nodeId = this.combos.length as V7ProgramNodeId;
         this.selectedMasks.push(selectedMask);
@@ -206,11 +310,20 @@ export class SearchProgram {
         this.combos.push(combo);
         this.counts.push(count);
         this.expansionCache.push(undefined);
-        this.nodeIndex.set(key, nodeId);
+        if (numericKey !== undefined) {
+            this.numericNodeIndex.set(numericKey, nodeId);
+        } else {
+            this.bigintNodeIndex.set(this.createBigIntNodeKey(selectedMask, currentLevel), nodeId);
+        }
         return nodeId;
     }
 
-    private createNodeKey(selectedMask: bigint, currentLevel: number): bigint {
+    private createNumericNodeKey(selectedMask: bigint, currentLevel: number): number | undefined {
+        if (selectedMask > SearchProgram.MAX_NUMERIC_MASK) return undefined;
+        return Number(selectedMask) * 256 + currentLevel;
+    }
+
+    private createBigIntNodeKey(selectedMask: bigint, currentLevel: number): bigint {
         return (selectedMask << 8n) | BigInt(currentLevel);
     }
 
