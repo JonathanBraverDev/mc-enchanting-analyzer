@@ -34,6 +34,7 @@ export class EnchantEngine {
     /** Clears all engine-level caches. */
     public resetCaches(): void {
         this.cache.clearAll();
+        this.v7SearchService.clearCache();
     }
 
     /** Clears only the stats cache. */

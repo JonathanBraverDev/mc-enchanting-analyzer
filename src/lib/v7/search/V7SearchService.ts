@@ -6,6 +6,7 @@ import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedL
 import { SearchResult, SequentialCheckpointSearchContext, CheckpointSearchContext, EngineInstrumentation, SearchTiming, SearchFrontierSnapshot } from '#types/index.js';
 import { RegistryKernel } from '#lib/v7/registry/RegistryKernel.js';
 import { SearchRun, V7SearchRunSnapshot } from '#lib/v7/search/SearchRun.js';
+import { V7SearchCache } from '#lib/v7/search/V7SearchCache.js';
 import { PRECISION, ProbUtils } from '#utils/index.js';
 
 /**
@@ -16,13 +17,18 @@ import { PRECISION, ProbUtils } from '#utils/index.js';
  */
 export class V7SearchService {
     public constructor(
-        private readonly distributionService: ModifiedLevelDistributionService = new ModifiedLevelDistributionService()
+        private readonly distributionService: ModifiedLevelDistributionService = new ModifiedLevelDistributionService(),
+        private readonly cache: V7SearchCache = new V7SearchCache()
     ) {}
+
+    public clearCache(): void {
+        this.cache.clearAll();
+    }
 
     public async searchToCheckpoint(request: CheckpointSearchContext): Promise<SearchResult> {
         const timingStart = request.timing ? performance.now() : 0;
         let recordedSearchMs = 0;
-        const run = this.createRun(request);
+        const run = this.getRun(request);
         const snapshot = await run.searchToCheckpointAsync({
             threshold: request.threshold ?? ENGINE_LIMITS.DEFAULT_THRESHOLD,
             maxIterations: request.maxIterations ?? ENGINE_LIMITS.MAX_ITERATIONS_UNBOUNDED,
@@ -36,7 +42,7 @@ export class V7SearchService {
     public async searchSequentialCheckpoints(request: SequentialCheckpointSearchContext): Promise<SearchResult> {
         const timingStart = request.timing ? performance.now() : 0;
         let recordedSearchMs = 0;
-        const run = this.createRun(request);
+        const run = this.getRun(request);
         let lastResult: SearchResult | undefined;
 
         for (let checkpointIndex = 0; checkpointIndex < request.checkpoints.length; checkpointIndex++) {
@@ -63,6 +69,12 @@ export class V7SearchService {
         return this.toSearchResult(emptySnapshot, 0, request.instrumentation, request.timing);
     }
 
+    private getRun(request: CheckpointSearchContext): SearchRun {
+        const create = () => this.createRun(request);
+        if (request.useCache === false) return create();
+        return this.cache.getOrCreateRun(this.createRunCacheKey(request), create);
+    }
+
     private createRun(request: CheckpointSearchContext): SearchRun {
         const kernel = new RegistryKernel({
             registry: request.registry,
@@ -71,10 +83,22 @@ export class V7SearchService {
         });
         const run = new SearchRun(kernel, {
             distributionService: this.distributionService,
-            targetClueId: request.targetClueId
+            targetClueId: request.targetClueId,
+            programCache: this.cache
         });
         run.seedXp(request.xp);
         return run;
+    }
+
+    private createRunCacheKey(request: CheckpointSearchContext): string {
+        return JSON.stringify({
+            schema: 1,
+            version: request.registry.version,
+            item: request.item,
+            material: request.material,
+            xp: request.xp,
+            targetClueId: request.targetClueId ?? null
+        });
     }
 
     private toSearchResult(
@@ -99,6 +123,7 @@ export class V7SearchService {
         const frontiers = this.toFrontiers(snapshot);
 
         if (instrumentation) {
+            const cacheMetrics = this.cache.getMetrics();
             instrumentation.totalIterations = snapshot.iterations;
             instrumentation.totalPrunedNodes = 0;
             instrumentation.roundingErrorEvents = snapshot.mass.rounding > 0 ? 1 : 0;
@@ -121,7 +146,11 @@ export class V7SearchService {
                 largestPendingMass: ProbUtils.toNumber(snapshot.largestPendingMass),
                 activeResidueCount: snapshot.activeResidueCount,
                 activeResidueMass: ProbUtils.toNumber(snapshot.activeResidueMass),
-                canImprove: !snapshot.fullyResolved && snapshot.largestPendingMass >= thresholdUnits
+                canImprove: !snapshot.fullyResolved && snapshot.largestPendingMass >= thresholdUnits,
+                programCacheHits: cacheMetrics.programs.hits,
+                programCacheMisses: cacheMetrics.programs.misses,
+                runCacheHits: cacheMetrics.runs.hits,
+                runCacheMisses: cacheMetrics.runs.misses
             };
         }
 

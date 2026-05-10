@@ -134,6 +134,14 @@ export interface V7Instrumentation {
   activeResidueMass: number;
   /** Whether this snapshot can still improve under a lower threshold or higher iteration cap. */
   canImprove: boolean;
+  /** Cumulative structural SearchProgram cache hits for this engine instance. */
+  programCacheHits?: number | undefined;
+  /** Cumulative structural SearchProgram cache misses for this engine instance. */
+  programCacheMisses?: number | undefined;
+  /** Cumulative resumable SearchRun cache hits for this engine instance. */
+  runCacheHits?: number | undefined;
+  /** Cumulative resumable SearchRun cache misses for this engine instance. */
+  runCacheMisses?: number | undefined;
 }
 
 export interface ResolvedRegistry {

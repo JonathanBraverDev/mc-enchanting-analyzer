@@ -8,9 +8,14 @@ import { AsyncUtils, ComboUtils, PRECISION, ProbUtils } from '#utils/index.js';
 import { RegistryKernel, V7PoolProjection, V7PoolSignature } from '#lib/v7/registry/RegistryKernel.js';
 import { SearchProgram, V7ProgramExpansion, V7ProgramNodeId } from '#lib/v7/search/SearchProgram.js';
 
+export interface V7SearchProgramCache {
+    getOrCreateProgram(kernel: RegistryKernel, pool: V7PoolProjection, clueMode?: string | null): SearchProgram;
+}
+
 export interface V7SearchRunOptions {
     readonly distributionService?: ModifiedLevelDistributionService | undefined;
     readonly targetClueId?: number | undefined;
+    readonly programCache?: V7SearchProgramCache | undefined;
 }
 
 export interface V7SearchCheckpointRequest {
@@ -77,6 +82,7 @@ export class SearchRun {
     public readonly mass = new ProbabilityMassAccountant();
 
     private readonly distributionService: ModifiedLevelDistributionService;
+    private readonly programCache: V7SearchProgramCache | undefined;
     private readonly programsBySignature = new Map<V7PoolSignature, ProgramRecord>();
     private readonly programs: ProgramRecord[] = [];
     private readonly forwardingResidues: BigUint64Array[] = [];
@@ -91,6 +97,7 @@ export class SearchRun {
         options: V7SearchRunOptions = {}
     ) {
         this.distributionService = options.distributionService ?? new ModifiedLevelDistributionService();
+        this.programCache = options.programCache;
         this.targetClueId = options.targetClueId;
     }
 
@@ -435,7 +442,7 @@ export class SearchRun {
             : undefined;
         const record = Object.freeze({
             id: this.programs.length,
-            program: new SearchProgram(this.kernel, pool),
+            program: this.programCache?.getOrCreateProgram(this.kernel, pool, null) ?? new SearchProgram(this.kernel, pool),
             cluePolicy
         });
         this.programs.push(record);

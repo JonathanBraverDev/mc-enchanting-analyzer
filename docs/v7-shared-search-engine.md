@@ -78,7 +78,8 @@ Current branch state after the first stack-adapter checkpoint and V7-first direc
   - Node-local V7 edge-split residue forwarding inside `SearchRun`, matching V6's cautious recovery model: fixed-point split residue stays in `rounding` until later mass reaches the same `(program, node)` expansion and can recover it.
   - Pending V7 frontier projection through the compatibility adapter: snapshots now expose exact pending `(program, node)` entries with mass/combo/count for existing summary, target, clue, and chart projections.
   - Async chunked V7 adapter search so worker abort signals can be observed during long checkpoints.
-  - Initial V7-native instrumentation under `EngineInstrumentation.v7` for program count, seeded levels, pending entries, largest pending mass, active residue count/mass, and improvability.
+  - Initial V7-native instrumentation under `EngineInstrumentation.v7` for program count, seeded levels, pending entries, largest pending mass, active residue count/mass, improvability, and V7 cache hit/miss counters.
+  - V7 structural `SearchProgram` cache plus XP-cell `SearchRun` cache: one-at-a-time chart worker calls can now resume the same XP run across refinement passes while sharing structural programs across fresh runs.
 - Direction change:
   - V7 is now the upgrade path and source of truth.
   - Treat V6 internals, telemetry shape, snapshots, and worker granularity as obsolete until re-evaluated.
@@ -311,15 +312,15 @@ Extend the current pool cache with structural signatures.
 ProgramKey -> SearchProgram
 ```
 
-Main new cache. This stores structural work without probability mass.
+Implemented as V7 structural cache. This stores structural work without probability mass: lazy node identity, node expansions, and pool-signature graph work. It is reusable across XP-cell runs when the version/item/book-mode/pool-signature/clue-mode are compatible.
 
-### SearchSnapshotCache
+### SearchRunCache / SearchSnapshotCache
 
 ```ts
-request signature -> SearchSnapshot
+version + item + material + xp + clue/search-policy -> SearchRun
 ```
 
-Stores compatible resumable search state and replaces final stats as the primary reusable artifact. Stats become derived projections.
+Implemented initially as a live XP-cell `SearchRun` cache rather than a serialized snapshot cache. Refinement level, threshold, and iteration budget are intentionally not part of the key; later refinement calls resume and advance the same run. This gives the current one-at-a-time chart worker loop resumability without introducing a full matrix scheduler yet. A future serialized `SearchSnapshotCache` can replace or back this live run cache when cross-worker persistence is needed.
 
 ### Optional SubtreeSummaryCache
 
@@ -345,7 +346,7 @@ UI input
 
 Top selected level is a one-cell batch. Chart sweep is a multi-cell batch. Refinement advances the same compatible run through stricter checkpoints instead of restarting unrelated searches.
 
-Current bridge state: workers still speak the existing protocol, but choose `engine: 'v7'` for both unclued and clue-conditioned top/chart searches. The compatibility adapter keeps `SummaryService`, `SnapshotService`, and existing UI contracts stable as migration scaffolding. It now projects V7 pending frontier entries back into the existing frontier scanner shape so pending mass remains visible to summaries, target analysis, clue conditioning, and chart cells. New V7 work should prefer native `SearchRun` / `V7SearchRunSnapshot` semantics and add projection contracts from there rather than conforming telemetry to V6.
+Current bridge state: workers still speak the existing protocol, but choose `engine: 'v7'` for both unclued and clue-conditioned top/chart searches. The compatibility adapter keeps `SummaryService`, `SnapshotService`, and existing UI contracts stable as migration scaffolding. It now projects V7 pending frontier entries back into the existing frontier scanner shape so pending mass remains visible to summaries, target analysis, clue conditioning, and chart cells. The adapter also caches V7 XP-cell `SearchRun`s, so repeated one-at-a-time calls for the same version/item/material/xp/clue can resume across refinement levels. New V7 work should prefer native `SearchRun` / `V7SearchRunSnapshot` semantics and add projection contracts from there rather than conforming telemetry to V6.
 
 ## Remainder and Equivalence Rules
 

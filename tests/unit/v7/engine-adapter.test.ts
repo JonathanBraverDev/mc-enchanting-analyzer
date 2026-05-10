@@ -132,6 +132,129 @@ describe('V7 engine adapter', () => {
         );
     });
 
+    it('resumes V7 XP-cell runs across one-at-a-time checkpoint calls', async () => {
+        const engine = EngineFactory.createForVersion('1.21.11');
+        engine.resetCaches();
+
+        const first = await engine.searchToCheckpoint({
+            engine: 'v7',
+            item: 'book',
+            material: 'book',
+            xp: 30,
+            threshold: 0,
+            maxIterations: 50,
+            instrumentation: {
+                poolCache: { hits: 0, misses: 0 },
+                distCache: { hits: 0, misses: 0 },
+                frontierCache: { hits: 0, misses: 0 },
+                totalIterations: 0,
+                totalPrunedNodes: 0,
+                roundingErrorEvents: 0,
+                levelsProcessed: 0,
+                levelsFullyResolved: 0,
+                fullyResolved: false
+            }
+        });
+
+        const resumed = await engine.searchToCheckpoint({
+            engine: 'v7',
+            item: 'book',
+            material: 'book',
+            xp: 30,
+            threshold: 0,
+            maxIterations: 10,
+            instrumentation: {
+                poolCache: { hits: 0, misses: 0 },
+                distCache: { hits: 0, misses: 0 },
+                frontierCache: { hits: 0, misses: 0 },
+                totalIterations: 0,
+                totalPrunedNodes: 0,
+                roundingErrorEvents: 0,
+                levelsProcessed: 0,
+                levelsFullyResolved: 0,
+                fullyResolved: false
+            }
+        });
+
+        assert.strictEqual(first.instrumentation?.totalIterations, 50);
+        assert.strictEqual(resumed.instrumentation?.totalIterations, 50, 'lower follow-up limit should return the already-advanced cached run');
+        assert.ok((resumed.instrumentation?.v7?.runCacheHits ?? 0) >= 1);
+
+        engine.resetCaches();
+        const fresh = await engine.searchToCheckpoint({
+            engine: 'v7',
+            item: 'book',
+            material: 'book',
+            xp: 30,
+            threshold: 0,
+            maxIterations: 10,
+            instrumentation: {
+                poolCache: { hits: 0, misses: 0 },
+                distCache: { hits: 0, misses: 0 },
+                frontierCache: { hits: 0, misses: 0 },
+                totalIterations: 0,
+                totalPrunedNodes: 0,
+                roundingErrorEvents: 0,
+                levelsProcessed: 0,
+                levelsFullyResolved: 0,
+                fullyResolved: false
+            }
+        });
+
+        assert.strictEqual(fresh.instrumentation?.totalIterations, 10);
+    });
+
+    it('reuses V7 structural programs across fresh XP-cell runs', async () => {
+        const engine = EngineFactory.createForVersion('1.21.11');
+        engine.resetCaches();
+
+        const first = await engine.searchToCheckpoint({
+            engine: 'v7',
+            item: 'sword',
+            material: 'diamond',
+            xp: 30,
+            threshold: 0,
+            maxIterations: 1,
+            useCache: false,
+            instrumentation: {
+                poolCache: { hits: 0, misses: 0 },
+                distCache: { hits: 0, misses: 0 },
+                frontierCache: { hits: 0, misses: 0 },
+                totalIterations: 0,
+                totalPrunedNodes: 0,
+                roundingErrorEvents: 0,
+                levelsProcessed: 0,
+                levelsFullyResolved: 0,
+                fullyResolved: false
+            }
+        });
+        const firstMisses = first.instrumentation?.v7?.programCacheMisses ?? 0;
+
+        const second = await engine.searchToCheckpoint({
+            engine: 'v7',
+            item: 'sword',
+            material: 'diamond',
+            xp: 30,
+            threshold: 0,
+            maxIterations: 1,
+            useCache: false,
+            instrumentation: {
+                poolCache: { hits: 0, misses: 0 },
+                distCache: { hits: 0, misses: 0 },
+                frontierCache: { hits: 0, misses: 0 },
+                totalIterations: 0,
+                totalPrunedNodes: 0,
+                roundingErrorEvents: 0,
+                levelsProcessed: 0,
+                levelsFullyResolved: 0,
+                fullyResolved: false
+            }
+        });
+
+        assert.ok(firstMisses > 0);
+        assert.ok((second.instrumentation?.v7?.programCacheHits ?? 0) >= firstMisses);
+    });
+
     it('does not share CalculationStats cache entries between V6 and V7', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
         engine.resetCaches();
