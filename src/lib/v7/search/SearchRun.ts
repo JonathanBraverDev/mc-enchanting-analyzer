@@ -5,7 +5,7 @@ import { MassAccountingBreakdown } from '#types/mass.js';
 import { PackedCombo } from '#types/index.js';
 import { ComboUtils, PRECISION, ProbUtils } from '#utils/index.js';
 import { RegistryKernel, V7PoolProjection, V7PoolSignature } from '#lib/v7/registry/RegistryKernel.js';
-import { SearchProgram, V7ProgramExpansion, V7ProgramNode, V7ProgramNodeId } from '#lib/v7/search/SearchProgram.js';
+import { SearchProgram, V7ProgramExpansion, V7ProgramNodeId } from '#lib/v7/search/SearchProgram.js';
 
 export interface V7SearchRunOptions {
     readonly distributionService?: ModifiedLevelDistributionService | undefined;
@@ -135,14 +135,20 @@ export class SearchRun {
     private expand(programId: number, nodeId: V7ProgramNodeId, incomingMass: bigint, probabilityFloor: bigint): void {
         const program = this.getProgramById(programId);
         const expansion = program.getExpansion(nodeId);
-        const node = program.getNode(nodeId);
 
         if (expansion.isRoot) {
             this.expandRoot(programId, expansion, incomingMass);
             return;
         }
 
-        this.expandSearchNode(programId, node, expansion, incomingMass, probabilityFloor);
+        this.expandSearchNode(
+            programId,
+            program.getNodeCombo(nodeId),
+            program.getNodeCount(nodeId),
+            expansion,
+            incomingMass,
+            probabilityFloor
+        );
     }
 
     private expandRoot(programId: number, expansion: V7ProgramExpansion, incomingMass: bigint): void {
@@ -156,7 +162,8 @@ export class SearchRun {
 
     private expandSearchNode(
         programId: number,
-        node: V7ProgramNode,
+        combo: PackedCombo,
+        count: number,
         expansion: V7ProgramExpansion,
         incomingMass: bigint,
         probabilityFloor: bigint
@@ -164,7 +171,7 @@ export class SearchRun {
         const probStop = ProbUtils.scale(incomingMass, PRECISION - expansion.probContinue);
         const probForward = incomingMass - probStop;
 
-        this.settleResolved(node.combo, node.count, probStop);
+        this.settleResolved(combo, count, probStop);
 
         if (probForward === 0n) return;
 
@@ -174,7 +181,7 @@ export class SearchRun {
         }
 
         if (expansion.totalWeight <= 0 || expansion.edges.length === 0) {
-            this.settleResolved(node.combo, node.count, probForward);
+            this.settleResolved(combo, count, probForward);
             return;
         }
 

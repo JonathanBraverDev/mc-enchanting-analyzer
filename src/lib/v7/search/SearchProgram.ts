@@ -51,9 +51,12 @@ export class SearchProgram {
     public readonly key: V7ProgramKey;
     public readonly pool: V7PoolProjection;
 
-    private readonly nodes: V7ProgramNode[] = [];
+    private readonly selectedMasks: bigint[] = [];
+    private readonly currentLevels: number[] = [];
+    private readonly combos: PackedCombo[] = [];
+    private readonly counts: number[] = [];
     private readonly nodeIndex = new Map<bigint, V7ProgramNodeId>();
-    private readonly expansionCache = new Map<V7ProgramNodeId, V7ProgramExpansion>();
+    private readonly expansionCache: Array<V7ProgramExpansion | undefined> = [];
 
     public constructor(
         private readonly kernel: RegistryKernel,
@@ -71,40 +74,55 @@ export class SearchProgram {
     }
 
     public get size(): number {
-        return this.nodes.length;
+        return this.combos.length;
     }
 
     public getRootNode(initialLevel: number): V7ProgramNode {
-        return this.getOrCreateNode(0n, initialLevel, 0 as PackedCombo, 0);
+        return this.getNode(this.getOrCreateNodeId(0n, initialLevel, 0 as PackedCombo, 0));
     }
 
     public getNode(id: V7ProgramNodeId): V7ProgramNode {
-        const node = this.nodes[id];
-        if (!node) throw new Error(`Unknown V7 search program node ${id}`);
-        return node;
+        this.assertNode(id);
+        return {
+            id,
+            selectedMask: this.selectedMasks[id]!,
+            currentLevel: this.currentLevels[id]!,
+            combo: this.combos[id]!,
+            count: this.counts[id]!
+        };
+    }
+
+    public getNodeCombo(id: V7ProgramNodeId): PackedCombo {
+        this.assertNode(id);
+        return this.combos[id]!;
+    }
+
+    public getNodeCount(id: V7ProgramNodeId): number {
+        this.assertNode(id);
+        return this.counts[id]!;
     }
 
     public getExpansion(nodeId: V7ProgramNodeId): V7ProgramExpansion {
-        const cached = this.expansionCache.get(nodeId);
+        const cached = this.expansionCache[nodeId];
         if (cached) return cached;
 
-        const node = this.getNode(nodeId);
-        const expansion = node.count === 0
-            ? this.buildRootExpansion(node)
-            : this.buildSearchExpansion(node);
-        this.expansionCache.set(nodeId, expansion);
+        const expansion = this.counts[nodeId] === 0
+            ? this.buildRootExpansion(nodeId)
+            : this.buildSearchExpansion(nodeId);
+        this.expansionCache[nodeId] = expansion;
         return expansion;
     }
 
-    private buildRootExpansion(node: V7ProgramNode): V7ProgramExpansion {
+    private buildRootExpansion(nodeId: V7ProgramNodeId): V7ProgramExpansion {
+        const currentLevel = this.currentLevels[nodeId]!;
         const edges = this.pool.entries.map(entry => ({
             entry,
             weight: entry.weight,
-            childId: this.getOrCreateNode(entry.idBit, node.currentLevel, entry.comboIndex as PackedCombo, 1).id
+            childId: this.getOrCreateNodeId(entry.idBit, currentLevel, entry.comboIndex as PackedCombo, 1)
         }));
 
         return {
-            nodeId: node.id,
+            nodeId,
             isRoot: true,
             probContinue: PRECISION,
             totalWeight: this.pool.totalWeight,
@@ -114,50 +132,56 @@ export class SearchProgram {
         };
     }
 
-    private buildSearchExpansion(node: V7ProgramNode): V7ProgramExpansion {
-        const terminalReason = this.getTerminalReason(node);
+    private buildSearchExpansion(nodeId: V7ProgramNodeId): V7ProgramExpansion {
+        const selectedMask = this.selectedMasks[nodeId]!;
+        const currentLevel = this.currentLevels[nodeId]!;
+        const combo = this.combos[nodeId]!;
+        const count = this.counts[nodeId]!;
+        const terminalReason = this.getTerminalReason(count);
         const probContinue = terminalReason === 'single-book'
             ? 0n
             // currentLevel only drives the chance of another enchantment slot.
             // Eligibility remains fixed by this program's initial pool signature.
-            : (ProbUtils.PROB_CONTINUE_TABLE[node.currentLevel] ?? PRECISION);
+            : (ProbUtils.PROB_CONTINUE_TABLE[currentLevel] ?? PRECISION);
 
         if (terminalReason === 'max-enchants' || terminalReason === 'single-book') {
-            return this.createExpansion(node, probContinue, [], terminalReason);
+            return this.createExpansion(nodeId, count, probContinue, [], terminalReason);
         }
 
-        const nextLevel = Math.floor(node.currentLevel / 2);
+        const nextLevel = Math.floor(currentLevel / 2);
+        const nextCount = count + 1;
         const edges: V7ProgramEdge[] = [];
         let totalWeight = 0;
 
         for (const entry of this.pool.entries) {
-            if ((node.selectedMask & entry.idBit) !== 0n) continue;
-            if ((node.selectedMask & entry.conflictBitset) !== 0n) continue;
+            if ((selectedMask & entry.idBit) !== 0n) continue;
+            if ((selectedMask & entry.conflictBitset) !== 0n) continue;
 
-            const childMask = node.selectedMask | entry.idBit;
-            const childCombo = ComboUtils.packAppendIndex(node.combo, entry.comboIndex, node.count);
-            const child = this.getOrCreateNode(childMask, nextLevel, childCombo, node.count + 1);
+            const childMask = selectedMask | entry.idBit;
+            const childCombo = ComboUtils.packAppendIndex(combo, entry.comboIndex, count);
+            const childId = this.getOrCreateNodeId(childMask, nextLevel, childCombo, nextCount);
             totalWeight += entry.weight;
             edges.push({
                 entry,
                 weight: entry.weight,
-                childId: child.id
+                childId
             });
         }
 
-        return this.createExpansion(node, probContinue, edges, edges.length === 0 ? 'no-eligible' : null, totalWeight);
+        return this.createExpansion(nodeId, count, probContinue, edges, edges.length === 0 ? 'no-eligible' : null, totalWeight);
     }
 
     private createExpansion(
-        node: V7ProgramNode,
+        nodeId: V7ProgramNodeId,
+        count: number,
         probContinue: bigint,
         edges: readonly V7ProgramEdge[],
         terminalReason: V7ProgramTerminalReason,
         totalWeight = edges.reduce((sum, edge) => sum + edge.weight, 0)
     ): V7ProgramExpansion {
         return {
-            nodeId: node.id,
-            isRoot: node.count === 0,
+            nodeId,
+            isRoot: count === 0,
             probContinue,
             totalWeight,
             eligibleCount: edges.length,
@@ -166,40 +190,44 @@ export class SearchProgram {
         };
     }
 
-    private getOrCreateNode(
+    private getOrCreateNodeId(
         selectedMask: bigint,
         currentLevel: number,
         combo: PackedCombo,
         count: number
-    ): V7ProgramNode {
+    ): V7ProgramNodeId {
         const key = this.createNodeKey(selectedMask, currentLevel);
         const existing = this.nodeIndex.get(key);
-        if (existing !== undefined) return this.getNode(existing);
+        if (existing !== undefined) return existing;
 
-        const node = {
-            id: this.nodes.length as V7ProgramNodeId,
-            selectedMask,
-            currentLevel,
-            combo,
-            count
-        };
-        this.nodes.push(node);
-        this.nodeIndex.set(key, node.id);
-        return node;
+        const nodeId = this.combos.length as V7ProgramNodeId;
+        this.selectedMasks.push(selectedMask);
+        this.currentLevels.push(currentLevel);
+        this.combos.push(combo);
+        this.counts.push(count);
+        this.expansionCache.push(undefined);
+        this.nodeIndex.set(key, nodeId);
+        return nodeId;
     }
 
     private createNodeKey(selectedMask: bigint, currentLevel: number): bigint {
         return (selectedMask << 8n) | BigInt(currentLevel);
     }
 
-    private getTerminalReason(node: V7ProgramNode): V7ProgramTerminalReason {
-        if (this.kernel.item === 'book' && !this.kernel.multiEnchantBooks && node.count >= 1) {
+    private getTerminalReason(count: number): V7ProgramTerminalReason {
+        if (this.kernel.item === 'book' && !this.kernel.multiEnchantBooks && count >= 1) {
             return 'single-book';
         }
-        if (node.count >= ENGINE_LIMITS.MAX_ENCHANTS_PER_ITEM) {
+        if (count >= ENGINE_LIMITS.MAX_ENCHANTS_PER_ITEM) {
             return 'max-enchants';
         }
         return null;
+    }
+
+    private assertNode(id: V7ProgramNodeId): void {
+        if (id < 0 || id >= this.combos.length) {
+            throw new Error(`Unknown V7 search program node ${id}`);
+        }
     }
 
     private getBookMode(kernel: RegistryKernel): V7ProgramKey['bookMode'] {
