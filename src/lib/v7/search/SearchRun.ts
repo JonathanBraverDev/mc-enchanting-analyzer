@@ -16,6 +16,8 @@ export interface V7SearchCheckpointRequest {
     readonly maxIterations?: number | undefined;
     /** Stop once resolved mass reaches this absolute fixed-point/number target. */
     readonly targetResolvedMass?: number | bigint | undefined;
+    /** Optional internal forward-mass floor. Defaults to 0 so validation can dig into the full tail. */
+    readonly probabilityFloor?: number | bigint | undefined;
 }
 
 export interface V7SearchRunSnapshot {
@@ -100,6 +102,9 @@ export class SearchRun {
         const targetResolvedMass = request.targetResolvedMass !== undefined
             ? ProbUtils.toBigInt(request.targetResolvedMass)
             : undefined;
+        const probabilityFloor = request.probabilityFloor !== undefined
+            ? ProbUtils.toBigInt(request.probabilityFloor)
+            : 0n;
         const current = { programId: 0, nodeId: 0 as V7ProgramNodeId, mass: 0n };
 
         while (this.frontier.size > 0 && this._iterations < maxIterations) {
@@ -108,7 +113,7 @@ export class SearchRun {
             if (!this.frontier.pop(current)) break;
 
             this.mass.subtract('pending', current.mass);
-            this.expand(current.programId, current.nodeId, current.mass);
+            this.expand(current.programId, current.nodeId, current.mass, probabilityFloor);
             this._iterations++;
         }
 
@@ -127,7 +132,7 @@ export class SearchRun {
         });
     }
 
-    private expand(programId: number, nodeId: V7ProgramNodeId, incomingMass: bigint): void {
+    private expand(programId: number, nodeId: V7ProgramNodeId, incomingMass: bigint, probabilityFloor: bigint): void {
         const program = this.getProgramById(programId);
         const expansion = program.getExpansion(nodeId);
         const node = program.getNode(nodeId);
@@ -137,7 +142,7 @@ export class SearchRun {
             return;
         }
 
-        this.expandSearchNode(programId, node, expansion, incomingMass);
+        this.expandSearchNode(programId, node, expansion, incomingMass, probabilityFloor);
     }
 
     private expandRoot(programId: number, expansion: V7ProgramExpansion, incomingMass: bigint): void {
@@ -153,7 +158,8 @@ export class SearchRun {
         programId: number,
         node: V7ProgramNode,
         expansion: V7ProgramExpansion,
-        incomingMass: bigint
+        incomingMass: bigint,
+        probabilityFloor: bigint
     ): void {
         const probStop = ProbUtils.scale(incomingMass, PRECISION - expansion.probContinue);
         const probForward = incomingMass - probStop;
@@ -172,8 +178,7 @@ export class SearchRun {
             return;
         }
 
-        const floor = ProbUtils.toBigInt(ENGINE_LIMITS.SYSTEM_THRESHOLD_FLOOR);
-        if (probForward < floor) {
+        if (probabilityFloor > 0n && probForward < probabilityFloor) {
             this.mass.record('sieved', probForward);
             return;
         }
