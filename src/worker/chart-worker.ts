@@ -17,7 +17,7 @@ shell.onRun = async (msg: WorkerRequest, engine, signal) => {
 
     const { requestId, runId, input, refinementLevels } = msg;
     const isBook = input.item === 'book';
-    const engineMode = input.clue ? 'v6' : 'v7';
+    const engineMode = 'v7';
     const xpCap = engine.registry.mechanics.xp_cap || 30;
 
     // Notify UI that run is accepted

@@ -65,7 +65,7 @@ shell.onRun = async (msg: WorkerRequest, engine, signal) => {
         ClueValidator.validate(engine.registry, input.item, input.clue);
     }
 
-    const engineMode = input.clue ? 'v6' : 'v7';
+    const engineMode = 'v7';
     const checkpoints = refinementLevels.map(level => getSearchCheckpointForRefinement(level, isBook, engineMode));
 
     await engine.searchSequentialCheckpoints({

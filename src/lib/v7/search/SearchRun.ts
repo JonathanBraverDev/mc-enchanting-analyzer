@@ -1,5 +1,6 @@
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { ProbabilityMassAccountant } from '#engine/search/ProbabilityMassAccountant.js';
+import { ClueSearchPolicy } from '#engine/search/ClueSearchPolicy.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import { MassAccountingBreakdown } from '#types/mass.js';
 import { PackedCombo } from '#types/index.js';
@@ -9,6 +10,7 @@ import { SearchProgram, V7ProgramExpansion, V7ProgramNodeId } from '#lib/v7/sear
 
 export interface V7SearchRunOptions {
     readonly distributionService?: ModifiedLevelDistributionService | undefined;
+    readonly targetClueId?: number | undefined;
 }
 
 export interface V7SearchCheckpointRequest {
@@ -33,6 +35,7 @@ export interface V7SearchRunSnapshot {
 interface ProgramRecord {
     readonly id: number;
     readonly program: SearchProgram;
+    readonly cluePolicy?: ClueSearchPolicy | undefined;
 }
 
 interface FrontierPopTarget {
@@ -49,7 +52,7 @@ interface V7EdgeMassShare {
 /**
  * Minimal V7 single-cell probability flow executor.
  *
- * This is intentionally small: one output cell, no clue conditioning, no worker
+ * This is intentionally small: one output cell, optional clue conditioning, no worker
  * protocol, and no projection layer. It proves the core V7 premise that modified
  * level mass can be seeded directly into shared lazy programs and expanded by one
  * global weighted frontier.
@@ -62,6 +65,7 @@ export class SearchRun {
     private readonly programsBySignature = new Map<V7PoolSignature, ProgramRecord>();
     private readonly programs: ProgramRecord[] = [];
     private readonly forwardingResidues: BigUint64Array[] = [];
+    private readonly targetClueId: number | undefined;
     private readonly frontier = new V7RunFrontier();
     private seeded = false;
     private _seededLevelCount = 0;
@@ -72,6 +76,7 @@ export class SearchRun {
         options: V7SearchRunOptions = {}
     ) {
         this.distributionService = options.distributionService ?? new ModifiedLevelDistributionService();
+        this.targetClueId = options.targetClueId;
     }
 
     public seedXp(xp: number): void {
@@ -90,6 +95,13 @@ export class SearchRun {
             const level = Number(levelText);
             const pool = this.kernel.getPool(level);
             const program = this.getProgram(pool);
+            if (program.cluePolicy && !program.cluePolicy.isReachableInPool) {
+                this.mass.record('clueIncompatible', rootMass);
+                seededMass += rootMass;
+                this._seededLevelCount++;
+                continue;
+            }
+
             const root = program.program.getRootNode(level);
             this.pushPending(program.id, root.id, rootMass);
             seededMass += rootMass;
@@ -139,11 +151,12 @@ export class SearchRun {
     }
 
     private expand(programId: number, nodeId: V7ProgramNodeId, incomingMass: bigint, probabilityFloor: bigint): void {
-        const program = this.getProgramById(programId);
+        const record = this.getProgramById(programId);
+        const { program, cluePolicy } = record;
         const expansion = program.getExpansion(nodeId);
 
         if (expansion.isRoot) {
-            this.expandRoot(programId, nodeId, expansion, incomingMass);
+            this.expandRoot(programId, nodeId, expansion, incomingMass, cluePolicy);
             return;
         }
 
@@ -154,17 +167,24 @@ export class SearchRun {
             program.getNodeCount(nodeId),
             expansion,
             incomingMass,
-            probabilityFloor
+            probabilityFloor,
+            cluePolicy
         );
     }
 
-    private expandRoot(programId: number, nodeId: V7ProgramNodeId, expansion: V7ProgramExpansion, incomingMass: bigint): void {
+    private expandRoot(
+        programId: number,
+        nodeId: V7ProgramNodeId,
+        expansion: V7ProgramExpansion,
+        incomingMass: bigint,
+        cluePolicy: ClueSearchPolicy | undefined
+    ): void {
         if (expansion.totalWeight <= 0 || expansion.edges.length === 0) {
             this.mass.record('resolved', incomingMass);
             return;
         }
 
-        this.distributeToEdges(programId, nodeId, expansion, incomingMass);
+        this.distributeToEdges(programId, nodeId, expansion, incomingMass, 0 as PackedCombo, cluePolicy);
     }
 
     private expandSearchNode(
@@ -174,12 +194,13 @@ export class SearchRun {
         count: number,
         expansion: V7ProgramExpansion,
         incomingMass: bigint,
-        probabilityFloor: bigint
+        probabilityFloor: bigint,
+        cluePolicy: ClueSearchPolicy | undefined
     ): void {
         const probStop = ProbUtils.scale(incomingMass, PRECISION - expansion.probContinue);
         const probForward = incomingMass - probStop;
 
-        this.settleResolved(combo, count, probStop);
+        this.settleResolved(combo, count, probStop, cluePolicy);
 
         if (probForward === 0n) return;
 
@@ -189,7 +210,7 @@ export class SearchRun {
         }
 
         if (expansion.totalWeight <= 0 || expansion.edges.length === 0) {
-            this.settleResolved(combo, count, probForward);
+            this.settleResolved(combo, count, probForward, cluePolicy);
             return;
         }
 
@@ -198,10 +219,17 @@ export class SearchRun {
             return;
         }
 
-        this.distributeToEdges(programId, nodeId, expansion, probForward);
+        this.distributeToEdges(programId, nodeId, expansion, probForward, combo, cluePolicy);
     }
 
-    private distributeToEdges(programId: number, nodeId: V7ProgramNodeId, expansion: V7ProgramExpansion, mass: bigint): void {
+    private distributeToEdges(
+        programId: number,
+        nodeId: V7ProgramNodeId,
+        expansion: V7ProgramExpansion,
+        mass: bigint,
+        combo: PackedCombo,
+        cluePolicy: ClueSearchPolicy | undefined
+    ): void {
         const totalWeight = BigInt(expansion.totalWeight);
         const oldResidue = this.getForwardingResidue(programId, nodeId);
         const totalToDistribute = mass + oldResidue;
@@ -213,6 +241,11 @@ export class SearchRun {
 
             const childMass = (totalToDistribute * BigInt(edge.weight)) / totalWeight;
             assigned += childMass;
+            if (cluePolicy && !cluePolicy.canSelectChild(edge.entry.packedEnchant, this.containsTargetClue(combo, cluePolicy))) {
+                this.mass.record('clueIncompatible', childMass);
+                continue;
+            }
+
             shares.push({
                 childId: edge.childId,
                 mass: childMass
@@ -267,8 +300,22 @@ export class SearchRun {
         storage[nodeIndex] = residue;
     }
 
-    private settleResolved(combo: PackedCombo, count: number, mass: bigint): void {
+    private containsTargetClue(combo: PackedCombo, cluePolicy: ClueSearchPolicy): boolean {
+        return cluePolicy.containsTargetClue(combo, this.kernel.registry.indexToEnchant);
+    }
+
+    private settleResolved(
+        combo: PackedCombo,
+        count: number,
+        mass: bigint,
+        cluePolicy: ClueSearchPolicy | undefined
+    ): void {
         if (mass === 0n) return;
+
+        if (cluePolicy && !this.containsTargetClue(combo, cluePolicy)) {
+            this.mass.record('clueIncompatible', mass);
+            return;
+        }
 
         if (this.kernel.item === 'book' && count > 1) {
             const redistributed = ComboUtils.removeAdditional(combo);
@@ -279,15 +326,29 @@ export class SearchRun {
             }
 
             let remainder = mass;
+            let resolved = 0n;
+            let clueIncompatible = 0n;
             for (const redistributedCombo of redistributed) {
                 const share = mass / divisor;
                 remainder -= share;
+                if (cluePolicy && !this.containsTargetClue(redistributedCombo, cluePolicy)) {
+                    clueIncompatible += share;
+                    continue;
+                }
                 ProbUtils.addItemMass(this.results, redistributedCombo, share);
+                resolved += share;
             }
             if (remainder > 0n) {
-                ProbUtils.addItemMass(this.results, redistributed[0]!, remainder);
+                const first = redistributed[0]!;
+                if (cluePolicy && !this.containsTargetClue(first, cluePolicy)) {
+                    clueIncompatible += remainder;
+                } else {
+                    ProbUtils.addItemMass(this.results, first, remainder);
+                    resolved += remainder;
+                }
             }
-            this.mass.record('resolved', mass);
+            this.mass.record('resolved', resolved);
+            this.mass.record('clueIncompatible', clueIncompatible);
             return;
         }
 
@@ -305,19 +366,24 @@ export class SearchRun {
         const existing = this.programsBySignature.get(pool.signature);
         if (existing) return existing;
 
+        const initialPool = pool.entries.map(entry => entry.packedEnchant);
+        const cluePolicy = this.targetClueId !== undefined
+            ? ClueSearchPolicy.create(this.kernel.registry, initialPool, this.targetClueId)
+            : undefined;
         const record = Object.freeze({
             id: this.programs.length,
-            program: new SearchProgram(this.kernel, pool)
+            program: new SearchProgram(this.kernel, pool),
+            cluePolicy
         });
         this.programs.push(record);
         this.programsBySignature.set(pool.signature, record);
         return record;
     }
 
-    private getProgramById(programId: number): SearchProgram {
+    private getProgramById(programId: number): ProgramRecord {
         const record = this.programs[programId];
         if (!record) throw new Error(`Unknown V7 search program ID ${programId}`);
-        return record.program;
+        return record;
     }
 }
 

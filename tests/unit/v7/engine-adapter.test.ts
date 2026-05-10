@@ -58,21 +58,26 @@ describe('V7 engine adapter', () => {
         assert.ok(accuracies[2]! > accuracies[1]!);
     });
 
-    it('keeps clue-conditioned requests on V6 until V7 clue mode exists', async () => {
+    it('supports clue-conditioned requests through the V7 search path', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
 
-        await assert.rejects(
-            () => engine.calculate({
-                engine: 'v7',
-                item: 'sword',
-                material: 'diamond',
-                xp: 30,
-                clue: 'Sharpness III',
-                threshold: 0,
-                maxIterations: 100
-            }),
-            /V7 clue-conditioned search is not implemented yet/
-        );
+        const stats = await engine.calculate({
+            engine: 'v7',
+            item: 'sword',
+            material: 'diamond',
+            xp: 30,
+            clue: 'Sharpness III',
+            threshold: 0,
+            maxIterations: 10_000
+        });
+
+        assert.ok(stats.clue);
+        assert.strictEqual(stats.clue.idAndRank, 3);
+        assert.ok(stats.clue.knownSpace > 0);
+        assert.ok(stats.accounting.resolved > 0);
+        assert.ok(stats.accounting.clueIncompatible > 0);
+        assert.ok(Math.abs(accountingTotal(stats) - 1) < 1e-12);
+        assert.ok(Object.keys(stats.combos).length > 0);
     });
 
     it('does not share CalculationStats cache entries between V6 and V7', async () => {

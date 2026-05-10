@@ -73,7 +73,7 @@ Current branch state after the first stack-adapter checkpoint and V7-first direc
   - Configurable zero probability floor so validation can dig through the tail.
   - V6/V7 comparison harness with matched-resolved mode.
   - `V7SearchService` adapter that temporarily projects V7 snapshots into the existing `SearchResult` / `CalculationStats` boundary.
-  - Top and chart workers route unclued requests through V7 and keep clue-conditioned requests on V6.
+  - Top and chart workers route both unclued and clue-conditioned requests through V7.
   - V7-specific refinement thresholds so product depth settings reflect global weighted frontier semantics instead of V6 local per-modified-level semantics.
   - Node-local V7 edge-split residue forwarding inside `SearchRun`, matching V6's cautious recovery model: fixed-point split residue stays in `rounding` until later mass reaches the same `(program, node)` expansion and can recover it.
 - Direction change:
@@ -81,7 +81,6 @@ Current branch state after the first stack-adapter checkpoint and V7-first direc
   - Treat V6 internals, telemetry shape, snapshots, and worker granularity as obsolete until re-evaluated.
   - Do not force native V7 results or telemetry into V6 output shapes unless a temporary bridge still requires it.
 - Not implemented yet:
-  - V7 clue mode.
   - True shared batch/chart-cell execution; chart worker currently uses the V7 single-cell adapter per XP cell.
   - Native V7 projection contracts beyond the compatibility adapter.
   - Full V7 replacement tests.
@@ -342,7 +341,7 @@ UI input
 
 Top selected level is a one-cell batch. Chart sweep is a multi-cell batch. Refinement advances the same compatible run through stricter checkpoints instead of restarting unrelated searches.
 
-Current bridge state: workers still speak the existing protocol, but choose `engine: 'v7'` for unclued top/chart searches and `engine: 'v6'` for clue-conditioned searches. The compatibility adapter keeps `SummaryService`, `SnapshotService`, and existing UI contracts stable only as a migration scaffold. New V7 work should prefer native `SearchRun` / `V7SearchRunSnapshot` semantics and add projection contracts from there rather than conforming telemetry to V6.
+Current bridge state: workers still speak the existing protocol, but choose `engine: 'v7'` for both unclued and clue-conditioned top/chart searches. The compatibility adapter keeps `SummaryService`, `SnapshotService`, and existing UI contracts stable only as a migration scaffold. New V7 work should prefer native `SearchRun` / `V7SearchRunSnapshot` semantics and add projection contracts from there rather than conforming telemetry to V6.
 
 ## Remainder and Equivalence Rules
 
@@ -357,6 +356,20 @@ Integer split residue must be handled conservatively:
 - Book `removeAdditional` redistribution can assign its local remainder to one of the equivalent redistributed outputs because the original leaf combo has already fully resolved.
 
 This keeps total bucket mass conserved without treating unrelated pre-equivalence rounding residue as shared probability.
+
+## Future Tuning Ideas — Post Initial Release
+
+These are intentionally not part of the initial V7 release scope. Keep the first release focused on correct V7 semantics, safe worker integration, and validation.
+
+Possible later optimizations:
+
+- Cross-program suffix equivalence once different initial pools reduce to the same future remaining edge set.
+- Shared expansion-blueprint caching across equivalent suffix states without merging result payload state.
+- Batch expansion by shared structural state to amortize frontier and distribution overhead.
+- Program-local search quanta so hot programs can run several local expansions before global arbitration.
+- Bounded memoized suffix summaries for fully equivalent tail states, especially for book-heavy searches.
+
+Avoid merging by visible combo alone; that collapses incompatible future state and reintroduces the same metadata mess V7 is designed to avoid.
 
 ## Testing Strategy
 

@@ -18,10 +18,6 @@ export class V7SearchService {
     ) {}
 
     public async searchToCheckpoint(request: CheckpointSearchContext): Promise<SearchResult> {
-        if (request.targetClueId !== undefined) {
-            throw new Error('V7 clue-conditioned search is not implemented yet. Use V6 for clue requests.');
-        }
-
         const timingStart = request.timing ? performance.now() : 0;
         let recordedSearchMs = 0;
         const run = this.createRun(request);
@@ -35,10 +31,6 @@ export class V7SearchService {
     }
 
     public async searchSequentialCheckpoints(request: SequentialCheckpointSearchContext): Promise<SearchResult> {
-        if (request.targetClueId !== undefined) {
-            throw new Error('V7 clue-conditioned search is not implemented yet. Use V6 for clue requests.');
-        }
-
         const timingStart = request.timing ? performance.now() : 0;
         let recordedSearchMs = 0;
         const run = this.createRun(request);
@@ -73,7 +65,10 @@ export class V7SearchService {
             item: request.item,
             material: request.material
         });
-        const run = new SearchRun(kernel, { distributionService: this.distributionService });
+        const run = new SearchRun(kernel, {
+            distributionService: this.distributionService,
+            targetClueId: request.targetClueId
+        });
         run.seedXp(request.xp);
         return run;
     }

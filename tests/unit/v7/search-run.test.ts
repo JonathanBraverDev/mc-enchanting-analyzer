@@ -2,6 +2,8 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { RegistryFactory, RegistryKernel, SearchRun } from '#lib/index.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
+import { ClueSearchPolicy } from '#engine/search/ClueSearchPolicy.js';
+import { ClueValidator } from '#core/clue.js';
 import { PRECISION, ProbUtils } from '#utils/index.js';
 
 function totalMassUnits(snapshot: ReturnType<SearchRun['snapshot']>): bigint {
@@ -88,6 +90,24 @@ describe('V7 SearchRun', () => {
         assert.ok(BigInt(snapshot.mass.units!.recoveredRounding) > 0n);
         assert.strictEqual(BigInt(snapshot.mass.units!.pending), 0n);
         assert.strictEqual(totalMassUnits(snapshot), PRECISION);
+    });
+
+    it('prunes clue-incompatible branches while preserving only matching results', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'sword', material: 'diamond' });
+        const targetClueId = ClueValidator.validate(registry, 'sword', 'Sharpness III');
+        const policy = ClueSearchPolicy.create(registry, [targetClueId], targetClueId);
+        const run = new SearchRun(kernel, { targetClueId });
+
+        run.seedXp(30);
+        const snapshot = run.searchToCheckpoint({ threshold: 0n, maxIterations: 100_000 });
+
+        assert.ok(snapshot.mass.resolved > 0);
+        assert.ok(snapshot.mass.clueIncompatible > 0);
+        assert.strictEqual(totalMassUnits(snapshot), PRECISION);
+        for (const combo of snapshot.results.keys()) {
+            assert.ok(policy.containsTargetClue(combo, registry.indexToEnchant));
+        }
     });
 
     it('can stop once a requested resolved-mass target is reached', () => {
