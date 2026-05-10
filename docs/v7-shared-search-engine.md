@@ -9,6 +9,9 @@ This document is the working design checkpoint for the V7 engine rewrite. V7 is 
 - [Purpose / Scope](#purpose--scope)
 - [Decisions Locked In](#decisions-locked-in)
 - [Problem Statement](#problem-statement)
+- [Current Implementation Checkpoint](#current-implementation-checkpoint)
+- [Validation Findings](#validation-findings)
+- [Limit and Threshold Semantics](#limit-and-threshold-semantics)
 - [Target Architecture](#target-architecture)
 - [Search Identity](#search-identity)
 - [Mass Accounting](#mass-accounting)
@@ -37,8 +40,8 @@ Out of scope for the first pass:
 - Base: current `main` / `v6.1.0`.
 - V7 can break public/internal APIs if the result quality is better.
 - Existing snapshots are reference fixtures, not exact behavioral oracles.
-- Book cases may need higher limits than V6 because the current book snapshot used roughly 1.2M iterations across all modified levels.
-- The V7 iteration counter may not be directly comparable to V6 once shared nodes merge mass from multiple modified levels.
+- Book cases may need higher absolute limits for near-complete resolution, but V7 resolves more useful mass under the same total node budget.
+- The V7 iteration counter is global and should not be compared to V6's per-modified-level iteration counter as if they were the same budget.
 - Intermittent commits are mandatory; avoid one giant uncommitted rewrite.
 
 ## Problem Statement
@@ -56,6 +59,99 @@ V7 should instead search the real shared state space:
 ```text
 weighted modified-level roots -> shared lazy program graph -> per-cell/accounted results
 ```
+
+## Current Implementation Checkpoint
+
+Current branch state as of the fallback checkpoint:
+
+- Branch: `rewrite/v7-shared-search-engine`.
+- Latest pushed implementation before docs checkpoint: `b53c543 feat(v7): allow zero probability floor search`.
+- Implemented V7 slices:
+  - `RegistryKernel` and `PoolSignature` projection.
+  - Lazy `SearchProgram` structural graph.
+  - Single-cell weighted `SearchRun` with global frontier scheduling and mass conservation.
+  - Configurable zero probability floor so validation can dig through the tail.
+  - V6/V7 comparison harness with matched-resolved mode.
+- Not implemented yet:
+  - Projection/snapshot adapter for normal UI outputs.
+  - Clue mode.
+  - Batch/chart-cell execution.
+  - Worker integration.
+  - Full V7 replacement tests.
+
+## Validation Findings
+
+The current evidence supports V7's global weighted search model. V6 and V7 can return slightly different shallow book rankings because they cut different parts of the search frontier, not because V7 is losing mass.
+
+### Matched resolved mass
+
+When V7 is stopped at the same resolved mass as V6, non-book cases line up closely:
+
+- `1.21.11 sword/diamond XP 30`: top-8 overlap `8/8`; combo L1 distance about `1.54%`.
+- `1.8 sword/diamond XP 30`: top-8 overlap `8/8`; combo L1 distance about `0.39%`.
+
+Book cases show more rank churn because many outputs are clustered near the same probability:
+
+- Baseline `1.21.11 book/book XP 30`: top-8 overlap `5/8`, but top-20 overlap `20/20`; combo L1 distance about `2.21%`.
+- Deep `1.21.11 book/book XP 30`: top-8 overlap `8/8`; top-20 overlap `19/20`; combo L1 distance about `2.46%`.
+
+### Cutoff shape
+
+The book drift is explained by cutoff shape:
+
+- V6 applies thresholds and iteration limits inside each independent modified-level search.
+- V7 applies scheduling to globally weighted frontier mass.
+- Baseline book pending-node global mass spread:
+  - V6: about `70,797x`.
+  - V7: about `346x`.
+- Deep book pending-node global mass spread:
+  - V6: about `97,279x`.
+  - V7: about `642x`.
+
+This means V6 over-searches some low-probability modified levels while leaving larger unresolved chunks in high-probability levels. V7 leaves a more balanced global frontier.
+
+### Budgeted coverage
+
+Under the same total node budget, V7 resolves substantially more book mass. For `1.21.11 book/book XP 30`, using V6 per-level caps and giving V7 the same total node count V6 actually spent:
+
+| V6 per-level cap | Total nodes | V6 resolved | V7 resolved | V7 advantage |
+|---:|---:|---:|---:|---:|
+| 5 | 55 | 10.8689% | 15.8951% | +5.0262% |
+| 10 | 110 | 19.0206% | 24.6429% | +5.6223% |
+| 20 | 220 | 28.7735% | 34.2312% | +5.4577% |
+| 50 | 550 | 43.0442% | 49.6542% | +6.6100% |
+| 100 | 1100 | 55.1493% | 61.1158% | +5.9665% |
+| 250 | 2750 | 69.4391% | 75.4156% | +5.9765% |
+
+This validates the intended V7 behavior: given a fixed budget, expand the highest global weighted frontier nodes first and maximize resolved coverage.
+
+## Limit and Threshold Semantics
+
+V7 should intentionally change the meaning of limits from local modified-level controls to global request controls.
+
+Intended V7 semantics:
+
+```text
+iteration limit = total global node budget for the request/cell
+threshold       = global weighted frontier floor
+resolved mass   = best coverage obtainable under that budget/floor
+```
+
+V6 behavior to avoid preserving as product semantics:
+
+```text
+iteration limit = per-modified-level budget
+threshold       = per-modified-level unweighted local frontier floor
+aggregation     = scale each local result by P(modifiedLevel) afterward
+```
+
+The V6 behavior is useful for compatibility diagnostics only. It should not define V7 product behavior or future snapshot expectations. New V7 validation should focus on:
+
+- mass conservation,
+- monotonic resolved mass as limits increase,
+- globally balanced frontier cutoffs,
+- high-resolution convergence,
+- top-result sanity and broad probability distance, not exact V6 snapshot parity.
 
 ## Target Architecture
 
@@ -243,7 +339,7 @@ Top selected level is a one-cell batch. Chart sweep is a multi-cell batch. Refin
 
 - Keep existing snapshots as reference material.
 - Do not require exact snapshot parity.
-- Add V6-vs-V7 comparison harness for broad sanity, especially top probabilities and accounting totals.
+- Keep the V6-vs-V7 comparison harness for broad sanity, especially top probabilities and accounting totals.
 - Add mass conservation tests from the first executable V7 slice.
 - Add targeted tests for:
   - pool signature equivalence
@@ -253,6 +349,8 @@ Top selected level is a one-cell batch. Chart sweep is a multi-cell batch. Refin
   - chart batch cells
   - abort/resume behavior
 - Treat old engine-internal tests as disposable once their behavior is no longer relevant.
+- Add budgeted-search tests that prove V7 resolves more mass than V6 under the same total node budget.
+- Add monotonic coverage tests for increasing global iteration limits and decreasing global thresholds.
 
 ## Commit Plan
 
@@ -263,11 +361,13 @@ Commit after each stable slice:
 3. SearchProgram structural graph skeleton.
 4. Single-cell weighted SearchRun with mass conservation.
 5. V6/V7 comparison harness.
-6. Global modified-level scheduler.
-7. Direct weighted accounting and snapshot output.
-8. Worker adapter for top results.
-9. Chart batch mode.
-10. Projection cleanup and obsolete-test pruning.
+6. Matched-resolved and budgeted-resolution diagnostics.
+7. Projection/snapshot output.
+8. Global modified-level scheduler for multi-cell/batch requests.
+9. Direct weighted accounting hardening and compatibility adapters.
+10. Worker adapter for top results.
+11. Chart batch mode.
+12. Projection cleanup and obsolete-test pruning.
 
 ## References / Related Docs
 
