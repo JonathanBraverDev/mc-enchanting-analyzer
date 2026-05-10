@@ -118,6 +118,7 @@ export class EnchantEngine {
             signal,
             onProgress,
             maxIterations,
+            targetResolvedMass,
             exhaustive,
             summaryLimit = ENGINE_LIMITS.MAX_RESULTS_SUMMARY,
             resultsLimit = ENGINE_LIMITS.MAX_RESULTS_UNBOUNDED,
@@ -128,17 +129,19 @@ export class EnchantEngine {
 
         const packedClue = clue ? this.getPackedClue(item, clue) : null;
         const effectiveThreshold = exhaustive ? 0 : threshold;
+        const targetResolvedMassNumber = targetResolvedMass === undefined ? undefined : ProbUtils.toNumber(targetResolvedMass);
 
         const cacheKey = this.getStatsKey(item, xp, material, packedClue);
 
         const cachedStats = useCache === false || exhaustive ? undefined : this.cache.getStats(this.registry.version, cacheKey);
-        if (cachedStats && cachedStats.threshold <= effectiveThreshold) return cachedStats;
+        if (cachedStats && cachedStats.threshold <= effectiveThreshold && (targetResolvedMassNumber === undefined || cachedStats.accuracy >= targetResolvedMassNumber)) return cachedStats;
 
         const searchConfig: SearchConfig = {
             threshold: effectiveThreshold,
             signal,
             onProgress,
             maxIterations,
+            targetResolvedMass,
             exhaustive,
             resultsLimit,
             useCache,
@@ -238,6 +241,21 @@ export class EnchantEngine {
         }
         if (request.maxIterations !== undefined && (request.maxIterations <= 0 || !Number.isInteger(request.maxIterations))) {
             throw new Error(`Invalid maxIterations: ${request.maxIterations}. Must be a positive integer.`);
+        }
+        if (request.targetResolvedMass !== undefined) {
+            const target = ProbUtils.toNumber(request.targetResolvedMass);
+            if (target < 0 || target > 1.0) {
+                throw new Error(`Invalid targetResolvedMass: ${target}. Must be between 0 and 1.0.`);
+            }
+        }
+        if ('checkpoints' in request) {
+            for (const checkpoint of request.checkpoints) {
+                if (checkpoint.targetResolvedMass === undefined) continue;
+                const target = ProbUtils.toNumber(checkpoint.targetResolvedMass);
+                if (target < 0 || target > 1.0) {
+                    throw new Error(`Invalid checkpoint targetResolvedMass: ${target}. Must be between 0 and 1.0.`);
+                }
+            }
         }
         if (request.resultsLimit !== undefined && (request.resultsLimit <= 0 || request.resultsLimit > 1_000_000)) {
             throw new Error(`Invalid resultsLimit: ${request.resultsLimit}. Must be between 1 and 1,000,000.`);
