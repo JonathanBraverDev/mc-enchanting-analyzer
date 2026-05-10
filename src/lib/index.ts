@@ -7,3 +7,4 @@ export * from './types/index.js';
 export * from './core/config.js';
 export * from './utils/index.js';
 export { CacheManager } from './engine/cache/CacheManager.js';
+export * from './v7/index.js';
