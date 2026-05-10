@@ -4,7 +4,7 @@ import { SearchResult, SequentialCheckpointSearchContext, CheckpointSearchContex
 import { RegistryKernel } from '#lib/v7/registry/RegistryKernel.js';
 import { SearchRun, V7SearchRunSnapshot } from '#lib/v7/search/SearchRun.js';
 import { V7SearchCache } from '#lib/v7/search/V7SearchCache.js';
-import { ProbUtils } from '#utils/index.js';
+import { PRECISION, ProbUtils } from '#utils/index.js';
 
 /**
  * V7 adapter for the existing engine boundary.
@@ -34,7 +34,7 @@ export class V7SearchService {
         });
 
         recordedSearchMs = this.finishTiming(request.timing, timingStart, recordedSearchMs);
-        return this.toSearchResult(snapshot, request.exhaustive ? 0n : request.threshold, request.instrumentation, request.timing);
+        return this.toSearchResult(snapshot, request.exhaustive ? 0n : request.threshold, undefined, request.instrumentation, request.timing);
     }
 
     public async searchSequentialCheckpoints(request: SequentialCheckpointSearchContext): Promise<SearchResult> {
@@ -63,7 +63,7 @@ export class V7SearchService {
             }
 
             recordedSearchMs = this.finishTiming(request.timing, timingStart, recordedSearchMs);
-            lastResult = this.toSearchResult(snapshot, checkpoint.threshold, request.instrumentation, request.timing);
+            lastResult = this.toSearchResult(snapshot, checkpoint.threshold, checkpoint.targetClassifiedMass, request.instrumentation, request.timing);
             request.onCheckpointComplete(lastResult, checkpointIndex);
         }
 
@@ -71,7 +71,7 @@ export class V7SearchService {
 
         recordedSearchMs = this.finishTiming(request.timing, timingStart, recordedSearchMs);
         const emptySnapshot = run.snapshot();
-        return this.toSearchResult(emptySnapshot, 0, request.instrumentation, request.timing);
+        return this.toSearchResult(emptySnapshot, 0, undefined, request.instrumentation, request.timing);
     }
 
     private getRun(request: CheckpointSearchContext): SearchRun {
@@ -109,10 +109,16 @@ export class V7SearchService {
     private toSearchResult(
         snapshot: V7SearchRunSnapshot,
         threshold: number | bigint | undefined,
+        targetClassifiedMass?: number | bigint | undefined,
         instrumentation?: EngineInstrumentation | undefined,
         timing?: SearchTiming | undefined
     ): SearchResult {
         const thresholdUnits = ProbUtils.toBigInt(threshold ?? 0);
+        const targetClassifiedMassUnits = targetClassifiedMass === undefined
+            ? undefined
+            : ProbUtils.toBigInt(targetClassifiedMass);
+        const pendingUnits = BigInt(snapshot.mass.units?.pending ?? 0);
+        const classifiedMassUnits = PRECISION - pendingUnits;
 
         if (instrumentation) {
             const cacheMetrics = this.cache.getMetrics();
@@ -127,7 +133,9 @@ export class V7SearchService {
             instrumentation.indexMapSize = snapshot.pendingCount;
             instrumentation.exitReason = snapshot.fullyResolved
                 ? 'empty'
-                : snapshot.largestPendingMass < thresholdUnits ? 'threshold' : 'iterations';
+                : targetClassifiedMassUnits !== undefined && classifiedMassUnits >= targetClassifiedMassUnits
+                    ? 'mass'
+                    : snapshot.largestPendingMass < thresholdUnits ? 'threshold' : 'iterations';
             instrumentation.poolCache = instrumentation.poolCache ?? { hits: 0, misses: 0 };
             instrumentation.distCache = instrumentation.distCache ?? { hits: 0, misses: 0 };
             instrumentation.frontierCache = instrumentation.frontierCache ?? { hits: 0, misses: 0 };

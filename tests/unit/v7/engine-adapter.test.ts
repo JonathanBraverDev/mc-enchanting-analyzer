@@ -65,6 +65,17 @@ describe('V7 engine adapter', () => {
         const engine = EngineFactory.createForVersion('1.21.11');
         engine.resetCaches();
         const snapshots: SearchResult[] = [];
+        const instrumentation = {
+            poolCache: { hits: 0, misses: 0 },
+            distCache: { hits: 0, misses: 0 },
+            frontierCache: { hits: 0, misses: 0 },
+            totalIterations: 0,
+            totalPrunedNodes: 0,
+            roundingErrorEvents: 0,
+            levelsProcessed: 0,
+            levelsFullyResolved: 0,
+            fullyResolved: false
+        };
 
         await engine.searchSequentialCheckpoints({
             item: 'book',
@@ -74,6 +85,7 @@ describe('V7 engine adapter', () => {
                 { threshold: 0, limit: 100_000, targetClassifiedMass: 0.2 },
                 { threshold: 0, limit: 100_000, targetClassifiedMass: 0.4 }
             ],
+            instrumentation,
             onCheckpointComplete: result => {
                 snapshots.push(result);
             }
@@ -84,6 +96,8 @@ describe('V7 engine adapter', () => {
         assert.ok((1 - snapshots[1]!.snapshot.mass.pending) >= 0.4);
         assert.ok(snapshots[1]!.snapshot.iterations > snapshots[0]!.snapshot.iterations);
         assert.ok(snapshots[1]!.snapshot.mass.pending > 0);
+        assert.strictEqual(snapshots[0]!.instrumentation?.exitReason, 'mass');
+        assert.strictEqual(snapshots[1]!.instrumentation?.exitReason, 'mass');
     });
 
     it('streams sequential checkpoints with monotonic V7 resolved mass', async () => {
