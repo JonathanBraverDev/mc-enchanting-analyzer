@@ -81,6 +81,7 @@ Current branch state after the V7-only migration:
   - Async chunked V7 adapter search so worker abort signals can be observed during long checkpoints.
   - Initial V7-native instrumentation under `EngineInstrumentation.v7` for program count, seeded levels, pending entries, largest pending mass, active residue count/mass, improvability, and V7 cache hit/miss counters.
   - V7 structural `SearchProgram` cache plus XP-cell `SearchRun` cache: one-at-a-time chart worker calls can now resume the same XP run across refinement passes while sharing structural programs across fresh runs.
+  - Explicit `exhaustive: true` diagnostic mode for bottom-out searches: it forces threshold `0`, bypasses the normal iteration safety cap, remains abortable through async search, and is intended for validation / “do we choke?” probes rather than product UI flows.
 - Direction change:
   - V7 is now the upgrade path and source of truth.
   - Treat V6 internals, telemetry shape, and snapshots as obsolete until re-evaluated.
@@ -150,6 +151,14 @@ iteration limit = total global node budget for the request/cell
 threshold       = global weighted frontier floor
 resolved mass   = best coverage obtainable under that budget/floor
 ```
+
+The named constant `MAX_ITERATIONS_UNBOUNDED` is historical and should be read as a large safety cap, not truly unbounded execution. Diagnostic bottom-out runs should use `exhaustive: true`, which deliberately forces threshold `0` and disables the iteration cap so the search runs until the frontier is empty, aborts, or exhausts host resources.
+
+Use exhaustive mode only for validation and stress probes:
+
+- safe for small and most non-book snapshot cases,
+- useful for V6/V7 convergence comparisons when threshold semantics differ,
+- dangerous for modern book cases such as `1.21.11 book/book XP 30`, where full bottom-out can take minutes or expose memory/runtime limits.
 
 V6 behavior to avoid preserving as product semantics:
 

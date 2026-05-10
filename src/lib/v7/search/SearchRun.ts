@@ -21,6 +21,8 @@ export interface V7SearchRunOptions {
 export interface V7SearchCheckpointRequest {
     readonly threshold?: number | bigint | undefined;
     readonly maxIterations?: number | undefined;
+    /** Ignore threshold and iteration cap, searching until the frontier is empty. */
+    readonly exhaustive?: boolean | undefined;
     /** Stop once resolved mass reaches this absolute fixed-point/number target. */
     readonly targetResolvedMass?: number | bigint | undefined;
     /** Optional internal forward-mass floor. Defaults to 0 so validation can dig into the full tail. */
@@ -137,8 +139,8 @@ export class SearchRun {
     public searchToCheckpoint(request: V7SearchCheckpointRequest = {}): V7SearchRunSnapshot {
         if (!this.seeded) throw new Error('V7 SearchRun must be seeded before searching.');
 
-        const threshold = ProbUtils.toBigInt(request.threshold ?? ENGINE_LIMITS.DEFAULT_THRESHOLD);
-        const maxIterations = request.maxIterations ?? ENGINE_LIMITS.MAX_ITERATIONS_UNBOUNDED;
+        const threshold = request.exhaustive ? 0n : ProbUtils.toBigInt(request.threshold ?? ENGINE_LIMITS.DEFAULT_THRESHOLD);
+        const maxIterations = request.exhaustive ? Number.POSITIVE_INFINITY : request.maxIterations ?? ENGINE_LIMITS.MAX_ITERATIONS_UNBOUNDED;
         const targetResolvedMass = request.targetResolvedMass !== undefined
             ? ProbUtils.toBigInt(request.targetResolvedMass)
             : undefined;
@@ -162,13 +164,18 @@ export class SearchRun {
     }
 
     public async searchToCheckpointAsync(request: V7SearchCheckpointRequest = {}): Promise<V7SearchRunSnapshot> {
-        const maxIterations = request.maxIterations ?? ENGINE_LIMITS.MAX_ITERATIONS_UNBOUNDED;
+        const maxIterations = request.exhaustive ? Number.POSITIVE_INFINITY : request.maxIterations ?? ENGINE_LIMITS.MAX_ITERATIONS_UNBOUNDED;
         const yieldEveryIterations = Math.max(1, request.yieldEveryIterations ?? 2048);
 
         while (true) {
             if (request.signal?.aborted) throw new Error('Aborted');
             const nextLimit = Math.min(maxIterations, this._iterations + yieldEveryIterations);
-            const snapshot = this.searchToCheckpoint({ ...request, maxIterations: nextLimit });
+            const snapshot = this.searchToCheckpoint({
+                ...request,
+                exhaustive: false,
+                threshold: request.exhaustive ? 0n : request.threshold,
+                maxIterations: nextLimit
+            });
             if (snapshot.iterations < nextLimit || snapshot.iterations >= maxIterations) return snapshot;
             await AsyncUtils.yield();
         }

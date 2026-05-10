@@ -118,6 +118,7 @@ export class EnchantEngine {
             signal,
             onProgress,
             maxIterations,
+            exhaustive,
             summaryLimit = ENGINE_LIMITS.MAX_RESULTS_SUMMARY,
             resultsLimit = ENGINE_LIMITS.MAX_RESULTS_UNBOUNDED,
             useCache,
@@ -126,17 +127,19 @@ export class EnchantEngine {
         } = request;
 
         const packedClue = clue ? this.getPackedClue(item, clue) : null;
+        const effectiveThreshold = exhaustive ? 0 : threshold;
 
         const cacheKey = this.getStatsKey(item, xp, material, packedClue);
 
-        const cachedStats = useCache === false ? undefined : this.cache.getStats(this.registry.version, cacheKey);
-        if (cachedStats && cachedStats.threshold <= threshold) return cachedStats;
+        const cachedStats = useCache === false || exhaustive ? undefined : this.cache.getStats(this.registry.version, cacheKey);
+        if (cachedStats && cachedStats.threshold <= effectiveThreshold) return cachedStats;
 
         const searchConfig: SearchConfig = {
-            threshold,
+            threshold: effectiveThreshold,
             signal,
             onProgress,
             maxIterations,
+            exhaustive,
             resultsLimit,
             useCache,
             instrumentation,
@@ -182,7 +185,7 @@ export class EnchantEngine {
             finalStats.timing = finalResult.timing;
         }
 
-        if (useCache !== false) {
+        if (useCache !== false && !exhaustive) {
             const currentCached = this.cache.getStats(this.registry.version, cacheKey);
             if (!currentCached || finalStats.accuracy > currentCached.accuracy) {
                 this.cache.setStats(this.registry.version, cacheKey, finalStats);

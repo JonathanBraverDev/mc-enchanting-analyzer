@@ -31,6 +31,29 @@ describe('V7 engine adapter', () => {
         assert.strictEqual(stats.threshold, 0);
     });
 
+    it('exposes exhaustive mode through the calculate boundary', async () => {
+        const engine = EngineFactory.createForVersion('1.21.11');
+        engine.resetCaches();
+
+        const stats = await engine.calculate({
+            item: 'mace',
+            material: 'mace',
+            xp: 1,
+            threshold: 1,
+            maxIterations: 1,
+            exhaustive: true,
+            summaryLimit: 10,
+            resultsLimit: ENGINE_LIMITS.MAX_RESULTS_UNBOUNDED,
+            useCache: false
+        });
+
+        assert.strictEqual(stats.threshold, 0);
+        assert.strictEqual(stats.accounting.pending, 0);
+        assert.ok(stats.accounting.resolved > 0);
+        assert.ok(Object.keys(stats.combos).length > 0);
+        assert.ok(Math.abs(accountingTotal(stats) - 1) < 1e-12);
+    });
+
     it('streams sequential checkpoints with monotonic V7 resolved mass', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
         engine.resetCaches();

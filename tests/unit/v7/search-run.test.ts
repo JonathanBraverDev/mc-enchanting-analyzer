@@ -137,4 +137,18 @@ describe('V7 SearchRun', () => {
         assert.ok(snapshot.mass.resolved > 0);
         assert.strictEqual(totalMassUnits(snapshot), PRECISION);
     });
+
+    it('supports an explicit exhaustive mode that ignores threshold and iteration caps', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'mace', material: 'mace' });
+        const run = new SearchRun(kernel);
+
+        run.seedXp(1);
+        const snapshot = run.searchToCheckpoint({ threshold: 1, maxIterations: 1, exhaustive: true });
+
+        assert.ok(snapshot.iterations > 1, 'exhaustive mode should bypass the caller iteration cap');
+        assert.strictEqual(snapshot.fullyResolved, true);
+        assert.strictEqual(BigInt(snapshot.mass.units!.pending), 0n);
+        assert.strictEqual(totalMassUnits(snapshot), PRECISION);
+    });
 });

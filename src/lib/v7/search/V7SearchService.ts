@@ -27,13 +27,14 @@ export class V7SearchService {
         let recordedSearchMs = 0;
         const run = this.getRun(request);
         const snapshot = await run.searchToCheckpointAsync({
-            threshold: request.threshold ?? ENGINE_LIMITS.DEFAULT_THRESHOLD,
-            maxIterations: request.maxIterations ?? ENGINE_LIMITS.MAX_ITERATIONS_UNBOUNDED,
+            threshold: request.exhaustive ? 0n : request.threshold ?? ENGINE_LIMITS.DEFAULT_THRESHOLD,
+            maxIterations: request.exhaustive ? undefined : request.maxIterations ?? ENGINE_LIMITS.MAX_ITERATIONS_UNBOUNDED,
+            exhaustive: request.exhaustive,
             signal: request.signal
         });
 
         recordedSearchMs = this.finishTiming(request.timing, timingStart, recordedSearchMs);
-        return this.toSearchResult(snapshot, request.threshold, request.instrumentation, request.timing);
+        return this.toSearchResult(snapshot, request.exhaustive ? 0n : request.threshold, request.instrumentation, request.timing);
     }
 
     public async searchSequentialCheckpoints(request: SequentialCheckpointSearchContext): Promise<SearchResult> {
