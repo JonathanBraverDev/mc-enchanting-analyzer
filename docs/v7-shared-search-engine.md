@@ -62,7 +62,7 @@ weighted modified-level roots -> shared lazy program graph -> per-cell/accounted
 
 ## Current Implementation Checkpoint
 
-Current branch state after the first stack-adapter checkpoint and V7-first direction change:
+Current branch state after the V7-only migration:
 
 - Branch: `rewrite/v7-shared-search-engine`.
 - Fallback design checkpoint tag: `v7-global-search-semantics-2026-05-10` at `20b65ba`.
@@ -71,12 +71,12 @@ Current branch state after the first stack-adapter checkpoint and V7-first direc
   - Lazy `SearchProgram` structural graph.
   - Single-cell weighted `SearchRun` with global frontier scheduling and mass conservation.
   - Configurable zero probability floor so validation can dig through the tail.
-  - V6/V7 comparison harness with matched-resolved mode.
-  - `V7SearchService` adapter that returns the existing `SearchResult` boundary while also carrying the native `V7SearchRunSnapshot` for V7-aware post-processing.
+  - Historical V6/V7 comparison runs with matched-resolved mode; the temporary comparison scripts have now been removed from the live tree.
+  - `V7SearchService` adapter that returns a native V7 `SearchResult` boundary backed by `V7SearchRunSnapshot`.
   - Top and chart workers route both unclued and clue-conditioned requests through V7.
   - V7-specific refinement thresholds so product depth settings reflect global weighted frontier semantics instead of V6 local per-modified-level semantics.
   - Node-local V7 edge-split residue forwarding inside `SearchRun`, matching V6's cautious recovery model: fixed-point split residue stays in `rounding` until later mass reaches the same `(program, node)` expansion and can recover it.
-  - Native V7 pending-state projection: summary, clue conditioning, target analysis, clue advice, snapshots, and chart cells can consume `V7SearchRunSnapshot.pendingEntries` directly instead of requiring fake V6 `SearchFrontierSnapshot` scans.
+  - Native V7 pending-state projection: summary, clue conditioning, target analysis, clue advice, snapshots, and chart cells consume `V7SearchRunSnapshot.pendingEntries` directly.
   - Async chunked V7 adapter search so worker abort signals can be observed during long checkpoints.
   - Initial V7-native instrumentation under `EngineInstrumentation.v7` for program count, seeded levels, pending entries, largest pending mass, active residue count/mass, improvability, and V7 cache hit/miss counters.
   - V7 structural `SearchProgram` cache plus XP-cell `SearchRun` cache: one-at-a-time chart worker calls can now resume the same XP run across refinement passes while sharing structural programs across fresh runs.
@@ -87,9 +87,8 @@ Current branch state after the first stack-adapter checkpoint and V7-first direc
   - Do not introduce a separate V7 worker/request abstraction unless a concrete feature cannot be expressed through the existing checkpoint interfaces.
   - Do not force native V7 results or telemetry into V6 output shapes unless a temporary bridge still requires it.
 - Not implemented yet:
-  - Final V7-only projection contracts after the remaining UI/worker protocol compatibility layer is removed.
   - Serialized/cross-worker V7 search snapshots if live run caching proves insufficient.
-  - Full V7 replacement tests.
+  - Additional V7-native regression tests as new edge cases are discovered.
 - Optional/post-release:
   - Engine-owned chart batch scheduling. Current direction is that the chart worker owns matrix orchestration and repeatedly calls checkpoint APIs; V7 caching provides XP-cell resume underneath.
 
@@ -349,7 +348,7 @@ searchSequentialCheckpoints(request)
 
 Top selected level should continue to use sequential checkpoints when it wants uninterrupted coarse → standard → deep progress. Chart sweep should stay worker-orchestrated: the chart worker loops refinement passes and XP levels, calls `searchToCheckpoint` for each cell, and relies on the V7 XP-cell run cache so later refinement calls resume the same `SearchRun` instead of recomputing from scratch.
 
-Current bridge state: workers still speak the existing protocol, but choose `engine: 'v7'` for both unclued and clue-conditioned top/chart searches. `SearchResult` remains a temporary outer compatibility envelope, but V7 post-processing now prefers the native `V7SearchRunSnapshot`: summary aggregation, clue conditioning, target analysis, clue advice, top snapshots, and chart cells consume `pendingEntries` directly as globally weighted `(program, node, mass, combo, count)` records. Legacy `SearchFrontierSnapshot` projection remains only as scaffolding for older callers/tests while the V6-shaped boundary is retired. The adapter also caches V7 XP-cell `SearchRun`s, so repeated one-at-a-time calls for the same version/item/material/xp/clue can resume across refinement levels. New V7 work should keep projection logic adapted to `SearchRun` / `V7SearchRunSnapshot` semantics rather than forcing V7 into V6 frontier shapes.
+Current state: workers use the existing checkpoint-oriented protocol, but there is no engine selector and all top/chart searches route through V7. `SearchResult` is a V7-native envelope containing `snapshot: V7SearchRunSnapshot`. Summary aggregation, clue conditioning, target analysis, clue advice, top snapshots, and chart cells consume `snapshot.pendingEntries` directly as globally weighted `(program, node, mass, combo, count)` records. The adapter caches V7 XP-cell `SearchRun`s, so repeated one-at-a-time calls for the same version/item/material/xp/clue can resume across refinement levels. New work should keep projection logic adapted to `SearchRun` / `V7SearchRunSnapshot` semantics rather than forcing V7 into old frontier/tracker shapes.
 
 ## Remainder and Equivalence Rules
 
@@ -383,7 +382,7 @@ Avoid merging by visible combo alone; that collapses incompatible future state a
 
 - Keep existing snapshots as reference material.
 - Do not require exact snapshot parity.
-- Keep the V6-vs-V7 comparison harness for broad sanity, especially top probabilities and accounting totals.
+- Treat historical V6-vs-V7 comparison output as reference material only; live tests should assert V7 semantics directly.
 - Add mass conservation tests from the first executable V7 slice.
 - Add targeted tests for:
   - pool signature equivalence
@@ -411,7 +410,7 @@ Commit after each stable slice:
 9. Worker adapter for top results. ✅ top path routed through V7
 10. Chart worker V7 routing. ✅ chart path routed through V7 per XP cell
 11. XP-cell run caching for chart-style refinement resume. ✅ live `SearchRun` cache
-12. Projection cleanup and obsolete-test pruning.
+12. Projection cleanup and obsolete-test pruning. ✅ V7-only projection path, obsolete search tests/scripts removed
 13. Optional later: engine-owned chart batch scheduling if profiling proves worker orchestration insufficient.
 
 ## References / Related Docs
