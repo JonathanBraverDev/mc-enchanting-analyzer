@@ -208,7 +208,8 @@ export class EnchantEngine {
                 targetClueId: packedClue,
                 comboLimit: summaryLimit,
                 frontiers: finalResult.frontiers,
-                isBook
+                isBook,
+                v7Snapshot: finalResult.v7Snapshot
             })
             : SummaryService.summarize({
                 combos: finalResult.combos,
@@ -217,7 +218,8 @@ export class EnchantEngine {
                 comboLimit: summaryLimit,
                 threshold: finalResult.threshold,
                 frontiers: finalResult.frontiers,
-                isBook
+                isBook,
+                v7Snapshot: finalResult.v7Snapshot
             });
 
         finalStats.instrumentation = finalResult.instrumentation;

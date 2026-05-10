@@ -8,6 +8,7 @@ import type {
     TargetAnalysisResult,
     TargetRequirementInput
 } from '#types/index.js';
+import type { V7PendingFrontierEntry } from '#lib/v7/search/SearchRun.js';
 import { ComboUtils, ProbUtils } from '#utils/index.js';
 
 export interface TargetAnalysisRequest {
@@ -15,6 +16,7 @@ export interface TargetAnalysisRequest {
     indexToEnchant: number[];
     targets?: PackedTargetRequirement[] | undefined;
     frontiers?: SearchFrontierSnapshot[] | undefined;
+    v7PendingEntries?: readonly V7PendingFrontierEntry[] | undefined;
     comboLimit?: number | undefined;
     registry?: RegistryState | undefined;
     isBook?: boolean | undefined;
@@ -110,6 +112,7 @@ export class TargetAnalysisService {
             indexToEnchant,
             targets = [],
             frontiers = [],
+            v7PendingEntries = [],
             comboLimit = 50,
             registry,
             isBook = false
@@ -132,6 +135,25 @@ export class TargetAnalysisService {
             } else {
                 if (classification.nearMiss) this.addComboMass(nearMissCombos, packed, mass);
                 if (classification.blockedByConflict) this.addComboMass(blockedCombos, packed, mass);
+            }
+        }
+
+        for (const entry of v7PendingEntries) {
+            const packed = entry.combo;
+            const classification = this.classifyCombo(packed, targets, indexToEnchant, registry);
+            const mass = entry.mass;
+            if (classification.matches) {
+                matchMass += mass;
+                if (!isBook) this.addComboMass(matchingCombos, packed, mass);
+            } else {
+                if (classification.nearMiss) {
+                    if (isBook) pendingNearMissMass += mass;
+                    else this.addComboMass(nearMissCombos, packed, mass);
+                }
+                if (classification.blockedByConflict) {
+                    if (isBook) pendingBlockedMass += mass;
+                    else this.addComboMass(blockedCombos, packed, mass);
+                }
             }
         }
 

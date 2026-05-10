@@ -3,6 +3,7 @@ import { NodeIdSearchFrontier } from '#engine/search/NodeIdSearchFrontier.js';
 import { SearchPoolPlan } from '#engine/search/SearchPoolPlan.js';
 import { SearchNodeGraph } from '#engine/search/SearchNodeGraph.js';
 import type { ClueSearchPolicy } from '#engine/search/ClueSearchPolicy.js';
+import type { V7SearchRunSnapshot } from '#lib/v7/search/SearchRun.js';
 
 import { MassAccountingBreakdown } from '#types/mass.js';
 
@@ -318,6 +319,7 @@ export interface SummaryRequest {
     threshold?: number | undefined;
     frontiers?: SearchFrontierSnapshot[] | undefined;
     isBook?: boolean | undefined;
+    v7Snapshot?: V7SearchRunSnapshot | undefined;
 }
 
 export interface ConditionedSummaryRequest extends SummaryRequest {
@@ -348,6 +350,8 @@ export interface SearchResult {
     combos: Map<PackedCombo, bigint>;
     tracker: import('../engine/search/SearchStateTracker.js').SearchStateTracker;
     frontiers?: SearchFrontierSnapshot[] | undefined;
+    /** Native V7 search snapshot. Prefer this for V7 post-processing; frontiers are legacy compatibility only. */
+    v7Snapshot?: V7SearchRunSnapshot | undefined;
     instrumentation?: EngineInstrumentation | undefined;
     timing?: SearchTiming | undefined;
     threshold: number;

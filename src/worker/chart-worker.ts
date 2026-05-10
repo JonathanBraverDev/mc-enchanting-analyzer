@@ -79,7 +79,8 @@ shell.onRun = async (msg: WorkerRequest, engine, signal) => {
                     clue: input.clue,
                     includeCombos: false
                 },
-                result.frontiers
+                result.frontiers,
+                result.v7Snapshot
             );
 
             const response: ChartUpdateResponse = {

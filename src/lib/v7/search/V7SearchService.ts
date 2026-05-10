@@ -158,6 +158,7 @@ export class V7SearchService {
             combos: new Map(snapshot.results),
             tracker,
             frontiers,
+            v7Snapshot: snapshot,
             instrumentation: instrumentation ? { ...instrumentation } : undefined,
             timing: timing ? { ...timing } : undefined,
             threshold: ProbUtils.toNumber(threshold ?? 0)

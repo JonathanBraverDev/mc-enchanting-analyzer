@@ -131,7 +131,8 @@ function postTopSnapshot(
             refinementLevel,
             clue: input.clue
         },
-        result.frontiers
+        result.frontiers,
+        result.v7Snapshot
     );
 
     const response: TopUpdateResponse = {

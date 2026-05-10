@@ -3,6 +3,7 @@ import assert from 'node:assert';
 import { EngineFactory } from '#engine/index.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import { CalculationStats } from '#types/index.js';
+import { SummaryService } from '#services/SummaryService.js';
 
 function accountingTotal(stats: CalculationStats): number {
     const a = stats.accounting;
@@ -111,6 +112,46 @@ describe('V7 engine adapter', () => {
         assert.ok(result.instrumentation.v7.programCount > 0);
         assert.strictEqual(result.instrumentation.v7.pendingEntryCount, result.frontiers![0]!.frontier.size());
         assert.ok(result.instrumentation.v7.canImprove);
+    });
+
+    it('feeds V7 post-processing from native pending entries instead of compatibility frontiers', async () => {
+        const engine = EngineFactory.createForVersion('1.21.11');
+        engine.resetCaches();
+
+        const result = await engine.searchToCheckpoint({
+            engine: 'v7',
+            item: 'book',
+            material: 'book',
+            xp: 30,
+            threshold: 0,
+            maxIterations: 1
+        });
+
+        assert.ok(result.v7Snapshot);
+        assert.ok(result.v7Snapshot.pendingEntries.length > 0);
+
+        const native = SummaryService.summarize({
+            combos: result.combos,
+            tracker: result.tracker,
+            indexToEnchant: engine.registry.indexToEnchant,
+            comboLimit: 0,
+            frontiers: [],
+            v7Snapshot: result.v7Snapshot,
+            isBook: true
+        });
+        const compatibility = SummaryService.summarize({
+            combos: result.combos,
+            tracker: result.tracker,
+            indexToEnchant: engine.registry.indexToEnchant,
+            comboLimit: 0,
+            frontiers: result.frontiers,
+            isBook: true
+        });
+
+        assert.deepStrictEqual(native.any, compatibility.any);
+        assert.deepStrictEqual(native.ranks, compatibility.ranks);
+        assert.deepStrictEqual(native.count, compatibility.count);
+        assert.deepStrictEqual(native.shownClueDistribution, compatibility.shownClueDistribution);
     });
 
     it('aborts V7 checkpoint searches through the adapter', async () => {

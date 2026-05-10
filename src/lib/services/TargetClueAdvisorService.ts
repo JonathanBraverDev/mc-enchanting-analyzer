@@ -11,6 +11,7 @@ import type {
     TargetLevelClueAdvisorView,
     TargetLevelClueRecommendationView
 } from '#types/index.js';
+import type { V7PendingFrontierEntry } from '#lib/v7/search/SearchRun.js';
 import { ComboUtils, ProbUtils, PRECISION } from '#utils/index.js';
 
 export interface TargetClueAdvisorRequest {
@@ -19,6 +20,7 @@ export interface TargetClueAdvisorRequest {
     targets: PackedTargetRequirement[];
     registry: RegistryState;
     frontiers?: SearchFrontierSnapshot[] | undefined;
+    v7PendingEntries?: readonly V7PendingFrontierEntry[] | undefined;
     limit?: number | undefined;
 }
 
@@ -53,6 +55,7 @@ export class TargetClueAdvisorService {
             targets,
             registry,
             frontiers = [],
+            v7PendingEntries = [],
             limit = 5
         } = request;
 
@@ -62,6 +65,10 @@ export class TargetClueAdvisorService {
 
         for (const [packed, mass] of combos) {
             this.addComboContribution(buckets, packed, mass, indexToEnchant, targets);
+        }
+
+        for (const entry of v7PendingEntries) {
+            this.addComboContribution(buckets, entry.combo, entry.mass, indexToEnchant, targets);
         }
 
         for (const { frontier, graph, scale } of frontiers) {

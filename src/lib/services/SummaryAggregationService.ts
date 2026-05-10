@@ -1,11 +1,14 @@
 import { PACKING_CONSTANTS } from '#constants/engine.js';
 import { PackedCombo, SearchFrontierSnapshot } from '#types/index.js';
+import type { V7PendingFrontierEntry } from '#lib/v7/search/SearchRun.js';
 import { ProbUtils } from '#utils/index.js';
 
 export interface SummaryAggregationRequest {
     combos: Map<PackedCombo, bigint>;
     indexToEnchant: number[];
     frontiers?: SearchFrontierSnapshot[] | undefined;
+    /** Native V7 pending entries. Prefer this over legacy frontier snapshots for V7 projection. */
+    v7PendingEntries?: readonly V7PendingFrontierEntry[] | undefined;
     isBook?: boolean | undefined;
     includeMasses?: boolean | undefined;
     includeShownClueDistribution?: boolean | undefined;
@@ -27,6 +30,7 @@ export class SummaryAggregationService {
             combos,
             indexToEnchant,
             frontiers = [],
+            v7PendingEntries = [],
             isBook = false,
             includeMasses = true,
             includeShownClueDistribution = true
@@ -41,6 +45,10 @@ export class SummaryAggregationService {
 
         for (const [packed, mass] of combos) {
             this.addContribution(result, packed, mass, indexToEnchant, false, isBook, includeMasses, includeShownClueDistribution);
+        }
+
+        for (const entry of v7PendingEntries) {
+            this.addContribution(result, entry.combo, entry.mass, indexToEnchant, true, isBook, includeMasses, includeShownClueDistribution);
         }
 
         for (const { frontier, graph, scale } of frontiers) {

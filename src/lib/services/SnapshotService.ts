@@ -26,6 +26,7 @@ import { SummaryAggregationService } from '#services/SummaryAggregationService.j
 import { TargetAnalysisService } from '#services/TargetAnalysisService.js';
 import { TargetClueAdvisorService } from '#services/TargetClueAdvisorService.js';
 import { ClueSignalAdvisorService } from '#services/ClueSignalAdvisorService.js';
+import type { V7SearchRunSnapshot } from '#lib/v7/search/SearchRun.js';
 
 
 export class SnapshotService {
@@ -44,7 +45,8 @@ export class SnapshotService {
     tracker: SearchStateTracker,
     combos: Map<PackedCombo, bigint>,
     request: SnapshotRequest,
-    frontiers: SearchFrontierSnapshot[] = []
+    frontiers: SearchFrontierSnapshot[] = [],
+    v7Snapshot?: V7SearchRunSnapshot | undefined
   ): TopRunView | ChartCellView {
     const { snapshotType, refinementLevel, clue, comboLimit } = request;
     const includeCombos = request.includeCombos ?? snapshotType === 'top';
@@ -69,7 +71,14 @@ export class SnapshotService {
 
     if (isConditioned) {
       // Conditioned views derive from top combos and any pending frontier mass.
-      const conditioned = ClueAnalysisService.conditionOnClue(combos, targetClueId!, state.indexToEnchant, frontiers, isBook);
+      const conditioned = ClueAnalysisService.conditionOnClue(
+        combos,
+        targetClueId!,
+        state.indexToEnchant,
+        v7Snapshot ? [] : frontiers,
+        isBook,
+        v7Snapshot?.pendingEntries
+      );
       knownSpace = ProbUtils.toNumber(conditioned.knownSpace);
       result = conditioned;
     } else {
@@ -77,7 +86,8 @@ export class SnapshotService {
       const derived = SummaryAggregationService.aggregate({
         combos,
         indexToEnchant: state.indexToEnchant,
-        frontiers,
+        frontiers: v7Snapshot ? [] : frontiers,
+        v7PendingEntries: v7Snapshot?.pendingEntries,
         isBook,
         includeShownClueDistribution: false
       });
@@ -101,7 +111,8 @@ export class SnapshotService {
       combos: result.combos,
       indexToEnchant: state.indexToEnchant,
       targets: packedTargets,
-      frontiers: isConditioned ? [] : frontiers,
+      frontiers: isConditioned || v7Snapshot ? [] : frontiers,
+      v7PendingEntries: isConditioned ? [] : v7Snapshot?.pendingEntries,
       comboLimit: includeCombos ? comboLimit ?? ENGINE_LIMITS.MAX_RESULTS_SUMMARY : 0,
       registry: state,
       isBook
@@ -124,7 +135,8 @@ export class SnapshotService {
         indexToEnchant: state.indexToEnchant,
         targets: packedTargets,
         registry: state,
-        frontiers,
+        frontiers: v7Snapshot ? [] : frontiers,
+        v7PendingEntries: v7Snapshot?.pendingEntries,
         limit: 5
       })
       : undefined;

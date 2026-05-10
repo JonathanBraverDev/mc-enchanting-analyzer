@@ -19,7 +19,8 @@ export class SummaryService {
             comboLimit = ENGINE_LIMITS.MAX_RESULTS_SUMMARY,
             threshold = 0,
             frontiers = [],
-            isBook = false
+            isBook = false,
+            v7Snapshot
         } = request;
         const accounting = tracker.mass.toPublic();
         const stats: CalculationStats = {
@@ -33,7 +34,13 @@ export class SummaryService {
             accounting
         };
 
-        const derived = SummaryAggregationService.aggregate({ combos, indexToEnchant, frontiers, isBook });
+        const derived = SummaryAggregationService.aggregate({
+            combos,
+            indexToEnchant,
+            frontiers: v7Snapshot ? [] : frontiers,
+            v7PendingEntries: v7Snapshot?.pendingEntries,
+            isBook
+        });
 
         SummaryService.populateStats(stats.any, derived.any);
         SummaryService.populateStats(stats.ranks, derived.ranks);
@@ -97,7 +104,8 @@ export class SummaryService {
             indexToEnchant,
             targetClueId,
             comboLimit = ENGINE_LIMITS.MAX_RESULTS_SUMMARY,
-            frontiers = []
+            frontiers = [],
+            v7Snapshot
         } = request;
         const accounting = tracker.mass.toPublic();
         const stats: CalculationStats = {
@@ -111,7 +119,14 @@ export class SummaryService {
         };
 
         // 1. Perform Bayesian conditioning
-        const conditioned = ClueAnalysisService.conditionOnClue(combos, targetClueId, indexToEnchant, frontiers, request.isBook ?? false);
+        const conditioned = ClueAnalysisService.conditionOnClue(
+            combos,
+            targetClueId,
+            indexToEnchant,
+            v7Snapshot ? [] : frontiers,
+            request.isBook ?? false,
+            v7Snapshot?.pendingEntries
+        );
 
         // 2. Preserve observed-clue diagnostics used for Bayesian conditioning.
         stats.clue = {
