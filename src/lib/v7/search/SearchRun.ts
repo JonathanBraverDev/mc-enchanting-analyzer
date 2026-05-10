@@ -253,50 +253,63 @@ export class SearchRun {
     }
 }
 
+interface V7FrontierProgramStorage {
+    masses: BigUint64Array;
+    positions: Int32Array;
+}
+
 class V7RunFrontier {
-    private readonly heap: string[] = [];
-    private readonly entries = new Map<string, { programId: number; nodeId: V7ProgramNodeId; mass: bigint; heapIndex: number }>();
+    private static readonly INITIAL_NODE_CAPACITY = 1024;
+
+    private readonly heapProgramIds: number[] = [];
+    private readonly heapNodeIds: number[] = [];
+    private readonly storages: V7FrontierProgramStorage[] = [];
 
     public get size(): number {
-        return this.heap.length;
+        return this.heapNodeIds.length;
     }
 
     public pushOrMerge(programId: number, nodeId: V7ProgramNodeId, mass: bigint): void {
-        const key = this.key(programId, nodeId);
-        const existing = this.entries.get(key);
-        if (existing) {
-            existing.mass += mass;
-            this.bubbleUp(existing.heapIndex);
+        const storage = this.ensureStorage(programId, nodeId);
+        const nodeIndex = nodeId as number;
+        const existingIndex = storage.positions[nodeIndex]!;
+        if (existingIndex !== -1) {
+            storage.masses[nodeIndex]! += mass;
+            this.bubbleUp(existingIndex);
             return;
         }
 
-        const entry = { programId, nodeId, mass, heapIndex: this.heap.length };
-        this.entries.set(key, entry);
-        this.heap.push(key);
-        this.bubbleUp(entry.heapIndex);
+        const heapIndex = this.heapNodeIds.length;
+        this.heapProgramIds.push(programId);
+        this.heapNodeIds.push(nodeIndex);
+        storage.masses[nodeIndex] = mass;
+        storage.positions[nodeIndex] = heapIndex;
+        this.bubbleUp(heapIndex);
     }
 
     public peekMass(): bigint {
-        const key = this.heap[0];
-        if (key === undefined) return 0n;
-        return this.entries.get(key)?.mass ?? 0n;
+        return this.heapNodeIds.length === 0 ? 0n : this.massAt(0);
     }
 
     public pop(out: FrontierPopTarget): boolean {
-        const key = this.heap[0];
-        if (key === undefined) return false;
-        const entry = this.entries.get(key);
-        if (!entry) return false;
+        if (this.heapNodeIds.length === 0) return false;
 
-        out.programId = entry.programId;
-        out.nodeId = entry.nodeId;
-        out.mass = entry.mass;
-        this.entries.delete(key);
+        const programId = this.heapProgramIds[0]!;
+        const nodeId = this.heapNodeIds[0]!;
+        const storage = this.storages[programId]!;
 
-        const lastKey = this.heap.pop();
-        if (this.heap.length > 0 && lastKey !== undefined && lastKey !== key) {
-            this.heap[0] = lastKey;
-            this.entries.get(lastKey)!.heapIndex = 0;
+        out.programId = programId;
+        out.nodeId = nodeId as V7ProgramNodeId;
+        out.mass = storage.masses[nodeId]!;
+        storage.positions[nodeId] = -1;
+        storage.masses[nodeId] = 0n;
+
+        const lastProgramId = this.heapProgramIds.pop();
+        const lastNodeId = this.heapNodeIds.pop();
+        if (this.heapNodeIds.length > 0 && lastProgramId !== undefined && lastNodeId !== undefined) {
+            this.heapProgramIds[0] = lastProgramId;
+            this.heapNodeIds[0] = lastNodeId;
+            this.storages[lastProgramId]!.positions[lastNodeId] = 0;
             this.sinkDown(0);
         }
 
@@ -305,51 +318,100 @@ class V7RunFrontier {
 
     private bubbleUp(index: number): void {
         let current = index;
-        const key = this.heap[current]!;
-        const mass = this.entries.get(key)!.mass;
+        const programId = this.heapProgramIds[current]!;
+        const nodeId = this.heapNodeIds[current]!;
+        const mass = this.getNodeMass(programId, nodeId);
 
         while (current > 0) {
             const parent = (current - 1) >>> 1;
-            const parentKey = this.heap[parent]!;
-            if (this.entries.get(parentKey)!.mass >= mass) break;
-            this.heap[current] = parentKey;
-            this.entries.get(parentKey)!.heapIndex = current;
+            if (this.massAt(parent) >= mass) break;
+            this.moveHeapEntry(parent, current);
             current = parent;
         }
 
-        this.heap[current] = key;
-        this.entries.get(key)!.heapIndex = current;
+        this.heapProgramIds[current] = programId;
+        this.heapNodeIds[current] = nodeId;
+        this.storages[programId]!.positions[nodeId] = current;
     }
 
     private sinkDown(index: number): void {
         let current = index;
-        const key = this.heap[current]!;
-        const mass = this.entries.get(key)!.mass;
+        const programId = this.heapProgramIds[current]!;
+        const nodeId = this.heapNodeIds[current]!;
+        const mass = this.getNodeMass(programId, nodeId);
 
         while (true) {
             const left = (current << 1) + 1;
-            if (left >= this.heap.length) break;
+            if (left >= this.heapNodeIds.length) break;
             const right = left + 1;
             let child = left;
-            if (right < this.heap.length && this.massAt(right) > this.massAt(left)) {
+            if (right < this.heapNodeIds.length && this.massAt(right) > this.massAt(left)) {
                 child = right;
             }
             if (mass >= this.massAt(child)) break;
-            const childKey = this.heap[child]!;
-            this.heap[current] = childKey;
-            this.entries.get(childKey)!.heapIndex = current;
+            this.moveHeapEntry(child, current);
             current = child;
         }
 
-        this.heap[current] = key;
-        this.entries.get(key)!.heapIndex = current;
+        this.heapProgramIds[current] = programId;
+        this.heapNodeIds[current] = nodeId;
+        this.storages[programId]!.positions[nodeId] = current;
+    }
+
+    private moveHeapEntry(from: number, to: number): void {
+        const programId = this.heapProgramIds[from]!;
+        const nodeId = this.heapNodeIds[from]!;
+        this.heapProgramIds[to] = programId;
+        this.heapNodeIds[to] = nodeId;
+        this.storages[programId]!.positions[nodeId] = to;
     }
 
     private massAt(index: number): bigint {
-        return this.entries.get(this.heap[index]!)!.mass;
+        return this.getNodeMass(this.heapProgramIds[index]!, this.heapNodeIds[index]!);
     }
 
-    private key(programId: number, nodeId: V7ProgramNodeId): string {
-        return `${programId}:${nodeId}`;
+    private getNodeMass(programId: number, nodeId: number): bigint {
+        return this.storages[programId]!.masses[nodeId]!;
+    }
+
+    private ensureStorage(programId: number, nodeId: V7ProgramNodeId): V7FrontierProgramStorage {
+        let storage = this.storages[programId];
+        if (!storage) {
+            storage = this.createStorage(Math.max(V7RunFrontier.INITIAL_NODE_CAPACITY, (nodeId as number) + 1));
+            this.storages[programId] = storage;
+            return storage;
+        }
+
+        if ((nodeId as number) >= storage.masses.length) {
+            this.growStorage(storage, (nodeId as number) + 1);
+        }
+        return storage;
+    }
+
+    private createStorage(capacity: number): V7FrontierProgramStorage {
+        const normalized = this.nextPowerOfTwo(capacity);
+        const positions = new Int32Array(normalized);
+        positions.fill(-1);
+        return {
+            masses: new BigUint64Array(normalized),
+            positions
+        };
+    }
+
+    private growStorage(storage: V7FrontierProgramStorage, required: number): void {
+        const nextCapacity = this.nextPowerOfTwo(required);
+        const nextMasses = new BigUint64Array(nextCapacity);
+        nextMasses.set(storage.masses);
+        const nextPositions = new Int32Array(nextCapacity);
+        nextPositions.fill(-1);
+        nextPositions.set(storage.positions);
+        storage.masses = nextMasses;
+        storage.positions = nextPositions;
+    }
+
+    private nextPowerOfTwo(value: number): number {
+        let size = 1;
+        while (size < value) size <<= 1;
+        return size;
     }
 }
