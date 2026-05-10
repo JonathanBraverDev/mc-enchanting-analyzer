@@ -17,7 +17,6 @@ shell.onRun = async (msg: WorkerRequest, engine, signal) => {
 
     const { requestId, runId, input, refinementLevels } = msg;
     const isBook = input.item === 'book';
-    const engineMode = 'v7';
     const xpCap = engine.registry.mechanics.xp_cap || 30;
 
     // Notify UI that run is accepted
@@ -49,14 +48,13 @@ shell.onRun = async (msg: WorkerRequest, engine, signal) => {
     for (const level of refinementLevels) {
         if (signal.aborted) break;
 
-        const params = getSearchCheckpointForRefinement(level, isBook, engineMode);
+        const params = getSearchCheckpointForRefinement(level, isBook);
         const passId = `pass_${level}` as PassId;
 
         for (let xp = 1; xp <= xpCap; xp++) {
             if (signal.aborted || shell.runId !== runId) break;
 
             const result = await engine.searchToCheckpoint({
-                engine: engineMode,
                 item: input.item,
                 xp,
                 material: input.material,
@@ -70,17 +68,14 @@ shell.onRun = async (msg: WorkerRequest, engine, signal) => {
 
             const cell = SnapshotService.create(
                 engine.registry,
-                result.tracker,
-                result.combos,
+                result.snapshot,
                 {
                     snapshotType: 'chart-cell',
                     input: { ...input, xpLevel: xp },
                     refinementLevel: level,
                     clue: input.clue,
                     includeCombos: false
-                },
-                result.frontiers,
-                result.v7Snapshot
+                }
             );
 
             const response: ChartUpdateResponse = {

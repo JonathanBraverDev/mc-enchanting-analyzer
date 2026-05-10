@@ -1,4 +1,4 @@
-import { PackedCombo, PackedEnchant, SearchFrontierSnapshot } from '#types/index.js';
+import { PackedCombo, PackedEnchant } from '#types/index.js';
 import type { V7PendingFrontierEntry } from '#lib/v7/search/SearchRun.js';
 import { ComboUtils, ProbUtils, PRECISION } from '#utils/index.js';
 import { SummaryAggregationService } from '#services/SummaryAggregationService.js';
@@ -17,14 +17,13 @@ export class ClueAnalysisService {
      * @param indexToEnchant Registry mapping.
      */
     public static conditionOnClue(
-        combos: Map<PackedCombo, bigint>,
+        combos: ReadonlyMap<PackedCombo, bigint>,
         targetClueId: number,
         indexToEnchant: number[],
-        frontiers: SearchFrontierSnapshot[] = [],
         isBook = false,
         v7PendingEntries: readonly V7PendingFrontierEntry[] = []
     ): {
-        combos: Map<PackedCombo, bigint>,
+        combos: ReadonlyMap<PackedCombo, bigint>,
         anyMass: Map<number, bigint>,
         rankMass: Map<number, bigint>,
         countMass: Map<number, bigint>,
@@ -33,7 +32,6 @@ export class ClueAnalysisService {
         const clueMasses = SummaryAggregationService.aggregate({
             combos,
             indexToEnchant,
-            frontiers,
             v7PendingEntries,
             includeMasses: false
         }).shownClueDistribution;
@@ -61,20 +59,6 @@ export class ClueAnalysisService {
             }
 
             totalMass += this.processConditionedNode(entry.combo, entry.mass, targetClueId, pClue, indexToEnchant, conditionedCombos, anyMass, rankMass, countMass);
-        }
-
-        for (const { frontier, graph, scale } of frontiers) {
-            frontier.forEachNode((nodeId, prob) => {
-                const packed = graph.getCombo(nodeId);
-                const mass = ProbUtils.scale(prob, scale);
-
-                if (isBook && ComboUtils.getCount(packed) > 1) {
-                    totalMass += this.processPendingBookAggregate(packed, mass, targetClueId, pClue, indexToEnchant, anyMass, rankMass, countMass);
-                    return;
-                }
-
-                totalMass += this.processConditionedNode(packed, mass, targetClueId, pClue, indexToEnchant, conditionedCombos, anyMass, rankMass, countMass);
-            });
         }
 
         // Final normalization to exactly 1.0.

@@ -14,15 +14,13 @@ export class SummaryService {
     public static summarize(request: SummaryRequest): CalculationStats {
         const {
             combos,
-            tracker,
+            snapshot,
             indexToEnchant,
             comboLimit = ENGINE_LIMITS.MAX_RESULTS_SUMMARY,
             threshold = 0,
-            frontiers = [],
-            isBook = false,
-            v7Snapshot
+            isBook = false
         } = request;
-        const accounting = tracker.mass.toPublic();
+        const accounting = snapshot.mass;
         const stats: CalculationStats = {
             ranks: {},
             any: {},
@@ -37,8 +35,7 @@ export class SummaryService {
         const derived = SummaryAggregationService.aggregate({
             combos,
             indexToEnchant,
-            frontiers: v7Snapshot ? [] : frontiers,
-            v7PendingEntries: v7Snapshot?.pendingEntries,
+            v7PendingEntries: snapshot.pendingEntries,
             isBook
         });
 
@@ -91,7 +88,6 @@ export class SummaryService {
      * Summarizes statistics under the condition that a specific clue is shown.
      *
      * @param combos Combination distribution before clue conditioning.
-     * @param tracker Original search manager (for metadata).
      * @param indexToEnchant Registry mapping.
      * @param targetClueId The observed clue ID.
      * @param comboLimit Result set limit.
@@ -100,14 +96,12 @@ export class SummaryService {
     public static summarizeConditioned(request: ConditionedSummaryRequest): CalculationStats {
         const {
             combos,
-            tracker,
+            snapshot,
             indexToEnchant,
             targetClueId,
-            comboLimit = ENGINE_LIMITS.MAX_RESULTS_SUMMARY,
-            frontiers = [],
-            v7Snapshot
+            comboLimit = ENGINE_LIMITS.MAX_RESULTS_SUMMARY
         } = request;
-        const accounting = tracker.mass.toPublic();
+        const accounting = snapshot.mass;
         const stats: CalculationStats = {
             ranks: {},
             any: {},
@@ -123,9 +117,8 @@ export class SummaryService {
             combos,
             targetClueId,
             indexToEnchant,
-            v7Snapshot ? [] : frontiers,
             request.isBook ?? false,
-            v7Snapshot?.pendingEntries
+            snapshot.pendingEntries
         );
 
         // 2. Preserve observed-clue diagnostics used for Bayesian conditioning.

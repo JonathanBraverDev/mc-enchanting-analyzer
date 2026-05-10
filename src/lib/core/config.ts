@@ -93,11 +93,9 @@ export const REFINEMENT_LEVEL_COLORS: Record<RefinementStatusLevel, { bg: string
     done:     { bg: 'rgba(255, 255, 255, 0.05)', text: 'var(--text-muted)' }
 };
 
-export function getSearchCheckpointForRefinement(level: RefinementLevelName, isBook: boolean, engine: 'v6' | 'v7' = 'v6'): RefinementSearchCheckpoint {
+export function getSearchCheckpointForRefinement(level: RefinementLevelName, isBook: boolean): RefinementSearchCheckpoint {
     const mode = REFINEMENT_CHECKPOINTS[level];
-    const threshold = engine === 'v7'
-        ? (isBook ? mode.v7ThresholdBook : mode.v7ThresholdOther)
-        : (isBook ? mode.thresholdBook : mode.thresholdOther);
+    const threshold = isBook ? mode.v7ThresholdBook : mode.v7ThresholdOther;
 
     return {
         refinementLevel: level,

@@ -1,8 +1,4 @@
 import { Enchantment, MaterialValues, RegistryMutation, RomanMap } from '#types/domain.js';
-import { NodeIdSearchFrontier } from '#engine/search/NodeIdSearchFrontier.js';
-import { SearchPoolPlan } from '#engine/search/SearchPoolPlan.js';
-import { SearchNodeGraph } from '#engine/search/SearchNodeGraph.js';
-import type { ClueSearchPolicy } from '#engine/search/ClueSearchPolicy.js';
 import type { V7SearchRunSnapshot } from '#lib/v7/search/SearchRun.js';
 
 import { MassAccountingBreakdown } from '#types/mass.js';
@@ -101,9 +97,9 @@ export interface EngineInstrumentation {
 
   /** Total unique results aggregated across all modified levels so far in this specific calculation */
   globalResultsSize?: number | undefined;
-  /** Total nodes currently stored in ALL frontiers across the entire engine's LRU caches */
+  /** Total nodes currently stored in engine-wide cached pending search state */
   globalCacheNodes?: number | undefined;
-  /** Total results currently stored in ALL frontiers across the entire engine's LRU caches */
+  /** Total results currently stored in engine-wide cached search state */
   globalCacheResults?: number | undefined;
 
   /** Optional script/diagnostic targets for recording explored mass crossings. */
@@ -187,46 +183,6 @@ export interface ExpansionBlueprint {
 }
 
 /**
- * Shared context for mass distribution and forwarding operations.
- * Bundles search state to reduce parameter ceremony.
- */
-export interface ForwardingContext {
-    registry: RegistryState;
-    results: Map<PackedCombo, bigint>;
-    queue: NodeIdSearchFrontier;
-    graph: SearchNodeGraph;
-    resultsLimit: number;
-    instrumentation?: EngineInstrumentation | undefined;
-    timing?: SearchTiming | undefined;
-
-    // Search-global parameters
-    item: string;
-    poolPlan: SearchPoolPlan;
-    cluePolicy?: ClueSearchPolicy | undefined;
-}
-
-
-/**
- * State of a search for enchantment combinations.
- */
-export interface SearchState {
-    queue: NodeIdSearchFrontier;
-    graph: SearchNodeGraph;
-    results: Map<PackedCombo, bigint>;
-    tracker: import('../engine/search/SearchStateTracker.js').SearchStateTracker;
-    threshold: bigint;
-    iterations: number;
-    nodesProcessed: number;
-    exitReason?: EngineExitReason | undefined;  // per-call output; not carried over on resume
-}
-
-export interface SearchFrontierSnapshot {
-    frontier: NodeIdSearchFrontier;
-    graph: SearchNodeGraph;
-    scale: bigint;
-}
-
-/**
  * Internal state of a Registry, containing pre-computed mapping and conflict data.
  */
 export interface RegistryState {
@@ -269,8 +225,6 @@ export type PackedCombo = number & { __brand: "PackedCombo" };
 export type ProbabilityValue = bigint & { __brand: "ProbabilityValue" };
 
 export interface SearchConfig {
-    /** Explicit engine implementation selector. Defaults to the legacy V6 engine until V7 is fully integrated. */
-    engine?: 'v6' | 'v7' | undefined;
     /** The observed enchantment clue (e.g. "Sharpness IV"). Trigger Bayesian conditioning if set. */
     clue?: string | null | undefined;
     threshold?: number | bigint | undefined;
@@ -293,14 +247,6 @@ export type CalculationRequest = SearchConfig & ItemSelectionRequest & {
     xp: number;
 };
 
-export type ModifiedLevelSearchRequest = ItemSelectionRequest & {
-    modLevel: number;
-    threshold?: bigint | undefined;
-    maxIterations?: number | undefined;
-    resultsLimit?: number | undefined;
-    instrumentation?: EngineInstrumentation | undefined;
-};
-
 export type CheckpointSearchRequest = SearchConfig & ItemSelectionRequest & {
     xp: number;
 };
@@ -312,14 +258,12 @@ export type SequentialCheckpointSearchRequest = SearchConfig & ItemSelectionRequ
 };
 
 export interface SummaryRequest {
-    combos: Map<PackedCombo, bigint>;
-    tracker: import('../engine/search/SearchStateTracker.js').SearchStateTracker;
+    combos: ReadonlyMap<PackedCombo, bigint>;
+    snapshot: V7SearchRunSnapshot;
     indexToEnchant: number[];
     comboLimit?: number | undefined;
     threshold?: number | undefined;
-    frontiers?: SearchFrontierSnapshot[] | undefined;
     isBook?: boolean | undefined;
-    v7Snapshot?: V7SearchRunSnapshot | undefined;
 }
 
 export interface ConditionedSummaryRequest extends SummaryRequest {
@@ -347,37 +291,11 @@ export interface ProgressReporter {
 
 /** Search results before presentation summarization. */
 export interface SearchResult {
-    combos: Map<PackedCombo, bigint>;
-    tracker: import('../engine/search/SearchStateTracker.js').SearchStateTracker;
-    frontiers?: SearchFrontierSnapshot[] | undefined;
-    /** Native V7 search snapshot. Prefer this for V7 post-processing; frontiers are legacy compatibility only. */
-    v7Snapshot?: V7SearchRunSnapshot | undefined;
+    snapshot: V7SearchRunSnapshot;
+    combos: ReadonlyMap<PackedCombo, bigint>;
     instrumentation?: EngineInstrumentation | undefined;
     timing?: SearchTiming | undefined;
     threshold: number;
-}
-
-/**
- * Context for the Best-First search algorithm tracking.
- * Used internally by the SearchController and SearchService.
- */
-export interface SearchContext {
-    threshold: bigint;
-    limit: number;
-    resultsLimit: number;
-    signal?: AbortSignal | undefined;
-    instrumentation?: EngineInstrumentation | undefined;
-    timing?: SearchTiming | undefined;
-}
-
-export interface ModifiedLevelSearchContext extends SearchContext {
-    registry: RegistryState;
-    item: string;
-    modLevel: number;
-    material?: string | undefined;
-    existingState?: SearchState | undefined;
-    useCache?: boolean | undefined;
-    targetClueId?: number | undefined;
 }
 
 export interface CheckpointSearchContext extends SearchConfig {

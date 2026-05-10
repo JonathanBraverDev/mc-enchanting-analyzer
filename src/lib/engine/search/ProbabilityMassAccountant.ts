@@ -138,7 +138,7 @@ export class ProbabilityMassAccountant {
     }
 
     /**
-     * Returns the mass from frontiers that were discovered but not yet expanded.
+     * Returns the mass discovered but not yet expanded.
      */
     public getUnexploredMass(): bigint {
         return this.data[2]!;

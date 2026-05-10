@@ -4,18 +4,16 @@ import type {
     PackedCombo,
     PackedTargetRequirement,
     RegistryState,
-    SearchFrontierSnapshot,
     TargetAnalysisResult,
     TargetRequirementInput
 } from '#types/index.js';
 import type { V7PendingFrontierEntry } from '#lib/v7/search/SearchRun.js';
-import { ComboUtils, ProbUtils } from '#utils/index.js';
+import { ComboUtils } from '#utils/index.js';
 
 export interface TargetAnalysisRequest {
-    combos: Map<PackedCombo, bigint>;
+    combos: ReadonlyMap<PackedCombo, bigint>;
     indexToEnchant: number[];
     targets?: PackedTargetRequirement[] | undefined;
-    frontiers?: SearchFrontierSnapshot[] | undefined;
     v7PendingEntries?: readonly V7PendingFrontierEntry[] | undefined;
     comboLimit?: number | undefined;
     registry?: RegistryState | undefined;
@@ -111,7 +109,6 @@ export class TargetAnalysisService {
             combos,
             indexToEnchant,
             targets = [],
-            frontiers = [],
             v7PendingEntries = [],
             comboLimit = 50,
             registry,
@@ -157,26 +154,6 @@ export class TargetAnalysisService {
             }
         }
 
-        for (const { frontier, graph, scale } of frontiers) {
-            frontier.forEachNode((nodeId, prob) => {
-                const packed = graph.getCombo(nodeId);
-                const classification = this.classifyCombo(packed, targets, indexToEnchant, registry);
-                const mass = ProbUtils.scale(prob, scale);
-                if (classification.matches) {
-                    matchMass += mass;
-                    if (!isBook) this.addComboMass(matchingCombos, packed, mass);
-                } else {
-                    if (classification.nearMiss) {
-                        if (isBook) pendingNearMissMass += mass;
-                        else this.addComboMass(nearMissCombos, packed, mass);
-                    }
-                    if (classification.blockedByConflict) {
-                        if (isBook) pendingBlockedMass += mass;
-                        else this.addComboMass(blockedCombos, packed, mass);
-                    }
-                }
-            });
-        }
 
         const topCombos: [PackedCombo, bigint][] = [];
         for (const entry of matchingCombos.entries()) {

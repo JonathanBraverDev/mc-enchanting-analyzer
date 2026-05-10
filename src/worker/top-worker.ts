@@ -65,11 +65,9 @@ shell.onRun = async (msg: WorkerRequest, engine, signal) => {
         ClueValidator.validate(engine.registry, input.item, input.clue);
     }
 
-    const engineMode = 'v7';
-    const checkpoints = refinementLevels.map(level => getSearchCheckpointForRefinement(level, isBook, engineMode));
+    const checkpoints = refinementLevels.map(level => getSearchCheckpointForRefinement(level, isBook));
 
     await engine.searchSequentialCheckpoints({
-        engine: engineMode,
         item: input.item,
         xp: input.xpLevel,
         material: input.material,
@@ -123,16 +121,13 @@ function postTopSnapshot(
 ): void {
     const view = SnapshotService.create(
         registry,
-        result.tracker,
-        result.combos,
+        result.snapshot,
         {
             snapshotType: 'top',
             input,
             refinementLevel,
             clue: input.clue
-        },
-        result.frontiers,
-        result.v7Snapshot
+        }
     );
 
     const response: TopUpdateResponse = {

@@ -2,14 +2,12 @@ import { BuiltRegistryState } from '#types/index.js';
 import { EnchantEngine } from '#engine/index.js';
 import { CacheManager } from '#engine/cache/CacheManager.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
-import { SearchService } from '#engine/search/SearchService.js';
 import { CACHE_CONFIG } from '#constants/engine.js';
 import { RegistryFactory } from '#core/factory.js';
 
 export interface EngineRuntimeOverrides {
     cache: CacheManager;
     distributionService: ModifiedLevelDistributionService;
-    searchService: SearchService;
 }
 
 /**
@@ -49,13 +47,10 @@ export class EngineFactory {
         });
 
         const distributionService = overrides.distributionService || new ModifiedLevelDistributionService(1024);
-        const searchService = overrides.searchService || new SearchService(cache, distributionService);
-
         const engine = new EnchantEngine(
             registry,
             cache,
-            distributionService,
-            searchService
+            distributionService
         );
         return engine;
     }

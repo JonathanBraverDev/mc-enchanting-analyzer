@@ -1,13 +1,11 @@
-import { BuiltRegistryState, CalculationRequest, CalculationStats, CheckpointSearchRequest, EngineInstrumentation, ModifiedLevelSearchRequest, SearchResult, SearchConfig, SearchState, SequentialCheckpointSearchRequest } from '#types/index.js';
-import { KeyUtils, ProbUtils } from '#utils/index.js';
+import { BuiltRegistryState, CalculationRequest, CalculationStats, CheckpointSearchRequest, EngineInstrumentation, SearchResult, SearchConfig, SequentialCheckpointSearchRequest } from '#types/index.js';
 import { getItemId, getMaterialId, isItemAvailable, isMaterialEligible, getEligibleListNumeric as getRegistryEligibleListNumeric } from '#core/registry.js';
+import { KeyUtils, ProbUtils } from '#utils/index.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import { MINECRAFT_RULES } from '#constants/minecraft.js';
-import { getSearchLimit } from '#engine/utils.js';
 import { CacheManager } from '#engine/cache/CacheManager.js';
 import { SummaryService } from '#services/SummaryService.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
-import { SearchService } from '#engine/search/SearchService.js';
 import { V7SearchService } from '#lib/v7/search/V7SearchService.js';
 import { ClueValidator } from '#core/clue.js';
 export { EngineFactory } from './factory.js';
@@ -25,7 +23,6 @@ export class EnchantEngine {
         registry: BuiltRegistryState,
         private readonly cache: CacheManager,
         private readonly distributionService: ModifiedLevelDistributionService,
-        private readonly searchService: SearchService,
         private readonly v7SearchService: V7SearchService = new V7SearchService(distributionService)
     ) {
         this._registry = registry;
@@ -66,46 +63,6 @@ export class EnchantEngine {
     }
 
     /**
-     * Search for enchantment combinations at a specific modified level.
-     *
-     * @param item Item type.
-     * @param modLevel The pre-computed modified level for this search.
-     * @param material Item material.
-     * @param threshold High-precision bigint threshold (1.0 = 10^18).
-     * @param maxIterations Max nodes to process.
-     * @param resultsLimit Max unique combinations to retain before recording capped mass.
-     * @param instrumentation Optional performance tracking.
-     */
-    public async searchModifiedLevel(request: ModifiedLevelSearchRequest): Promise<SearchState> {
-        const { item, material } = request;
-        const {
-            modLevel,
-            threshold = ProbUtils.toBigInt(ENGINE_LIMITS.DEFAULT_THRESHOLD),
-            maxIterations,
-            resultsLimit = ENGINE_LIMITS.MAX_RESULTS_UNBOUNDED,
-            instrumentation
-        } = request;
-        const cacheKey = this.getPackedKey(item, modLevel, material);
-        const cached = this.cache.getSearchState(item, this.registry.version, cacheKey) as SearchState | undefined;
-        // This one-level API returns a frontier directly, so a complete cached frontier is already
-        // the full answer. Request-level searches still enter SearchService to preserve reporting.
-        if (cached && cached.threshold <= threshold) return cached;
-
-        return this.searchService.searchModifiedLevel({
-            registry: this.registry,
-            item,
-            modLevel,
-            material,
-            useCache: true,
-            existingState: cached,
-            threshold,
-            limit: getSearchLimit(item, ProbUtils.toNumber(threshold), maxIterations),
-            resultsLimit,
-            instrumentation
-        });
-    }
-
-    /**
      * Sequential checkpoint version of searchToCheckpoint for v5 workers.
      * Streams search results via callback for each checkpoint.
      */
@@ -114,8 +71,7 @@ export class EnchantEngine {
         const { item, material } = request;
         const targetClueId = request.clue ? this.getPackedClue(item, request.clue) : undefined;
 
-        const service = request.engine === 'v7' ? this.v7SearchService : this.searchService;
-        return service.searchSequentialCheckpoints({
+        return this.v7SearchService.searchSequentialCheckpoints({
             ...request,
             item,
             material,
@@ -132,8 +88,7 @@ export class EnchantEngine {
         const { item, material } = request;
         const targetClueId = request.clue ? this.getPackedClue(item, request.clue) : undefined;
 
-        const service = request.engine === 'v7' ? this.v7SearchService : this.searchService;
-        return service.searchToCheckpoint({
+        return this.v7SearchService.searchToCheckpoint({
             ...request,
             item,
             material,
@@ -172,9 +127,9 @@ export class EnchantEngine {
 
         const packedClue = clue ? this.getPackedClue(item, clue) : null;
 
-        const cacheKey = this.getStatsKey(item, xp, material, packedClue, request.engine ?? 'v6');
+        const cacheKey = this.getStatsKey(item, xp, material, packedClue);
 
-        const cachedStats = this.cache.getStats(this.registry.version, cacheKey);
+        const cachedStats = useCache === false ? undefined : this.cache.getStats(this.registry.version, cacheKey);
         if (cachedStats && cachedStats.threshold <= threshold) return cachedStats;
 
         const searchConfig: SearchConfig = {
@@ -188,8 +143,7 @@ export class EnchantEngine {
             timing
         };
 
-        const service = request.engine === 'v7' ? this.v7SearchService : this.searchService;
-        const finalResult = await service.searchToCheckpoint({
+        const finalResult = await this.v7SearchService.searchToCheckpoint({
             registry: this.registry,
             item,
             xp,
@@ -203,23 +157,19 @@ export class EnchantEngine {
         const finalStats = packedClue
             ? SummaryService.summarizeConditioned({
                 combos: finalResult.combos,
-                tracker: finalResult.tracker,
+                snapshot: finalResult.snapshot,
                 indexToEnchant: this.registry.indexToEnchant,
                 targetClueId: packedClue,
                 comboLimit: summaryLimit,
-                frontiers: finalResult.frontiers,
-                isBook,
-                v7Snapshot: finalResult.v7Snapshot
+                isBook
             })
             : SummaryService.summarize({
                 combos: finalResult.combos,
-                tracker: finalResult.tracker,
+                snapshot: finalResult.snapshot,
                 indexToEnchant: this.registry.indexToEnchant,
                 comboLimit: summaryLimit,
                 threshold: finalResult.threshold,
-                frontiers: finalResult.frontiers,
-                isBook,
-                v7Snapshot: finalResult.v7Snapshot
+                isBook
             });
 
         finalStats.instrumentation = finalResult.instrumentation;
@@ -232,9 +182,11 @@ export class EnchantEngine {
             finalStats.timing = finalResult.timing;
         }
 
-        const currentCached = this.cache.getStats(this.registry.version, cacheKey);
-        if (!currentCached || finalStats.accuracy > currentCached.accuracy) {
-            this.cache.setStats(this.registry.version, cacheKey, finalStats);
+        if (useCache !== false) {
+            const currentCached = this.cache.getStats(this.registry.version, cacheKey);
+            if (!currentCached || finalStats.accuracy > currentCached.accuracy) {
+                this.cache.setStats(this.registry.version, cacheKey, finalStats);
+            }
         }
 
         return finalStats;
@@ -244,14 +196,7 @@ export class EnchantEngine {
         return ClueValidator.validate(this.registry, item, clue);
     }
 
-    private getPackedKey(item: string, modLevel: number, material: string): number {
-        const itemId = getItemId(this.registry, item);
-        const materialId = getMaterialId(this.registry, material);
-
-        return KeyUtils.getPackedKey(itemId, materialId, modLevel);
-    }
-
-    private getStatsKey(item: string, xp: number, material: string, packedClue: number | null = null, engine: 'v6' | 'v7' = 'v6'): number {
+    private getStatsKey(item: string, xp: number, material: string, packedClue: number | null = null): number {
         const itemId = getItemId(this.registry, item);
         const materialId = getMaterialId(this.registry, material);
 
@@ -259,11 +204,6 @@ export class EnchantEngine {
         if (packedClue !== null) {
             // Encode the clue into the high bits above the item/material/level fields.
             key += packedClue * (2 ** 18);
-        }
-        if (engine === 'v7') {
-            // V7 has intentionally different cutoff semantics, so it must not share
-            // cached CalculationStats with V6 even while both project to the same shape.
-            key += 2 ** 30;
         }
         return key;
     }

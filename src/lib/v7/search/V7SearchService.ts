@@ -1,13 +1,10 @@
 import { ENGINE_LIMITS } from '#constants/engine.js';
-import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
-import { NodeIdSearchFrontier } from '#engine/search/NodeIdSearchFrontier.js';
-import { SearchNodeGraph } from '#engine/search/SearchNodeGraph.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
-import { SearchResult, SequentialCheckpointSearchContext, CheckpointSearchContext, EngineInstrumentation, SearchTiming, SearchFrontierSnapshot } from '#types/index.js';
+import { SearchResult, SequentialCheckpointSearchContext, CheckpointSearchContext, EngineInstrumentation, SearchTiming } from '#types/index.js';
 import { RegistryKernel } from '#lib/v7/registry/RegistryKernel.js';
 import { SearchRun, V7SearchRunSnapshot } from '#lib/v7/search/SearchRun.js';
 import { V7SearchCache } from '#lib/v7/search/V7SearchCache.js';
-import { PRECISION, ProbUtils } from '#utils/index.js';
+import { ProbUtils } from '#utils/index.js';
 
 /**
  * V7 adapter for the existing engine boundary.
@@ -51,11 +48,17 @@ export class V7SearchService {
             const checkpoint = request.checkpoints[checkpointIndex];
             if (!checkpoint) continue;
 
-            const snapshot = await run.searchToCheckpointAsync({
-                threshold: checkpoint.threshold,
-                maxIterations: checkpoint.limit,
-                signal: request.signal
-            });
+            let snapshot: V7SearchRunSnapshot;
+            try {
+                snapshot = await run.searchToCheckpointAsync({
+                    threshold: checkpoint.threshold,
+                    maxIterations: checkpoint.limit,
+                    signal: request.signal
+                });
+            } catch (error) {
+                if (request.signal?.aborted && lastResult) return lastResult;
+                throw error;
+            }
 
             recordedSearchMs = this.finishTiming(request.timing, timingStart, recordedSearchMs);
             lastResult = this.toSearchResult(snapshot, checkpoint.threshold, request.instrumentation, request.timing);
@@ -107,20 +110,7 @@ export class V7SearchService {
         instrumentation?: EngineInstrumentation | undefined,
         timing?: SearchTiming | undefined
     ): SearchResult {
-        const tracker = new SearchStateTracker({
-            resolved: BigInt(snapshot.mass.units!.resolved),
-            clueIncompatible: BigInt(snapshot.mass.units!.clueIncompatible),
-            pending: BigInt(snapshot.mass.units!.pending),
-            sieved: BigInt(snapshot.mass.units!.sieved),
-            overflow: BigInt(snapshot.mass.units!.overflow),
-            capped: BigInt(snapshot.mass.units!.capped),
-            rounding: BigInt(snapshot.mass.units!.rounding),
-            recoveredRounding: BigInt(snapshot.mass.units!.recoveredRounding),
-            recoveredSieved: BigInt(snapshot.mass.units!.recoveredSieved)
-        });
-
         const thresholdUnits = ProbUtils.toBigInt(threshold ?? 0);
-        const frontiers = this.toFrontiers(snapshot);
 
         if (instrumentation) {
             const cacheMetrics = this.cache.getMetrics();
@@ -155,33 +145,12 @@ export class V7SearchService {
         }
 
         return {
+            snapshot,
             combos: new Map(snapshot.results),
-            tracker,
-            frontiers,
-            v7Snapshot: snapshot,
             instrumentation: instrumentation ? { ...instrumentation } : undefined,
             timing: timing ? { ...timing } : undefined,
             threshold: ProbUtils.toNumber(threshold ?? 0)
         };
-    }
-
-    private toFrontiers(snapshot: V7SearchRunSnapshot): SearchFrontierSnapshot[] {
-        if (snapshot.pendingEntries.length === 0) return [];
-
-        const graph = new SearchNodeGraph();
-        const frontier = new NodeIdSearchFrontier(snapshot.pendingEntries.length);
-        for (const entry of snapshot.pendingEntries) {
-            const nodeId = graph.createNumericNode(
-                entry.nodeId as number,
-                entry.programId,
-                0,
-                entry.combo,
-                entry.count
-            );
-            frontier.pushOrMerge(nodeId, entry.mass);
-        }
-
-        return [{ frontier, graph, scale: PRECISION }];
     }
 
     private finishTiming(timing: SearchTiming | undefined, start: number, alreadyRecordedForCall: number): number {

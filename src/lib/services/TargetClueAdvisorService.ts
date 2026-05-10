@@ -7,19 +7,17 @@ import type {
     PackedCombo,
     PackedTargetRequirement,
     RegistryState,
-    SearchFrontierSnapshot,
     TargetLevelClueAdvisorView,
     TargetLevelClueRecommendationView
 } from '#types/index.js';
 import type { V7PendingFrontierEntry } from '#lib/v7/search/SearchRun.js';
-import { ComboUtils, ProbUtils, PRECISION } from '#utils/index.js';
+import { ComboUtils, PRECISION, ProbUtils } from '#utils/index.js';
 
 export interface TargetClueAdvisorRequest {
-    combos: Map<PackedCombo, bigint>;
+    combos: ReadonlyMap<PackedCombo, bigint>;
     indexToEnchant: number[];
     targets: PackedTargetRequirement[];
     registry: RegistryState;
-    frontiers?: SearchFrontierSnapshot[] | undefined;
     v7PendingEntries?: readonly V7PendingFrontierEntry[] | undefined;
     limit?: number | undefined;
 }
@@ -54,7 +52,6 @@ export class TargetClueAdvisorService {
             indexToEnchant,
             targets,
             registry,
-            frontiers = [],
             v7PendingEntries = [],
             limit = 5
         } = request;
@@ -71,17 +68,6 @@ export class TargetClueAdvisorService {
             this.addComboContribution(buckets, entry.combo, entry.mass, indexToEnchant, targets);
         }
 
-        for (const { frontier, graph, scale } of frontiers) {
-            frontier.forEachNode((nodeId, prob) => {
-                this.addComboContribution(
-                    buckets,
-                    graph.getCombo(nodeId),
-                    ProbUtils.scale(prob, scale),
-                    indexToEnchant,
-                    targets
-                );
-            });
-        }
 
         const anyBaselineChanceMass = this.calculateBaselineChance(buckets, () => true);
         const compatibleBaselineChanceMass = this.calculateBaselineChance(
