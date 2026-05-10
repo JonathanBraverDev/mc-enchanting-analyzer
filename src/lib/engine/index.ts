@@ -8,6 +8,7 @@ import { CacheManager } from '#engine/cache/CacheManager.js';
 import { SummaryService } from '#services/SummaryService.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { SearchService } from '#engine/search/SearchService.js';
+import { V7SearchService } from '#lib/v7/search/V7SearchService.js';
 import { ClueValidator } from '#core/clue.js';
 export { EngineFactory } from './factory.js';
 
@@ -24,7 +25,8 @@ export class EnchantEngine {
         registry: BuiltRegistryState,
         private readonly cache: CacheManager,
         private readonly distributionService: ModifiedLevelDistributionService,
-        private readonly searchService: SearchService
+        private readonly searchService: SearchService,
+        private readonly v7SearchService: V7SearchService = new V7SearchService(distributionService)
     ) {
         this._registry = registry;
     }
@@ -111,7 +113,8 @@ export class EnchantEngine {
         const { item, material } = request;
         const targetClueId = request.clue ? this.getPackedClue(item, request.clue) : undefined;
 
-        return this.searchService.searchSequentialCheckpoints({
+        const service = request.engine === 'v7' ? this.v7SearchService : this.searchService;
+        return service.searchSequentialCheckpoints({
             ...request,
             item,
             material,
@@ -128,7 +131,8 @@ export class EnchantEngine {
         const { item, material } = request;
         const targetClueId = request.clue ? this.getPackedClue(item, request.clue) : undefined;
 
-        return this.searchService.searchToCheckpoint({
+        const service = request.engine === 'v7' ? this.v7SearchService : this.searchService;
+        return service.searchToCheckpoint({
             ...request,
             item,
             material,
@@ -167,7 +171,7 @@ export class EnchantEngine {
 
         const packedClue = clue ? this.getPackedClue(item, clue) : null;
 
-        const cacheKey = this.getStatsKey(item, xp, material, packedClue);
+        const cacheKey = this.getStatsKey(item, xp, material, packedClue, request.engine ?? 'v6');
 
         const cachedStats = this.cache.getStats(this.registry.version, cacheKey);
         if (cachedStats && cachedStats.threshold <= threshold) return cachedStats;
@@ -183,7 +187,8 @@ export class EnchantEngine {
             timing
         };
 
-        const finalResult = await this.searchService.searchToCheckpoint({
+        const service = request.engine === 'v7' ? this.v7SearchService : this.searchService;
+        const finalResult = await service.searchToCheckpoint({
             registry: this.registry,
             item,
             xp,
@@ -243,14 +248,19 @@ export class EnchantEngine {
         return KeyUtils.getPackedKey(itemId, materialId, modLevel);
     }
 
-    private getStatsKey(item: string, xp: number, material: string, packedClue: number | null = null): number {
+    private getStatsKey(item: string, xp: number, material: string, packedClue: number | null = null, engine: 'v6' | 'v7' = 'v6'): number {
         const itemId = getItemId(this.registry, item);
         const materialId = getMaterialId(this.registry, material);
 
         let key = KeyUtils.getStatsKey(itemId, materialId, xp);
         if (packedClue !== null) {
             // Encode the clue into the high bits above the item/material/level fields.
-            key |= (packedClue << 18);
+            key += packedClue * (2 ** 18);
+        }
+        if (engine === 'v7') {
+            // V7 has intentionally different cutoff semantics, so it must not share
+            // cached CalculationStats with V6 even while both project to the same shape.
+            key += 2 ** 30;
         }
         return key;
     }

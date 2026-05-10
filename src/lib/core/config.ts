@@ -4,6 +4,8 @@ import { RefinementLevelName, SearchCheckpoint } from '#types/index.js';
 export interface RefinementCheckpointPreset {
     thresholdBook: number;
     thresholdOther: number;
+    v7ThresholdBook: number;
+    v7ThresholdOther: number;
     limitBook: number;
     limitOther: number;
     status: string;
@@ -48,6 +50,8 @@ export const REFINEMENT_CHECKPOINTS: Record<RefinementLevelName, RefinementCheck
     coarse: {
         thresholdBook: 0.05,
         thresholdOther: 0.01,
+        v7ThresholdBook: 0.007,
+        v7ThresholdOther: 0.001,
         limitBook: 5000,
         limitOther: 2000,
         status: UI_TEXTS.STATUS_SEARCHING
@@ -55,6 +59,8 @@ export const REFINEMENT_CHECKPOINTS: Record<RefinementLevelName, RefinementCheck
     standard: {
         thresholdBook: 0.005,
         thresholdOther: 0.0005,
+        v7ThresholdBook: 0.001,
+        v7ThresholdOther: 0.00005,
         limitBook: 20000,
         limitOther: 10000,
         status: UI_TEXTS.STATUS_REFINING
@@ -62,6 +68,8 @@ export const REFINEMENT_CHECKPOINTS: Record<RefinementLevelName, RefinementCheck
     deep: {
         thresholdBook: 0.0005,
         thresholdOther: 0.00005,
+        v7ThresholdBook: 0.00005,
+        v7ThresholdOther: 0.000005,
         limitBook: 60000,
         limitOther: 30000,
         status: UI_TEXTS.STATUS_FINALIZING
@@ -69,6 +77,8 @@ export const REFINEMENT_CHECKPOINTS: Record<RefinementLevelName, RefinementCheck
     ultra: {
         thresholdBook: 0.0001,
         thresholdOther: 0.000005,
+        v7ThresholdBook: 0.00001,
+        v7ThresholdOther: 0.000001,
         limitBook: 150000,
         limitOther: 75000,
         status: UI_TEXTS.STATUS_OPTIMIZING
@@ -83,11 +93,15 @@ export const REFINEMENT_LEVEL_COLORS: Record<RefinementStatusLevel, { bg: string
     done:     { bg: 'rgba(255, 255, 255, 0.05)', text: 'var(--text-muted)' }
 };
 
-export function getSearchCheckpointForRefinement(level: RefinementLevelName, isBook: boolean): RefinementSearchCheckpoint {
+export function getSearchCheckpointForRefinement(level: RefinementLevelName, isBook: boolean, engine: 'v6' | 'v7' = 'v6'): RefinementSearchCheckpoint {
     const mode = REFINEMENT_CHECKPOINTS[level];
+    const threshold = engine === 'v7'
+        ? (isBook ? mode.v7ThresholdBook : mode.v7ThresholdOther)
+        : (isBook ? mode.thresholdBook : mode.thresholdOther);
+
     return {
         refinementLevel: level,
-        threshold: isBook ? mode.thresholdBook : mode.thresholdOther,
+        threshold,
         limit: isBook ? mode.limitBook : mode.limitOther,
         status: mode.status
     };

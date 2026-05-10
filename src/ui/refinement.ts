@@ -79,6 +79,8 @@ export class RefinementService {
 
             const refinementLevels: RefinementLevelName[] = ['coarse', 'standard', 'deep', 'ultra'];
             const isBook = payload.item === 'book';
+            const initialChartParams = getSearchCheckpointForRefinement(refinementLevels[0]!, isBook);
+            callbacks.onChartStatus?.(`${initialChartParams.status} probabilities`, 0);
 
             // Start Top Run (Single call for all levels)
             WorkerClient.startTopRun(

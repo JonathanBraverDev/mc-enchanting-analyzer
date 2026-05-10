@@ -17,6 +17,7 @@ shell.onRun = async (msg: WorkerRequest, engine, signal) => {
 
     const { requestId, runId, input, refinementLevels } = msg;
     const isBook = input.item === 'book';
+    const engineMode = input.clue ? 'v6' : 'v7';
     const xpCap = engine.registry.mechanics.xp_cap || 30;
 
     // Notify UI that run is accepted
@@ -48,13 +49,14 @@ shell.onRun = async (msg: WorkerRequest, engine, signal) => {
     for (const level of refinementLevels) {
         if (signal.aborted) break;
 
-        const params = getSearchCheckpointForRefinement(level, isBook);
+        const params = getSearchCheckpointForRefinement(level, isBook, engineMode);
         const passId = `pass_${level}` as PassId;
 
         for (let xp = 1; xp <= xpCap; xp++) {
             if (signal.aborted || shell.runId !== runId) break;
 
             const result = await engine.searchToCheckpoint({
+                engine: engineMode,
                 item: input.item,
                 xp,
                 material: input.material,

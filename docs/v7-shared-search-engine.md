@@ -62,21 +62,23 @@ weighted modified-level roots -> shared lazy program graph -> per-cell/accounted
 
 ## Current Implementation Checkpoint
 
-Current branch state as of the fallback checkpoint:
+Current branch state after the first stack-adapter checkpoint:
 
 - Branch: `rewrite/v7-shared-search-engine`.
-- Latest pushed implementation before docs checkpoint: `b53c543 feat(v7): allow zero probability floor search`.
+- Fallback design checkpoint tag: `v7-global-search-semantics-2026-05-10` at `20b65ba`.
 - Implemented V7 slices:
   - `RegistryKernel` and `PoolSignature` projection.
   - Lazy `SearchProgram` structural graph.
   - Single-cell weighted `SearchRun` with global frontier scheduling and mass conservation.
   - Configurable zero probability floor so validation can dig through the tail.
   - V6/V7 comparison harness with matched-resolved mode.
+  - `V7SearchService` adapter that projects V7 snapshots into the existing `SearchResult` / `CalculationStats` boundary.
+  - Top and chart workers route unclued requests through V7 and keep clue-conditioned requests on V6.
+  - V7-specific refinement thresholds so product depth settings reflect global weighted frontier semantics instead of V6 local per-modified-level semantics.
 - Not implemented yet:
-  - Projection/snapshot adapter for normal UI outputs.
-  - Clue mode.
-  - Batch/chart-cell execution.
-  - Worker integration.
+  - V7 clue mode.
+  - True shared batch/chart-cell execution; chart worker currently uses the V7 single-cell adapter per XP cell.
+  - Native V7 projection contracts beyond the compatibility adapter.
   - Full V7 replacement tests.
 
 ## Validation Findings
@@ -335,6 +337,8 @@ UI input
 
 Top selected level is a one-cell batch. Chart sweep is a multi-cell batch. Refinement advances the same compatible run through stricter checkpoints instead of restarting unrelated searches.
 
+Current bridge state: workers still speak the existing protocol, but choose `engine: 'v7'` for unclued top/chart searches and `engine: 'v6'` for clue-conditioned searches. The compatibility adapter keeps `SummaryService`, `SnapshotService`, and existing UI contracts stable while V7 internals replace the search backend.
+
 ## Testing Strategy
 
 - Keep existing snapshots as reference material.
@@ -364,9 +368,9 @@ Commit after each stable slice:
 6. Matched-resolved and budgeted-resolution diagnostics.
 7. Projection/snapshot output.
 8. Global modified-level scheduler for multi-cell/batch requests.
-9. Direct weighted accounting hardening and compatibility adapters.
-10. Worker adapter for top results.
-11. Chart batch mode.
+9. Direct weighted accounting hardening and compatibility adapters. ✅ first adapter checkpoint
+10. Worker adapter for top results. ✅ unclued top path routed through V7
+11. Chart batch mode. ⏳ unclued chart path routed through V7 per XP cell; true batch mode remains
 12. Projection cleanup and obsolete-test pruning.
 
 ## References / Related Docs

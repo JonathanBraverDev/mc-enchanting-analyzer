@@ -240,6 +240,8 @@ export type PackedCombo = number & { __brand: "PackedCombo" };
 export type ProbabilityValue = bigint & { __brand: "ProbabilityValue" };
 
 export interface SearchConfig {
+    /** Explicit engine implementation selector. Defaults to the legacy V6 engine until V7 is fully integrated. */
+    engine?: 'v6' | 'v7' | undefined;
     /** The observed enchantment clue (e.g. "Sharpness IV"). Trigger Bayesian conditioning if set. */
     clue?: string | null | undefined;
     threshold?: number | bigint | undefined;

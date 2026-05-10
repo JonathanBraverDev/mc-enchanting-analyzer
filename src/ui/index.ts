@@ -121,6 +121,9 @@ class AppController {
 
     private enqueueRun(): void {
         if (this.runDebounceTimeout) window.clearTimeout(this.runDebounceTimeout);
+        if (!this.suppressNextChartRefresh) {
+            this.results.setChartStatus(`${UI_TEXTS.STATUS_SEARCHING} probabilities`, 0);
+        }
         this.runDebounceTimeout = window.setTimeout(() => this.run(), 50);
     }
 
