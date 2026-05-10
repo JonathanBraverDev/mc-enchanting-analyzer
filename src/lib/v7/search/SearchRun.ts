@@ -23,7 +23,9 @@ export interface V7SearchCheckpointRequest {
     readonly maxIterations?: number | undefined;
     /** Ignore threshold and iteration cap, searching until the frontier is empty. */
     readonly exhaustive?: boolean | undefined;
-    /** Stop once resolved mass reaches this absolute fixed-point/number target. */
+    /** Stop once non-pending mass reaches this absolute fixed-point/number target. */
+    readonly targetClassifiedMass?: number | bigint | undefined;
+    /** Stop once resolved result mass reaches this absolute fixed-point/number target. Internal/specialized use only. */
     readonly targetResolvedMass?: number | bigint | undefined;
     /** Optional internal forward-mass floor. Defaults to 0 so validation can dig into the full tail. */
     readonly probabilityFloor?: number | bigint | undefined;
@@ -141,6 +143,9 @@ export class SearchRun {
 
         const threshold = request.exhaustive ? 0n : ProbUtils.toBigInt(request.threshold ?? ENGINE_LIMITS.DEFAULT_THRESHOLD);
         const maxIterations = request.exhaustive ? Number.POSITIVE_INFINITY : request.maxIterations ?? ENGINE_LIMITS.MAX_ITERATIONS_UNBOUNDED;
+        const targetClassifiedMass = request.targetClassifiedMass !== undefined
+            ? ProbUtils.toBigInt(request.targetClassifiedMass)
+            : undefined;
         const targetResolvedMass = request.targetResolvedMass !== undefined
             ? ProbUtils.toBigInt(request.targetResolvedMass)
             : undefined;
@@ -151,6 +156,7 @@ export class SearchRun {
 
         while (this.frontier.size > 0 && this._iterations < maxIterations) {
             if (request.signal?.aborted) throw new Error('Aborted');
+            if (targetClassifiedMass !== undefined && this.mass.getClassifiedMass() >= targetClassifiedMass) break;
             if (targetResolvedMass !== undefined && this.mass.getResolvedMass() >= targetResolvedMass) break;
             if (this.frontier.peekMass() < threshold) break;
             if (!this.frontier.pop(current)) break;

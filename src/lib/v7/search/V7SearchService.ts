@@ -29,7 +29,7 @@ export class V7SearchService {
         const snapshot = await run.searchToCheckpointAsync({
             threshold: request.exhaustive ? 0n : request.threshold ?? ENGINE_LIMITS.DEFAULT_THRESHOLD,
             maxIterations: request.exhaustive ? undefined : request.maxIterations ?? ENGINE_LIMITS.MAX_ITERATIONS_UNBOUNDED,
-            targetResolvedMass: request.targetResolvedMass,
+            targetClassifiedMass: request.targetClassifiedMass,
             exhaustive: request.exhaustive,
             signal: request.signal
         });
@@ -55,7 +55,7 @@ export class V7SearchService {
                 snapshot = await run.searchToCheckpointAsync({
                     threshold: checkpoint.threshold,
                     maxIterations: checkpoint.limit,
-                    targetResolvedMass: checkpoint.targetResolvedMass ?? request.targetResolvedMass,
+                    targetClassifiedMass: checkpoint.targetClassifiedMass ?? request.targetClassifiedMass,
                     signal: request.signal
                 });
             } catch (error) {

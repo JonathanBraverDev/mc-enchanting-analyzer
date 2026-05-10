@@ -149,13 +149,13 @@ Intended V7 semantics:
 ```text
 iteration limit      = total global node budget for the request/cell
 threshold            = global weighted frontier floor
-targetResolvedMass   = optional early-stop target once enough mass is resolved
-resolved mass        = best coverage obtainable under that budget/floor/target
+targetClassifiedMass   = optional early-stop target once enough mass is classified
+classified mass      = non-pending bucketed mass obtainable under that budget/floor/target
 ```
 
 The named constant `MAX_ITERATIONS_UNBOUNDED` is historical and should be read as a large safety cap, not truly unbounded execution. Diagnostic bottom-out runs should use `exhaustive: true`, which deliberately forces threshold `0` and disables the iteration cap so the search runs until the frontier is empty, aborts, or exhausts host resources.
 
-`targetResolvedMass` is first-party request/checkpoint control for “do we need to keep going?” behavior. It is an early-stop condition, not a guarantee: threshold, iteration limits, abort signals, overflow, and caps can still stop the search before the target is reached. For convergence probes, combine it with threshold `0` and an explicit iteration/runtime budget; for true stress probes, use exhaustive mode instead.
+`targetClassifiedMass` is first-party request/checkpoint control for “do we need to keep going?” behavior. It targets non-pending mass, not result-only mass: resolved results, clue-incompatible mass, overflow, sieve/cap buckets, and rounding all count as classified because they are no longer frontier uncertainty. It is an early-stop condition, not a guarantee: threshold, iteration limits, abort signals, and host limits can still stop the search before the target is reached. For convergence probes, combine it with threshold `0` and an explicit iteration/runtime budget; for true stress probes, use exhaustive mode instead.
 
 Use exhaustive mode only for validation and stress probes:
 

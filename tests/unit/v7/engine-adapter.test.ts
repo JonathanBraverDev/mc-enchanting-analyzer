@@ -31,7 +31,7 @@ describe('V7 engine adapter', () => {
         assert.strictEqual(stats.threshold, 0);
     });
 
-    it('exposes resolved-mass targets through the calculate boundary', async () => {
+    it('exposes classified-mass targets through the calculate boundary', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
         engine.resetCaches();
 
@@ -41,13 +41,13 @@ describe('V7 engine adapter', () => {
             xp: 30,
             threshold: 0,
             maxIterations: 100_000,
-            targetResolvedMass: 0.2,
+            targetClassifiedMass: 0.2,
             summaryLimit: 10,
             resultsLimit: ENGINE_LIMITS.MAX_RESULTS_UNBOUNDED,
             useCache: false
         });
 
-        assert.ok(stats.accuracy >= 0.2);
+        assert.ok((1 - stats.accounting.pending) >= 0.2);
         assert.ok(stats.accounting.pending > 0, 'target stop should not require full resolution');
         assert.ok(Math.abs(accountingTotal(stats) - 1) < 1e-12);
     });
@@ -75,7 +75,7 @@ describe('V7 engine adapter', () => {
         assert.ok(Math.abs(accountingTotal(stats) - 1) < 1e-12);
     });
 
-    it('supports per-checkpoint resolved-mass targets', async () => {
+    it('supports per-checkpoint classified-mass targets', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
         engine.resetCaches();
         const snapshots: SearchResult[] = [];
@@ -85,8 +85,8 @@ describe('V7 engine adapter', () => {
             material: 'book',
             xp: 30,
             checkpoints: [
-                { threshold: 0, limit: 100_000, targetResolvedMass: 0.2 },
-                { threshold: 0, limit: 100_000, targetResolvedMass: 0.4 }
+                { threshold: 0, limit: 100_000, targetClassifiedMass: 0.2 },
+                { threshold: 0, limit: 100_000, targetClassifiedMass: 0.4 }
             ],
             onCheckpointComplete: result => {
                 snapshots.push(result);
@@ -94,8 +94,8 @@ describe('V7 engine adapter', () => {
         });
 
         assert.deepStrictEqual(snapshots.length, 2);
-        assert.ok(snapshots[0]!.snapshot.mass.resolved >= 0.2);
-        assert.ok(snapshots[1]!.snapshot.mass.resolved >= 0.4);
+        assert.ok((1 - snapshots[0]!.snapshot.mass.pending) >= 0.2);
+        assert.ok((1 - snapshots[1]!.snapshot.mass.pending) >= 0.4);
         assert.ok(snapshots[1]!.snapshot.iterations > snapshots[0]!.snapshot.iterations);
         assert.ok(snapshots[1]!.snapshot.mass.pending > 0);
     });
