@@ -31,7 +31,7 @@ describe('EnchantEngine: Sequential Checkpoint Search', () => {
             material: TEST_DATA.MATERIALS.DIAMOND,
             checkpoints,
             onCheckpointComplete: (result) => {
-                accuracies.push(result.tracker.mass.toPublic().resolved);
+                accuracies.push(result.snapshot.mass.resolved);
             }
         });
 
@@ -59,7 +59,7 @@ describe('EnchantEngine: Sequential Checkpoint Search', () => {
         });
 
         assert.ok(checkpointCount >= 1);
-        assert.ok(finalResult.tracker.mass.toPublic().resolved > 0.99);
+        assert.ok(finalResult.snapshot.mass.resolved > 0.99);
     });
 
     it('should recover rounding residue between checkpoints (High Precision)', async () => {
@@ -75,7 +75,7 @@ describe('EnchantEngine: Sequential Checkpoint Search', () => {
             material: TEST_DATA.MATERIALS.DIAMOND,
             checkpoints,
             onCheckpointComplete: (result) => {
-                roundingValues.push(result.tracker.mass.toPublic().rounding);
+                roundingValues.push(result.snapshot.mass.rounding);
             }
         });
 

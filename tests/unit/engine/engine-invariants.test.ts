@@ -7,7 +7,7 @@ describe('Engine Architectural Invariants', () => {
 
     it('Invariant: Mass Conservation (1.0 Total)', async () => {
         const engine = EngineFactory.createForVersion('1.21');
-        const stats = await engine.calculate({ item: 'sword', xp: 30, material: 'diamond', threshold: 0.001 });
+        const stats = await engine.calculate({ item: 'sword', xp: 30, material: 'diamond', threshold: 0, maxIterations: 1_000_000 });
 
         const acc = stats.accounting;
         const total = acc.resolved + acc.clueIncompatible + acc.pending + acc.sieved + acc.overflow + acc.capped + acc.rounding;
@@ -23,7 +23,7 @@ describe('Engine Architectural Invariants', () => {
 
         // Run with a very high threshold (0.1).
         // Most nodes won't even be expanded, so they should be 'pending', NOT 'sieved'.
-        const coarseStats = await engine.calculate({ item: 'sword', xp: 30, material: 'diamond', threshold: 0.1 });
+        const coarseStats = await engine.calculate({ item: 'sword', xp: 30, material: 'diamond', threshold: 0.1, useCache: false });
 
         // Sieved mass should be extremely low because it only counts branches that were
         // actually evaluated and fell below the 1e-10 floor.
@@ -34,7 +34,7 @@ describe('Engine Architectural Invariants', () => {
 
     it('Invariant: Legacy Book Restriction (Pre-1.7.2)', async () => {
         const engine = EngineFactory.createForVersion('1.6.4');
-        const stats = await engine.calculate({ item: 'book', xp: 30, material: 'book', threshold: 0.0001 });
+        const stats = await engine.calculate({ item: 'book', xp: 30, material: 'book', threshold: 0, maxIterations: 1_000_000 });
 
         // Verify that no expansion happened beyond count 1
         assert.strictEqual(stats.count[2] || 0, 0, 'Legacy books must have 0% for 2 enchants');

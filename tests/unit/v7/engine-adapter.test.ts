@@ -3,7 +3,6 @@ import assert from 'node:assert';
 import { EngineFactory } from '#engine/index.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import { CalculationStats } from '#types/index.js';
-import { SummaryService } from '#services/SummaryService.js';
 
 function accountingTotal(stats: CalculationStats): number {
     const a = stats.accounting;
@@ -16,7 +15,6 @@ describe('V7 engine adapter', () => {
         engine.resetCaches();
 
         const stats = await engine.calculate({
-            engine: 'v7',
             item: 'sword',
             material: 'diamond',
             xp: 30,
@@ -39,7 +37,6 @@ describe('V7 engine adapter', () => {
         const accuracies: number[] = [];
 
         await engine.searchSequentialCheckpoints({
-            engine: 'v7',
             item: 'book',
             material: 'book',
             xp: 30,
@@ -49,7 +46,7 @@ describe('V7 engine adapter', () => {
                 { threshold: 0, limit: 600 }
             ],
             onCheckpointComplete: result => {
-                accuracies.push(result.tracker.mass.toPublic().resolved);
+                accuracies.push(result.snapshot.mass.resolved);
             }
         });
 
@@ -63,7 +60,6 @@ describe('V7 engine adapter', () => {
         const engine = EngineFactory.createForVersion('1.21.11');
 
         const stats = await engine.calculate({
-            engine: 'v7',
             item: 'sword',
             material: 'diamond',
             xp: 30,
@@ -96,7 +92,6 @@ describe('V7 engine adapter', () => {
         };
 
         const result = await engine.searchToCheckpoint({
-            engine: 'v7',
             item: 'book',
             material: 'book',
             xp: 30,
@@ -105,53 +100,12 @@ describe('V7 engine adapter', () => {
             instrumentation
         });
 
-        assert.ok(result.frontiers?.length);
-        assert.ok(result.frontiers![0]!.frontier.size() > 0);
-        assert.ok(result.tracker.mass.toPublic().pending > 0);
+        assert.ok(result.snapshot.pendingEntries.length > 0);
+        assert.ok(result.snapshot.mass.pending > 0);
         assert.ok(result.instrumentation?.v7);
         assert.ok(result.instrumentation.v7.programCount > 0);
-        assert.strictEqual(result.instrumentation.v7.pendingEntryCount, result.frontiers![0]!.frontier.size());
+        assert.strictEqual(result.instrumentation.v7.pendingEntryCount, result.snapshot.pendingEntries.length);
         assert.ok(result.instrumentation.v7.canImprove);
-    });
-
-    it('feeds V7 post-processing from native pending entries instead of compatibility frontiers', async () => {
-        const engine = EngineFactory.createForVersion('1.21.11');
-        engine.resetCaches();
-
-        const result = await engine.searchToCheckpoint({
-            engine: 'v7',
-            item: 'book',
-            material: 'book',
-            xp: 30,
-            threshold: 0,
-            maxIterations: 1
-        });
-
-        assert.ok(result.v7Snapshot);
-        assert.ok(result.v7Snapshot.pendingEntries.length > 0);
-
-        const native = SummaryService.summarize({
-            combos: result.combos,
-            tracker: result.tracker,
-            indexToEnchant: engine.registry.indexToEnchant,
-            comboLimit: 0,
-            frontiers: [],
-            v7Snapshot: result.v7Snapshot,
-            isBook: true
-        });
-        const compatibility = SummaryService.summarize({
-            combos: result.combos,
-            tracker: result.tracker,
-            indexToEnchant: engine.registry.indexToEnchant,
-            comboLimit: 0,
-            frontiers: result.frontiers,
-            isBook: true
-        });
-
-        assert.deepStrictEqual(native.any, compatibility.any);
-        assert.deepStrictEqual(native.ranks, compatibility.ranks);
-        assert.deepStrictEqual(native.count, compatibility.count);
-        assert.deepStrictEqual(native.shownClueDistribution, compatibility.shownClueDistribution);
     });
 
     it('aborts V7 checkpoint searches through the adapter', async () => {
@@ -161,8 +115,7 @@ describe('V7 engine adapter', () => {
 
         await assert.rejects(
             () => engine.searchToCheckpoint({
-                engine: 'v7',
-                item: 'sword',
+                    item: 'sword',
                 material: 'diamond',
                 xp: 30,
                 threshold: 0,
@@ -178,7 +131,6 @@ describe('V7 engine adapter', () => {
         engine.resetCaches();
 
         const first = await engine.searchToCheckpoint({
-            engine: 'v7',
             item: 'book',
             material: 'book',
             xp: 30,
@@ -198,7 +150,6 @@ describe('V7 engine adapter', () => {
         });
 
         const resumed = await engine.searchToCheckpoint({
-            engine: 'v7',
             item: 'book',
             material: 'book',
             xp: 30,
@@ -223,7 +174,6 @@ describe('V7 engine adapter', () => {
 
         engine.resetCaches();
         const fresh = await engine.searchToCheckpoint({
-            engine: 'v7',
             item: 'book',
             material: 'book',
             xp: 30,
@@ -250,7 +200,6 @@ describe('V7 engine adapter', () => {
         engine.resetCaches();
 
         const first = await engine.searchToCheckpoint({
-            engine: 'v7',
             item: 'sword',
             material: 'diamond',
             xp: 30,
@@ -272,7 +221,6 @@ describe('V7 engine adapter', () => {
         const firstMisses = first.instrumentation?.v7?.programCacheMisses ?? 0;
 
         const second = await engine.searchToCheckpoint({
-            engine: 'v7',
             item: 'sword',
             material: 'diamond',
             xp: 30,
@@ -296,28 +244,4 @@ describe('V7 engine adapter', () => {
         assert.ok((second.instrumentation?.v7?.programCacheHits ?? 0) >= firstMisses);
     });
 
-    it('does not share CalculationStats cache entries between V6 and V7', async () => {
-        const engine = EngineFactory.createForVersion('1.21.11');
-        engine.resetCaches();
-
-        const v6 = await engine.calculate({
-            engine: 'v6',
-            item: 'sword',
-            material: 'diamond',
-            xp: 30,
-            threshold: 0.00005,
-            maxIterations: 30_000
-        });
-        const v7 = await engine.calculate({
-            engine: 'v7',
-            item: 'sword',
-            material: 'diamond',
-            xp: 30,
-            threshold: 0.00005,
-            maxIterations: 30_000
-        });
-
-        assert.notStrictEqual(v7, v6);
-        assert.ok(v7.accuracy >= 0);
-    });
 });

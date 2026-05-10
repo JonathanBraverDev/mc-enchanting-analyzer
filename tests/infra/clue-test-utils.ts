@@ -44,10 +44,9 @@ export async function calculateByFullSearchThenCondition(
 
     return SummaryService.summarizeConditioned({
         combos: fullSearch.combos,
-        tracker: fullSearch.tracker,
+        snapshot: fullSearch.snapshot,
         indexToEnchant: engine.registry.indexToEnchant,
         targetClueId,
-        frontiers: fullSearch.frontiers,
         isBook: item === TEST_DATA.ITEMS.BOOK,
         comboLimit: 1000
     });
@@ -82,10 +81,9 @@ export function summarizeCheckpoint(
 
     return SummaryService.summarizeConditioned({
         combos: result.combos,
-        tracker: result.tracker,
+        snapshot: result.snapshot,
         indexToEnchant: engine.registry.indexToEnchant,
         targetClueId,
-        frontiers: result.frontiers,
         isBook: item === TEST_DATA.ITEMS.BOOK,
         comboLimit: 1000
     });

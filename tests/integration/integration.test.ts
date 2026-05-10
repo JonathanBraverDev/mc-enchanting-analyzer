@@ -7,9 +7,9 @@ import { TEST_DATA } from '#tests/infra/test-data.js';
 import { SnapshotService } from '#services/SnapshotService.js';
 import { SummaryService } from '#services/SummaryService.js';
 import { getEnchantId } from '#core/registry.js';
-import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
 import { ComboUtils, PRECISION } from '#utils/index.js';
 import type { PackedEnchant, TopRunView } from '#types/index.js';
+import { makeV7Snapshot } from '#tests/infra/v7-snapshot-test-utils.js';
 
 const BASE_PAYLOAD = TEST_DATA.PAYLOADS.BASE_SWORD;
 
@@ -81,15 +81,15 @@ describe('Integration: Snapshot Integrity', () => {
 
         const summary = SummaryService.summarize({
             combos: res.combos,
-            tracker: res.tracker,
+            snapshot: res.snapshot,
             indexToEnchant: engine.registry.indexToEnchant,
-            comboLimit: 30
+            comboLimit: 30,
+            isBook: true
         });
 
         const snapshot = SnapshotService.create(
             engine.registry,
-            res.tracker,
-            res.combos,
+            res.snapshot,
             {
                 snapshotType: 'top',
                 input: {
@@ -140,13 +140,11 @@ describe('Integration: Clue-Conditioned Calculation', () => {
         const combos = new Map([
             [ComboUtils.pack([smiteIv], engine.registry.enchantToIndex), PRECISION]
         ]);
-        const tracker = new SearchStateTracker();
-        tracker.mass.record('resolved', PRECISION);
+        const runSnapshot = makeV7Snapshot({ results: combos, units: { resolved: PRECISION } });
 
         const snapshot = SnapshotService.create(
             engine.registry,
-            tracker,
-            combos,
+            runSnapshot,
             {
                 snapshotType: 'top',
                 input: {

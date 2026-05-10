@@ -5,7 +5,7 @@ import { EngineFactory } from '#engine/factory.js';
 import { TargetAnalysisService } from '#services/TargetAnalysisService.js';
 import { TargetClueAdvisorService } from '#services/TargetClueAdvisorService.js';
 import { ComboUtils, ProbUtils, PRECISION } from '#utils/index.js';
-import { makeFrontierSnapshot } from '#tests/infra/frontier-test-utils.js';
+import { makeV7PendingEntry } from '#tests/infra/v7-snapshot-test-utils.js';
 import type { ChartCellView, PackedCombo, PackedEnchant, PackedTargetRequirement, RegistryState } from '#types/index.js';
 
 let registry: RegistryState;
@@ -77,7 +77,7 @@ describe('TargetClueAdvisorService', () => {
             indexToEnchant,
             targets,
             registry,
-            frontiers: makeFrontierSnapshot(matching, 2, PRECISION, PRECISION / 2n),
+            v7PendingEntries: [makeV7PendingEntry(matching, 2, PRECISION / 2n)],
             limit: 2
         });
 
