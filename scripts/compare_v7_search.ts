@@ -36,21 +36,26 @@ const DEEP_CASES: CompareCase[] = BASE_CASES.map(testCase => ({
 
 async function main(): Promise<void> {
     const args = new Set(process.argv.slice(2));
-    const cases = args.has('--deep') ? DEEP_CASES : BASE_CASES;
+    const matchResolved = args.has('--match-resolved');
+    const only = stringArg('--only');
+    const cases = (args.has('--deep') ? DEEP_CASES : BASE_CASES)
+        .filter(testCase => !only || caseMatches(testCase, only));
     const topN = numberArg('--top', 8);
+    const v7MaxIterations = numberArg('--v7-max', ENGINE_LIMITS.MAX_ITERATIONS_UNBOUNDED);
 
-    console.log(`# V6/V7 search comparison (${args.has('--deep') ? 'deep' : 'baseline'})`);
+    console.log(`# V6/V7 search comparison (${args.has('--deep') ? 'deep' : 'baseline'}${matchResolved ? ', match-resolved' : ''})`);
     console.log('');
     console.log('V7 iteration counts are not expected to match V6 because V7 expands shared weighted nodes rather than independent modified-level frontiers.');
     console.log('Snapshots are references, not exact oracles; focus on mass conservation, top-combo overlap, and broad probability distance.');
     console.log('Important: the same numeric threshold is not semantically identical yet; V6 applies it inside each unweighted modified-level search, while this V7 prototype applies it to globally weighted frontier mass.');
+    if (matchResolved) console.log('Match-resolved mode runs V7 with threshold=0 until it reaches V6 resolved/classified mass, then compares distributions.');
 
     for (const testCase of cases) {
-        await compareCase(testCase, topN);
+        await compareCase(testCase, topN, { matchResolved, v7MaxIterations });
     }
 }
 
-async function compareCase(testCase: CompareCase, topN: number): Promise<void> {
+async function compareCase(testCase: CompareCase, topN: number, options: { matchResolved: boolean; v7MaxIterations: number }): Promise<void> {
     const engine = EngineFactory.createForVersion(testCase.version);
     engine.resetCaches();
 
@@ -75,7 +80,9 @@ async function compareCase(testCase: CompareCase, topN: number): Promise<void> {
     const v7Run = new SearchRun(kernel);
     v7Run.seedXp(testCase.xp);
     const v7Started = performance.now();
-    const v7 = v7Run.searchToCheckpoint({ threshold: testCase.threshold, maxIterations: testCase.maxIterations });
+    const v7 = options.matchResolved
+        ? v7Run.searchToCheckpoint({ threshold: 0n, targetResolvedMass: ProbUtils.toBigInt(v6.accuracy), maxIterations: options.v7MaxIterations })
+        : v7Run.searchToCheckpoint({ threshold: testCase.threshold, maxIterations: testCase.maxIterations });
     const v7WallMs = performance.now() - v7Started;
 
     const v6Combos = combosObjectToMap(v6.combos);
@@ -88,7 +95,7 @@ async function compareCase(testCase: CompareCase, topN: number): Promise<void> {
 
     console.log('');
     console.log(`## ${testCase.label} — ${testCase.version} ${testCase.item}/${testCase.material} XP ${testCase.xp}`);
-    console.log(`threshold=${testCase.threshold}, maxIterations=${testCase.maxIterations.toLocaleString()}`);
+    console.log(`threshold=${testCase.threshold}, maxIterations=${testCase.maxIterations.toLocaleString()}${options.matchResolved ? `, v7TargetResolved=${fmt(v6.accuracy)}, v7MaxIterations=${options.v7MaxIterations.toLocaleString()}` : ''}`);
     console.log('');
     console.log('| metric | V6 | V7 |');
     console.log('|---|---:|---:|');
@@ -123,6 +130,18 @@ function createInstrumentation(): EngineInstrumentation {
         levelsFullyResolved: 0,
         fullyResolved: false
     };
+}
+
+function stringArg(name: string): string | null {
+    const index = process.argv.indexOf(name);
+    const raw = index >= 0 ? process.argv[index + 1] : undefined;
+    return raw && !raw.startsWith('--') ? raw : null;
+}
+
+function caseMatches(testCase: CompareCase, query: string): boolean {
+    const normalized = query.toLowerCase();
+    return [testCase.label, testCase.version, testCase.item, testCase.material]
+        .some(value => value.toLowerCase().includes(normalized));
 }
 
 function numberArg(name: string, fallback: number): number {

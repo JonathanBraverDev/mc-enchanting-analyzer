@@ -14,6 +14,8 @@ export interface V7SearchRunOptions {
 export interface V7SearchCheckpointRequest {
     readonly threshold?: number | bigint | undefined;
     readonly maxIterations?: number | undefined;
+    /** Stop once resolved mass reaches this absolute fixed-point/number target. */
+    readonly targetResolvedMass?: number | bigint | undefined;
 }
 
 export interface V7SearchRunSnapshot {
@@ -95,9 +97,13 @@ export class SearchRun {
 
         const threshold = ProbUtils.toBigInt(request.threshold ?? ENGINE_LIMITS.DEFAULT_THRESHOLD);
         const maxIterations = request.maxIterations ?? ENGINE_LIMITS.MAX_ITERATIONS_UNBOUNDED;
+        const targetResolvedMass = request.targetResolvedMass !== undefined
+            ? ProbUtils.toBigInt(request.targetResolvedMass)
+            : undefined;
         const current = { programId: 0, nodeId: 0 as V7ProgramNodeId, mass: 0n };
 
         while (this.frontier.size > 0 && this._iterations < maxIterations) {
+            if (targetResolvedMass !== undefined && this.mass.getResolvedMass() >= targetResolvedMass) break;
             if (this.frontier.peekMass() < threshold) break;
             if (!this.frontier.pop(current)) break;
 

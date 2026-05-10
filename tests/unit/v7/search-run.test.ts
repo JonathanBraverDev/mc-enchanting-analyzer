@@ -45,6 +45,22 @@ describe('V7 SearchRun', () => {
         assert.strictEqual(totalMassUnits(snapshot), PRECISION);
     });
 
+
+
+    it('can stop once a requested resolved-mass target is reached', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'sword', material: 'diamond' });
+        const run = new SearchRun(kernel);
+
+        run.seedXp(30);
+        const target = ProbUtils.toBigInt(0.8);
+        const snapshot = run.searchToCheckpoint({ threshold: 0n, targetResolvedMass: target, maxIterations: 100_000 });
+
+        assert.ok(BigInt(snapshot.mass.units!.resolved) >= target);
+        assert.ok(snapshot.mass.pending > 0, 'target stop should not require full resolution');
+        assert.strictEqual(totalMassUnits(snapshot), PRECISION);
+    });
+
     it('can fully resolve a tiny high-threshold request without pending mass', () => {
         const registry = RegistryFactory.build('1.21.11');
         const kernel = new RegistryKernel({ registry, item: 'mace', material: 'mace' });
