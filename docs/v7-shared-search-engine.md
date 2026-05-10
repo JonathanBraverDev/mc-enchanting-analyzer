@@ -17,6 +17,7 @@ This document is the working design checkpoint for the V7 engine rewrite. V7 is 
 - [Mass Accounting](#mass-accounting)
 - [Caching Model](#caching-model)
 - [Worker Model](#worker-model)
+- [Deferred Optimization Investigations](#deferred-optimization-investigations)
 - [Testing Strategy](#testing-strategy)
 - [Commit Plan](#commit-plan)
 - [References / Related Docs](#references--related-docs)
@@ -288,7 +289,9 @@ The invariant should hold per output cell:
 resolved + clueIncompatible + pending + sieved + overflow + capped + rounding == PRECISION
 ```
 
-This may produce small differences from V6 because probability mass can merge before later divisions, reducing fragmentation and changing where rounding/recovered rounding appears.
+Current V7 accounting conserves raw fixed-point active mass exactly: `resolved + clueIncompatible + pending + sieved + overflow + capped + rounding` must equal `PRECISION`. Recovered buckets are diagnostics and are not part of active conservation.
+
+This may produce small differences from V6 because probability mass can merge before later divisions, reducing fragmentation and changing where rounding/recovered rounding appears. It can also increase active `rounding` in other places: V7 seeds already-weighted modified-level mass and then performs edge splits on those smaller weighted values, while V6 searched each modified level at full `PRECISION` and scaled the finished local result once during aggregation. The extra residue is tiny for bottomed-out non-book cases inspected so far, but book searches have much larger tails and should be treated as a precision/performance investigation target.
 
 ## Caching Model
 
@@ -375,8 +378,51 @@ Possible later optimizations:
 - Batch expansion by shared structural state to amortize frontier and distribution overhead.
 - Program-local search quanta so hot programs can run several local expansions before global arbitration.
 - Bounded memoized suffix summaries for fully equivalent tail states, especially for book-heavy searches.
+- Delayed-scaling or factorized-mass experiments to reduce repeated integer division on already-weighted mass.
+- Book-specific result-tail optimization, including better handling of redistributed book outcomes and huge low-probability combo tails.
 
 Avoid merging by visible combo alone; that collapses incompatible future state and reintroduces the same metadata mess V7 is designed to avoid.
+
+## Deferred Optimization Investigations
+
+These are explicitly postponed until the V7-only path is stable. They are important, but they should not block the initial migration unless they reveal a conservation or correctness bug.
+
+### Weighted-split residue and book precision
+
+V7 currently performs more fixed-point divisions than V6 because modified-level probability is applied before the search enters the shared graph:
+
+```text
+V6: search local tree at PRECISION -> scale finished result by P(modifiedLevel)
+V7: seed weighted root mass -> split weighted mass at every explored edge
+```
+
+This increases active `rounding` residue, especially when many small weighted masses are split through deep book trees. The raw-unit invariant still holds exactly, so this is not lost mass; it is mass classified as active rounding rather than assigned to resolved/pending/overflow buckets. For small bottomed-out non-book cases inspected during the V7-only migration, result maps matched the old snapshots after sanitization while active residue stayed around hundreds to low thousands of fixed-point units. Books may be different because those units can be a meaningful fraction of individual low-probability combo shares.
+
+Future work should investigate:
+
+- split `rounding` diagnostics by source: modified-level seed residue, edge-split active residue, recovered edge residue, book redistribution remainder, and deliberate pruning/sieving;
+- measure active residue as a percentage of total mass and as a percentage of tail combo shares for book snapshots;
+- experiment with delayed/factorized scaling so shared search can operate on larger local masses and apply modified-level weights later when it is semantically safe;
+- compare any precision optimization against raw-unit conservation and against high-resolution V6/V7 reference runs;
+- avoid eager largest-remainder assignment unless the equivalence basis is proven, because assigning residue across unrelated states changes probabilities.
+
+### Book-heavy search throughput
+
+Current quick timing evidence suggests V7 is competitive or faster for small non-book trees, but slower for large book snapshots at comparable settings. This should be treated separately from the precision issue because books stress both search breadth and result projection volume.
+
+Future work should investigate:
+
+- bounded subtree summaries for fully equivalent book tails;
+- book redistribution aggregation that avoids materializing huge numbers of near-zero combo entries too early;
+- chart/batch scheduling for book cells so shared structural work and cache locality are used deliberately;
+- result-tail policies that distinguish product-facing top results from exhaustive diagnostic snapshots.
+
+### Guardrails
+
+- Preserve the raw active-mass invariant exactly.
+- Do not merge by visible combo alone.
+- Do not pool residue before mass reaches the same full equivalence point, currently `(program, node)`.
+- Treat snapshot fixture updates as separate reviewable commits, especially for books.
 
 ## Testing Strategy
 
