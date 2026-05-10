@@ -52,7 +52,7 @@ export class SearchProgram {
     public readonly pool: V7PoolProjection;
 
     private readonly nodes: V7ProgramNode[] = [];
-    private readonly nodeIndex = new Map<string, V7ProgramNodeId>();
+    private readonly nodeIndex = new Map<bigint, V7ProgramNodeId>();
     private readonly expansionCache = new Map<V7ProgramNodeId, V7ProgramExpansion>();
 
     public constructor(
@@ -97,21 +97,21 @@ export class SearchProgram {
     }
 
     private buildRootExpansion(node: V7ProgramNode): V7ProgramExpansion {
-        const edges = this.pool.entries.map(entry => Object.freeze({
+        const edges = this.pool.entries.map(entry => ({
             entry,
             weight: entry.weight,
             childId: this.getOrCreateNode(entry.idBit, node.currentLevel, entry.comboIndex as PackedCombo, 1).id
         }));
 
-        return Object.freeze({
+        return {
             nodeId: node.id,
             isRoot: true,
             probContinue: PRECISION,
             totalWeight: this.pool.totalWeight,
             eligibleCount: edges.length,
-            edges: Object.freeze(edges),
+            edges,
             terminalReason: edges.length === 0 ? 'no-eligible' : null
-        });
+        };
     }
 
     private buildSearchExpansion(node: V7ProgramNode): V7ProgramExpansion {
@@ -138,11 +138,11 @@ export class SearchProgram {
             const childCombo = ComboUtils.packAppendIndex(node.combo, entry.comboIndex, node.count);
             const child = this.getOrCreateNode(childMask, nextLevel, childCombo, node.count + 1);
             totalWeight += entry.weight;
-            edges.push(Object.freeze({
+            edges.push({
                 entry,
                 weight: entry.weight,
                 childId: child.id
-            }));
+            });
         }
 
         return this.createExpansion(node, probContinue, edges, edges.length === 0 ? 'no-eligible' : null, totalWeight);
@@ -155,15 +155,15 @@ export class SearchProgram {
         terminalReason: V7ProgramTerminalReason,
         totalWeight = edges.reduce((sum, edge) => sum + edge.weight, 0)
     ): V7ProgramExpansion {
-        return Object.freeze({
+        return {
             nodeId: node.id,
             isRoot: node.count === 0,
             probContinue,
             totalWeight,
             eligibleCount: edges.length,
-            edges: Object.freeze([...edges]),
+            edges,
             terminalReason
-        });
+        };
     }
 
     private getOrCreateNode(
@@ -176,20 +176,20 @@ export class SearchProgram {
         const existing = this.nodeIndex.get(key);
         if (existing !== undefined) return this.getNode(existing);
 
-        const node = Object.freeze({
+        const node = {
             id: this.nodes.length as V7ProgramNodeId,
             selectedMask,
             currentLevel,
             combo,
             count
-        });
+        };
         this.nodes.push(node);
         this.nodeIndex.set(key, node.id);
         return node;
     }
 
-    private createNodeKey(selectedMask: bigint, currentLevel: number): string {
-        return `${selectedMask.toString(16)}@${currentLevel}`;
+    private createNodeKey(selectedMask: bigint, currentLevel: number): bigint {
+        return (selectedMask << 8n) | BigInt(currentLevel);
     }
 
     private getTerminalReason(node: V7ProgramNode): V7ProgramTerminalReason {
