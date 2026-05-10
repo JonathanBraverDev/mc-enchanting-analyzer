@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { RegistryFactory, RegistryKernel, SearchRun } from '#lib/index.js';
+import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { PRECISION, ProbUtils } from '#utils/index.js';
 
 function totalMassUnits(snapshot: ReturnType<SearchRun['snapshot']>): bigint {
@@ -12,6 +13,18 @@ function totalMassUnits(snapshot: ReturnType<SearchRun['snapshot']>): bigint {
         + BigInt(units.overflow)
         + BigInt(units.capped)
         + BigInt(units.rounding);
+}
+
+function resultMassUnits(snapshot: ReturnType<SearchRun['snapshot']>): bigint {
+    let total = 0n;
+    for (const mass of snapshot.results.values()) total += mass;
+    return total;
+}
+
+class SingleModifiedLevelDistribution extends ModifiedLevelDistributionService {
+    public override getModifiedLevelDist(): { [level: number]: bigint } {
+        return { 30: PRECISION };
+    }
 }
 
 describe('V7 SearchRun', () => {
@@ -45,7 +58,20 @@ describe('V7 SearchRun', () => {
         assert.strictEqual(totalMassUnits(snapshot), PRECISION);
     });
 
+    it('harvests split remainders locally instead of leaking them into rounding', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'mace', material: 'mace' });
+        const run = new SearchRun(kernel, { distributionService: new SingleModifiedLevelDistribution() });
 
+        run.seedXp(30);
+        const snapshot = run.searchToCheckpoint({ threshold: 0n, maxIterations: 100_000 });
+
+        assert.strictEqual(snapshot.fullyResolved, true);
+        assert.strictEqual(BigInt(snapshot.mass.units!.rounding), 0n);
+        assert.strictEqual(BigInt(snapshot.mass.units!.pending), 0n);
+        assert.strictEqual(totalMassUnits(snapshot), PRECISION);
+        assert.strictEqual(resultMassUnits(snapshot), BigInt(snapshot.mass.units!.resolved));
+    });
 
     it('can stop once a requested resolved-mass target is reached', () => {
         const registry = RegistryFactory.build('1.21.11');

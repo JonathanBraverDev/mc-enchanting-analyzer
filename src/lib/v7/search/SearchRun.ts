@@ -41,6 +41,13 @@ interface FrontierPopTarget {
     mass: bigint;
 }
 
+interface V7EdgeMassShare {
+    readonly childId: V7ProgramNodeId;
+    readonly residue: bigint;
+    readonly order: number;
+    mass: bigint;
+}
+
 /**
  * Minimal V7 single-cell probability flow executor.
  *
@@ -195,12 +202,45 @@ export class SearchRun {
 
     private distributeToEdges(programId: number, expansion: V7ProgramExpansion, mass: bigint): void {
         const totalWeight = BigInt(expansion.totalWeight);
-        let remainder = mass;
+        const shares: V7EdgeMassShare[] = [];
+        let assigned = 0n;
 
-        for (const edge of expansion.edges) {
-            const childMass = (mass * BigInt(edge.weight)) / totalWeight;
-            remainder -= childMass;
-            this.pushPending(programId, edge.childId, childMass);
+        for (let order = 0; order < expansion.edges.length; order++) {
+            const edge = expansion.edges[order]!;
+            if (edge.weight <= 0) continue;
+
+            const weightedMass = mass * BigInt(edge.weight);
+            const childMass = weightedMass / totalWeight;
+            assigned += childMass;
+            shares.push({
+                childId: edge.childId,
+                residue: weightedMass % totalWeight,
+                order,
+                mass: childMass
+            });
+        }
+
+        let remainder = mass - assigned;
+        if (remainder > 0n) {
+            // Harvest split remainders at this expansion boundary only. Different
+            // modified-level roots keep separate remainder decisions until their
+            // mass has actually converged into the same `(program, node)` frontier
+            // entry, which is the first full equivalence point for future search.
+            shares.sort((a, b) => {
+                if (a.residue === b.residue) return a.order - b.order;
+                return a.residue > b.residue ? -1 : 1;
+            });
+
+            for (const share of shares) {
+                if (remainder === 0n) break;
+                share.mass += 1n;
+                remainder--;
+            }
+        }
+
+        shares.sort((a, b) => a.order - b.order);
+        for (const share of shares) {
+            this.pushPending(programId, share.childId, share.mass);
         }
 
         if (remainder > 0n) this.mass.record('rounding', remainder);

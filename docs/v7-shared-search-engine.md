@@ -62,7 +62,7 @@ weighted modified-level roots -> shared lazy program graph -> per-cell/accounted
 
 ## Current Implementation Checkpoint
 
-Current branch state after the first stack-adapter checkpoint:
+Current branch state after the first stack-adapter checkpoint and V7-first direction change:
 
 - Branch: `rewrite/v7-shared-search-engine`.
 - Fallback design checkpoint tag: `v7-global-search-semantics-2026-05-10` at `20b65ba`.
@@ -72,9 +72,14 @@ Current branch state after the first stack-adapter checkpoint:
   - Single-cell weighted `SearchRun` with global frontier scheduling and mass conservation.
   - Configurable zero probability floor so validation can dig through the tail.
   - V6/V7 comparison harness with matched-resolved mode.
-  - `V7SearchService` adapter that projects V7 snapshots into the existing `SearchResult` / `CalculationStats` boundary.
+  - `V7SearchService` adapter that temporarily projects V7 snapshots into the existing `SearchResult` / `CalculationStats` boundary.
   - Top and chart workers route unclued requests through V7 and keep clue-conditioned requests on V6.
   - V7-specific refinement thresholds so product depth settings reflect global weighted frontier semantics instead of V6 local per-modified-level semantics.
+  - Local edge-split remainder harvesting inside `SearchRun`, so integer division residue is assigned at the expansion boundary instead of leaking into a global rounding bucket.
+- Direction change:
+  - V7 is now the upgrade path and source of truth.
+  - Treat V6 internals, telemetry shape, snapshots, and worker granularity as obsolete until re-evaluated.
+  - Do not force native V7 results or telemetry into V6 output shapes unless a temporary bridge still requires it.
 - Not implemented yet:
   - V7 clue mode.
   - True shared batch/chart-cell execution; chart worker currently uses the V7 single-cell adapter per XP cell.
@@ -337,7 +342,19 @@ UI input
 
 Top selected level is a one-cell batch. Chart sweep is a multi-cell batch. Refinement advances the same compatible run through stricter checkpoints instead of restarting unrelated searches.
 
-Current bridge state: workers still speak the existing protocol, but choose `engine: 'v7'` for unclued top/chart searches and `engine: 'v6'` for clue-conditioned searches. The compatibility adapter keeps `SummaryService`, `SnapshotService`, and existing UI contracts stable while V7 internals replace the search backend.
+Current bridge state: workers still speak the existing protocol, but choose `engine: 'v7'` for unclued top/chart searches and `engine: 'v6'` for clue-conditioned searches. The compatibility adapter keeps `SummaryService`, `SnapshotService`, and existing UI contracts stable only as a migration scaffold. New V7 work should prefer native `SearchRun` / `V7SearchRunSnapshot` semantics and add projection contracts from there rather than conforming telemetry to V6.
+
+## Remainder and Equivalence Rules
+
+Integer split residue must be handled where it is created:
+
+- At a single expansion, compute each child share from the same incoming mass and edge weights.
+- Assign leftover fixed-point units to the children with the largest local residues, with deterministic edge-order tie-breaking.
+- Do not pool residues from different modified-level roots just because they share a pool signature.
+- Pooling is valid only after mass has reached the same full equivalence point, currently the same `(program, node)` frontier entry.
+- Book `removeAdditional` redistribution can assign its local remainder to one of the equivalent redistributed outputs because the original leaf combo has already fully resolved.
+
+This keeps total bucket mass conserved without treating unrelated pre-equivalence rounding residue as shared probability.
 
 ## Testing Strategy
 
