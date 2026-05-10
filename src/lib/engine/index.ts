@@ -118,7 +118,6 @@ export class EnchantEngine {
             signal,
             onProgress,
             maxIterations,
-            targetClassifiedMass,
             exhaustive,
             summaryLimit = ENGINE_LIMITS.MAX_RESULTS_SUMMARY,
             resultsLimit = ENGINE_LIMITS.MAX_RESULTS_UNBOUNDED,
@@ -129,19 +128,17 @@ export class EnchantEngine {
 
         const packedClue = clue ? this.getPackedClue(item, clue) : null;
         const effectiveThreshold = exhaustive ? 0 : threshold;
-        const targetClassifiedMassNumber = targetClassifiedMass === undefined ? undefined : ProbUtils.toNumber(targetClassifiedMass);
 
         const cacheKey = this.getStatsKey(item, xp, material, packedClue);
 
         const cachedStats = useCache === false || exhaustive ? undefined : this.cache.getStats(this.registry.version, cacheKey);
-        if (cachedStats && cachedStats.threshold <= effectiveThreshold && (targetClassifiedMassNumber === undefined || this.getClassifiedMass(cachedStats) >= targetClassifiedMassNumber)) return cachedStats;
+        if (cachedStats && cachedStats.threshold <= effectiveThreshold) return cachedStats;
 
         const searchConfig: SearchConfig = {
             threshold: effectiveThreshold,
             signal,
             onProgress,
             maxIterations,
-            targetClassifiedMass,
             exhaustive,
             resultsLimit,
             useCache,
@@ -202,15 +199,6 @@ export class EnchantEngine {
         return ClueValidator.validate(this.registry, item, clue);
     }
 
-    private getClassifiedMass(stats: CalculationStats): number {
-        return stats.accounting.resolved
-            + stats.accounting.clueIncompatible
-            + stats.accounting.sieved
-            + stats.accounting.overflow
-            + stats.accounting.capped
-            + stats.accounting.rounding;
-    }
-
     private getStatsKey(item: string, xp: number, material: string, packedClue: number | null = null): number {
         const itemId = getItemId(this.registry, item);
         const materialId = getMaterialId(this.registry, material);
@@ -250,12 +238,6 @@ export class EnchantEngine {
         }
         if (request.maxIterations !== undefined && (request.maxIterations <= 0 || !Number.isInteger(request.maxIterations))) {
             throw new Error(`Invalid maxIterations: ${request.maxIterations}. Must be a positive integer.`);
-        }
-        if (request.targetClassifiedMass !== undefined) {
-            const target = ProbUtils.toNumber(request.targetClassifiedMass);
-            if (target < 0 || target > 1.0) {
-                throw new Error(`Invalid targetClassifiedMass: ${target}. Must be between 0 and 1.0.`);
-            }
         }
         if ('checkpoints' in request) {
             for (const checkpoint of request.checkpoints) {

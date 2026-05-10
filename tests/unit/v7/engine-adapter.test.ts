@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { EngineFactory } from '#engine/index.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
+import { getSearchCheckpointForRefinement } from '#core/config.js';
 import { CalculationStats, SearchResult } from '#types/index.js';
 
 function accountingTotal(stats: CalculationStats): number {
@@ -31,27 +32,6 @@ describe('V7 engine adapter', () => {
         assert.strictEqual(stats.threshold, 0);
     });
 
-    it('exposes classified-mass targets through the calculate boundary', async () => {
-        const engine = EngineFactory.createForVersion('1.21.11');
-        engine.resetCaches();
-
-        const stats = await engine.calculate({
-            item: 'book',
-            material: 'book',
-            xp: 30,
-            threshold: 0,
-            maxIterations: 100_000,
-            targetClassifiedMass: 0.2,
-            summaryLimit: 10,
-            resultsLimit: ENGINE_LIMITS.MAX_RESULTS_UNBOUNDED,
-            useCache: false
-        });
-
-        assert.ok((1 - stats.accounting.pending) >= 0.2);
-        assert.ok(stats.accounting.pending > 0, 'target stop should not require full resolution');
-        assert.ok(Math.abs(accountingTotal(stats) - 1) < 1e-12);
-    });
-
     it('exposes exhaustive mode through the calculate boundary', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
         engine.resetCaches();
@@ -73,6 +53,12 @@ describe('V7 engine adapter', () => {
         assert.ok(stats.accounting.resolved > 0);
         assert.ok(Object.keys(stats.combos).length > 0);
         assert.ok(Math.abs(accountingTotal(stats) - 1) < 1e-12);
+    });
+
+    it('omits classified-mass targets from named refinement checkpoints by default', () => {
+        const checkpoint = getSearchCheckpointForRefinement('ultra', true);
+
+        assert.strictEqual(checkpoint.targetClassifiedMass, undefined);
     });
 
     it('supports per-checkpoint classified-mass targets', async () => {

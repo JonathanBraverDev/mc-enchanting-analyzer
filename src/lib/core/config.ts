@@ -8,6 +8,8 @@ export interface RefinementCheckpointPreset {
     v7ThresholdOther: number;
     limitBook: number;
     limitOther: number;
+    targetClassifiedMassBook?: number | undefined;
+    targetClassifiedMassOther?: number | undefined;
     status: string;
 }
 
@@ -96,11 +98,13 @@ export const REFINEMENT_LEVEL_COLORS: Record<RefinementStatusLevel, { bg: string
 export function getSearchCheckpointForRefinement(level: RefinementLevelName, isBook: boolean): RefinementSearchCheckpoint {
     const mode = REFINEMENT_CHECKPOINTS[level];
     const threshold = isBook ? mode.v7ThresholdBook : mode.v7ThresholdOther;
+    const targetClassifiedMass = isBook ? mode.targetClassifiedMassBook : mode.targetClassifiedMassOther;
 
     return {
         refinementLevel: level,
         threshold,
         limit: isBook ? mode.limitBook : mode.limitOther,
+        ...(targetClassifiedMass === undefined ? {} : { targetClassifiedMass }),
         status: mode.status
     };
 }

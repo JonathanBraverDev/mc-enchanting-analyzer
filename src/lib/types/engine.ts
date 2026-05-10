@@ -233,8 +233,6 @@ export interface SearchConfig {
     signal?: AbortSignal | undefined;
     onProgress?: ((update: ProgressUpdate) => void) | undefined;
     maxIterations?: number | undefined;
-    /** Stop once non-pending classified mass reaches this target. Threshold/iteration caps still apply as safety stops. */
-    targetClassifiedMass?: number | bigint | undefined;
     /**
      * Diagnostic escape hatch: ignore threshold and iteration cap, searching until the frontier is empty.
      * This can be extremely expensive on modern book searches; keep product flows on checkpoint limits.
