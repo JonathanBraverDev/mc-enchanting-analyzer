@@ -10,11 +10,17 @@ describe('Engine Architectural Invariants', () => {
         const stats = await engine.calculate({ item: 'sword', xp: 30, material: 'diamond', threshold: 0, maxIterations: 1_000_000 });
 
         const acc = stats.accounting;
-        const total = acc.resolved + acc.clueIncompatible + acc.pending + acc.sieved + acc.overflow + acc.capped + acc.rounding;
+        assert.ok(acc.units, 'Mass accounting should expose raw fixed-point units');
+        const total = BigInt(acc.units.resolved)
+            + BigInt(acc.units.clueIncompatible)
+            + BigInt(acc.units.pending)
+            + BigInt(acc.units.sieved)
+            + BigInt(acc.units.overflow)
+            + BigInt(acc.units.capped)
+            + BigInt(acc.units.rounding);
 
-        // Sum should be exactly 1.0 within floating point precision of the stats object reconstruction.
-        // The accounting buckets in stats are already normalized to 0..1 floats.
-        assert.ok(Math.abs(total - 1.0) < 1e-15, `Mass total ${total} should be exactly 1.0`);
+        // Recovered buckets are diagnostic only; active mass buckets must conserve exactly.
+        assert.strictEqual(total, PRECISION, `Mass total ${total} should equal PRECISION ${PRECISION}`);
         assert.ok(acc.resolved > 0.9, 'Should have resolved most mass at level 30');
     });
 
