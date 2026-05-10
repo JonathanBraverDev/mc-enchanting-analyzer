@@ -75,7 +75,7 @@ Current branch state after the first stack-adapter checkpoint and V7-first direc
   - `V7SearchService` adapter that temporarily projects V7 snapshots into the existing `SearchResult` / `CalculationStats` boundary.
   - Top and chart workers route unclued requests through V7 and keep clue-conditioned requests on V6.
   - V7-specific refinement thresholds so product depth settings reflect global weighted frontier semantics instead of V6 local per-modified-level semantics.
-  - Local edge-split remainder harvesting inside `SearchRun`, so integer division residue is assigned at the expansion boundary instead of leaking into a global rounding bucket.
+  - Node-local V7 edge-split residue forwarding inside `SearchRun`, matching V6's cautious recovery model: fixed-point split residue stays in `rounding` until later mass reaches the same `(program, node)` expansion and can recover it.
 - Direction change:
   - V7 is now the upgrade path and source of truth.
   - Treat V6 internals, telemetry shape, snapshots, and worker granularity as obsolete until re-evaluated.
@@ -346,12 +346,14 @@ Current bridge state: workers still speak the existing protocol, but choose `eng
 
 ## Remainder and Equivalence Rules
 
-Integer split residue must be handled where it is created:
+Integer split residue must be handled conservatively:
 
-- At a single expansion, compute each child share from the same incoming mass and edge weights.
-- Assign leftover fixed-point units to the children with the largest local residues, with deterministic edge-order tie-breaking.
+- At a single expansion, compute each child share by flooring `mass * edge.weight / totalWeight`.
+- Do not eagerly assign leftover fixed-point units to child edges by largest-remainder order; that changes outcome probabilities before the engine has a true equivalence basis for doing so.
+- Carry the split residue on the exact source expansion, currently the same `(program, node)` identity.
+- If later mass reaches that same `(program, node)`, distribute `incomingMass + oldResidue`; any residue decrease is recorded as `recoveredRounding` and removed from active `rounding`.
 - Do not pool residues from different modified-level roots just because they share a pool signature.
-- Pooling is valid only after mass has reached the same full equivalence point, currently the same `(program, node)` frontier entry.
+- Pooling/recovery is valid only after mass has reached the same full equivalence point, currently the same `(program, node)` frontier entry.
 - Book `removeAdditional` redistribution can assign its local remainder to one of the equivalent redistributed outputs because the original leaf combo has already fully resolved.
 
 This keeps total bucket mass conserved without treating unrelated pre-equivalence rounding residue as shared probability.

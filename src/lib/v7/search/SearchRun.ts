@@ -43,8 +43,6 @@ interface FrontierPopTarget {
 
 interface V7EdgeMassShare {
     readonly childId: V7ProgramNodeId;
-    readonly residue: bigint;
-    readonly order: number;
     mass: bigint;
 }
 
@@ -63,6 +61,7 @@ export class SearchRun {
     private readonly distributionService: ModifiedLevelDistributionService;
     private readonly programsBySignature = new Map<V7PoolSignature, ProgramRecord>();
     private readonly programs: ProgramRecord[] = [];
+    private readonly forwardingResidues: BigUint64Array[] = [];
     private readonly frontier = new V7RunFrontier();
     private seeded = false;
     private _seededLevelCount = 0;
@@ -144,12 +143,13 @@ export class SearchRun {
         const expansion = program.getExpansion(nodeId);
 
         if (expansion.isRoot) {
-            this.expandRoot(programId, expansion, incomingMass);
+            this.expandRoot(programId, nodeId, expansion, incomingMass);
             return;
         }
 
         this.expandSearchNode(
             programId,
+            nodeId,
             program.getNodeCombo(nodeId),
             program.getNodeCount(nodeId),
             expansion,
@@ -158,17 +158,18 @@ export class SearchRun {
         );
     }
 
-    private expandRoot(programId: number, expansion: V7ProgramExpansion, incomingMass: bigint): void {
+    private expandRoot(programId: number, nodeId: V7ProgramNodeId, expansion: V7ProgramExpansion, incomingMass: bigint): void {
         if (expansion.totalWeight <= 0 || expansion.edges.length === 0) {
             this.mass.record('resolved', incomingMass);
             return;
         }
 
-        this.distributeToEdges(programId, expansion, incomingMass);
+        this.distributeToEdges(programId, nodeId, expansion, incomingMass);
     }
 
     private expandSearchNode(
         programId: number,
+        nodeId: V7ProgramNodeId,
         combo: PackedCombo,
         count: number,
         expansion: V7ProgramExpansion,
@@ -197,53 +198,73 @@ export class SearchRun {
             return;
         }
 
-        this.distributeToEdges(programId, expansion, probForward);
+        this.distributeToEdges(programId, nodeId, expansion, probForward);
     }
 
-    private distributeToEdges(programId: number, expansion: V7ProgramExpansion, mass: bigint): void {
+    private distributeToEdges(programId: number, nodeId: V7ProgramNodeId, expansion: V7ProgramExpansion, mass: bigint): void {
         const totalWeight = BigInt(expansion.totalWeight);
+        const oldResidue = this.getForwardingResidue(programId, nodeId);
+        const totalToDistribute = mass + oldResidue;
         const shares: V7EdgeMassShare[] = [];
         let assigned = 0n;
 
-        for (let order = 0; order < expansion.edges.length; order++) {
-            const edge = expansion.edges[order]!;
+        for (const edge of expansion.edges) {
             if (edge.weight <= 0) continue;
 
-            const weightedMass = mass * BigInt(edge.weight);
-            const childMass = weightedMass / totalWeight;
+            const childMass = (totalToDistribute * BigInt(edge.weight)) / totalWeight;
             assigned += childMass;
             shares.push({
                 childId: edge.childId,
-                residue: weightedMass % totalWeight,
-                order,
                 mass: childMass
             });
         }
 
-        let remainder = mass - assigned;
-        if (remainder > 0n) {
-            // Harvest split remainders at this expansion boundary only. Different
-            // modified-level roots keep separate remainder decisions until their
-            // mass has actually converged into the same `(program, node)` frontier
-            // entry, which is the first full equivalence point for future search.
-            shares.sort((a, b) => {
-                if (a.residue === b.residue) return a.order - b.order;
-                return a.residue > b.residue ? -1 : 1;
-            });
+        const newResidue = totalToDistribute - assigned;
+        this.setForwardingResidue(programId, nodeId, newResidue);
+        this.recordResidueDelta(oldResidue, newResidue);
 
-            for (const share of shares) {
-                if (remainder === 0n) break;
-                share.mass += 1n;
-                remainder--;
-            }
-        }
-
-        shares.sort((a, b) => a.order - b.order);
         for (const share of shares) {
             this.pushPending(programId, share.childId, share.mass);
         }
+    }
 
-        if (remainder > 0n) this.mass.record('rounding', remainder);
+    private recordResidueDelta(oldResidue: bigint, newResidue: bigint): void {
+        if (newResidue > oldResidue) {
+            this.mass.record('rounding', newResidue - oldResidue);
+            return;
+        }
+
+        if (oldResidue > newResidue) {
+            const recovered = oldResidue - newResidue;
+            this.mass.subtract('rounding', recovered);
+            this.mass.record('recoveredRounding', recovered);
+        }
+    }
+
+    private getForwardingResidue(programId: number, nodeId: V7ProgramNodeId): bigint {
+        const storage = this.forwardingResidues[programId];
+        return storage?.[nodeId as number] ?? 0n;
+    }
+
+    private setForwardingResidue(programId: number, nodeId: V7ProgramNodeId, residue: bigint): void {
+        const nodeIndex = nodeId as number;
+        let storage = this.forwardingResidues[programId];
+
+        if (!storage) {
+            let capacity = V7RunFrontier.INITIAL_NODE_CAPACITY;
+            while (capacity <= nodeIndex) capacity *= 2;
+            storage = new BigUint64Array(capacity);
+            this.forwardingResidues[programId] = storage;
+        } else if (nodeIndex >= storage.length) {
+            let capacity = storage.length;
+            while (capacity <= nodeIndex) capacity *= 2;
+            const expanded = new BigUint64Array(capacity);
+            expanded.set(storage);
+            storage = expanded;
+            this.forwardingResidues[programId] = storage;
+        }
+
+        storage[nodeIndex] = residue;
     }
 
     private settleResolved(combo: PackedCombo, count: number, mass: bigint): void {
@@ -306,7 +327,7 @@ interface V7FrontierProgramStorage {
 }
 
 class V7RunFrontier {
-    private static readonly INITIAL_NODE_CAPACITY = 1024;
+    public static readonly INITIAL_NODE_CAPACITY = 1024;
 
     private readonly heapProgramIds: number[] = [];
     private readonly heapNodeIds: number[] = [];

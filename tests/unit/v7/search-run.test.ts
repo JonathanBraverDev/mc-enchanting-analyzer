@@ -58,19 +58,36 @@ describe('V7 SearchRun', () => {
         assert.strictEqual(totalMassUnits(snapshot), PRECISION);
     });
 
-    it('harvests split remainders locally instead of leaking them into rounding', () => {
+    it('carries split remainders instead of eagerly assigning them to child edges', () => {
         const registry = RegistryFactory.build('1.21.11');
         const kernel = new RegistryKernel({ registry, item: 'mace', material: 'mace' });
         const run = new SearchRun(kernel, { distributionService: new SingleModifiedLevelDistribution() });
 
         run.seedXp(30);
         const snapshot = run.searchToCheckpoint({ threshold: 0n, maxIterations: 100_000 });
+        const rounding = BigInt(snapshot.mass.units!.rounding);
 
         assert.strictEqual(snapshot.fullyResolved, true);
-        assert.strictEqual(BigInt(snapshot.mass.units!.rounding), 0n);
+        assert.ok(rounding > 0n, 'integer split residue should remain accounted as rounding until it can be recovered at the same node');
         assert.strictEqual(BigInt(snapshot.mass.units!.pending), 0n);
         assert.strictEqual(totalMassUnits(snapshot), PRECISION);
         assert.strictEqual(resultMassUnits(snapshot), BigInt(snapshot.mass.units!.resolved));
+        assert.strictEqual(resultMassUnits(snapshot) + rounding, PRECISION);
+    });
+
+    it('recovers carried split residue only through later arrivals to equivalent nodes', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'sword', material: 'diamond' });
+        const run = new SearchRun(kernel);
+
+        run.seedXp(30);
+        const snapshot = run.searchToCheckpoint({ threshold: 0n, maxIterations: 100_000 });
+
+        assert.strictEqual(snapshot.fullyResolved, true);
+        assert.ok(BigInt(snapshot.mass.units!.rounding) > 0n);
+        assert.ok(BigInt(snapshot.mass.units!.recoveredRounding) > 0n);
+        assert.strictEqual(BigInt(snapshot.mass.units!.pending), 0n);
+        assert.strictEqual(totalMassUnits(snapshot), PRECISION);
     });
 
     it('can stop once a requested resolved-mass target is reached', () => {
