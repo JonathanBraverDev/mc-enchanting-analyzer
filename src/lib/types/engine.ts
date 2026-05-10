@@ -114,6 +114,26 @@ export interface EngineInstrumentation {
 
   /** Optional: If true, perform expensive global heap scans for cache nodes/results */
   trackGlobalMetrics?: boolean | undefined;
+
+  /** V7-native diagnostics. Present when the V7 engine path records them. */
+  v7?: V7Instrumentation | undefined;
+}
+
+export interface V7Instrumentation {
+  /** Number of structural search programs currently used by the run. */
+  programCount: number;
+  /** Number of modified levels seeded into the run. */
+  seededLevelCount: number;
+  /** Number of distinct `(program, node)` entries still pending in the global frontier. */
+  pendingEntryCount: number;
+  /** Largest pending frontier mass as a normalized probability. */
+  largestPendingMass: number;
+  /** Active node-local split-residue buckets with non-zero mass. */
+  activeResidueCount: number;
+  /** Total active node-local split residue as a normalized probability. */
+  activeResidueMass: number;
+  /** Whether this snapshot can still improve under a lower threshold or higher iteration cap. */
+  canImprove: boolean;
 }
 
 export interface ResolvedRegistry {

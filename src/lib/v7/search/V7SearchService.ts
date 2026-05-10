@@ -1,10 +1,12 @@
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
+import { NodeIdSearchFrontier } from '#engine/search/NodeIdSearchFrontier.js';
+import { SearchNodeGraph } from '#engine/search/SearchNodeGraph.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
-import { SearchResult, SequentialCheckpointSearchContext, CheckpointSearchContext, EngineInstrumentation, SearchTiming } from '#types/index.js';
+import { SearchResult, SequentialCheckpointSearchContext, CheckpointSearchContext, EngineInstrumentation, SearchTiming, SearchFrontierSnapshot } from '#types/index.js';
 import { RegistryKernel } from '#lib/v7/registry/RegistryKernel.js';
 import { SearchRun, V7SearchRunSnapshot } from '#lib/v7/search/SearchRun.js';
-import { ProbUtils } from '#utils/index.js';
+import { PRECISION, ProbUtils } from '#utils/index.js';
 
 /**
  * V7 adapter for the existing engine boundary.
@@ -21,9 +23,10 @@ export class V7SearchService {
         const timingStart = request.timing ? performance.now() : 0;
         let recordedSearchMs = 0;
         const run = this.createRun(request);
-        const snapshot = run.searchToCheckpoint({
+        const snapshot = await run.searchToCheckpointAsync({
             threshold: request.threshold ?? ENGINE_LIMITS.DEFAULT_THRESHOLD,
-            maxIterations: request.maxIterations ?? ENGINE_LIMITS.MAX_ITERATIONS_UNBOUNDED
+            maxIterations: request.maxIterations ?? ENGINE_LIMITS.MAX_ITERATIONS_UNBOUNDED,
+            signal: request.signal
         });
 
         recordedSearchMs = this.finishTiming(request.timing, timingStart, recordedSearchMs);
@@ -42,9 +45,10 @@ export class V7SearchService {
             const checkpoint = request.checkpoints[checkpointIndex];
             if (!checkpoint) continue;
 
-            const snapshot = run.searchToCheckpoint({
+            const snapshot = await run.searchToCheckpointAsync({
                 threshold: checkpoint.threshold,
-                maxIterations: checkpoint.limit
+                maxIterations: checkpoint.limit,
+                signal: request.signal
             });
 
             recordedSearchMs = this.finishTiming(request.timing, timingStart, recordedSearchMs);
@@ -91,6 +95,9 @@ export class V7SearchService {
             recoveredSieved: BigInt(snapshot.mass.units!.recoveredSieved)
         });
 
+        const thresholdUnits = ProbUtils.toBigInt(threshold ?? 0);
+        const frontiers = this.toFrontiers(snapshot);
+
         if (instrumentation) {
             instrumentation.totalIterations = snapshot.iterations;
             instrumentation.totalPrunedNodes = 0;
@@ -101,20 +108,50 @@ export class V7SearchService {
             instrumentation.resultsSize = snapshot.results.size;
             instrumentation.queueSize = snapshot.pendingCount;
             instrumentation.indexMapSize = snapshot.pendingCount;
-            instrumentation.exitReason = snapshot.fullyResolved ? 'empty' : 'threshold';
+            instrumentation.exitReason = snapshot.fullyResolved
+                ? 'empty'
+                : snapshot.largestPendingMass < thresholdUnits ? 'threshold' : 'iterations';
             instrumentation.poolCache = instrumentation.poolCache ?? { hits: 0, misses: 0 };
             instrumentation.distCache = instrumentation.distCache ?? { hits: 0, misses: 0 };
             instrumentation.frontierCache = instrumentation.frontierCache ?? { hits: 0, misses: 0 };
+            instrumentation.v7 = {
+                programCount: snapshot.programCount,
+                seededLevelCount: snapshot.seededLevelCount,
+                pendingEntryCount: snapshot.pendingCount,
+                largestPendingMass: ProbUtils.toNumber(snapshot.largestPendingMass),
+                activeResidueCount: snapshot.activeResidueCount,
+                activeResidueMass: ProbUtils.toNumber(snapshot.activeResidueMass),
+                canImprove: !snapshot.fullyResolved && snapshot.largestPendingMass >= thresholdUnits
+            };
         }
 
         return {
             combos: new Map(snapshot.results),
             tracker,
-            frontiers: [],
+            frontiers,
             instrumentation: instrumentation ? { ...instrumentation } : undefined,
             timing: timing ? { ...timing } : undefined,
             threshold: ProbUtils.toNumber(threshold ?? 0)
         };
+    }
+
+    private toFrontiers(snapshot: V7SearchRunSnapshot): SearchFrontierSnapshot[] {
+        if (snapshot.pendingEntries.length === 0) return [];
+
+        const graph = new SearchNodeGraph();
+        const frontier = new NodeIdSearchFrontier(snapshot.pendingEntries.length);
+        for (const entry of snapshot.pendingEntries) {
+            const nodeId = graph.createNumericNode(
+                entry.nodeId as number,
+                entry.programId,
+                0,
+                entry.combo,
+                entry.count
+            );
+            frontier.pushOrMerge(nodeId, entry.mass);
+        }
+
+        return [{ frontier, graph, scale: PRECISION }];
     }
 
     private finishTiming(timing: SearchTiming | undefined, start: number, alreadyRecordedForCall: number): number {

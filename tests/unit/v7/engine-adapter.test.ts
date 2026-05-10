@@ -80,6 +80,58 @@ describe('V7 engine adapter', () => {
         assert.ok(Object.keys(stats.combos).length > 0);
     });
 
+    it('projects V7 pending frontier nodes and native instrumentation through the adapter', async () => {
+        const engine = EngineFactory.createForVersion('1.21.11');
+        const instrumentation = {
+            poolCache: { hits: 0, misses: 0 },
+            distCache: { hits: 0, misses: 0 },
+            frontierCache: { hits: 0, misses: 0 },
+            totalIterations: 0,
+            totalPrunedNodes: 0,
+            roundingErrorEvents: 0,
+            levelsProcessed: 0,
+            levelsFullyResolved: 0,
+            fullyResolved: false
+        };
+
+        const result = await engine.searchToCheckpoint({
+            engine: 'v7',
+            item: 'book',
+            material: 'book',
+            xp: 30,
+            threshold: 0,
+            maxIterations: 1,
+            instrumentation
+        });
+
+        assert.ok(result.frontiers?.length);
+        assert.ok(result.frontiers![0]!.frontier.size() > 0);
+        assert.ok(result.tracker.mass.toPublic().pending > 0);
+        assert.ok(result.instrumentation?.v7);
+        assert.ok(result.instrumentation.v7.programCount > 0);
+        assert.strictEqual(result.instrumentation.v7.pendingEntryCount, result.frontiers![0]!.frontier.size());
+        assert.ok(result.instrumentation.v7.canImprove);
+    });
+
+    it('aborts V7 checkpoint searches through the adapter', async () => {
+        const engine = EngineFactory.createForVersion('1.21.11');
+        const controller = new AbortController();
+        controller.abort();
+
+        await assert.rejects(
+            () => engine.searchToCheckpoint({
+                engine: 'v7',
+                item: 'sword',
+                material: 'diamond',
+                xp: 30,
+                threshold: 0,
+                maxIterations: 10_000,
+                signal: controller.signal
+            }),
+            /Aborted/
+        );
+    });
+
     it('does not share CalculationStats cache entries between V6 and V7', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
         engine.resetCaches();

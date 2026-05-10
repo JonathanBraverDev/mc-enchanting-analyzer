@@ -4,7 +4,7 @@ import { ClueSearchPolicy } from '#engine/search/ClueSearchPolicy.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import { MassAccountingBreakdown } from '#types/mass.js';
 import { PackedCombo } from '#types/index.js';
-import { ComboUtils, PRECISION, ProbUtils } from '#utils/index.js';
+import { AsyncUtils, ComboUtils, PRECISION, ProbUtils } from '#utils/index.js';
 import { RegistryKernel, V7PoolProjection, V7PoolSignature } from '#lib/v7/registry/RegistryKernel.js';
 import { SearchProgram, V7ProgramExpansion, V7ProgramNodeId } from '#lib/v7/search/SearchProgram.js';
 
@@ -20,6 +20,17 @@ export interface V7SearchCheckpointRequest {
     readonly targetResolvedMass?: number | bigint | undefined;
     /** Optional internal forward-mass floor. Defaults to 0 so validation can dig into the full tail. */
     readonly probabilityFloor?: number | bigint | undefined;
+    readonly signal?: AbortSignal | undefined;
+    /** Async search yield cadence. Used by the worker adapter so abort messages can be observed. */
+    readonly yieldEveryIterations?: number | undefined;
+}
+
+export interface V7PendingFrontierEntry {
+    readonly programId: number;
+    readonly nodeId: V7ProgramNodeId;
+    readonly mass: bigint;
+    readonly combo: PackedCombo;
+    readonly count: number;
 }
 
 export interface V7SearchRunSnapshot {
@@ -27,8 +38,12 @@ export interface V7SearchRunSnapshot {
     readonly mass: MassAccountingBreakdown;
     readonly iterations: number;
     readonly pendingCount: number;
+    readonly largestPendingMass: bigint;
+    readonly pendingEntries: readonly V7PendingFrontierEntry[];
     readonly programCount: number;
     readonly seededLevelCount: number;
+    readonly activeResidueCount: number;
+    readonly activeResidueMass: bigint;
     readonly fullyResolved: boolean;
 }
 
@@ -126,6 +141,7 @@ export class SearchRun {
         const current = { programId: 0, nodeId: 0 as V7ProgramNodeId, mass: 0n };
 
         while (this.frontier.size > 0 && this._iterations < maxIterations) {
+            if (request.signal?.aborted) throw new Error('Aborted');
             if (targetResolvedMass !== undefined && this.mass.getResolvedMass() >= targetResolvedMass) break;
             if (this.frontier.peekMass() < threshold) break;
             if (!this.frontier.pop(current)) break;
@@ -138,14 +154,32 @@ export class SearchRun {
         return this.snapshot();
     }
 
+    public async searchToCheckpointAsync(request: V7SearchCheckpointRequest = {}): Promise<V7SearchRunSnapshot> {
+        const maxIterations = request.maxIterations ?? ENGINE_LIMITS.MAX_ITERATIONS_UNBOUNDED;
+        const yieldEveryIterations = Math.max(1, request.yieldEveryIterations ?? 2048);
+
+        while (true) {
+            if (request.signal?.aborted) throw new Error('Aborted');
+            const nextLimit = Math.min(maxIterations, this._iterations + yieldEveryIterations);
+            const snapshot = this.searchToCheckpoint({ ...request, maxIterations: nextLimit });
+            if (snapshot.iterations < nextLimit || snapshot.iterations >= maxIterations) return snapshot;
+            await AsyncUtils.yield();
+        }
+    }
+
     public snapshot(): V7SearchRunSnapshot {
+        const residue = this.getActiveResidueStats();
         return Object.freeze({
             results: new Map(this.results),
             mass: this.mass.toPublic(),
             iterations: this._iterations,
             pendingCount: this.frontier.size,
+            largestPendingMass: this.frontier.peekMass(),
+            pendingEntries: Object.freeze(this.getPendingEntries()),
             programCount: this.programs.length,
             seededLevelCount: this._seededLevelCount,
+            activeResidueCount: residue.count,
+            activeResidueMass: residue.mass,
             fullyResolved: this.frontier.size === 0
         });
     }
@@ -259,6 +293,35 @@ export class SearchRun {
         for (const share of shares) {
             this.pushPending(programId, share.childId, share.mass);
         }
+    }
+
+    private getPendingEntries(): V7PendingFrontierEntry[] {
+        const entries: V7PendingFrontierEntry[] = [];
+        this.frontier.forEach((programId, nodeId, mass) => {
+            const program = this.getProgramById(programId).program;
+            entries.push(Object.freeze({
+                programId,
+                nodeId,
+                mass,
+                combo: program.getNodeCombo(nodeId),
+                count: program.getNodeCount(nodeId)
+            }));
+        });
+        return entries;
+    }
+
+    private getActiveResidueStats(): { count: number; mass: bigint } {
+        let count = 0;
+        let mass = 0n;
+        for (const storage of this.forwardingResidues) {
+            if (!storage) continue;
+            for (const residue of storage) {
+                if (residue === 0n) continue;
+                count++;
+                mass += residue;
+            }
+        }
+        return { count, mass };
     }
 
     private recordResidueDelta(oldResidue: bigint, newResidue: bigint): void {
@@ -423,6 +486,14 @@ class V7RunFrontier {
 
     public peekMass(): bigint {
         return this.heapNodeIds.length === 0 ? 0n : this.massAt(0);
+    }
+
+    public forEach(callback: (programId: number, nodeId: V7ProgramNodeId, mass: bigint) => void): void {
+        for (let i = 0; i < this.heapNodeIds.length; i++) {
+            const programId = this.heapProgramIds[i]!;
+            const nodeId = this.heapNodeIds[i]! as V7ProgramNodeId;
+            callback(programId, nodeId, this.getNodeMass(programId, nodeId as number));
+        }
     }
 
     public pop(out: FrontierPopTarget): boolean {

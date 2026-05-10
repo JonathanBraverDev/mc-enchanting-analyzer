@@ -76,13 +76,17 @@ Current branch state after the first stack-adapter checkpoint and V7-first direc
   - Top and chart workers route both unclued and clue-conditioned requests through V7.
   - V7-specific refinement thresholds so product depth settings reflect global weighted frontier semantics instead of V6 local per-modified-level semantics.
   - Node-local V7 edge-split residue forwarding inside `SearchRun`, matching V6's cautious recovery model: fixed-point split residue stays in `rounding` until later mass reaches the same `(program, node)` expansion and can recover it.
+  - Pending V7 frontier projection through the compatibility adapter: snapshots now expose exact pending `(program, node)` entries with mass/combo/count for existing summary, target, clue, and chart projections.
+  - Async chunked V7 adapter search so worker abort signals can be observed during long checkpoints.
+  - Initial V7-native instrumentation under `EngineInstrumentation.v7` for program count, seeded levels, pending entries, largest pending mass, active residue count/mass, and improvability.
 - Direction change:
   - V7 is now the upgrade path and source of truth.
   - Treat V6 internals, telemetry shape, snapshots, and worker granularity as obsolete until re-evaluated.
   - Do not force native V7 results or telemetry into V6 output shapes unless a temporary bridge still requires it.
 - Not implemented yet:
   - True shared batch/chart-cell execution; chart worker currently uses the V7 single-cell adapter per XP cell.
-  - Native V7 projection contracts beyond the compatibility adapter.
+  - Fully native V7 projection contracts beyond the compatibility adapter.
+  - Cross-request V7 search-state/program caching and resume beyond sequential checkpoints.
   - Full V7 replacement tests.
 
 ## Validation Findings
@@ -341,7 +345,7 @@ UI input
 
 Top selected level is a one-cell batch. Chart sweep is a multi-cell batch. Refinement advances the same compatible run through stricter checkpoints instead of restarting unrelated searches.
 
-Current bridge state: workers still speak the existing protocol, but choose `engine: 'v7'` for both unclued and clue-conditioned top/chart searches. The compatibility adapter keeps `SummaryService`, `SnapshotService`, and existing UI contracts stable only as a migration scaffold. New V7 work should prefer native `SearchRun` / `V7SearchRunSnapshot` semantics and add projection contracts from there rather than conforming telemetry to V6.
+Current bridge state: workers still speak the existing protocol, but choose `engine: 'v7'` for both unclued and clue-conditioned top/chart searches. The compatibility adapter keeps `SummaryService`, `SnapshotService`, and existing UI contracts stable as migration scaffolding. It now projects V7 pending frontier entries back into the existing frontier scanner shape so pending mass remains visible to summaries, target analysis, clue conditioning, and chart cells. New V7 work should prefer native `SearchRun` / `V7SearchRunSnapshot` semantics and add projection contracts from there rather than conforming telemetry to V6.
 
 ## Remainder and Equivalence Rules
 
