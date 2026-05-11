@@ -6,7 +6,7 @@ import { MassAccountingBreakdown } from '#types/mass.js';
 import { PackedCombo } from '#types/index.js';
 import { AsyncUtils, ComboUtils, PRECISION, ProbUtils } from '#utils/index.js';
 import { RegistryKernel, SearchPool, SearchPoolSignature } from '#lib/search/registry/RegistryKernel.js';
-import { SearchGraph, SearchGraphExpansion, SearchGraphNodeId } from '#lib/search/SearchGraph.js';
+import { SearchGraph, SearchGraphDiagnostics, SearchGraphExpansion, SearchGraphNodeId } from '#lib/search/SearchGraph.js';
 
 /** Minimal cache surface a SearchRun needs for structural graph reuse. */
 export interface SearchGraphCache {
@@ -53,6 +53,8 @@ export interface SearchRunSnapshot {
     readonly results: ReadonlyMap<PackedCombo, bigint>;
     readonly mass: MassAccountingBreakdown;
     readonly iterations: number;
+    /** Mass of the most recently expanded frontier node. Useful for checkpoint overshoot diagnostics. */
+    readonly lastExpandedMass: bigint;
     readonly pendingCount: number;
     readonly largestPendingMass: bigint;
     readonly pendingEntries: readonly PendingFrontierEntry[];
@@ -61,6 +63,10 @@ export interface SearchRunSnapshot {
     readonly activeResidueCount: number;
     readonly activeResidueMass: bigint;
     readonly fullyResolved: boolean;
+}
+
+export interface SearchRunGraphDiagnostics extends SearchGraphDiagnostics {
+    readonly graphId: number;
 }
 
 interface GraphRecord {
@@ -112,6 +118,7 @@ export class SearchRun {
     private seeded = false;
     private _seededLevelCount = 0;
     private _iterations = 0;
+    private _lastExpandedMass = 0n;
 
     public constructor(
         private readonly kernel: RegistryKernel,
@@ -219,6 +226,7 @@ export class SearchRun {
             if (!this.frontier.pop(current)) return true;
 
             this.mass.subtract('pending', current.mass);
+            this._lastExpandedMass = current.mass;
             this.expand(current.graphId, current.nodeId, current.mass, criteria.probabilityFloor);
             this._iterations++;
             advancedInChunk++;
@@ -232,6 +240,7 @@ export class SearchRun {
             results: new Map(this.results),
             mass: this.mass.toPublic(),
             iterations: this._iterations,
+            lastExpandedMass: this._lastExpandedMass,
             pendingCount: this.frontier.size,
             largestPendingMass: this.frontier.peekMass(),
             pendingEntries: Object.freeze(this.getPendingEntries()),
@@ -241,6 +250,14 @@ export class SearchRun {
             activeResidueMass: residue.mass,
             fullyResolved: this.frontier.size === 0
         });
+    }
+
+    /** Returns structural graph diagnostics for scripts and performance investigations. */
+    public getGraphDiagnostics(includeNodes = false): readonly SearchRunGraphDiagnostics[] {
+        return Object.freeze(this.graphs.map(record => Object.freeze({
+            graphId: record.id,
+            ...record.graph.getDiagnostics(includeNodes)
+        })));
     }
 
     private expand(graphId: number, nodeId: SearchGraphNodeId, incomingMass: bigint, probabilityFloor: bigint): void {

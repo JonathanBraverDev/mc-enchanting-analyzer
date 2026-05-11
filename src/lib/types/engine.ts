@@ -125,6 +125,8 @@ export interface SearchInstrumentation {
   pendingEntryCount: number;
   /** Largest pending frontier mass as a normalized probability. */
   largestPendingMass: number;
+  /** Most recent expanded frontier-node mass as a normalized probability. */
+  lastExpandedMass: number;
   /** Active node-local split-residue buckets with non-zero mass. */
   activeResidueCount: number;
   /** Total active node-local split residue as a normalized probability. */
@@ -228,6 +230,8 @@ export interface SearchConfig {
     /** The observed enchantment clue (e.g. "Sharpness IV"). Trigger Bayesian conditioning if set. */
     clue?: string | null | undefined;
     threshold?: number | bigint | undefined;
+    /** Optional direct checkpoint target: stop once non-pending mass reaches this value. */
+    targetClassifiedMass?: number | bigint | undefined;
     signal?: AbortSignal | undefined;
     onProgress?: ((update: ProgressUpdate) => void) | undefined;
     maxIterations?: number | undefined;

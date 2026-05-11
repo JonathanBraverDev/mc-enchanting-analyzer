@@ -18,6 +18,7 @@ export function makeSearchSnapshot(options: {
         results,
         mass,
         iterations: options.iterations ?? 0,
+        lastExpandedMass: 0n,
         pendingCount: pendingEntries.length,
         largestPendingMass: pendingEntries.reduce((max, entry) => entry.mass > max ? entry.mass : max, 0n),
         pendingEntries: Object.freeze([...pendingEntries]),

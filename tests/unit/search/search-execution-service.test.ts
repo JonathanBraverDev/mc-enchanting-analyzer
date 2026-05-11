@@ -122,6 +122,35 @@ describe('Search execution service', () => {
         assert.strictEqual(snapshots[1]!.instrumentation?.exitReason, 'mass');
     });
 
+    it('supports direct classified-mass targets and reports the last expanded node mass', async () => {
+        const engine = EngineFactory.createForVersion('1.21.11');
+        engine.resetCaches();
+
+        const result = await engine.searchToCheckpoint({
+            item: 'book',
+            material: 'book',
+            xp: 30,
+            threshold: 0,
+            maxIterations: 100_000,
+            targetClassifiedMass: 0.25,
+            instrumentation: {
+                poolCache: { hits: 0, misses: 0 },
+                distCache: { hits: 0, misses: 0 },
+                totalIterations: 0,
+                totalPrunedNodes: 0,
+                roundingErrorEvents: 0,
+                levelsProcessed: 0,
+                levelsFullyResolved: 0,
+                fullyResolved: false
+            }
+        });
+
+        assert.ok((1 - result.snapshot.mass.pending) >= 0.25);
+        assert.strictEqual(result.instrumentation?.exitReason, 'mass');
+        assert.ok(result.snapshot.lastExpandedMass > 0n);
+        assert.ok((result.instrumentation?.search?.lastExpandedMass ?? 0) > 0);
+    });
+
     it('streams sequential checkpoints with monotonic resolved mass', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
         engine.resetCaches();
