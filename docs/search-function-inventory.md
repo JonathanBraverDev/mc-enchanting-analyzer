@@ -400,6 +400,7 @@ Top `Search/search` identifiers in source:
 | `SearchRunSnapshot` | 12 | Precise snapshot of a run | Keep. |
 | `ClueSearchPolicy` | 12 | Search-specific pruning policy | Keep. |
 | `getSearchCheckpointForRefinement` | 11 | Boundary helper | Accept, though `getCheckpointForRefinement` may be enough later. |
+| `getDefaultStatsCheckpoint` | 2 | Boundary helper | Keep as the single default stats checkpoint used by `getStats(...)` and simple-result tests. |
 | `SearchPoolSignature` | 11 | Precise structural identity for graph reuse | Keep for now. |
 | `SearchGraphExpansion` | 10 | Precise graph expansion type | Keep. |
 | `SearchStateCache` | 7 | Slightly broad but accurate enough | Keep. |

@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { EngineFactory } from '#engine/index.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
-import { getSearchCheckpointForRefinement } from '#core/config.js';
+import { getDefaultStatsCheckpoint, getSearchCheckpointForRefinement } from '#core/config.js';
 import { CalculationStats, SearchResult } from '#types/index.js';
 
 function accountingTotal(stats: CalculationStats): number {
@@ -53,6 +53,32 @@ describe('Search execution service', () => {
         assert.ok(stats.accounting.resolved > 0);
         assert.ok(Object.keys(stats.combos).length > 0);
         assert.ok(Math.abs(accountingTotal(stats) - 1) < 1e-12);
+    });
+
+    it('uses the default stats checkpoint for simple stats calls', async () => {
+        const engine = EngineFactory.createForVersion('1.21.11');
+        const checkpoint = getDefaultStatsCheckpoint(false);
+
+        const instrumentation = {
+            poolCache: { hits: 0, misses: 0 },
+            distCache: { hits: 0, misses: 0 },
+            totalIterations: 0,
+            totalPrunedNodes: 0,
+            roundingErrorEvents: 0,
+            levelsProcessed: 0,
+            levelsFullyResolved: 0,
+            fullyResolved: false
+        };
+        const stats = await engine.getStats({
+            item: 'sword',
+            material: 'diamond',
+            xp: 30,
+            summaryLimit: 10,
+            instrumentation
+        });
+
+        assert.strictEqual(stats.threshold, checkpoint.threshold);
+        assert.ok((stats.instrumentation?.totalIterations ?? 0) <= checkpoint.limit);
     });
 
     it('omits classified-mass targets from named refinement checkpoints by default', () => {

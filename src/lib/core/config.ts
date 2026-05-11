@@ -17,6 +17,8 @@ export interface RefinementSearchCheckpoint extends SearchCheckpoint {
     status: string;
 }
 
+export type StatsCheckpoint = SearchCheckpoint;
+
 export const UI_TEXTS = {
     PAGE_TITLE: "Minecraft Enchantment Analyzer",
     LOGO_TEXT: "Analyzer",
@@ -77,6 +79,8 @@ export const REFINEMENT_CHECKPOINTS: Record<RefinementLevelName, RefinementCheck
     }
 };
 
+export const DEFAULT_STATS_REFINEMENT_LEVEL: RefinementLevelName = 'standard';
+
 export const REFINEMENT_LEVEL_COLORS: Record<RefinementStatusLevel, { bg: string; text: string }> = {
     coarse:   { bg: 'rgba(255, 193, 7, 0.15)',   text: '#ffca28' },
     standard: { bg: 'rgba(76, 175, 80, 0.15)',   text: '#66bb6a' },
@@ -87,14 +91,25 @@ export const REFINEMENT_LEVEL_COLORS: Record<RefinementStatusLevel, { bg: string
 
 export function getSearchCheckpointForRefinement(level: RefinementLevelName, isBook: boolean): RefinementSearchCheckpoint {
     const mode = REFINEMENT_CHECKPOINTS[level];
-    const threshold = isBook ? mode.thresholdBook : mode.thresholdOther;
-    const targetClassifiedMass = isBook ? mode.targetClassifiedMassBook : mode.targetClassifiedMassOther;
+    const checkpoint = getCheckpointFromPreset(mode, isBook);
 
     return {
         refinementLevel: level,
-        threshold,
-        limit: isBook ? mode.limitBook : mode.limitOther,
-        ...(targetClassifiedMass === undefined ? {} : { targetClassifiedMass }),
+        ...checkpoint,
         status: mode.status
+    };
+}
+
+export function getDefaultStatsCheckpoint(isBook: boolean): StatsCheckpoint {
+    return getCheckpointFromPreset(REFINEMENT_CHECKPOINTS[DEFAULT_STATS_REFINEMENT_LEVEL], isBook);
+}
+
+function getCheckpointFromPreset(mode: RefinementCheckpointPreset, isBook: boolean): StatsCheckpoint {
+    const targetClassifiedMass = isBook ? mode.targetClassifiedMassBook : mode.targetClassifiedMassOther;
+
+    return {
+        threshold: isBook ? mode.thresholdBook : mode.thresholdOther,
+        limit: isBook ? mode.limitBook : mode.limitOther,
+        ...(targetClassifiedMass === undefined ? {} : { targetClassifiedMass })
     };
 }

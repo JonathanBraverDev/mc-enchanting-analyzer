@@ -8,6 +8,7 @@ import { SearchExecutionService } from '#lib/search/SearchExecutionService.js';
 import { ClueValidator } from '#core/clue.js';
 import { SummaryService } from '#services/SummaryService.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
+import { getDefaultStatsCheckpoint } from '#core/config.js';
 export { EngineFactory } from './factory.js';
 
 /**
@@ -76,7 +77,12 @@ export class EnchantEngine {
      * This is the simple public result API: no separate stats cache, no alternate search path.
      */
     public async getStats(request: CheckpointSearchRequest): Promise<CalculationStats> {
-        const searchRequest = this.prepareSearchRequest(request);
+        const checkpoint = getDefaultStatsCheckpoint(request.item === 'book');
+        const searchRequest = this.prepareSearchRequest({
+            ...request,
+            threshold: request.threshold ?? checkpoint.threshold,
+            maxIterations: request.maxIterations ?? checkpoint.limit
+        });
         const result = await this.searchService.searchToCheckpoint(searchRequest);
         const { targetClueId } = searchRequest;
         const postProcessingStart = request.timing ? performance.now() : 0;

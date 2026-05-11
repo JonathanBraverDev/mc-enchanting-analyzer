@@ -595,7 +595,7 @@
   },
   {
     "path": "src/lib/engine/index.ts",
-    "line": 78,
+    "line": 79,
     "symbol": "EnchantEngine.getStats",
     "kind": "class method"
   },

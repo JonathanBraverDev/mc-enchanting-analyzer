@@ -833,12 +833,12 @@ For each function:
   - **return/side effects:** returns one checkpoint/final raw search result
   - **body-derived behavior summary:** validates and prepares the public request, attaches the active registry and optional packed clue id, then advances one checkpoint request through the search service.
 
-- **path:line** `src/lib/engine/index.ts:78`
+- **path:line** `src/lib/engine/index.ts:79`
   - **current symbol:** `EnchantEngine.getStats`
-  - **inputs/parameters used:** `request`, including item/material/xp search config, optional clue, optional summaryLimit, instrumentation, and timing
-  - **state read/written:** calls `prepareSearchRequest`; reads `registry.indexToEnchant`; calls `searchService.searchToCheckpoint(...)`; calls `SummaryService.summarize(...)` or `SummaryService.summarizeConditioned(...)`; may update `request.timing.postProcessingMs` and `request.timing.totalMs`
+  - **inputs/parameters used:** `request`, including item/material/xp search config, optional clue, optional threshold/maxIterations, optional summaryLimit, instrumentation, and timing
+  - **state read/written:** calls `getDefaultStatsCheckpoint`; calls `prepareSearchRequest`; reads `registry.indexToEnchant`; calls `searchService.searchToCheckpoint(...)`; calls `SummaryService.summarize(...)` or `SummaryService.summarizeConditioned(...)`; may update `request.timing.postProcessingMs` and `request.timing.totalMs`
   - **return/side effects:** returns summarized `CalculationStats` with search instrumentation and timing attached
-  - **body-derived behavior summary:** provides the simple public stats API by using the same checkpoint search path as raw search callers, then converts the raw `SearchResult` into presented stats without a separate stats cache or alternate search route.
+  - **body-derived behavior summary:** provides the simple public stats API by filling missing threshold/iteration settings from the shared default stats checkpoint, using the same checkpoint search path as raw search callers, then converting the raw `SearchResult` into presented stats without a separate stats cache or alternate search route.
 
 - **path:line** `src/lib/engine/index.ts:107`
   - **current symbol:** `EnchantEngine.prepareSearchRequest`
