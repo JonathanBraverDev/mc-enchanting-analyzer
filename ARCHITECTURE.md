@@ -1,4 +1,4 @@
-# Architecture Map - Minecraft Enchantment Analyzer (V6)
+# Architecture Map - Minecraft Enchantment Analyzer (V7)
 
 ## Entry Points
 
@@ -31,11 +31,11 @@ scripts/           Build, profiling, reporting, and snapshot tools
 
 Dependency direction is intentionally one way: data and types sit at the bottom, engine code owns search behavior, services translate engine output into UI/reporting shapes, workers isolate long-running calculations, and the UI consumes worker responses.
 
-The bundled enchantment registry models the active enchanting-table space. Treasure-only or otherwise table-impossible enchantments are intentionally excluded from `global_enchantments` instead of being carried through the registry behind per-item filters. V6 constructs runtime engines from resolved `RegistryState` objects; normal vanilla callers build those states by version, while vanilla-plus-mutation registries are an explicit advanced path.
+The bundled enchantment registry models the active enchanting-table space. Treasure-only or otherwise table-impossible enchantments are intentionally excluded from `global_enchantments` instead of being carried through the registry behind per-item filters. V7 constructs runtime engines from resolved `RegistryState` objects; normal vanilla callers build those states by version, while vanilla-plus-mutation registries are an explicit advanced path.
 
 ## Checkpoint Search Flow
 
-V5 centers the engine around checkpoint-capable searches. A normal calculation searches to one target checkpoint and summarizes the final result. UI refinement can instead search a sequence of checkpoints and stream a completed result each time a checkpoint is crossed.
+V7 centers the engine around checkpoint-capable shared searches. A normal stats call searches to the default stats checkpoint and summarizes the final result. UI refinement can instead search a sequence of checkpoints and stream a completed result each time a checkpoint is crossed. Search scheduling is global: modified-level mass is seeded into one weighted frontier, so the highest-probability pending state is expanded next regardless of which modified level produced it.
 
 ```text
 UI input
@@ -43,11 +43,11 @@ UI input
   -> top-worker or chart-worker
   -> WorkerShell.dispatchEvent
   -> EnchantEngine.searchSequentialCheckpoints or searchToCheckpoint
-  -> SearchService.searchModifiedLevel for each modified level
-  -> SearchController best-first expansion
-  -> NodeIdSearchFrontier + SearchNodeGraph + MassForwardingEngine
-  -> SearchStateTracker and ProbabilityMassAccountant
-  -> SearchResult at each checkpoint
+  -> SearchExecutionService
+  -> SearchRun seeded with weighted modified-level root mass
+  -> SearchRunFrontier + SearchGraph best-first expansion
+  -> ProbabilityMassAccountant
+  -> SearchRunSnapshot / SearchResult at each checkpoint
   -> SummaryAggregationService
   -> SnapshotService / SummaryService
   -> worker response back to UI
@@ -64,7 +64,7 @@ UI input
 | `getModifiedLevelDist(xp, enchantability, instrumentation?)` | Returns the BigInt distribution over modified levels |
 | `getAvailablePool(item, level, bitset?)` | Returns packed eligible enchant/rank IDs for an item and level |
 
-The public calls use request objects so callers can pass optional search, instrumentation, timing, clue, and abort options without positional argument drift. Use `getStats(...)` when a caller wants usable presented probabilities; use checkpoint calls when a caller needs raw search state or streaming checkpoint control. `getStats(...)` fills missing threshold/iteration settings from the default stats checkpoint (`DEFAULT_STATS_REFINEMENT_LEVEL`, currently `standard`) so simple callers and tests share one reliable baseline. V6 uses `item` and `material` consistently across engine calls, workers, UI code, tests, and scripts.
+The public calls use request objects so callers can pass optional search, instrumentation, timing, clue, and abort options without positional argument drift. Use `getStats(...)` when a caller wants usable presented probabilities; use checkpoint calls when a caller needs raw search state or streaming checkpoint control. `getStats(...)` fills missing threshold/iteration settings from the default stats checkpoint (`DEFAULT_STATS_REFINEMENT_LEVEL`, currently `standard`) so simple callers and tests share one reliable baseline. V7 uses `item` and `material` consistently across engine calls, workers, UI code, tests, and scripts.
 
 ## Registry Construction
 
@@ -77,7 +77,7 @@ The public calls use request objects so callers can pass optional search, instru
 
 Runtime registry state contains projected lookup data such as active item pools, item/material compatibility, enchantability tables, conflict bitsets, material values, and rank maps. Raw registry data remains in the data/factory layer rather than being carried on each engine registry object.
 
-V6 intentionally keeps custom registry support narrow: the supported extension point is vanilla plus explicit mutations. Full custom data-pack construction is not part of the public runtime surface.
+V7 intentionally keeps custom registry support narrow: the supported extension point is vanilla plus explicit mutations. Full custom data-pack construction is not part of the public runtime surface.
 
 ## Registry Rule Model
 
@@ -97,14 +97,10 @@ Missing `groups` on an enchantable item rule means “all active table enchantme
 | Component | Role |
 |---|---|
 | `EnchantEngine` | Validates requests, owns registry access, cache lookups, and public orchestration |
-| `SearchService` | Coordinates modified-level search, checkpoint aggregation, instrumentation, and cache reuse |
-| `SearchController` | Runs the best-first expansion loop until threshold, iteration, abort, or exhaustion |
-| `NodeIdSearchFrontier` | Stores pending node IDs and probability mass in best-first order |
-| `SearchNodeGraph` | Owns canonical node identity, optional split-mask node state, combo payloads, expansion blueprints, and forwarding residue |
-| `MassForwardingEngine` | Forwards mass through cached graph nodes and routes unresolved child mass back to the frontier |
-| `SearchProcessor` | Builds Minecraft-specific expansion blueprints, performs eligibility/conflict checks, and settles generated mass |
-| `SearchPoolPlan` | Precomputes fixed per-level pool metadata, identity mode, weights, masks, conflicts, and initial child payloads |
-| `SearchStateTracker` | Holds bucketed mass accounting for one modified level |
+| `SearchExecutionService` | Coordinates shared search runs, checkpoint aggregation, instrumentation, and cache reuse |
+| `SearchRun` | Runs the globally weighted best-first expansion loop until threshold, iteration, abort, or exhaustion |
+| `SearchRunFrontier` | Stores pending graph node IDs and weighted probability mass in best-first order |
+| `SearchGraph` | Owns canonical node identity, optional split-mask node state, combo payloads, expansion blueprints, and forwarding residue |
 | `ProbabilityMassAccountant` | Records resolved, clue-incompatible, pending, sieved, capped, overflow, and rounding mass |
 | `ModifiedLevelDistributionService` | Computes the BigInt distribution of modified enchantment levels |
 | `SummaryAggregationService` | Scans resolved combos and pending frontiers once to derive shared any/rank/count/clue mass buckets |
@@ -118,21 +114,19 @@ Missing `groups` on an enchantable item rule means “all active table enchantme
 
 ```ts
 interface SearchResult {
-  combos: Map<PackedCombo, bigint>;
-  tracker: SearchStateTracker;
-  frontiers?: { frontier: NodeIdSearchFrontier; graph: SearchNodeGraph; scale: bigint }[];
+  snapshot: SearchRunSnapshot;
+  combos: ReadonlyMap<PackedCombo, bigint>;
   instrumentation?: EngineInstrumentation;
   timing?: SearchTiming;
   threshold: number;
 }
 ```
 
-For each modified level, `SearchService` searches or resumes a `SearchState`, scales it by the modified-level probability, and records it into one checkpoint accumulator. `SearchState` stores the current node-ID frontier, the graph that resolves those IDs back to canonical combo nodes, exact combo results, and the mass tracker. The accumulator owns:
+`SearchExecutionService` searches or resumes a cached `SearchRun` for the request signature. The run seeds each modified level as weighted root mass, expands the highest-probability pending graph node globally, and snapshots the completed checkpoint state. The checkpoint result owns:
 
 - global combo mass
-- aggregated mass tracker
-- frontier references for snapshot reporting
-- processed modified-level probability
+- mass accounting buckets
+- a `SearchRunSnapshot` with pending entries for reporting and projections
 - timing and instrumentation snapshots
 
 If a sequential checkpoint run is aborted before any modified level is processed for the active checkpoint, the service returns the last completed checkpoint instead of replacing it with an empty result.
@@ -145,21 +139,20 @@ When a request includes a displayed clue, `EnchantEngine` validates the clue lab
 
 Target combo filtering is a reporting projection, not a search mode. The UI sends minimum-rank requirements such as `Efficiency IV+` and `Fortune III+`; `TargetAnalysisService` validates that the requirements can coexist, scans the checkpoint result before display limits are applied, and returns matching mass, top matching combos, and near-miss diagnostics. For unconditioned top results with active targets, `TargetClueAdvisorService` ranks possible shown table clues by `P(targets | shown clue)` and reports both the conditioned target chance and how often each clue appears. Top-result target changes can reuse cached checkpoint `SearchResult` objects in the top worker, so changing targets does not rerun the engine when the base item, level, clue, and refinement inputs are unchanged.
 
-## Node-ID Frontier Model
+## Shared Frontier Model
 
-The V5 search path separates node identity from frontier priority:
+The V7 search path separates graph node identity from weighted frontier priority:
 
-- `SearchNodeGraph` assigns each canonical `(enchant bitset << 8 | current level)` state a dense `nodeId`.
-- `SearchPoolPlan` selects the internal identity mode from the registry max enchant ID: `number53` for IDs `0..44`, `bigint64` for IDs `45..63`, and a clear unsupported-registry error above that range.
-- In `number53` mode, graph identity is stored as a safe packed number key plus split masks: `maskLo`, `maskHi`, and `level`.
-- In `bigint64` mode, graph identity stays on canonical BigInt meta keys while preserving the same node-ID frontier and result shape.
-- `SearchPoolPlan` precomputes matching low/high ID masks and conflict masks for each eligible enchant, so `number53` expansion can use numeric selected/conflict checks instead of rebuilding BigInt state.
-- The graph stores the node payload once: split masks, level, packed combo, enchant count, optional `ExpansionBlueprint`, and forwarding residue.
-- `NodeIdSearchFrontier` stores only `nodeId` and pending probability mass, using direct typed-array indexes for merge and heap-position lookups.
+- `SearchGraph` assigns each canonical `(enchant bitset << 8 | current level)` state a dense `nodeId`.
+- `RegistryKernel` groups modified levels by `SearchPoolSignature`, so levels with the same eligible enchant pool reuse the same structural graph.
+- `SearchGraph` stores canonical selected-enchant masks and packed combos on dense node IDs.
+- `SearchPoolEntry` precomputes rank, weight, availability, and conflict metadata for each eligible enchant, so expansion can reuse the same pool structure across levels that share a signature.
+- The graph stores the node payload once: split masks, level, packed combo, enchant count, optional expansion blueprint, and forwarding residue.
+- `SearchRunFrontier` stores only `nodeId` and pending weighted probability mass, using direct indexes for merge and heap-position lookups.
 - Expansion blueprints point to child node IDs, so cached-child checks are array lookups instead of BigInt heap/hash work.
 - `getMeta(nodeId)` remains available for compatibility and reporting; numeric nodes reconstruct the BigInt meta lazily only when a caller asks for it.
 
-This preserves the old best-first semantics: the highest-probability pending node still expands first, and `meta` remains the canonical state identity. The scaling improvement comes from removing repeated `BigInt meta + packed combo` traffic from frontier push/pop/merge operations.
+This preserves best-first semantics while changing the scheduling scope: the highest-probability pending weighted node expands first across the whole XP search, not inside one modified level at a time. `meta` remains the canonical state identity. The scaling improvement comes from sharing graph identity and cache state across the weighted run instead of repeating independent per-modified-level searches.
 
 ## Worker Model
 
@@ -180,9 +173,9 @@ The browser uses two dedicated workers:
 |---|---|
 | distribution cache | Modified-level distributions by version/xp/enchantability |
 | pool cache | Eligible enchant pools by version/item/level; material is intentionally absent because it affects modified-level distribution, not per-level eligibility |
-| frontier cache | Reusable modified-level search states keyed by version/item/material/modified level |
+| search run cache | Reusable shared search runs keyed by version/item/material/xp/clue/request signature |
 
-The registry rule model declares item/material compatibility together, but the engine cache keys still follow the computation they cache. Pool entries only depend on the fixed enchantable item pool at a modified level. Frontier entries include material because material changes enchantability, which changes the modified-level distribution and therefore the weighted search state. Threshold-aware reads can reuse more precise cached state when it already satisfies the requested checkpoint.
+The registry rule model declares item/material compatibility together, but the engine cache keys still follow the computation they cache. Pool entries only depend on the fixed enchantable item pool at a modified level. Search run entries include material because material changes enchantability, which changes the modified-level distribution and therefore the weighted search state. Threshold-aware reads can reuse more precise cached state when it already satisfies the requested checkpoint.
 
 ## Release Documentation Rule
 

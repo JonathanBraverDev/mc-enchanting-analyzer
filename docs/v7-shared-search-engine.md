@@ -478,7 +478,7 @@ Commit after each stable slice:
 
 ## References / Related Docs
 
-- `ARCHITECTURE.md` — V6 architecture map.
+- `ARCHITECTURE.md` — V7 architecture map.
 - `MASS_HANDLING.md` — current honest mass accounting design.
 - Existing snapshot fixtures under `tests/snapshots/`.
 
