@@ -9,7 +9,7 @@ import {
     compareConditionedMaps,
     summarizeCheckpoint
 } from '#tests/infra/clue-test-utils.js';
-import type { CalculationStats } from '#types/index.js';
+import type { EnchantStats } from '#types/index.js';
 
 describe('Clue-aware search optimization', () => {
     const assertMatchesFullSearchConditioning = async (item: string, material: string, clue: string, threshold = 0.005) => {
@@ -83,7 +83,7 @@ describe('Clue-aware search optimization', () => {
         const engine = EngineFactory.createForVersion('1.21.11');
         engine.resetCaches();
         const targetClueId = ClueValidator.validate(engine.registry, item, clue);
-        const streamed: CalculationStats[] = [];
+        const streamed: EnchantStats[] = [];
         const clueIncompatibleMass: number[] = [];
 
         await engine.searchSequentialCheckpoints({

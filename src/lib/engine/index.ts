@@ -1,4 +1,4 @@
-import { BuiltRegistryState, CalculationStats, CheckpointSearchRequest, EngineInstrumentation, SearchResult, SequentialCheckpointSearchRequest } from '#types/index.js';
+import { BuiltRegistryState, EnchantStats, CheckpointSearchRequest, EngineInstrumentation, SearchResult, SequentialCheckpointSearchRequest } from '#types/index.js';
 import { isItemAvailable, isMaterialEligible, getAvailablePool as getRegistryAvailablePool } from '#core/registry.js';
 import { ProbUtils } from '#utils/index.js';
 import { MINECRAFT_RULES } from '#constants/minecraft.js';
@@ -76,7 +76,7 @@ export class EnchantEngine {
      * Runs the standard checkpoint search and returns summarized stats for product/tool callers.
      * This is the simple public result API: no separate stats cache, no alternate search path.
      */
-    public async getStats(request: CheckpointSearchRequest): Promise<CalculationStats> {
+    public async getStats(request: CheckpointSearchRequest): Promise<EnchantStats> {
         const checkpoint = getDefaultStatsCheckpoint(request.item === 'book');
         const searchRequest = this.prepareSearchRequest({
             ...request,

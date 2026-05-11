@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { HumanizationService } from '#services/index.js';
 import { EnchantEngine } from '#engine/index.js';
-import type { CalculationStats, CheckpointSearchRequest } from '#types/index.js';
+import type { EnchantStats, CheckpointSearchRequest } from '#types/index.js';
 
 /**
  * Utility for snapshot-based regression testing of engine results.
@@ -305,7 +305,7 @@ export const EngineTestUtils = {
     /**
      * Compatibility wrapper for older tests; product/tooling code should call engine.getStats directly.
      */
-    async getStats(engine: EnchantEngine, request: CheckpointSearchRequest): Promise<CalculationStats> {
+    async getStats(engine: EnchantEngine, request: CheckpointSearchRequest): Promise<EnchantStats> {
         return engine.getStats(request);
     },
 

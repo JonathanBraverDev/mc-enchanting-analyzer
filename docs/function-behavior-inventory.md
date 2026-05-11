@@ -837,7 +837,7 @@ For each function:
   - **current symbol:** `EnchantEngine.getStats`
   - **inputs/parameters used:** `request`, including item/material/xp search config, optional clue, optional threshold/maxIterations, optional summaryLimit, instrumentation, and timing
   - **state read/written:** calls `getDefaultStatsCheckpoint`; calls `prepareSearchRequest`; reads `registry.indexToEnchant`; calls `searchService.searchToCheckpoint(...)`; calls `SummaryService.summarize(...)` or `SummaryService.summarizeConditioned(...)`; may update `request.timing.postProcessingMs` and `request.timing.totalMs`
-  - **return/side effects:** returns summarized `CalculationStats` with search instrumentation and timing attached
+  - **return/side effects:** returns summarized `EnchantStats` with search instrumentation and timing attached
   - **body-derived behavior summary:** provides the simple public stats API by filling missing threshold/iteration settings from the shared default stats checkpoint, using the same checkpoint search path as raw search callers, then converting the raw `SearchResult` into presented stats without a separate stats cache or alternate search route.
 
 - **path:line** `src/lib/engine/index.ts:107`

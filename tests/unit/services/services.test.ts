@@ -19,7 +19,7 @@ import { EngineFactory } from '#engine/factory.js';
 import { ComboUtils } from '#utils/domain/ComboUtils.js';
 import { ProbUtils } from '#utils/index.js';
 import { makePendingEntry, makeSearchSnapshot } from '#tests/infra/search-snapshot-test-utils.js';
-import type { CalculationStats, MassAccountingBreakdown, PackedCombo, PackedEnchant, TopComboView } from '#types/index.js';
+import type { EnchantStats, MassAccountingBreakdown, PackedCombo, PackedEnchant, TopComboView } from '#types/index.js';
 
 describe('UiMetadataService', () => {
     it('includes version boundaries used by registry data', () => {
@@ -303,7 +303,7 @@ describe('SummaryService', () => {
 // ── SerializationService ───────────────────────────────────────────────────
 
 describe('SerializationService', () => {
-    const makeStats = (overrides: Partial<CalculationStats> = {}): CalculationStats => {
+    const makeStats = (overrides: Partial<EnchantStats> = {}): EnchantStats => {
         const accuracy = overrides.accuracy ?? 1.0;
         const accounting = overrides.accounting ?? {
             resolved: accuracy, clueIncompatible: 0, pending: 0, sieved: 0,
@@ -370,7 +370,7 @@ describe('HumanizationService', () => {
     it('resolves enchantment names in the any map', () => {
         const effId = reg.idMap.get('Efficiency')!;
         const acc: MassAccountingBreakdown = { resolved: 0.85, clueIncompatible: 0, pending: 0.15, sieved: 0, overflow: 0, capped: 0, rounding: 0, recoveredRounding: 0, recoveredSieved: 0 };
-        const rawStats: CalculationStats = {
+        const rawStats: EnchantStats = {
             ranks: {}, any: { [effId]: 0.85 }, count: {}, combos: {}, shownClueDistribution: {},
             accuracy: 0.85, accounting: acc, threshold: 0.85
         };

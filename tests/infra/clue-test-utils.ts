@@ -3,7 +3,7 @@ import { ClueValidator } from '#core/clue.js';
 import { EngineFactory } from '#engine/factory.js';
 import { SummaryService } from '#services/SummaryService.js';
 import { TEST_DATA } from '#tests/infra/test-data.js';
-import type { CalculationStats } from '#types/index.js';
+import type { EnchantStats } from '#types/index.js';
 
 type TestEngine = ReturnType<typeof EngineFactory.createForVersion>;
 type CheckpointResult = Awaited<ReturnType<TestEngine['searchToCheckpoint']>>;
@@ -30,7 +30,7 @@ export async function calculateByFullSearchThenCondition(
     clue: string,
     threshold: number,
     xp = 30
-): Promise<CalculationStats> {
+): Promise<EnchantStats> {
     const engine = EngineFactory.createForVersion('1.21.11');
     engine.resetCaches();
     const targetClueId = ClueValidator.validate(engine.registry, item, clue);
@@ -57,7 +57,7 @@ export async function calculateWithPruning(
     material: string,
     clue: string,
     threshold: number
-): Promise<CalculationStats> {
+): Promise<EnchantStats> {
     const engine = EngineFactory.createForVersion('1.21.11');
     engine.resetCaches();
     return engine.getStats({
@@ -76,7 +76,7 @@ export function summarizeCheckpoint(
     result: CheckpointResult,
     item: string,
     clue: string
-): CalculationStats {
+): EnchantStats {
     const targetClueId = ClueValidator.validate(engine.registry, item, clue);
 
     return SummaryService.summarizeConditioned({

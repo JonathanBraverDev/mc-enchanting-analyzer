@@ -57,7 +57,7 @@ UI input
 
 | API | Purpose |
 |---|---|
-| `getStats({ item, xp, material, ...config })` | Runs the standard checkpoint search and returns summarized `CalculationStats` for product/tool callers |
+| `getStats({ item, xp, material, ...config })` | Runs the standard checkpoint search and returns summarized `EnchantStats` for product/tool callers |
 | `searchToCheckpoint({ item, xp, material, ...config })` | Searches one target checkpoint and returns a raw `SearchResult` |
 | `searchSequentialCheckpoints({ item, xp, material, checkpoints, onCheckpointComplete, ...config })` | Searches multiple checkpoints in order and streams each completed `SearchResult` |
 | `searchModifiedLevel({ item, modLevel, material, ...config })` | Searches one modified level and returns its reusable `SearchState` |
@@ -109,7 +109,7 @@ Missing `groups` on an enchantable item rule means “all active table enchantme
 | `ModifiedLevelDistributionService` | Computes the BigInt distribution of modified enchantment levels |
 | `SummaryAggregationService` | Scans resolved combos and pending frontiers once to derive shared any/rank/count/clue mass buckets |
 | `TargetAnalysisService` | Projects target-combo filters over resolved combos and pending frontiers without changing search behavior |
-| `SummaryService` | Formats aggregated checkpoint masses into presented `CalculationStats` |
+| `SummaryService` | Formats aggregated checkpoint masses into presented `EnchantStats` |
 | `SnapshotService` | Formats aggregated checkpoint masses into UI/reporting snapshots |
 
 ## Checkpoint Aggregation

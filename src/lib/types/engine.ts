@@ -4,9 +4,9 @@ import type { SearchRunSnapshot } from '#lib/search/SearchRun.js';
 import { MassAccountingBreakdown } from '#types/mass.js';
 
 /**
- * Presented calculation statistics from the search engine.
+ * Presented enchant stats from the search engine.
  */
-export interface CalculationStats {
+export interface EnchantStats {
   /** Map of enchantment rank IDs to their total cumulative probability. Key is (enchantId << 8 | rank). */
   ranks: { [idAndRank: number]: number };
   /** Map of base enchantment IDs to their total probability on the item (any rank). */

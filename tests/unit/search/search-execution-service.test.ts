@@ -3,15 +3,15 @@ import assert from 'node:assert';
 import { EngineFactory } from '#engine/index.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import { getDefaultStatsCheckpoint, getSearchCheckpointForRefinement } from '#core/config.js';
-import { CalculationStats, SearchResult } from '#types/index.js';
+import { EnchantStats, SearchResult } from '#types/index.js';
 
-function accountingTotal(stats: CalculationStats): number {
+function accountingTotal(stats: EnchantStats): number {
     const a = stats.accounting;
     return a.resolved + a.clueIncompatible + a.pending + a.sieved + a.overflow + a.capped + a.rounding;
 }
 
 describe('Search execution service', () => {
-    it('produces CalculationStats through the public stats API', async () => {
+    it('produces EnchantStats through the public stats API', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
         engine.resetCaches();
 

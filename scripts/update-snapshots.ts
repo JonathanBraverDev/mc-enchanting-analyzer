@@ -5,7 +5,7 @@ import { TEST_DEFAULTS } from '#constants/testing.js';
 import { ClueValidator } from '#core/clue.js';
 import { SummaryService } from '#services/SummaryService.js';
 import { RegistryKernel, SearchRun } from '#lib/search/index.js';
-import { CalculationStats } from '#types/index.js';
+import { EnchantStats } from '#types/index.js';
 
 interface SnapshotCase {
     name: string;
@@ -51,7 +51,7 @@ function getRequestedCases(): SnapshotCase[] {
     return selected;
 }
 
-async function getStats(engine: EnchantEngine, testCase: SnapshotCase): Promise<CalculationStats> {
+async function getStats(engine: EnchantEngine, testCase: SnapshotCase): Promise<EnchantStats> {
     const targetClueId = testCase.clue
         ? ClueValidator.validate(engine.registry, testCase.item, testCase.clue)
         : undefined;

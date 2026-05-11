@@ -1,6 +1,6 @@
 import { ProbUtils } from '#utils/index.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
-import { CalculationStats, ConditionedSummaryRequest, SummaryRequest } from '#types/index.js';
+import { EnchantStats, ConditionedSummaryRequest, SummaryRequest } from '#types/index.js';
 import { ClueAnalysisService } from '#services/ClueAnalysisService.js';
 import { SummaryAggregationService } from '#services/SummaryAggregationService.js';
 
@@ -9,9 +9,9 @@ import { SummaryAggregationService } from '#services/SummaryAggregationService.j
  */
 export class SummaryService {
     /**
-     * Summarizes search results into a CalculationStats object.
+     * Summarizes search results into a EnchantStats object.
      */
-    public static summarize(request: SummaryRequest): CalculationStats {
+    public static summarize(request: SummaryRequest): EnchantStats {
         const {
             combos,
             snapshot,
@@ -21,7 +21,7 @@ export class SummaryService {
             isBook = false
         } = request;
         const accounting = snapshot.mass;
-        const stats: CalculationStats = {
+        const stats: EnchantStats = {
             ranks: {},
             any: {},
             count: {},
@@ -91,9 +91,9 @@ export class SummaryService {
      * @param indexToEnchant Registry mapping.
      * @param targetClueId The observed clue ID.
      * @param comboLimit Result set limit.
-     * @returns Conditioned calculation statistics.
+     * @returns Conditioned enchant stats.
      */
-    public static summarizeConditioned(request: ConditionedSummaryRequest): CalculationStats {
+    public static summarizeConditioned(request: ConditionedSummaryRequest): EnchantStats {
         const {
             combos,
             snapshot,
@@ -102,7 +102,7 @@ export class SummaryService {
             comboLimit = ENGINE_LIMITS.MAX_RESULTS_SUMMARY
         } = request;
         const accounting = snapshot.mass;
-        const stats: CalculationStats = {
+        const stats: EnchantStats = {
             ranks: {},
             any: {},
             count: {},
