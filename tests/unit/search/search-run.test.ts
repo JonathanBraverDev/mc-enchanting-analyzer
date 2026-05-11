@@ -29,7 +29,7 @@ class SingleModifiedLevelDistribution extends ModifiedLevelDistributionService {
     }
 }
 
-describe('V7 SearchRun', () => {
+describe('SearchRun', () => {
     it('seeds one XP cell into shared pool programs', () => {
         const registry = RegistryFactory.build('1.21.11');
         const kernel = new RegistryKernel({ registry, item: 'sword', material: 'diamond' });

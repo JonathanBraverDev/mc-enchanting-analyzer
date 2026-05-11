@@ -20,7 +20,7 @@ async function calculateSnapshot(engine: EnchantEngine, request: { item: string;
     });
 }
 
-describe('Enchantment Engine V7 Exhaustive Regression Snapshots', () => {
+describe('Enchantment Engine Exhaustive Regression Snapshots', () => {
     it('Snapshot: 1.8 Diamond Sword @ Level 30', async () => {
         const engine = EngineFactory.createForVersion(TEST_DATA.VERSIONS.LAPIS_PIVOT);
         const stats = await calculateSnapshot(engine, { item: TEST_DATA.ITEMS.SWORD, xp: 30, material: TEST_DATA.MATERIALS.DIAMOND });
@@ -60,7 +60,7 @@ describe('Enchantment Engine V7 Exhaustive Regression Snapshots', () => {
     });
 
     it.skip('Snapshot: 1.21.11 Book @ Level 30', async () => {
-        // Blocked: exhaustive V7 generation currently exceeds practical local runtime/heap budgets.
+        // Blocked: exhaustive generation currently exceeds practical local runtime/heap budgets.
         // Keep the fixture out of the golden suite until the book-tail implementation can bottom out.
         const engine = EngineFactory.createForVersion('1.21.11');
         engine.resetCaches();

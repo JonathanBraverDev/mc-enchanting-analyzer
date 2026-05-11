@@ -3,7 +3,7 @@ import assert from 'node:assert';
 import { EngineFactory } from '#engine/factory.js';
 import { TargetAnalysisService } from '#services/TargetAnalysisService.js';
 import { ComboUtils, ProbUtils, PRECISION } from '#utils/index.js';
-import { makeV7PendingEntry } from '#tests/infra/v7-snapshot-test-utils.js';
+import { makePendingEntry } from '#tests/infra/search-snapshot-test-utils.js';
 import type { PackedCombo, PackedEnchant, PackedTargetRequirement, RegistryState } from '#types/index.js';
 
 let registry: RegistryState;
@@ -82,7 +82,7 @@ describe('TargetAnalysisService', () => {
             combos: new Map([[terminalCombo, PRECISION / 2n], [pack([EFF_V]), PRECISION / 8n]]),
             indexToEnchant,
             targets: [target(EFF_IV), target(FORT_III)],
-            v7PendingEntries: [makeV7PendingEntry(frontierCombo, 3, expectedFrontier)],
+            pendingEntries: [makePendingEntry(frontierCombo, 3, expectedFrontier)],
             comboLimit: 10
         });
 
@@ -102,7 +102,7 @@ describe('TargetAnalysisService', () => {
             combos: new Map([[terminalCombo, PRECISION / 2n], [pack([EFF_V]), PRECISION / 8n]]),
             indexToEnchant,
             targets: [target(EFF_IV), target(FORT_III)],
-            v7PendingEntries: [makeV7PendingEntry(frontierCombo, 3, expectedFrontier)],
+            pendingEntries: [makePendingEntry(frontierCombo, 3, expectedFrontier)],
             comboLimit: 10,
             isBook: true
         });

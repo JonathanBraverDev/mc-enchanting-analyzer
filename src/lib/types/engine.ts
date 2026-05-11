@@ -1,5 +1,5 @@
 import { Enchantment, MaterialValues, RegistryMutation, RomanMap } from '#types/domain.js';
-import type { V7SearchRunSnapshot } from '#lib/v7/search/SearchRun.js';
+import type { SearchRunSnapshot } from '#lib/search/SearchRun.js';
 
 import { MassAccountingBreakdown } from '#types/mass.js';
 
@@ -114,11 +114,11 @@ export interface EngineInstrumentation {
   /** Optional: If true, perform expensive global heap scans for cache nodes/results */
   trackGlobalMetrics?: boolean | undefined;
 
-  /** V7-native diagnostics. Present when the V7 engine path records them. */
-  v7?: V7Instrumentation | undefined;
+  /** Native search diagnostics. Present when the engine records them. */
+  search?: SearchInstrumentation | undefined;
 }
 
-export interface V7Instrumentation {
+export interface SearchInstrumentation {
   /** Number of structural search programs currently used by the run. */
   programCount: number;
   /** Number of modified levels seeded into the run. */
@@ -266,7 +266,7 @@ export type SequentialCheckpointSearchRequest = SearchConfig & ItemSelectionRequ
 
 export interface SummaryRequest {
     combos: ReadonlyMap<PackedCombo, bigint>;
-    snapshot: V7SearchRunSnapshot;
+    snapshot: SearchRunSnapshot;
     indexToEnchant: number[];
     comboLimit?: number | undefined;
     threshold?: number | undefined;
@@ -298,7 +298,7 @@ export interface ProgressReporter {
 
 /** Search results before presentation summarization. */
 export interface SearchResult {
-    snapshot: V7SearchRunSnapshot;
+    snapshot: SearchRunSnapshot;
     combos: ReadonlyMap<PackedCombo, bigint>;
     instrumentation?: EngineInstrumentation | undefined;
     timing?: SearchTiming | undefined;

@@ -16,8 +16,8 @@ test('Engine Instrumentation Collection', async () => {
     await engine.calculate({ item: 'leggings', xp: 30, material: 'diamond', instrumentation, threshold: 0.0001 });
 
     assert.ok(instrumentation.totalIterations > 0, 'Should have recorded iterations');
-    assert.ok((instrumentation.v7?.programCacheMisses ?? 0) > 0, 'Should have V7 program cache misses');
-    assert.ok((instrumentation.v7?.runCacheMisses ?? 0) > 0, 'Should have V7 run cache misses');
+    assert.ok((instrumentation.search?.programCacheMisses ?? 0) > 0, 'Should have search program cache misses');
+    assert.ok((instrumentation.search?.runCacheMisses ?? 0) > 0, 'Should have search run cache misses');
     assert.ok(instrumentation.exitReason, 'Should have an exit reason');
 
     // Second run with same params - should hit caches
@@ -32,10 +32,10 @@ test('Engine Instrumentation Collection', async () => {
 
     await engine.calculate({ item: 'leggings', xp: 30, material: 'diamond', instrumentation: instrumentation2, threshold: 0.0001 });
 
-    assert.ok((instrumentation2.v7?.runCacheHits ?? 0) > 0, 'Should have V7 run cache hits on second run');
+    assert.ok((instrumentation2.search?.runCacheHits ?? 0) > 0, 'Should have search run cache hits on second run');
 });
 
-test('V7 Run Cache Instrumentation (Resumption)', async () => {
+test('Search run cache instrumentation (resumption)', async () => {
     const engine = EngineFactory.createForVersion('1.21');
     const instrumentation: EngineInstrumentation = {
         poolCache: { hits: 0, misses: 0 },
@@ -58,5 +58,5 @@ test('V7 Run Cache Instrumentation (Resumption)', async () => {
 
     await engine.calculate({ item: 'sword', xp: 30, material: 'netherite', threshold: 0.0001, instrumentation: instrumentation2 });
 
-    assert.ok((instrumentation2.v7?.runCacheHits ?? 0) > 0, 'Should have V7 run cache hits when refining');
+    assert.ok((instrumentation2.search?.runCacheHits ?? 0) > 0, 'Should have search run cache hits when refining');
 });

@@ -6,7 +6,7 @@ import { MINECRAFT_RULES } from '#constants/minecraft.js';
 import { CacheManager } from '#engine/cache/CacheManager.js';
 import { SummaryService } from '#services/SummaryService.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
-import { V7SearchService } from '#lib/v7/search/V7SearchService.js';
+import { SearchService } from '#lib/search/SearchService.js';
 import { ClueValidator } from '#core/clue.js';
 export { EngineFactory } from './factory.js';
 
@@ -23,7 +23,7 @@ export class EnchantEngine {
         registry: BuiltRegistryState,
         private readonly cache: CacheManager,
         private readonly distributionService: ModifiedLevelDistributionService,
-        private readonly v7SearchService: V7SearchService = new V7SearchService(distributionService)
+        private readonly searchService: SearchService = new SearchService(distributionService)
     ) {
         this._registry = registry;
     }
@@ -31,7 +31,7 @@ export class EnchantEngine {
     /** Clears all engine-level caches. */
     public resetCaches(): void {
         this.cache.clearAll();
-        this.v7SearchService.clearCache();
+        this.searchService.clearCache();
     }
 
     /** Clears only the stats cache. */
@@ -71,7 +71,7 @@ export class EnchantEngine {
         const { item, material } = request;
         const targetClueId = request.clue ? this.getPackedClue(item, request.clue) : undefined;
 
-        return this.v7SearchService.searchSequentialCheckpoints({
+        return this.searchService.searchSequentialCheckpoints({
             ...request,
             item,
             material,
@@ -88,7 +88,7 @@ export class EnchantEngine {
         const { item, material } = request;
         const targetClueId = request.clue ? this.getPackedClue(item, request.clue) : undefined;
 
-        return this.v7SearchService.searchToCheckpoint({
+        return this.searchService.searchToCheckpoint({
             ...request,
             item,
             material,
@@ -146,7 +146,7 @@ export class EnchantEngine {
             timing
         };
 
-        const finalResult = await this.v7SearchService.searchToCheckpoint({
+        const finalResult = await this.searchService.searchToCheckpoint({
             registry: this.registry,
             item,
             xp,

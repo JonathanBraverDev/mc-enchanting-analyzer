@@ -10,7 +10,7 @@ import type {
     TargetLevelClueAdvisorView,
     TargetLevelClueRecommendationView
 } from '#types/index.js';
-import type { V7PendingFrontierEntry } from '#lib/v7/search/SearchRun.js';
+import type { PendingFrontierEntry } from '#lib/search/SearchRun.js';
 import { ComboUtils, PRECISION, ProbUtils } from '#utils/index.js';
 
 export interface TargetClueAdvisorRequest {
@@ -18,7 +18,7 @@ export interface TargetClueAdvisorRequest {
     indexToEnchant: number[];
     targets: PackedTargetRequirement[];
     registry: RegistryState;
-    v7PendingEntries?: readonly V7PendingFrontierEntry[] | undefined;
+    pendingEntries?: readonly PendingFrontierEntry[] | undefined;
     limit?: number | undefined;
 }
 
@@ -52,7 +52,7 @@ export class TargetClueAdvisorService {
             indexToEnchant,
             targets,
             registry,
-            v7PendingEntries = [],
+            pendingEntries = [],
             limit = 5
         } = request;
 
@@ -64,7 +64,7 @@ export class TargetClueAdvisorService {
             this.addComboContribution(buckets, packed, mass, indexToEnchant, targets);
         }
 
-        for (const entry of v7PendingEntries) {
+        for (const entry of pendingEntries) {
             this.addComboContribution(buckets, entry.combo, entry.mass, indexToEnchant, targets);
         }
 

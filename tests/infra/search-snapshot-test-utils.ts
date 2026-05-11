@@ -1,16 +1,16 @@
 import { PRECISION } from '#utils/index.js';
 import type { PackedCombo } from '#types/index.js';
-import type { V7PendingFrontierEntry, V7SearchRunSnapshot } from '#lib/v7/search/SearchRun.js';
+import type { PendingFrontierEntry, SearchRunSnapshot } from '#lib/search/SearchRun.js';
 import type { MassAccountingBreakdown } from '#types/mass.js';
 
 type UnitOverrides = Partial<Record<keyof NonNullable<MassAccountingBreakdown['units']>, bigint>>;
 
-export function makeV7Snapshot(options: {
+export function makeSearchSnapshot(options: {
     results?: Map<PackedCombo, bigint>;
-    pendingEntries?: readonly V7PendingFrontierEntry[];
+    pendingEntries?: readonly PendingFrontierEntry[];
     units?: UnitOverrides;
     iterations?: number;
-} = {}): V7SearchRunSnapshot {
+} = {}): SearchRunSnapshot {
     const results = options.results ?? new Map<PackedCombo, bigint>();
     const pendingEntries = options.pendingEntries ?? [];
     const mass = makeMass(options.units);
@@ -29,7 +29,7 @@ export function makeV7Snapshot(options: {
     });
 }
 
-export function makeV7PendingEntry(combo: PackedCombo, count: number, mass: bigint): V7PendingFrontierEntry {
+export function makePendingEntry(combo: PackedCombo, count: number, mass: bigint): PendingFrontierEntry {
     return { programId: 0, nodeId: 0 as any, combo, count, mass };
 }
 

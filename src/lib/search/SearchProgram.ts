@@ -1,12 +1,12 @@
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import { PackedCombo } from '#types/index.js';
 import { ComboUtils, PRECISION, ProbUtils } from '#utils/index.js';
-import { RegistryKernel, V7PoolEntry, V7PoolProjection, V7PoolSignature } from '#lib/v7/registry/RegistryKernel.js';
+import { RegistryKernel, PoolEntry, PoolProjection, PoolSignature } from '#lib/search/registry/RegistryKernel.js';
 
-export type V7ProgramNodeId = number & { readonly __brand: 'V7ProgramNodeId' };
+export type ProgramNodeId = number & { readonly __brand: 'ProgramNodeId' };
 
 
-class V7NumericNodeIndex {
+class NumericNodeIndex {
     private static readonly INITIAL_CAPACITY = 131072;
     private static readonly MAX_LOAD_FACTOR = 0.7;
 
@@ -17,23 +17,23 @@ class V7NumericNodeIndex {
     private resizeAt: number;
     private count = 0;
 
-    public constructor(capacity: number = V7NumericNodeIndex.INITIAL_CAPACITY) {
-        const size = V7NumericNodeIndex.nextPowerOfTwo(capacity);
+    public constructor(capacity: number = NumericNodeIndex.INITIAL_CAPACITY) {
+        const size = NumericNodeIndex.nextPowerOfTwo(capacity);
         this.keys = new Float64Array(size);
         this.values = new Int32Array(size);
         this.values.fill(-1);
         this.used = new Uint8Array(size);
         this.mask = size - 1;
-        this.resizeAt = Math.floor(size * V7NumericNodeIndex.MAX_LOAD_FACTOR);
+        this.resizeAt = Math.floor(size * NumericNodeIndex.MAX_LOAD_FACTOR);
     }
 
-    public get(key: number): V7ProgramNodeId | undefined {
+    public get(key: number): ProgramNodeId | undefined {
         let idx = this.hash(key) & this.mask;
 
         while (this.used[idx] !== 0) {
             if (this.keys[idx] === key) {
                 const value = this.values[idx]!;
-                return value === -1 ? undefined : value as V7ProgramNodeId;
+                return value === -1 ? undefined : value as ProgramNodeId;
             }
             idx = (idx + 1) & this.mask;
         }
@@ -41,12 +41,12 @@ class V7NumericNodeIndex {
         return undefined;
     }
 
-    public set(key: number, value: V7ProgramNodeId): void {
+    public set(key: number, value: ProgramNodeId): void {
         if (this.count >= this.resizeAt) this.grow();
         this.insert(key, value);
     }
 
-    private insert(key: number, value: V7ProgramNodeId): void {
+    private insert(key: number, value: ProgramNodeId): void {
         let idx = this.hash(key) & this.mask;
 
         while (this.used[idx] !== 0) {
@@ -74,11 +74,11 @@ class V7NumericNodeIndex {
         this.values.fill(-1);
         this.used = new Uint8Array(nextSize);
         this.mask = nextSize - 1;
-        this.resizeAt = Math.floor(nextSize * V7NumericNodeIndex.MAX_LOAD_FACTOR);
+        this.resizeAt = Math.floor(nextSize * NumericNodeIndex.MAX_LOAD_FACTOR);
         this.count = 0;
 
         for (let i = 0; i < oldKeys.length; i++) {
-            if (oldUsed[i] !== 0) this.insert(oldKeys[i]!, oldValues[i]! as V7ProgramNodeId);
+            if (oldUsed[i] !== 0) this.insert(oldKeys[i]!, oldValues[i]! as ProgramNodeId);
         }
     }
 
@@ -100,42 +100,42 @@ class V7NumericNodeIndex {
     }
 }
 
-export interface V7ProgramKey {
+export interface ProgramKey {
     readonly version: string;
     readonly item: string;
-    readonly poolSignature: V7PoolSignature;
+    readonly poolSignature: PoolSignature;
     readonly bookMode: 'single-book' | 'multi-book' | 'item';
     readonly clueMode: string | null;
 }
 
-export interface V7ProgramNode {
-    readonly id: V7ProgramNodeId;
+export interface ProgramNode {
+    readonly id: ProgramNodeId;
     readonly selectedMask: bigint;
     readonly currentLevel: number;
     readonly combo: PackedCombo;
     readonly count: number;
 }
 
-export interface V7ProgramEdge {
-    readonly entry: V7PoolEntry;
+export interface ProgramEdge {
+    readonly entry: PoolEntry;
     readonly weight: number;
-    readonly childId: V7ProgramNodeId;
+    readonly childId: ProgramNodeId;
 }
 
-export type V7ProgramTerminalReason = 'max-enchants' | 'single-book' | 'no-eligible' | null;
+export type ProgramTerminalReason = 'max-enchants' | 'single-book' | 'no-eligible' | null;
 
-export interface V7ProgramExpansion {
-    readonly nodeId: V7ProgramNodeId;
+export interface ProgramExpansion {
+    readonly nodeId: ProgramNodeId;
     readonly isRoot: boolean;
     readonly probContinue: bigint;
     readonly totalWeight: number;
     readonly eligibleCount: number;
-    readonly edges: readonly V7ProgramEdge[];
-    readonly terminalReason: V7ProgramTerminalReason;
+    readonly edges: readonly ProgramEdge[];
+    readonly terminalReason: ProgramTerminalReason;
 }
 
 /**
- * Immutable/lazy structural search program for one V7 pool signature.
+ * Immutable/lazy structural search program for one pool signature.
  *
  * The program owns node identity and expansion structure only. It deliberately
  * stores no probability mass; SearchRun will later attach weighted mass vectors
@@ -143,8 +143,8 @@ export interface V7ProgramExpansion {
  * identical.
  */
 export class SearchProgram {
-    public readonly key: V7ProgramKey;
-    public readonly pool: V7PoolProjection;
+    public readonly key: ProgramKey;
+    public readonly pool: PoolProjection;
 
     private readonly selectedMasks: bigint[] = [];
     private readonly currentLevels: number[] = [];
@@ -152,13 +152,13 @@ export class SearchProgram {
     private readonly counts: number[] = [];
     private static readonly MAX_NUMERIC_MASK = BigInt(Math.floor(Number.MAX_SAFE_INTEGER / 256));
 
-    private readonly numericNodeIndex = new V7NumericNodeIndex();
-    private readonly bigintNodeIndex = new Map<bigint, V7ProgramNodeId>();
-    private readonly expansionCache: Array<V7ProgramExpansion | undefined> = [];
+    private readonly numericNodeIndex = new NumericNodeIndex();
+    private readonly bigintNodeIndex = new Map<bigint, ProgramNodeId>();
+    private readonly expansionCache: Array<ProgramExpansion | undefined> = [];
 
     public constructor(
         private readonly kernel: RegistryKernel,
-        pool: V7PoolProjection,
+        pool: PoolProjection,
         options: { clueMode?: string | null } = {}
     ) {
         this.pool = pool;
@@ -175,11 +175,11 @@ export class SearchProgram {
         return this.combos.length;
     }
 
-    public getRootNode(initialLevel: number): V7ProgramNode {
+    public getRootNode(initialLevel: number): ProgramNode {
         return this.getNode(this.getOrCreateNodeId(0n, initialLevel, 0 as PackedCombo, 0));
     }
 
-    public getNode(id: V7ProgramNodeId): V7ProgramNode {
+    public getNode(id: ProgramNodeId): ProgramNode {
         this.assertNode(id);
         return {
             id,
@@ -190,17 +190,17 @@ export class SearchProgram {
         };
     }
 
-    public getNodeCombo(id: V7ProgramNodeId): PackedCombo {
+    public getNodeCombo(id: ProgramNodeId): PackedCombo {
         this.assertNode(id);
         return this.combos[id]!;
     }
 
-    public getNodeCount(id: V7ProgramNodeId): number {
+    public getNodeCount(id: ProgramNodeId): number {
         this.assertNode(id);
         return this.counts[id]!;
     }
 
-    public getExpansion(nodeId: V7ProgramNodeId): V7ProgramExpansion {
+    public getExpansion(nodeId: ProgramNodeId): ProgramExpansion {
         const cached = this.expansionCache[nodeId];
         if (cached) return cached;
 
@@ -211,7 +211,7 @@ export class SearchProgram {
         return expansion;
     }
 
-    private buildRootExpansion(nodeId: V7ProgramNodeId): V7ProgramExpansion {
+    private buildRootExpansion(nodeId: ProgramNodeId): ProgramExpansion {
         const currentLevel = this.currentLevels[nodeId]!;
         const edges = this.pool.entries.map(entry => ({
             entry,
@@ -230,7 +230,7 @@ export class SearchProgram {
         };
     }
 
-    private buildSearchExpansion(nodeId: V7ProgramNodeId): V7ProgramExpansion {
+    private buildSearchExpansion(nodeId: ProgramNodeId): ProgramExpansion {
         const selectedMask = this.selectedMasks[nodeId]!;
         const currentLevel = this.currentLevels[nodeId]!;
         const combo = this.combos[nodeId]!;
@@ -248,7 +248,7 @@ export class SearchProgram {
 
         const nextLevel = Math.floor(currentLevel / 2);
         const nextCount = count + 1;
-        const edges: V7ProgramEdge[] = [];
+        const edges: ProgramEdge[] = [];
         let totalWeight = 0;
 
         for (const entry of this.pool.entries) {
@@ -270,13 +270,13 @@ export class SearchProgram {
     }
 
     private createExpansion(
-        nodeId: V7ProgramNodeId,
+        nodeId: ProgramNodeId,
         count: number,
         probContinue: bigint,
-        edges: readonly V7ProgramEdge[],
-        terminalReason: V7ProgramTerminalReason,
+        edges: readonly ProgramEdge[],
+        terminalReason: ProgramTerminalReason,
         totalWeight = edges.reduce((sum, edge) => sum + edge.weight, 0)
-    ): V7ProgramExpansion {
+    ): ProgramExpansion {
         return {
             nodeId,
             isRoot: count === 0,
@@ -293,7 +293,7 @@ export class SearchProgram {
         currentLevel: number,
         combo: PackedCombo,
         count: number
-    ): V7ProgramNodeId {
+    ): ProgramNodeId {
         const numericKey = this.createNumericNodeKey(selectedMask, currentLevel);
         if (numericKey !== undefined) {
             const existing = this.numericNodeIndex.get(numericKey);
@@ -304,7 +304,7 @@ export class SearchProgram {
             if (existing !== undefined) return existing;
         }
 
-        const nodeId = this.combos.length as V7ProgramNodeId;
+        const nodeId = this.combos.length as ProgramNodeId;
         this.selectedMasks.push(selectedMask);
         this.currentLevels.push(currentLevel);
         this.combos.push(combo);
@@ -327,7 +327,7 @@ export class SearchProgram {
         return (selectedMask << 8n) | BigInt(currentLevel);
     }
 
-    private getTerminalReason(count: number): V7ProgramTerminalReason {
+    private getTerminalReason(count: number): ProgramTerminalReason {
         if (this.kernel.item === 'book' && !this.kernel.multiEnchantBooks && count >= 1) {
             return 'single-book';
         }
@@ -337,13 +337,13 @@ export class SearchProgram {
         return null;
     }
 
-    private assertNode(id: V7ProgramNodeId): void {
+    private assertNode(id: ProgramNodeId): void {
         if (id < 0 || id >= this.combos.length) {
-            throw new Error(`Unknown V7 search program node ${id}`);
+            throw new Error(`Unknown search program node ${id}`);
         }
     }
 
-    private getBookMode(kernel: RegistryKernel): V7ProgramKey['bookMode'] {
+    private getBookMode(kernel: RegistryKernel): ProgramKey['bookMode'] {
         if (kernel.item !== 'book') return 'item';
         return kernel.multiEnchantBooks ? 'multi-book' : 'single-book';
     }

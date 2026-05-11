@@ -107,8 +107,8 @@ describe('Probability Conservation', () => {
             Math.abs(total - 1.0) < TOLERANCE,
             `sum(buckets) = ${total} ≠ 1.0. Breakdown: ${JSON.stringify(stats.accounting)}`
         );
-        assert.ok(stats.accounting.resolved > 0, 'clue-aware V7 search should resolve compatible mass');
-        assert.ok(stats.accounting.clueIncompatible > 0, 'clue-aware V7 search should classify incompatible mass');
+        assert.ok(stats.accounting.resolved > 0, 'clue-aware search should resolve compatible mass');
+        assert.ok(stats.accounting.clueIncompatible > 0, 'clue-aware search should classify incompatible mass');
 
         const powerId = engine.registry.idMap.get('Power')!;
         assert.ok(

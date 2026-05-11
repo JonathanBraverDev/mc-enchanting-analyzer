@@ -1,5 +1,5 @@
 import { PackedCombo, PackedEnchant } from '#types/index.js';
-import type { V7PendingFrontierEntry } from '#lib/v7/search/SearchRun.js';
+import type { PendingFrontierEntry } from '#lib/search/SearchRun.js';
 import { ComboUtils, ProbUtils, PRECISION } from '#utils/index.js';
 import { SummaryAggregationService } from '#services/SummaryAggregationService.js';
 
@@ -21,7 +21,7 @@ export class ClueAnalysisService {
         targetClueId: number,
         indexToEnchant: number[],
         isBook = false,
-        v7PendingEntries: readonly V7PendingFrontierEntry[] = []
+        pendingEntries: readonly PendingFrontierEntry[] = []
     ): {
         combos: ReadonlyMap<PackedCombo, bigint>,
         anyMass: Map<number, bigint>,
@@ -32,7 +32,7 @@ export class ClueAnalysisService {
         const clueMasses = SummaryAggregationService.aggregate({
             combos,
             indexToEnchant,
-            v7PendingEntries,
+            pendingEntries,
             includeMasses: false
         }).shownClueDistribution;
         const pClue = clueMasses.get(targetClueId) ?? 0n;
@@ -52,7 +52,7 @@ export class ClueAnalysisService {
             totalMass += this.processConditionedNode(packed, pCombo, targetClueId, pClue, indexToEnchant, conditionedCombos, anyMass, rankMass, countMass);
         }
 
-        for (const entry of v7PendingEntries) {
+        for (const entry of pendingEntries) {
             if (isBook && entry.count > 1) {
                 totalMass += this.processPendingBookAggregate(entry.combo, entry.mass, targetClueId, pClue, indexToEnchant, anyMass, rankMass, countMass);
                 continue;

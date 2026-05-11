@@ -1,12 +1,12 @@
 import { PACKING_CONSTANTS } from '#constants/engine.js';
 import { PackedCombo } from '#types/index.js';
-import type { V7PendingFrontierEntry } from '#lib/v7/search/SearchRun.js';
+import type { PendingFrontierEntry } from '#lib/search/SearchRun.js';
 
 export interface SummaryAggregationRequest {
     combos: ReadonlyMap<PackedCombo, bigint>;
     indexToEnchant: number[];
-    /** Native V7 pending entries. Prefer this over legacy frontier snapshots for V7 projection. */
-    v7PendingEntries?: readonly V7PendingFrontierEntry[] | undefined;
+    /** Native pending entries from the shared search run. */
+    pendingEntries?: readonly PendingFrontierEntry[] | undefined;
     isBook?: boolean | undefined;
     includeMasses?: boolean | undefined;
     includeShownClueDistribution?: boolean | undefined;
@@ -27,7 +27,7 @@ export class SummaryAggregationService {
         const {
             combos,
             indexToEnchant,
-            v7PendingEntries = [],
+            pendingEntries = [],
             isBook = false,
             includeMasses = true,
             includeShownClueDistribution = true
@@ -44,7 +44,7 @@ export class SummaryAggregationService {
             this.addContribution(result, packed, mass, indexToEnchant, false, isBook, includeMasses, includeShownClueDistribution);
         }
 
-        for (const entry of v7PendingEntries) {
+        for (const entry of pendingEntries) {
             this.addContribution(result, entry.combo, entry.mass, indexToEnchant, true, isBook, includeMasses, includeShownClueDistribution);
         }
 

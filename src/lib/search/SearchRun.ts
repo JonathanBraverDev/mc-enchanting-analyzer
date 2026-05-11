@@ -5,20 +5,20 @@ import { ENGINE_LIMITS } from '#constants/engine.js';
 import { MassAccountingBreakdown } from '#types/mass.js';
 import { PackedCombo } from '#types/index.js';
 import { AsyncUtils, ComboUtils, PRECISION, ProbUtils } from '#utils/index.js';
-import { RegistryKernel, V7PoolProjection, V7PoolSignature } from '#lib/v7/registry/RegistryKernel.js';
-import { SearchProgram, V7ProgramExpansion, V7ProgramNodeId } from '#lib/v7/search/SearchProgram.js';
+import { RegistryKernel, PoolProjection, PoolSignature } from '#lib/search/registry/RegistryKernel.js';
+import { SearchProgram, ProgramExpansion, ProgramNodeId } from '#lib/search/SearchProgram.js';
 
-export interface V7SearchProgramCache {
-    getOrCreateProgram(kernel: RegistryKernel, pool: V7PoolProjection, clueMode?: string | null): SearchProgram;
+export interface SearchProgramCache {
+    getOrCreateProgram(kernel: RegistryKernel, pool: PoolProjection, clueMode?: string | null): SearchProgram;
 }
 
-export interface V7SearchRunOptions {
+export interface SearchRunOptions {
     readonly distributionService?: ModifiedLevelDistributionService | undefined;
     readonly targetClueId?: number | undefined;
-    readonly programCache?: V7SearchProgramCache | undefined;
+    readonly programCache?: SearchProgramCache | undefined;
 }
 
-export interface V7SearchCheckpointRequest {
+export interface SearchRunCheckpointRequest {
     readonly threshold?: number | bigint | undefined;
     readonly maxIterations?: number | undefined;
     /** Ignore threshold and iteration cap, searching until the frontier is empty. */
@@ -34,21 +34,21 @@ export interface V7SearchCheckpointRequest {
     readonly yieldEveryIterations?: number | undefined;
 }
 
-export interface V7PendingFrontierEntry {
+export interface PendingFrontierEntry {
     readonly programId: number;
-    readonly nodeId: V7ProgramNodeId;
+    readonly nodeId: ProgramNodeId;
     readonly mass: bigint;
     readonly combo: PackedCombo;
     readonly count: number;
 }
 
-export interface V7SearchRunSnapshot {
+export interface SearchRunSnapshot {
     readonly results: ReadonlyMap<PackedCombo, bigint>;
     readonly mass: MassAccountingBreakdown;
     readonly iterations: number;
     readonly pendingCount: number;
     readonly largestPendingMass: bigint;
-    readonly pendingEntries: readonly V7PendingFrontierEntry[];
+    readonly pendingEntries: readonly PendingFrontierEntry[];
     readonly programCount: number;
     readonly seededLevelCount: number;
     readonly activeResidueCount: number;
@@ -64,16 +64,16 @@ interface ProgramRecord {
 
 interface FrontierPopTarget {
     programId: number;
-    nodeId: V7ProgramNodeId;
+    nodeId: ProgramNodeId;
     mass: bigint;
 }
 
-interface V7EdgeMassShare {
-    readonly childId: V7ProgramNodeId;
+interface EdgeMassShare {
+    readonly childId: ProgramNodeId;
     mass: bigint;
 }
 
-interface V7AdvanceCriteria {
+interface AdvanceCriteria {
     readonly threshold: bigint;
     readonly maxIterations: number;
     readonly targetClassifiedMass?: bigint | undefined;
@@ -83,10 +83,10 @@ interface V7AdvanceCriteria {
 }
 
 /**
- * Minimal V7 single-cell probability flow executor.
+ * Minimal single-cell probability flow executor.
  *
  * This is intentionally small: one output cell, optional clue conditioning, no worker
- * protocol, and no projection layer. It proves the core V7 premise that modified
+ * protocol, and no projection layer. It implements the shared-search premise that modified
  * level mass can be seeded directly into shared lazy programs and expanded by one
  * global weighted frontier.
  */
@@ -95,19 +95,19 @@ export class SearchRun {
     public readonly mass = new ProbabilityMassAccountant();
 
     private readonly distributionService: ModifiedLevelDistributionService;
-    private readonly programCache: V7SearchProgramCache | undefined;
-    private readonly programsBySignature = new Map<V7PoolSignature, ProgramRecord>();
+    private readonly programCache: SearchProgramCache | undefined;
+    private readonly programsBySignature = new Map<PoolSignature, ProgramRecord>();
     private readonly programs: ProgramRecord[] = [];
     private readonly forwardingResidues: BigUint64Array[] = [];
     private readonly targetClueId: number | undefined;
-    private readonly frontier = new V7RunFrontier();
+    private readonly frontier = new SearchRunFrontier();
     private seeded = false;
     private _seededLevelCount = 0;
     private _iterations = 0;
 
     public constructor(
         private readonly kernel: RegistryKernel,
-        options: V7SearchRunOptions = {}
+        options: SearchRunOptions = {}
     ) {
         this.distributionService = options.distributionService ?? new ModifiedLevelDistributionService();
         this.programCache = options.programCache;
@@ -115,7 +115,7 @@ export class SearchRun {
     }
 
     public seedXp(xp: number): void {
-        if (this.seeded) throw new Error('V7 SearchRun can only be seeded once. Create a new run for a new cell.');
+        if (this.seeded) throw new Error('SearchRun can only be seeded once. Create a new run for a new cell.');
         this.seeded = true;
 
         const distribution = this.distributionService.getModifiedLevelDist(
@@ -144,16 +144,16 @@ export class SearchRun {
         }
 
         if (seededMass < PRECISION) this.mass.record('rounding', PRECISION - seededMass);
-        if (seededMass > PRECISION) throw new Error(`V7 modified-level distribution overflowed precision by ${seededMass - PRECISION} units.`);
+        if (seededMass > PRECISION) throw new Error(`Modified-level distribution overflowed precision by ${seededMass - PRECISION} units.`);
     }
 
-    public searchToCheckpoint(request: V7SearchCheckpointRequest = {}): V7SearchRunSnapshot {
+    public searchToCheckpoint(request: SearchRunCheckpointRequest = {}): SearchRunSnapshot {
         const criteria = this.createAdvanceCriteria(request);
         this.advanceUntilCheckpoint(criteria);
         return this.snapshot();
     }
 
-    public async searchToCheckpointAsync(request: V7SearchCheckpointRequest = {}): Promise<V7SearchRunSnapshot> {
+    public async searchToCheckpointAsync(request: SearchRunCheckpointRequest = {}): Promise<SearchRunSnapshot> {
         const criteria = this.createAdvanceCriteria(request);
         const chunkIterations = Math.max(
             1,
@@ -167,8 +167,8 @@ export class SearchRun {
         return this.snapshot();
     }
 
-    private createAdvanceCriteria(request: V7SearchCheckpointRequest): V7AdvanceCriteria {
-        if (!this.seeded) throw new Error('V7 SearchRun must be seeded before searching.');
+    private createAdvanceCriteria(request: SearchRunCheckpointRequest): AdvanceCriteria {
+        if (!this.seeded) throw new Error('SearchRun must be seeded before searching.');
 
         return {
             threshold: request.exhaustive ? 0n : ProbUtils.toBigInt(request.threshold ?? ENGINE_LIMITS.DEFAULT_THRESHOLD),
@@ -193,8 +193,8 @@ export class SearchRun {
      *
      * @returns true when the requested checkpoint is reached; false when only the chunk budget was exhausted.
      */
-    private advanceUntilCheckpoint(criteria: V7AdvanceCriteria, chunkIterations?: number): boolean {
-        const current = { programId: 0, nodeId: 0 as V7ProgramNodeId, mass: 0n };
+    private advanceUntilCheckpoint(criteria: AdvanceCriteria, chunkIterations?: number): boolean {
+        const current = { programId: 0, nodeId: 0 as ProgramNodeId, mass: 0n };
         let advancedInChunk = 0;
 
         while (true) {
@@ -214,7 +214,7 @@ export class SearchRun {
         }
     }
 
-    public snapshot(): V7SearchRunSnapshot {
+    public snapshot(): SearchRunSnapshot {
         const residue = this.getActiveResidueStats();
         return Object.freeze({
             results: new Map(this.results),
@@ -231,7 +231,7 @@ export class SearchRun {
         });
     }
 
-    private expand(programId: number, nodeId: V7ProgramNodeId, incomingMass: bigint, probabilityFloor: bigint): void {
+    private expand(programId: number, nodeId: ProgramNodeId, incomingMass: bigint, probabilityFloor: bigint): void {
         const record = this.getProgramById(programId);
         const { program, cluePolicy } = record;
         const expansion = program.getExpansion(nodeId);
@@ -255,8 +255,8 @@ export class SearchRun {
 
     private expandRoot(
         programId: number,
-        nodeId: V7ProgramNodeId,
-        expansion: V7ProgramExpansion,
+        nodeId: ProgramNodeId,
+        expansion: ProgramExpansion,
         incomingMass: bigint,
         cluePolicy: ClueSearchPolicy | undefined
     ): void {
@@ -270,10 +270,10 @@ export class SearchRun {
 
     private expandSearchNode(
         programId: number,
-        nodeId: V7ProgramNodeId,
+        nodeId: ProgramNodeId,
         combo: PackedCombo,
         count: number,
-        expansion: V7ProgramExpansion,
+        expansion: ProgramExpansion,
         incomingMass: bigint,
         probabilityFloor: bigint,
         cluePolicy: ClueSearchPolicy | undefined
@@ -305,8 +305,8 @@ export class SearchRun {
 
     private distributeToEdges(
         programId: number,
-        nodeId: V7ProgramNodeId,
-        expansion: V7ProgramExpansion,
+        nodeId: ProgramNodeId,
+        expansion: ProgramExpansion,
         mass: bigint,
         combo: PackedCombo,
         cluePolicy: ClueSearchPolicy | undefined
@@ -314,7 +314,7 @@ export class SearchRun {
         const totalWeight = BigInt(expansion.totalWeight);
         const oldResidue = this.getForwardingResidue(programId, nodeId);
         const totalToDistribute = mass + oldResidue;
-        const shares: V7EdgeMassShare[] = [];
+        const shares: EdgeMassShare[] = [];
         let assigned = 0n;
 
         for (const edge of expansion.edges) {
@@ -342,8 +342,8 @@ export class SearchRun {
         }
     }
 
-    private getPendingEntries(): V7PendingFrontierEntry[] {
-        const entries: V7PendingFrontierEntry[] = [];
+    private getPendingEntries(): PendingFrontierEntry[] {
+        const entries: PendingFrontierEntry[] = [];
         this.frontier.forEach((programId, nodeId, mass) => {
             const program = this.getProgramById(programId).program;
             entries.push(Object.freeze({
@@ -384,17 +384,17 @@ export class SearchRun {
         }
     }
 
-    private getForwardingResidue(programId: number, nodeId: V7ProgramNodeId): bigint {
+    private getForwardingResidue(programId: number, nodeId: ProgramNodeId): bigint {
         const storage = this.forwardingResidues[programId];
         return storage?.[nodeId as number] ?? 0n;
     }
 
-    private setForwardingResidue(programId: number, nodeId: V7ProgramNodeId, residue: bigint): void {
+    private setForwardingResidue(programId: number, nodeId: ProgramNodeId, residue: bigint): void {
         const nodeIndex = nodeId as number;
         let storage = this.forwardingResidues[programId];
 
         if (!storage) {
-            let capacity = V7RunFrontier.INITIAL_NODE_CAPACITY;
+            let capacity = SearchRunFrontier.INITIAL_NODE_CAPACITY;
             while (capacity <= nodeIndex) capacity *= 2;
             storage = new BigUint64Array(capacity);
             this.forwardingResidues[programId] = storage;
@@ -466,13 +466,13 @@ export class SearchRun {
         this.mass.record('resolved', mass);
     }
 
-    private pushPending(programId: number, nodeId: V7ProgramNodeId, mass: bigint): void {
+    private pushPending(programId: number, nodeId: ProgramNodeId, mass: bigint): void {
         if (mass === 0n) return;
         this.frontier.pushOrMerge(programId, nodeId, mass);
         this.mass.record('pending', mass);
     }
 
-    private getProgram(pool: V7PoolProjection): ProgramRecord {
+    private getProgram(pool: PoolProjection): ProgramRecord {
         const existing = this.programsBySignature.get(pool.signature);
         if (existing) return existing;
 
@@ -492,28 +492,28 @@ export class SearchRun {
 
     private getProgramById(programId: number): ProgramRecord {
         const record = this.programs[programId];
-        if (!record) throw new Error(`Unknown V7 search program ID ${programId}`);
+        if (!record) throw new Error(`Unknown search program ID ${programId}`);
         return record;
     }
 }
 
-interface V7FrontierProgramStorage {
+interface FrontierProgramStorage {
     masses: BigUint64Array;
     positions: Int32Array;
 }
 
-class V7RunFrontier {
+class SearchRunFrontier {
     public static readonly INITIAL_NODE_CAPACITY = 1024;
 
     private readonly heapProgramIds: number[] = [];
     private readonly heapNodeIds: number[] = [];
-    private readonly storages: V7FrontierProgramStorage[] = [];
+    private readonly storages: FrontierProgramStorage[] = [];
 
     public get size(): number {
         return this.heapNodeIds.length;
     }
 
-    public pushOrMerge(programId: number, nodeId: V7ProgramNodeId, mass: bigint): void {
+    public pushOrMerge(programId: number, nodeId: ProgramNodeId, mass: bigint): void {
         const storage = this.ensureStorage(programId, nodeId);
         const nodeIndex = nodeId as number;
         const existingIndex = storage.positions[nodeIndex]!;
@@ -535,10 +535,10 @@ class V7RunFrontier {
         return this.heapNodeIds.length === 0 ? 0n : this.massAt(0);
     }
 
-    public forEach(callback: (programId: number, nodeId: V7ProgramNodeId, mass: bigint) => void): void {
+    public forEach(callback: (programId: number, nodeId: ProgramNodeId, mass: bigint) => void): void {
         for (let i = 0; i < this.heapNodeIds.length; i++) {
             const programId = this.heapProgramIds[i]!;
-            const nodeId = this.heapNodeIds[i]! as V7ProgramNodeId;
+            const nodeId = this.heapNodeIds[i]! as ProgramNodeId;
             callback(programId, nodeId, this.getNodeMass(programId, nodeId as number));
         }
     }
@@ -551,7 +551,7 @@ class V7RunFrontier {
         const storage = this.storages[programId]!;
 
         out.programId = programId;
-        out.nodeId = nodeId as V7ProgramNodeId;
+        out.nodeId = nodeId as ProgramNodeId;
         out.mass = storage.masses[nodeId]!;
         storage.positions[nodeId] = -1;
         storage.masses[nodeId] = 0n;
@@ -626,10 +626,10 @@ class V7RunFrontier {
         return this.storages[programId]!.masses[nodeId]!;
     }
 
-    private ensureStorage(programId: number, nodeId: V7ProgramNodeId): V7FrontierProgramStorage {
+    private ensureStorage(programId: number, nodeId: ProgramNodeId): FrontierProgramStorage {
         let storage = this.storages[programId];
         if (!storage) {
-            storage = this.createStorage(Math.max(V7RunFrontier.INITIAL_NODE_CAPACITY, (nodeId as number) + 1));
+            storage = this.createStorage(Math.max(SearchRunFrontier.INITIAL_NODE_CAPACITY, (nodeId as number) + 1));
             this.storages[programId] = storage;
             return storage;
         }
@@ -640,7 +640,7 @@ class V7RunFrontier {
         return storage;
     }
 
-    private createStorage(capacity: number): V7FrontierProgramStorage {
+    private createStorage(capacity: number): FrontierProgramStorage {
         const normalized = this.nextPowerOfTwo(capacity);
         const positions = new Int32Array(normalized);
         positions.fill(-1);
@@ -650,7 +650,7 @@ class V7RunFrontier {
         };
     }
 
-    private growStorage(storage: V7FrontierProgramStorage, required: number): void {
+    private growStorage(storage: FrontierProgramStorage, required: number): void {
         const nextCapacity = this.nextPowerOfTwo(required);
         const nextMasses = new BigUint64Array(nextCapacity);
         nextMasses.set(storage.masses);

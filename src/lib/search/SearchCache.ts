@@ -1,32 +1,32 @@
 import { LRUCache } from '#utils/collections/LRUCache.js';
-import { RegistryKernel, V7PoolProjection } from '#lib/v7/registry/RegistryKernel.js';
-import { SearchProgram } from '#lib/v7/search/SearchProgram.js';
-import { SearchRun } from '#lib/v7/search/SearchRun.js';
+import { RegistryKernel, PoolProjection } from '#lib/search/registry/RegistryKernel.js';
+import { SearchProgram } from '#lib/search/SearchProgram.js';
+import { SearchRun } from '#lib/search/SearchRun.js';
 
-export interface V7CacheConfig {
+export interface SearchCacheConfig {
     readonly programSize?: number | undefined;
     readonly runSize?: number | undefined;
 }
 
-export interface V7CacheStats {
+export interface SearchCacheStats {
     readonly hits: number;
     readonly misses: number;
 }
 
-export interface V7SearchCacheMetrics {
-    readonly programs: V7CacheStats;
-    readonly runs: V7CacheStats;
+export interface SearchCacheMetrics {
+    readonly programs: SearchCacheStats;
+    readonly runs: SearchCacheStats;
 }
 
 /**
- * V7-specific cache split along V7's natural boundaries.
+ * Search cache split along the shared search engine's natural boundaries.
  *
  * SearchProgram entries are structural only: lazy node identity and expansions for
  * a pool signature, without probability mass. SearchRun entries are XP-cell state:
  * frontier mass, resolved results, residue, and accounting that can be advanced by
  * later refinement calls.
  */
-export class V7SearchCache {
+export class SearchCache {
     private readonly programs: LRUCache<string, SearchProgram>;
     private readonly runs: LRUCache<string, SearchRun>;
 
@@ -35,12 +35,12 @@ export class V7SearchCache {
         runs: { hits: 0, misses: 0 }
     };
 
-    public constructor(config: V7CacheConfig = {}) {
+    public constructor(config: SearchCacheConfig = {}) {
         this.programs = new LRUCache<string, SearchProgram>(config.programSize ?? 256);
         this.runs = new LRUCache<string, SearchRun>(config.runSize ?? 128);
     }
 
-    public getOrCreateProgram(kernel: RegistryKernel, pool: V7PoolProjection, clueMode: string | null = null): SearchProgram {
+    public getOrCreateProgram(kernel: RegistryKernel, pool: PoolProjection, clueMode: string | null = null): SearchProgram {
         const key = this.createProgramKey(kernel, pool, clueMode);
         const cached = this.programs.get(key);
         if (cached) {
@@ -83,14 +83,14 @@ export class V7SearchCache {
         this.metrics.runs = { hits: 0, misses: 0 };
     }
 
-    public getMetrics(): V7SearchCacheMetrics {
+    public getMetrics(): SearchCacheMetrics {
         return {
             programs: { ...this.metrics.programs },
             runs: { ...this.metrics.runs }
         };
     }
 
-    private createProgramKey(kernel: RegistryKernel, pool: V7PoolProjection, clueMode: string | null): string {
+    private createProgramKey(kernel: RegistryKernel, pool: PoolProjection, clueMode: string | null): string {
         const bookMode = kernel.item !== 'book'
             ? 'item'
             : kernel.multiEnchantBooks ? 'multi-book' : 'single-book';

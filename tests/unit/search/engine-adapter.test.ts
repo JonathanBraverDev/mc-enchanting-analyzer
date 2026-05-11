@@ -10,7 +10,7 @@ function accountingTotal(stats: CalculationStats): number {
     return a.resolved + a.clueIncompatible + a.pending + a.sieved + a.overflow + a.capped + a.rounding;
 }
 
-describe('V7 engine adapter', () => {
+describe('Search engine adapter', () => {
     it('produces CalculationStats through the normal calculate boundary', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
         engine.resetCaches();
@@ -100,7 +100,7 @@ describe('V7 engine adapter', () => {
         assert.strictEqual(snapshots[1]!.instrumentation?.exitReason, 'mass');
     });
 
-    it('streams sequential checkpoints with monotonic V7 resolved mass', async () => {
+    it('streams sequential checkpoints with monotonic resolved mass', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
         engine.resetCaches();
         const accuracies: number[] = [];
@@ -125,7 +125,7 @@ describe('V7 engine adapter', () => {
         assert.ok(accuracies[2]! > accuracies[1]!);
     });
 
-    it('supports clue-conditioned requests through the V7 search path', async () => {
+    it('supports clue-conditioned requests through the search path', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
 
         const stats = await engine.calculate({
@@ -146,7 +146,7 @@ describe('V7 engine adapter', () => {
         assert.ok(Object.keys(stats.combos).length > 0);
     });
 
-    it('projects V7 pending frontier nodes and native instrumentation through the adapter', async () => {
+    it('projects pending frontier nodes and native instrumentation through the adapter', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
         const instrumentation = {
             poolCache: { hits: 0, misses: 0 },
@@ -171,13 +171,13 @@ describe('V7 engine adapter', () => {
 
         assert.ok(result.snapshot.pendingEntries.length > 0);
         assert.ok(result.snapshot.mass.pending > 0);
-        assert.ok(result.instrumentation?.v7);
-        assert.ok(result.instrumentation.v7.programCount > 0);
-        assert.strictEqual(result.instrumentation.v7.pendingEntryCount, result.snapshot.pendingEntries.length);
-        assert.ok(result.instrumentation.v7.canImprove);
+        assert.ok(result.instrumentation?.search);
+        assert.ok(result.instrumentation.search.programCount > 0);
+        assert.strictEqual(result.instrumentation.search.pendingEntryCount, result.snapshot.pendingEntries.length);
+        assert.ok(result.instrumentation.search.canImprove);
     });
 
-    it('aborts V7 checkpoint searches through the adapter', async () => {
+    it('aborts checkpoint searches through the adapter', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
         const controller = new AbortController();
         controller.abort();
@@ -195,7 +195,7 @@ describe('V7 engine adapter', () => {
         );
     });
 
-    it('resumes V7 XP-cell runs across one-at-a-time checkpoint calls', async () => {
+    it('resumes XP-cell runs across one-at-a-time checkpoint calls', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
         engine.resetCaches();
 
@@ -239,7 +239,7 @@ describe('V7 engine adapter', () => {
 
         assert.strictEqual(first.instrumentation?.totalIterations, 50);
         assert.strictEqual(resumed.instrumentation?.totalIterations, 50, 'lower follow-up limit should return the already-advanced cached run');
-        assert.ok((resumed.instrumentation?.v7?.runCacheHits ?? 0) >= 1);
+        assert.ok((resumed.instrumentation?.search?.runCacheHits ?? 0) >= 1);
 
         engine.resetCaches();
         const fresh = await engine.searchToCheckpoint({
@@ -264,7 +264,7 @@ describe('V7 engine adapter', () => {
         assert.strictEqual(fresh.instrumentation?.totalIterations, 10);
     });
 
-    it('reuses V7 structural programs across fresh XP-cell runs', async () => {
+    it('reuses structural programs across fresh XP-cell runs', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
         engine.resetCaches();
 
@@ -287,7 +287,7 @@ describe('V7 engine adapter', () => {
                 fullyResolved: false
             }
         });
-        const firstMisses = first.instrumentation?.v7?.programCacheMisses ?? 0;
+        const firstMisses = first.instrumentation?.search?.programCacheMisses ?? 0;
 
         const second = await engine.searchToCheckpoint({
             item: 'sword',
@@ -310,7 +310,7 @@ describe('V7 engine adapter', () => {
         });
 
         assert.ok(firstMisses > 0);
-        assert.ok((second.instrumentation?.v7?.programCacheHits ?? 0) >= firstMisses);
+        assert.ok((second.instrumentation?.search?.programCacheHits ?? 0) >= firstMisses);
     });
 
 });

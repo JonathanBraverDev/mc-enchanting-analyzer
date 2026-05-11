@@ -4,7 +4,7 @@ import { ENGINE_LIMITS } from '#constants/engine.js';
 import { TEST_DEFAULTS } from '#constants/testing.js';
 import { ClueValidator } from '#core/clue.js';
 import { SummaryService } from '#services/SummaryService.js';
-import { RegistryKernel, SearchRun } from '#lib/v7/index.js';
+import { RegistryKernel, SearchRun } from '#lib/search/index.js';
 import { CalculationStats } from '#types/index.js';
 
 interface SnapshotCase {
@@ -63,7 +63,7 @@ async function getStats(engine: EnchantEngine, testCase: SnapshotCase): Promise<
     const run = new SearchRun(kernel, { targetClueId });
     run.seedXp(testCase.xp);
 
-    // Snapshot generation is a final artifact export. Use V7's synchronous run path
+    // Snapshot generation is a final artifact export. Use the synchronous search run path
     // so the search loop does not repeatedly materialize full checkpoint snapshots
     // while yielding; modern book exhaustive runs have millions of pending entries.
     const snapshot = run.searchToCheckpoint({
@@ -86,7 +86,7 @@ async function getStats(engine: EnchantEngine, testCase: SnapshotCase): Promise<
 }
 
 async function updateSnapshots() {
-    console.log('Updating V7 exhaustive regression snapshots...');
+    console.log('Updating exhaustive regression snapshots...');
 
     for (const testCase of getRequestedCases()) {
         console.log(`Generating ${testCase.name}...`);
@@ -96,7 +96,7 @@ async function updateSnapshots() {
         await SnapshotUtils.saveSnapshot(testCase.name, stats, engine.registry);
     }
 
-    console.log('V7 exhaustive snapshots updated successfully.');
+    console.log('Exhaustive snapshots updated successfully.');
 }
 
 updateSnapshots().catch(err => {

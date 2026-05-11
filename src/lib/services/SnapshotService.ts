@@ -24,7 +24,7 @@ import { SummaryAggregationService } from '#services/SummaryAggregationService.j
 import { TargetAnalysisService } from '#services/TargetAnalysisService.js';
 import { TargetClueAdvisorService } from '#services/TargetClueAdvisorService.js';
 import { ClueSignalAdvisorService } from '#services/ClueSignalAdvisorService.js';
-import type { V7SearchRunSnapshot } from '#lib/v7/search/SearchRun.js';
+import type { SearchRunSnapshot } from '#lib/search/SearchRun.js';
 
 
 export class SnapshotService {
@@ -40,7 +40,7 @@ export class SnapshotService {
    */
   public static create(
     state: RegistryState,
-    snapshot: V7SearchRunSnapshot,
+    snapshot: SearchRunSnapshot,
     request: SnapshotRequest
   ): TopRunView | ChartCellView {
     const { snapshotType, refinementLevel, clue, comboLimit } = request;
@@ -77,11 +77,11 @@ export class SnapshotService {
       knownSpace = ProbUtils.toNumber(conditioned.knownSpace);
       result = conditioned;
     } else {
-      // Unconditioned views derive aggregate stats from combos + pending V7 entries.
+      // Unconditioned views derive aggregate stats from combos + pending search entries.
       const derived = SummaryAggregationService.aggregate({
         combos,
         indexToEnchant: state.indexToEnchant,
-        v7PendingEntries: snapshot.pendingEntries,
+        pendingEntries: snapshot.pendingEntries,
         isBook,
         includeShownClueDistribution: false
       });
@@ -105,7 +105,7 @@ export class SnapshotService {
       combos: result.combos,
       indexToEnchant: state.indexToEnchant,
       targets: packedTargets,
-      v7PendingEntries: isConditioned ? [] : snapshot.pendingEntries,
+      pendingEntries: isConditioned ? [] : snapshot.pendingEntries,
       comboLimit: includeCombos ? comboLimit ?? ENGINE_LIMITS.MAX_RESULTS_SUMMARY : 0,
       registry: state,
       isBook
@@ -128,7 +128,7 @@ export class SnapshotService {
         indexToEnchant: state.indexToEnchant,
         targets: packedTargets,
         registry: state,
-        v7PendingEntries: snapshot.pendingEntries,
+        pendingEntries: snapshot.pendingEntries,
         limit: 5
       })
       : undefined;

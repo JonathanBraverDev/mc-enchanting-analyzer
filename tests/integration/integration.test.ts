@@ -9,7 +9,7 @@ import { SummaryService } from '#services/SummaryService.js';
 import { getEnchantId } from '#core/registry.js';
 import { ComboUtils, PRECISION } from '#utils/index.js';
 import type { PackedEnchant, TopRunView } from '#types/index.js';
-import { makeV7Snapshot } from '#tests/infra/v7-snapshot-test-utils.js';
+import { makeSearchSnapshot } from '#tests/infra/search-snapshot-test-utils.js';
 
 const BASE_PAYLOAD = TEST_DATA.PAYLOADS.BASE_SWORD;
 
@@ -140,7 +140,7 @@ describe('Integration: Clue-Conditioned Calculation', () => {
         const combos = new Map([
             [ComboUtils.pack([smiteIv], engine.registry.enchantToIndex), PRECISION]
         ]);
-        const runSnapshot = makeV7Snapshot({ results: combos, units: { resolved: PRECISION } });
+        const runSnapshot = makeSearchSnapshot({ results: combos, units: { resolved: PRECISION } });
 
         const snapshot = SnapshotService.create(
             engine.registry,

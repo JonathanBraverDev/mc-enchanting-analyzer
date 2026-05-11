@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { RegistryFactory, RegistryKernel } from '#lib/index.js';
 
-describe('V7 RegistryKernel', () => {
+describe('RegistryKernel', () => {
     it('creates stable pool signatures for equivalent modified-level pools', () => {
         const registry = RegistryFactory.build('1.21.11');
         const kernel = new RegistryKernel({ registry, item: 'sword', material: 'diamond' });

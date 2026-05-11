@@ -1,21 +1,21 @@
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { SearchResult, SequentialCheckpointSearchContext, CheckpointSearchContext, EngineInstrumentation, SearchTiming } from '#types/index.js';
-import { RegistryKernel } from '#lib/v7/registry/RegistryKernel.js';
-import { SearchRun, V7SearchRunSnapshot } from '#lib/v7/search/SearchRun.js';
-import { V7SearchCache } from '#lib/v7/search/V7SearchCache.js';
+import { RegistryKernel } from '#lib/search/registry/RegistryKernel.js';
+import { SearchRun, SearchRunSnapshot } from '#lib/search/SearchRun.js';
+import { SearchCache } from '#lib/search/SearchCache.js';
 import { PRECISION, ProbUtils } from '#utils/index.js';
 
 /**
- * V7 adapter for the existing engine boundary.
+ * Adapter for the existing engine boundary.
  *
  * This intentionally returns the existing SearchResult shape so SummaryService,
  * SnapshotService, and workers can be migrated before their public contracts move.
  */
-export class V7SearchService {
+export class SearchService {
     public constructor(
         private readonly distributionService: ModifiedLevelDistributionService = new ModifiedLevelDistributionService(),
-        private readonly cache: V7SearchCache = new V7SearchCache()
+        private readonly cache: SearchCache = new SearchCache()
     ) {}
 
     public clearCache(): void {
@@ -49,7 +49,7 @@ export class V7SearchService {
             const checkpoint = request.checkpoints[checkpointIndex];
             if (!checkpoint) continue;
 
-            let snapshot: V7SearchRunSnapshot;
+            let snapshot: SearchRunSnapshot;
             try {
                 snapshot = await run.searchToCheckpointAsync({
                     threshold: checkpoint.threshold,
@@ -107,7 +107,7 @@ export class V7SearchService {
     }
 
     private toSearchResult(
-        snapshot: V7SearchRunSnapshot,
+        snapshot: SearchRunSnapshot,
         threshold: number | bigint | undefined,
         targetClassifiedMass?: number | bigint | undefined,
         instrumentation?: EngineInstrumentation | undefined,
@@ -139,7 +139,7 @@ export class V7SearchService {
             instrumentation.poolCache = instrumentation.poolCache ?? { hits: 0, misses: 0 };
             instrumentation.distCache = instrumentation.distCache ?? { hits: 0, misses: 0 };
             instrumentation.frontierCache = instrumentation.frontierCache ?? { hits: 0, misses: 0 };
-            instrumentation.v7 = {
+            instrumentation.search = {
                 programCount: snapshot.programCount,
                 seededLevelCount: snapshot.seededLevelCount,
                 pendingEntryCount: snapshot.pendingCount,

@@ -35,7 +35,7 @@ export class SummaryService {
         const derived = SummaryAggregationService.aggregate({
             combos,
             indexToEnchant,
-            v7PendingEntries: snapshot.pendingEntries,
+            pendingEntries: snapshot.pendingEntries,
             isBook
         });
 

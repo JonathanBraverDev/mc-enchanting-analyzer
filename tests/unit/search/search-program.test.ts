@@ -3,7 +3,7 @@ import assert from 'node:assert';
 import { RegistryFactory, RegistryKernel, SearchProgram } from '#lib/index.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 
-describe('V7 SearchProgram', () => {
+describe('SearchProgram', () => {
     it('lazily expands root nodes into canonical one-enchant children', () => {
         const registry = RegistryFactory.build('1.21.11');
         const kernel = new RegistryKernel({ registry, item: 'sword', material: 'diamond' });

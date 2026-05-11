@@ -2,9 +2,9 @@ import { getEligiblePool, getEnchantability } from '#core/registry.js';
 import { BIGINT_CONSTANTS, PACKING_CONSTANTS } from '#constants/engine.js';
 import { PackedEnchant, RegistryState } from '#types/index.js';
 
-export type V7PoolSignature = string & { readonly __brand: 'V7PoolSignature' };
+export type PoolSignature = string & { readonly __brand: 'PoolSignature' };
 
-export interface V7PoolEntry {
+export interface PoolEntry {
     readonly packedEnchant: PackedEnchant;
     readonly enchantId: number;
     readonly rank: number;
@@ -14,18 +14,18 @@ export interface V7PoolEntry {
     readonly conflictBitset: bigint;
 }
 
-export interface V7PoolProjection {
+export interface PoolProjection {
     readonly item: string;
     readonly level: number;
-    readonly signature: V7PoolSignature;
-    readonly entries: readonly V7PoolEntry[];
+    readonly signature: PoolSignature;
+    readonly entries: readonly PoolEntry[];
     readonly totalWeight: number;
 }
 
-export interface V7PoolGroup {
-    readonly signature: V7PoolSignature;
+export interface PoolGroup {
+    readonly signature: PoolSignature;
     readonly levels: readonly number[];
-    readonly pool: V7PoolProjection;
+    readonly pool: PoolProjection;
 }
 
 export interface RegistryKernelRequest {
@@ -35,7 +35,7 @@ export interface RegistryKernelRequest {
 }
 
 /**
- * V7 request-scoped registry projection.
+ * Request-scoped registry projection for shared search.
  *
  * This is the first seam for the shared-search rewrite: it turns the mutable-looking
  * V6 registry helpers into immutable pool projections with stable structural
@@ -50,7 +50,7 @@ export class RegistryKernel {
     public readonly enchantability: number;
     public readonly multiEnchantBooks: boolean;
 
-    private readonly poolCache = new Map<number, V7PoolProjection>();
+    private readonly poolCache = new Map<number, PoolProjection>();
 
     public constructor(request: RegistryKernelRequest) {
         this.registry = request.registry;
@@ -61,7 +61,7 @@ export class RegistryKernel {
         this.multiEnchantBooks = request.registry.multiEnchantBooks;
     }
 
-    public getPool(level: number): V7PoolProjection {
+    public getPool(level: number): PoolProjection {
         const cached = this.poolCache.get(level);
         if (cached) return cached;
 
@@ -69,7 +69,7 @@ export class RegistryKernel {
         const entries = packedPool.map(packedEnchant => this.createPoolEntry(packedEnchant));
         const totalWeight = entries.reduce((sum, entry) => sum + entry.weight, 0);
         const signature = this.createPoolSignature(entries);
-        const projection: V7PoolProjection = Object.freeze({
+        const projection: PoolProjection = Object.freeze({
             item: this.item,
             level,
             signature,
@@ -81,8 +81,8 @@ export class RegistryKernel {
         return projection;
     }
 
-    public getPoolGroups(levels: readonly number[]): V7PoolGroup[] {
-        const groups = new Map<V7PoolSignature, { levels: number[]; pool: V7PoolProjection }>();
+    public getPoolGroups(levels: readonly number[]): PoolGroup[] {
+        const groups = new Map<PoolSignature, { levels: number[]; pool: PoolProjection }>();
 
         for (const level of levels) {
             const pool = this.getPool(level);
@@ -101,14 +101,14 @@ export class RegistryKernel {
         }));
     }
 
-    private createPoolEntry(packedEnchant: PackedEnchant): V7PoolEntry {
+    private createPoolEntry(packedEnchant: PackedEnchant): PoolEntry {
         const enchantId = packedEnchant >> PACKING_CONSTANTS.ENCHANT_SHIFT;
         const rank = packedEnchant & PACKING_CONSTANTS.RANK_MASK;
         const weight = this.registry.weightMap[enchantId] ?? 0;
         const comboIndex = this.registry.enchantToIndex.get(packedEnchant) ?? 0;
         const idBit = BIGINT_CONSTANTS.ID_BIT_LOOKUP[enchantId];
         if (idBit === undefined) {
-            throw new Error(`V7 registry kernel supports enchant IDs 0-${BIGINT_CONSTANTS.ID_BIT_LOOKUP.length - 1}; pool contains ID ${enchantId}.`);
+            throw new Error(`Registry kernel supports enchant IDs 0-${BIGINT_CONSTANTS.ID_BIT_LOOKUP.length - 1}; pool contains ID ${enchantId}.`);
         }
 
         return Object.freeze({
@@ -122,7 +122,7 @@ export class RegistryKernel {
         });
     }
 
-    private createPoolSignature(entries: readonly V7PoolEntry[]): V7PoolSignature {
+    private createPoolSignature(entries: readonly PoolEntry[]): PoolSignature {
         const parts = [
             `v=${this.version}`,
             `item=${this.item}`,
@@ -135,7 +135,7 @@ export class RegistryKernel {
             ].join(':'))
         ];
 
-        return `pool:${fnv1a64(parts.join('|'))}` as V7PoolSignature;
+        return `pool:${fnv1a64(parts.join('|'))}` as PoolSignature;
     }
 }
 

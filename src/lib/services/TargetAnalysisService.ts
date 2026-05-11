@@ -7,14 +7,14 @@ import type {
     TargetAnalysisResult,
     TargetRequirementInput
 } from '#types/index.js';
-import type { V7PendingFrontierEntry } from '#lib/v7/search/SearchRun.js';
+import type { PendingFrontierEntry } from '#lib/search/SearchRun.js';
 import { ComboUtils } from '#utils/index.js';
 
 export interface TargetAnalysisRequest {
     combos: ReadonlyMap<PackedCombo, bigint>;
     indexToEnchant: number[];
     targets?: PackedTargetRequirement[] | undefined;
-    v7PendingEntries?: readonly V7PendingFrontierEntry[] | undefined;
+    pendingEntries?: readonly PendingFrontierEntry[] | undefined;
     comboLimit?: number | undefined;
     registry?: RegistryState | undefined;
     isBook?: boolean | undefined;
@@ -109,7 +109,7 @@ export class TargetAnalysisService {
             combos,
             indexToEnchant,
             targets = [],
-            v7PendingEntries = [],
+            pendingEntries = [],
             comboLimit = 50,
             registry,
             isBook = false
@@ -135,7 +135,7 @@ export class TargetAnalysisService {
             }
         }
 
-        for (const entry of v7PendingEntries) {
+        for (const entry of pendingEntries) {
             const packed = entry.combo;
             const classification = this.classifyCombo(packed, targets, indexToEnchant, registry);
             const mass = entry.mass;

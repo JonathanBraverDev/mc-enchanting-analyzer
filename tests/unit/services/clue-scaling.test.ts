@@ -3,7 +3,7 @@ import assert from 'node:assert';
 import { PRECISION } from '#utils/math/ProbUtils.js';
 import { SummaryService } from '#services/SummaryService.js';
 import { ComboUtils } from '#utils/domain/ComboUtils.js';
-import { makeV7PendingEntry, makeV7Snapshot } from '#tests/infra/v7-snapshot-test-utils.js';
+import { makePendingEntry, makeSearchSnapshot } from '#tests/infra/search-snapshot-test-utils.js';
 import type { PackedEnchant } from '#types/index.js';
 
 describe('Clue Conditioning Scaling diagnostics', () => {
@@ -16,7 +16,7 @@ describe('Clue Conditioning Scaling diagnostics', () => {
         // Combo with only Sharpness II
         rawCombos.set(2, PRECISION);
 
-        const snapshot = makeV7Snapshot({ results: rawCombos as any, units: { resolved: PRECISION } });
+        const snapshot = makeSearchSnapshot({ results: rawCombos as any, units: { resolved: PRECISION } });
         const stats = SummaryService.summarizeConditioned({ combos: rawCombos as any, snapshot, indexToEnchant, targetClueId });
 
         assert.strictEqual(stats.clue?.knownSpace, 0);
@@ -31,7 +31,7 @@ describe('Clue Conditioning Scaling diagnostics', () => {
         // Combo with only Sharpness I
         rawCombos.set(1, PRECISION);
 
-        const snapshot = makeV7Snapshot({ results: rawCombos as any, units: { resolved: PRECISION } });
+        const snapshot = makeSearchSnapshot({ results: rawCombos as any, units: { resolved: PRECISION } });
         const stats = SummaryService.summarizeConditioned({ combos: rawCombos as any, snapshot, indexToEnchant, targetClueId });
 
         // pClue should be 1.0
@@ -50,7 +50,7 @@ describe('Clue Conditioning Scaling diagnostics', () => {
         rawCombos.set(1, PRECISION / 2n);
         rawCombos.set(2, PRECISION / 2n);
 
-        const snapshot = makeV7Snapshot({ results: rawCombos as any, units: { resolved: PRECISION } });
+        const snapshot = makeSearchSnapshot({ results: rawCombos as any, units: { resolved: PRECISION } });
         const stats = SummaryService.summarizeConditioned({ combos: rawCombos as any, snapshot, indexToEnchant, targetClueId });
 
         // pClue = 0.5
@@ -65,7 +65,7 @@ describe('Clue Conditioning Scaling diagnostics', () => {
         const rawCombos = new Map<number, bigint>();
         rawCombos.set(1, PRECISION / 4n); // 25% compatible resolved mass
 
-        const snapshot = makeV7Snapshot({ results: rawCombos as any, units: { resolved: PRECISION / 2n, pending: PRECISION / 2n } });
+        const snapshot = makeSearchSnapshot({ results: rawCombos as any, units: { resolved: PRECISION / 2n, pending: PRECISION / 2n } });
 
         const stats = SummaryService.summarizeConditioned({ combos: rawCombos as any, snapshot, indexToEnchant, targetClueId });
 
@@ -83,8 +83,8 @@ describe('Clue Conditioning Scaling diagnostics', () => {
             [2, 2]
         ]);
         const packed = ComboUtils.pack([targetClueId as PackedEnchant, 2 as PackedEnchant], enchantToIndex);
-        const pendingEntries = [makeV7PendingEntry(packed, 2, PRECISION / 2n)];
-        const snapshot = makeV7Snapshot({ pendingEntries, units: { pending: PRECISION / 2n } });
+        const pendingEntries = [makePendingEntry(packed, 2, PRECISION / 2n)];
+        const snapshot = makeSearchSnapshot({ pendingEntries, units: { pending: PRECISION / 2n } });
 
         const stats = SummaryService.summarizeConditioned({
             combos: new Map(),
@@ -106,8 +106,8 @@ describe('Clue Conditioning Scaling diagnostics', () => {
             [enchantC, 3]
         ]);
         const packed = ComboUtils.pack([targetClueId as PackedEnchant, 2 as PackedEnchant, enchantC], enchantToIndex);
-        const pendingEntries = [makeV7PendingEntry(packed, 3, PRECISION)];
-        const snapshot = makeV7Snapshot({ pendingEntries, units: { pending: PRECISION } });
+        const pendingEntries = [makePendingEntry(packed, 3, PRECISION)];
+        const snapshot = makeSearchSnapshot({ pendingEntries, units: { pending: PRECISION } });
 
         const stats = SummaryService.summarizeConditioned({
             combos: new Map(),
