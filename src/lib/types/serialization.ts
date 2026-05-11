@@ -1,7 +1,7 @@
 import type { MassAccountingBreakdown } from '#types/mass.js';
 
 /**
- * Compact representation of calculation statistics for efficient transfer.
+ * Compact representation of enchant stats for efficient transfer.
  */
 export interface CompactStats {
     comboKeys: Float64Array;

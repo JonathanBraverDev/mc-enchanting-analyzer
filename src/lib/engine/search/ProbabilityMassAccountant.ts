@@ -130,6 +130,13 @@ export class ProbabilityMassAccountant {
     }
 
     /**
+     * Returns active mass that is no longer pending frontier work.
+     */
+    public getClassifiedMass(): bigint {
+        return this.getTotalMass() - this.data[BUCKET_INDEX.pending]!;
+    }
+
+    /**
      * Returns the mass that has been removed from the frontier by normal exploration.
      */
     public getExploredMass(): bigint {
@@ -138,7 +145,7 @@ export class ProbabilityMassAccountant {
     }
 
     /**
-     * Returns the mass from frontiers that were discovered but not yet expanded.
+     * Returns the mass discovered but not yet expanded.
      */
     public getUnexploredMass(): bigint {
         return this.data[2]!;

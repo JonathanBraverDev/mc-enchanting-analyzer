@@ -1,5 +1,5 @@
 import { PACKING_CONSTANTS } from '#constants/engine.js';
-import { getEligiblePool, getEnchantability, getFullEnchantName } from '#core/registry.js';
+import { getCandidatePool, getEnchantability, getFullEnchantName } from '#core/registry.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import type {
     ClueSignalAdvisorView,
@@ -36,7 +36,7 @@ export class ClueSignalAdvisorService {
 
         for (const [modifiedLevelText, levelMass] of Object.entries(distribution)) {
             const modifiedLevel = Number(modifiedLevelText);
-            const pool = getEligiblePool(registry, item, modifiedLevel);
+            const pool = getCandidatePool(registry, item, modifiedLevel);
             const totalWeight = this.getPoolWeight(registry, pool);
             if (totalWeight <= 0) continue;
 

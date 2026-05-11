@@ -121,6 +121,9 @@ class AppController {
 
     private enqueueRun(): void {
         if (this.runDebounceTimeout) window.clearTimeout(this.runDebounceTimeout);
+        if (!this.suppressNextChartRefresh) {
+            this.results.setChartStatus(`${UI_TEXTS.STATUS_SEARCHING} probabilities`, 0);
+        }
         this.runDebounceTimeout = window.setTimeout(() => this.run(), 50);
     }
 
@@ -232,7 +235,7 @@ class AppController {
         const registry = UiMetadataService.getRegistry(version);
         const sortMode = this.params.getValues().sortMode;
 
-        this.results.updateV5(
+        this.results.updateRunView(
             view,
             registry,
             sortMode === 'advisor' ? TargetClueAdvisorService.summarizeSweep(this.refinement.currentSweep) : undefined,

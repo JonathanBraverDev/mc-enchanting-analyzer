@@ -43,7 +43,7 @@ async function runCase(testCase: PerfCase) {
 
     const timing = { totalMs: 0, searchMs: 0, postProcessingMs: 0 };
     const wallStart = performance.now();
-    const stats = await engine.calculate({
+    const stats = await engine.getStats({
         item: testCase.item,
         xp: testCase.xp,
         material: testCase.material,

@@ -11,12 +11,10 @@ import {
   TopEnchantShareView,
   ChartBucketsView,
   RefinementLevelName,
-  SearchFrontierSnapshot,
   ClueSignalAdvisorView,
   TargetClueAdvisorView,
   TargetDiagnosticsView
 } from '#types/index.js';
-import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
 import { ProbUtils, ComboUtils } from '#utils/index.js';
 import { ClueAnalysisService } from '#services/ClueAnalysisService.js';
 import { getFullEnchantName, getEnchantName } from '#core/registry.js';
@@ -26,6 +24,7 @@ import { SummaryAggregationService } from '#services/SummaryAggregationService.j
 import { TargetAnalysisService } from '#services/TargetAnalysisService.js';
 import { TargetClueAdvisorService } from '#services/TargetClueAdvisorService.js';
 import { ClueSignalAdvisorService } from '#services/ClueSignalAdvisorService.js';
+import type { SearchRunSnapshot } from '#lib/search/SearchRun.js';
 
 
 export class SnapshotService {
@@ -41,12 +40,11 @@ export class SnapshotService {
    */
   public static create(
     state: RegistryState,
-    tracker: SearchStateTracker,
-    combos: Map<PackedCombo, bigint>,
-    request: SnapshotRequest,
-    frontiers: SearchFrontierSnapshot[] = []
+    snapshot: SearchRunSnapshot,
+    request: SnapshotRequest
   ): TopRunView | ChartCellView {
     const { snapshotType, refinementLevel, clue, comboLimit } = request;
+    const combos = new Map(snapshot.results);
     const includeCombos = request.includeCombos ?? snapshotType === 'top';
     const isBook = request.input.item === 'book';
 
@@ -69,15 +67,21 @@ export class SnapshotService {
 
     if (isConditioned) {
       // Conditioned views derive from top combos and any pending frontier mass.
-      const conditioned = ClueAnalysisService.conditionOnClue(combos, targetClueId!, state.indexToEnchant, frontiers, isBook);
+      const conditioned = ClueAnalysisService.conditionOnClue(
+        combos,
+        targetClueId!,
+        state.indexToEnchant,
+        isBook,
+        snapshot.pendingEntries
+      );
       knownSpace = ProbUtils.toNumber(conditioned.knownSpace);
       result = conditioned;
     } else {
-      // Unconditioned views derive aggregate stats from combos + frontiers.
+      // Unconditioned views derive aggregate stats from combos + pending search entries.
       const derived = SummaryAggregationService.aggregate({
         combos,
         indexToEnchant: state.indexToEnchant,
-        frontiers,
+        pendingEntries: snapshot.pendingEntries,
         isBook,
         includeShownClueDistribution: false
       });
@@ -101,7 +105,7 @@ export class SnapshotService {
       combos: result.combos,
       indexToEnchant: state.indexToEnchant,
       targets: packedTargets,
-      frontiers: isConditioned ? [] : frontiers,
+      pendingEntries: isConditioned ? [] : snapshot.pendingEntries,
       comboLimit: includeCombos ? comboLimit ?? ENGINE_LIMITS.MAX_RESULTS_SUMMARY : 0,
       registry: state,
       isBook
@@ -124,7 +128,7 @@ export class SnapshotService {
         indexToEnchant: state.indexToEnchant,
         targets: packedTargets,
         registry: state,
-        frontiers,
+        pendingEntries: snapshot.pendingEntries,
         limit: 5
       })
       : undefined;
@@ -156,7 +160,7 @@ export class SnapshotService {
       ? { ...result, combos: targetAnalysis.combos }
       : result;
 
-    const accounting = tracker.mass.toPublic();
+    const accounting = snapshot.mass;
     const normalization: NormalizationView = {
       domain: isConditioned ? 'clue-known-space' : 'resolved-mass',
       ...(knownSpace !== undefined ? { clue: { knownSpace } } : {})
@@ -209,7 +213,7 @@ export class SnapshotService {
     clueConditioned: boolean,
     normalization: NormalizationView,
     accounting: AccountingView,
-    result: { anyMass: Map<number, bigint>, rankMass: Map<number, bigint>, countMass: Map<number, bigint>, combos: Map<PackedCombo, bigint> },
+    result: { anyMass: Map<number, bigint>, rankMass: Map<number, bigint>, countMass: Map<number, bigint>, combos: ReadonlyMap<PackedCombo, bigint> },
     comboLimit: number,
     target?: TargetDiagnosticsView,
     clueAdvisor?: TargetClueAdvisorView,

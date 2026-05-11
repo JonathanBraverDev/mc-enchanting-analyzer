@@ -68,16 +68,14 @@ shell.onRun = async (msg: WorkerRequest, engine, signal) => {
 
             const cell = SnapshotService.create(
                 engine.registry,
-                result.tracker,
-                result.combos,
+                result.snapshot,
                 {
                     snapshotType: 'chart-cell',
                     input: { ...input, xpLevel: xp },
                     refinementLevel: level,
                     clue: input.clue,
                     includeCombos: false
-                },
-                result.frontiers
+                }
             );
 
             const response: ChartUpdateResponse = {

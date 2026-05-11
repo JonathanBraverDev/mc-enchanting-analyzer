@@ -35,7 +35,7 @@ describe('Legacy Distribution & Mechanics (Beta 1.9 - 1.2.5)', () => {
         const engine = EngineFactory.createForVersion('1.21');
 
         await assert.rejects(async () => {
-            await engine.calculate({ item: 'sword', xp: 31, material: 'diamond' });
+            await engine.getStats({ item: 'sword', xp: 31, material: 'diamond' });
         }, /XP level 31 exceeds the maximum/);
     });
 });

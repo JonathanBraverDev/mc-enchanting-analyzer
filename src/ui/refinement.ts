@@ -28,7 +28,7 @@ export interface RefinementCallbacks {
 
 /**
  * Service for orchestrating progressive refinement of enchantment calculations.
- * V5 implementation uses the run-based protocol and specialized workers.
+ * Uses the run-based worker protocol and specialized top/chart workers.
  */
 export class RefinementService {
     private sweep: ChartCellView[] = [];
@@ -79,6 +79,8 @@ export class RefinementService {
 
             const refinementLevels: RefinementLevelName[] = ['coarse', 'standard', 'deep', 'ultra'];
             const isBook = payload.item === 'book';
+            const initialChartParams = getSearchCheckpointForRefinement(refinementLevels[0]!, isBook);
+            callbacks.onChartStatus?.(`${initialChartParams.status} probabilities`, 0);
 
             // Start Top Run (Single call for all levels)
             WorkerClient.startTopRun(
@@ -126,7 +128,7 @@ export class RefinementService {
                 }
             );
 
-            // In v5, we don't await the workers directly here; they drive the UI via callbacks.
+            // Do not await worker completion here; worker callbacks drive UI updates.
             // But we keep the promise active until terminal state if we want run() to represent the lifecycle.
             await new Promise<void>((resolve) => {
                 const interval = setInterval(() => {

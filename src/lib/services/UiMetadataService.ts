@@ -6,7 +6,7 @@ import {
   getEnchantability,
   getEnchantId,
   getFullEnchantName,
-  getEligiblePool
+  getCandidatePool
 } from '#core/registry.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { TargetAnalysisService } from '#services/TargetAnalysisService.js';
@@ -71,7 +71,7 @@ export class UiMetadataService {
     const allPossible = new Set<string>();
     for (const mlStr of Object.keys(dist)) {
       const ml = parseInt(mlStr);
-      const pool = getEligiblePool(registry, item, ml);
+      const pool = getCandidatePool(registry, item, ml);
       for (const p of pool) {
         allPossible.add(getFullEnchantName(registry, p));
       }
@@ -93,7 +93,7 @@ export class UiMetadataService {
 
     for (const mlStr of Object.keys(dist)) {
       const ml = parseInt(mlStr);
-      const pool = getEligiblePool(registry, item, ml);
+      const pool = getCandidatePool(registry, item, ml);
       for (const packed of pool) {
         const option = TargetAnalysisService.makeTargetInput(registry, packed);
         for (let rank = 1; rank <= option.rank; rank++) {

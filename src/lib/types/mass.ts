@@ -17,7 +17,7 @@ export interface MassAccountingBreakdown {
   capped: number;
   /** Cumulative mass lost to floating point precision or integer division. */
   rounding: number;
-  /** Diagnostic: Mass recovered from the rounding bucket via residual promotion. (Non-additive) */
+  /** Diagnostic: Gross mass made distributable only because carried residue combined with later input. (Non-additive.) */
   recoveredRounding: number;
   /** Diagnostic: Mass recovered from sieved branches via aggregation. (Non-additive) */
   recoveredSieved: number;

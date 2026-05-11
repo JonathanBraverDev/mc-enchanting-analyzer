@@ -4,17 +4,17 @@ import type {
     PackedCombo,
     PackedTargetRequirement,
     RegistryState,
-    SearchFrontierSnapshot,
     TargetAnalysisResult,
     TargetRequirementInput
 } from '#types/index.js';
-import { ComboUtils, ProbUtils } from '#utils/index.js';
+import type { PendingFrontierEntry } from '#lib/search/SearchRun.js';
+import { ComboUtils } from '#utils/index.js';
 
 export interface TargetAnalysisRequest {
-    combos: Map<PackedCombo, bigint>;
+    combos: ReadonlyMap<PackedCombo, bigint>;
     indexToEnchant: number[];
     targets?: PackedTargetRequirement[] | undefined;
-    frontiers?: SearchFrontierSnapshot[] | undefined;
+    pendingEntries?: readonly PendingFrontierEntry[] | undefined;
     comboLimit?: number | undefined;
     registry?: RegistryState | undefined;
     isBook?: boolean | undefined;
@@ -109,7 +109,7 @@ export class TargetAnalysisService {
             combos,
             indexToEnchant,
             targets = [],
-            frontiers = [],
+            pendingEntries = [],
             comboLimit = 50,
             registry,
             isBook = false
@@ -135,26 +135,25 @@ export class TargetAnalysisService {
             }
         }
 
-        for (const { frontier, graph, scale } of frontiers) {
-            frontier.forEachNode((nodeId, prob) => {
-                const packed = graph.getCombo(nodeId);
-                const classification = this.classifyCombo(packed, targets, indexToEnchant, registry);
-                const mass = ProbUtils.scale(prob, scale);
-                if (classification.matches) {
-                    matchMass += mass;
-                    if (!isBook) this.addComboMass(matchingCombos, packed, mass);
-                } else {
-                    if (classification.nearMiss) {
-                        if (isBook) pendingNearMissMass += mass;
-                        else this.addComboMass(nearMissCombos, packed, mass);
-                    }
-                    if (classification.blockedByConflict) {
-                        if (isBook) pendingBlockedMass += mass;
-                        else this.addComboMass(blockedCombos, packed, mass);
-                    }
+        for (const entry of pendingEntries) {
+            const packed = entry.combo;
+            const classification = this.classifyCombo(packed, targets, indexToEnchant, registry);
+            const mass = entry.mass;
+            if (classification.matches) {
+                matchMass += mass;
+                if (!isBook) this.addComboMass(matchingCombos, packed, mass);
+            } else {
+                if (classification.nearMiss) {
+                    if (isBook) pendingNearMissMass += mass;
+                    else this.addComboMass(nearMissCombos, packed, mass);
                 }
-            });
+                if (classification.blockedByConflict) {
+                    if (isBook) pendingBlockedMass += mass;
+                    else this.addComboMass(blockedCombos, packed, mass);
+                }
+            }
         }
+
 
         const topCombos: [PackedCombo, bigint][] = [];
         for (const entry of matchingCombos.entries()) {

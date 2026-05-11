@@ -130,7 +130,7 @@ export function getFullEnchantName(state: RegistryState, idAndRank: number): str
  * @param version Optional version key for cache lookup.
  * @returns Array of packed enchantment values available at this level.
  */
-export function getEligiblePool(
+export function getCandidatePool(
     state: RegistryState,
     item: string,
     level: number,
@@ -152,6 +152,8 @@ export function getEligiblePool(
 
         // sortedRanks is sorted descending (highest rank first), so the first matching
         // rank is the highest one achievable at this level. The break is correct.
+        // TODO(post-7.0.0): precompute effective rank intervals in the runtime registry
+        // so lower ranks shadowed by overlapping higher-rank ranges are not scanned here.
         for (const [r, rankVal] of state.sortedRanks) {
             const range = props.levels[r];
             if (range && level >= range[0] && level <= range[1]) {
@@ -165,7 +167,7 @@ export function getEligiblePool(
     return out;
 }
 
-export function getEligibleListNumeric(
+export function getAvailablePool(
     state: RegistryState,
     item: string,
     level: number,
@@ -173,7 +175,7 @@ export function getEligibleListNumeric(
     cache?: { getPool(v: string, k: string): PackedEnchant[] | undefined; setPool(v: string, k: string, val: PackedEnchant[]): void },
     version?: string
 ): PackedEnchant[] {
-    const pool = getEligiblePool(state, item, level, cache, version);
+    const pool = getCandidatePool(state, item, level, cache, version);
     if (bitset === 0n) return pool;
 
     return pool.filter(packedEnchant => {
@@ -197,7 +199,7 @@ export function isEnchantmentAchievable(
     const targetRank = parsed.rank;
 
     for (const ml of levels) {
-        const pool = getEligiblePool(state, item, ml, cache, version);
+        const pool = getCandidatePool(state, item, ml, cache, version);
         if (pool.some(p => (p >> PACKING_CONSTANTS.ENCHANT_SHIFT) === targetId && (p & PACKING_CONSTANTS.RANK_MASK) === targetRank)) return true;
     }
     return false;

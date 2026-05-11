@@ -105,7 +105,7 @@ test.describe('Basic UI Functionality', () => {
                 rounding: 0
             };
 
-            app.results.updateV5({
+            app.results.updateRunView({
                 input: {},
                 refinementLevel: 'coarse',
                 clueConditioned: false,

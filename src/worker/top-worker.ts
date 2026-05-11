@@ -121,15 +121,13 @@ function postTopSnapshot(
 ): void {
     const view = SnapshotService.create(
         registry,
-        result.tracker,
-        result.combos,
+        result.snapshot,
         {
             snapshotType: 'top',
             input,
             refinementLevel,
             clue: input.clue
-        },
-        result.frontiers
+        }
     );
 
     const response: TopUpdateResponse = {
