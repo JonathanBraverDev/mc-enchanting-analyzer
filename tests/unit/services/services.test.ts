@@ -1,4 +1,3 @@
-import { EngineTestUtils } from '#tests/infra/test-utils.js';
 /**
  * Unit tests for service-layer classes:
  * SummaryService (combo-limit branches), SerializationService (roundtrip),
@@ -365,7 +364,7 @@ describe('HumanizationService', () => {
     const reg    = engine.registry;
 
     before(async () => {
-        await EngineTestUtils.getStats(engine, { item: 'pickaxe', xp: 30, material: 'diamond', threshold: 0.005 });
+        await engine.getStats({ item: 'pickaxe', xp: 30, material: 'diamond', threshold: 0.005 });
     });
 
     it('resolves enchantment names in the any map', () => {

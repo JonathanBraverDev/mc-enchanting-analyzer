@@ -1,4 +1,3 @@
-import { EngineTestUtils } from '#tests/infra/test-utils.js';
 /**
  * Tests for EnchantEngine sequential checkpoint search.
  */
@@ -182,7 +181,7 @@ describe('EnchantEngine checkpoint search', () => {
 
         engine.resetCaches();
 
-        const fullStats = await EngineTestUtils.getStats(engine, {
+        const fullStats = await engine.getStats({
             item: ITEM,
             xp: XP,
             material: MATERIAL,

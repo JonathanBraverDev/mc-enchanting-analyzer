@@ -1,10 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { HumanizationService } from '#services/index.js';
-import { SummaryService } from '#services/SummaryService.js';
-import { ClueValidator } from '#core/clue.js';
 import { EnchantEngine } from '#engine/index.js';
-import { ENGINE_LIMITS } from '#constants/engine.js';
 import type { CalculationStats, CheckpointSearchRequest } from '#types/index.js';
 
 /**
@@ -306,43 +303,17 @@ export const UI_TIMEOUT = process.env['CI'] ? 45000 : 15000;
  */
 export const EngineTestUtils = {
     /**
-     * Runs the checkpoint search boundary and summarizes its result for tests.
+     * Compatibility wrapper for older tests; product/tooling code should call engine.getStats directly.
      */
     async getStats(engine: EnchantEngine, request: CheckpointSearchRequest): Promise<CalculationStats> {
-        const result = await engine.searchToCheckpoint(request);
-        const targetClueId = request.clue
-            ? ClueValidator.validate(engine.registry, request.item, request.clue)
-            : undefined;
-        const postProcessingStart = request.timing ? performance.now() : 0;
-        const summaryRequest = {
-            combos: result.combos,
-            snapshot: result.snapshot,
-            indexToEnchant: engine.registry.indexToEnchant,
-            comboLimit: request.summaryLimit ?? ENGINE_LIMITS.MAX_RESULTS_SUMMARY,
-            threshold: result.threshold,
-            isBook: request.item === 'book'
-        };
-        const stats = targetClueId === undefined
-            ? SummaryService.summarize(summaryRequest)
-            : SummaryService.summarizeConditioned({ ...summaryRequest, targetClueId });
-
-        stats.instrumentation = result.instrumentation;
-        if (request.timing) {
-            const postProcessingMs = performance.now() - postProcessingStart;
-            request.timing.postProcessingMs = (request.timing.postProcessingMs ?? 0) + postProcessingMs;
-            request.timing.totalMs += postProcessingMs;
-            stats.timing = { ...request.timing };
-        } else {
-            stats.timing = result.timing;
-        }
-        return stats;
+        return engine.getStats(request);
     },
 
     /**
      * Performs a full enchantment simulation and returns human-readable results.
      */
     async getHumanStats(engine: EnchantEngine, item: string, xp: number, material: string, clue: string | null = null, threshold = 0.0001): Promise<any> {
-        const stats = await EngineTestUtils.getStats(engine, { item, xp, material, clue, threshold });
+        const stats = await engine.getStats({ item, xp, material, clue, threshold });
         return HumanizationService.humanize(stats, engine.registry);
     }
 };

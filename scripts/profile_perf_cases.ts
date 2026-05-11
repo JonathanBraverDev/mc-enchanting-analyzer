@@ -1,7 +1,6 @@
 import { EngineFactory } from '#engine/index.js';
 import { TEST_DEFAULTS } from '#constants/testing.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
-import { EngineTestUtils } from '#tests/infra/test-utils.js';
 
 interface PerfCase {
     name: string;
@@ -44,7 +43,7 @@ async function runCase(testCase: PerfCase) {
 
     const timing = { totalMs: 0, searchMs: 0, postProcessingMs: 0 };
     const wallStart = performance.now();
-    const stats = await EngineTestUtils.getStats(engine, {
+    const stats = await engine.getStats({
         item: testCase.item,
         xp: testCase.xp,
         material: testCase.material,

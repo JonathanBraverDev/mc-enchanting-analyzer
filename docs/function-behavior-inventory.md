@@ -819,28 +819,42 @@ For each function:
   - **return/side effects:** returns the registry helper's filtered packed-enchant list
   - **body-derived behavior summary:** asks the registry helper for the eligible packed enchants at one level, optionally excluding entries whose enchant ids are already present in the provided bigint bitset.
 
-- **path:line** `src/lib/engine/index.ts:61`
+- **path:line** `src/lib/engine/index.ts:63`
   - **current symbol:** `EnchantEngine.searchSequentialCheckpoints`
-  - **inputs/parameters used:** `request`, especially `item`, `material`, optional `clue`
-  - **state read/written:** calls `validateRequest`; may call `getPackedClue`; reads `registry`; calls `searchService.searchSequentialCheckpoints(...)`
+  - **inputs/parameters used:** `request`, especially `item`, `material`, optional `clue`, and `checkpoints`
+  - **state read/written:** calls `prepareSearchRequest`; then calls `searchService.searchSequentialCheckpoints(...)`
   - **return/side effects:** returns the search service result for the sequential checkpoint plan
-  - **body-derived behavior summary:** validates the request, converts an optional clue string into a validated packed clue id, then forwards the request plus the engine registry and packed clue target into the search service.
+  - **body-derived behavior summary:** shares validation and registry/clue context preparation with the other public engine search APIs, then forwards the prepared request into sequential checkpoint execution.
 
-- **path:line** `src/lib/engine/index.ts:78`
+- **path:line** `src/lib/engine/index.ts:70`
   - **current symbol:** `EnchantEngine.searchToCheckpoint`
   - **inputs/parameters used:** `request`, especially `item`, `material`, optional `clue`
-  - **state read/written:** calls `validateRequest`; may call `getPackedClue`; reads `registry`; calls `searchService.searchToCheckpoint(...)`
-  - **return/side effects:** returns one checkpoint/final search result
-  - **body-derived behavior summary:** performs the same validation and clue packing as the sequential variant, but advances only one checkpoint request through the search service.
+  - **state read/written:** calls `prepareSearchRequest`; then calls `searchService.searchToCheckpoint(...)`
+  - **return/side effects:** returns one checkpoint/final raw search result
+  - **body-derived behavior summary:** validates and prepares the public request, attaches the active registry and optional packed clue id, then advances one checkpoint request through the search service.
 
-- **path:line** `src/lib/engine/index.ts:92`
+- **path:line** `src/lib/engine/index.ts:78`
+  - **current symbol:** `EnchantEngine.getStats`
+  - **inputs/parameters used:** `request`, including item/material/xp search config, optional clue, optional summaryLimit, instrumentation, and timing
+  - **state read/written:** calls `prepareSearchRequest`; reads `registry.indexToEnchant`; calls `searchService.searchToCheckpoint(...)`; calls `SummaryService.summarize(...)` or `SummaryService.summarizeConditioned(...)`; may update `request.timing.postProcessingMs` and `request.timing.totalMs`
+  - **return/side effects:** returns summarized `CalculationStats` with search instrumentation and timing attached
+  - **body-derived behavior summary:** provides the simple public stats API by using the same checkpoint search path as raw search callers, then converts the raw `SearchResult` into presented stats without a separate stats cache or alternate search route.
+
+- **path:line** `src/lib/engine/index.ts:107`
+  - **current symbol:** `EnchantEngine.prepareSearchRequest`
+  - **inputs/parameters used:** `request.item`, optional `request.clue`, and all request fields forwarded by spread
+  - **state read/written:** calls `validateRequest`; may call `getPackedClue`; reads `registry`
+  - **return/side effects:** returns a request copy with `registry` and optional `targetClueId` attached
+  - **body-derived behavior summary:** centralizes public request validation and clue packing so raw checkpoint APIs and summarized stats use the same prepared search context.
+
+- **path:line** `src/lib/engine/index.ts:117`
   - **current symbol:** `EnchantEngine.getPackedClue`
   - **inputs/parameters used:** `item`, `clue`
   - **state read/written:** reads `registry`; calls `ClueValidator.validate(...)`
   - **return/side effects:** returns a numeric packed clue id; throws when validation fails
   - **body-derived behavior summary:** validates the clue string against the current registry/item context and returns the packed clue representation used by the search layer.
 
-- **path:line** `src/lib/engine/index.ts:96`
+- **path:line** `src/lib/engine/index.ts:121`
   - **current symbol:** `EnchantEngine.validateRequest`
   - **inputs/parameters used:** `request.item`, `request.material`, `request.xp`, optional `request.threshold`, `request.maxIterations`, optional `request.checkpoints`, optional `request.resultsLimit`
   - **state read/written:** reads `registry.mechanics.xp_cap`, `registry.version`; falls back to `MINECRAFT_RULES.XP_CAP_LEGACY`; calls `isItemAvailable`, `isMaterialEligible`, `ProbUtils.toNumber`; iterates `request.checkpoints` when present; no writes

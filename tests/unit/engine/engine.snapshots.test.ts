@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import { EngineFactory } from '#engine/factory.js';
-import { EngineTestUtils, SnapshotUtils } from '#tests/infra/test-utils.js';
+import { SnapshotUtils } from '#tests/infra/test-utils.js';
 import { TEST_DEFAULTS } from '#constants/testing.js';
 import { TEST_DATA } from '#tests/infra/test-data.js';
 import type { EnchantEngine } from '#engine/index.js';
@@ -11,7 +11,7 @@ if (typeof (globalThis as any).requestAnimationFrame !== 'function') {
 }
 
 async function calculateSnapshot(engine: EnchantEngine, request: { item: string; xp: number; material: string; clue?: string }) {
-    return await EngineTestUtils.getStats(engine, {
+    return await engine.getStats({
         ...request,
         exhaustive: TEST_DEFAULTS.SNAPSHOT_EXHAUSTIVE,
         summaryLimit: TEST_DEFAULTS.SNAPSHOT_RESULTS_LIMIT,

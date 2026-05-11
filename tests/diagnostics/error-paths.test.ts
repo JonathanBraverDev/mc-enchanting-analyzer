@@ -2,7 +2,6 @@ import { test, describe, it } from 'node:test';
 import assert from 'node:assert';
 import { EngineFactory } from '#engine/factory.js';
 import { MINECRAFT_RULES } from '#constants/minecraft.js';
-import { EngineTestUtils } from '#tests/infra/test-utils.js';
 
 describe('Error Path Tests', () => {
     test.afterEach(() => {
@@ -55,7 +54,7 @@ describe('Error Path Tests', () => {
         it('completely unknown clue name throws clear error', async () => {
             const engine = EngineFactory.createForVersion('1.21');
             await assert.rejects(
-                () => EngineTestUtils.getStats(engine, { item: 'sword', xp: 30, material: 'diamond', clue: 'FakeEnchant X' }),
+                () => engine.getStats({ item: 'sword', xp: 30, material: 'diamond', clue: 'FakeEnchant X' }),
                 (err: Error) => {
                     assert.ok(err.message.includes('Unknown enchantment'), `Expected "Unknown enchantment" in: ${err.message}`);
                     return true;
@@ -67,7 +66,7 @@ describe('Error Path Tests', () => {
             const engine = EngineFactory.createForVersion('1.21');
             // Aqua Affinity is helmet-only, not applicable to swords
             await assert.rejects(
-                () => EngineTestUtils.getStats(engine, { item: 'sword', xp: 30, material: 'diamond', clue: 'Aqua Affinity I' }),
+                () => engine.getStats({ item: 'sword', xp: 30, material: 'diamond', clue: 'Aqua Affinity I' }),
                 (err: Error) => {
                     assert.ok(err.message.includes('not applicable'), `Expected "not applicable" in: ${err.message}`);
                     return true;
@@ -79,7 +78,7 @@ describe('Error Path Tests', () => {
             const engine = EngineFactory.createForVersion('1.21');
             // Sharpness only goes to V, VI is invalid
             await assert.rejects(
-                () => EngineTestUtils.getStats(engine, { item: 'sword', xp: 30, material: 'diamond', clue: 'Sharpness VI' }),
+                () => engine.getStats({ item: 'sword', xp: 30, material: 'diamond', clue: 'Sharpness VI' }),
                 (err: Error) => {
                     assert.ok(err.message.includes('exceeds max rank'), `Expected "exceeds max rank" in: ${err.message}`);
                     return true;
@@ -90,7 +89,7 @@ describe('Error Path Tests', () => {
         it('clue with valid signature but impossible mass does not throw (Bayesian logic)', async () => {
             const engine = EngineFactory.createForVersion('1.21');
             // Sharpness V is impossible at level 1, but Bayesian p(Combo|Clue) just returns zero mass
-            const stats = await EngineTestUtils.getStats(engine, { item: 'sword', xp: 1, material: 'diamond', clue: 'Sharpness V' });
+            const stats = await engine.getStats({ item: 'sword', xp: 1, material: 'diamond', clue: 'Sharpness V' });
 
             // The search itself is still highly accurate/complete (100% of the tiny L1 space explored)
             assert.ok(stats.accuracy > 0.9999, `Expected search to be complete, got accuracy ${stats.accuracy}`);
@@ -103,7 +102,7 @@ describe('Error Path Tests', () => {
         it('missing item throws a clear error', async () => {
             const engine = EngineFactory.createForVersion('1.21');
             await assert.rejects(
-                () => EngineTestUtils.getStats(engine, { xp: 30, material: 'diamond' } as any),
+                () => engine.getStats({ xp: 30, material: 'diamond' } as any),
                 (err: Error) => {
                     assert.ok(err.message.toLowerCase().includes('item'), `Expected "item" in: ${err.message}`);
                     return true;
@@ -114,7 +113,7 @@ describe('Error Path Tests', () => {
         it('unknown item throws a clear error', async () => {
             const engine = EngineFactory.createForVersion('1.21');
             await assert.rejects(
-                () => EngineTestUtils.getStats(engine, { item: 'not_a_real_item', xp: 30, material: 'diamond' }),
+                () => engine.getStats({ item: 'not_a_real_item', xp: 30, material: 'diamond' }),
                 (err: Error) => {
                     assert.ok(err.message.toLowerCase().includes('item'), `Expected "item" in: ${err.message}`);
                     return true;
@@ -125,7 +124,7 @@ describe('Error Path Tests', () => {
         it('empty string item throws a clear error', async () => {
             const engine = EngineFactory.createForVersion('1.21');
             await assert.rejects(
-                () => EngineTestUtils.getStats(engine, { item: '', xp: 30, material: 'diamond' }),
+                () => engine.getStats({ item: '', xp: 30, material: 'diamond' }),
                 (err: Error) => {
                     assert.ok(err.message.toLowerCase().includes('item'), `Expected "item" in: ${err.message}`);
                     return true;
@@ -138,7 +137,7 @@ describe('Error Path Tests', () => {
         it('missing material throws a clear error', async () => {
             const engine = EngineFactory.createForVersion('1.21');
             await assert.rejects(
-                () => EngineTestUtils.getStats(engine, { item: 'sword', xp: 30 } as any),
+                () => engine.getStats({ item: 'sword', xp: 30 } as any),
                 (err: Error) => {
                     assert.ok(err.message.toLowerCase().includes('material'), `Expected "material" in: ${err.message}`);
                     return true;
@@ -149,7 +148,7 @@ describe('Error Path Tests', () => {
         it('unknown material throws a clear error', async () => {
             const engine = EngineFactory.createForVersion('1.21');
             await assert.rejects(
-                () => EngineTestUtils.getStats(engine, { item: 'sword', xp: 30, material: 'unobtanium' }),
+                () => engine.getStats({ item: 'sword', xp: 30, material: 'unobtanium' }),
                 (err: Error) => {
                     assert.ok(err.message.toLowerCase().includes('material'), `Expected "material" in: ${err.message}`);
                     return true;
@@ -160,7 +159,7 @@ describe('Error Path Tests', () => {
         it('empty string material throws a clear error', async () => {
             const engine = EngineFactory.createForVersion('1.21');
             await assert.rejects(
-                () => EngineTestUtils.getStats(engine, { item: 'sword', xp: 30, material: '' }),
+                () => engine.getStats({ item: 'sword', xp: 30, material: '' }),
                 (err: Error) => {
                     assert.ok(err.message.toLowerCase().includes('material'), `Expected "material" in: ${err.message}`);
                     return true;
@@ -174,7 +173,7 @@ describe('Error Path Tests', () => {
             const engine = EngineFactory.createForVersion('1.21');
             for (const xp of [0, -1, -100]) {
                 await assert.rejects(
-                    () => EngineTestUtils.getStats(engine, { item: 'sword', xp, material: 'diamond' }),
+                    () => engine.getStats({ item: 'sword', xp, material: 'diamond' }),
                     (err: Error) => {
                         assert.ok(err.message.toLowerCase().includes('xp'), `Expected "xp" in: ${err.message}`);
                         return true;
@@ -187,7 +186,7 @@ describe('Error Path Tests', () => {
         it('NaN XP throws a clear error', async () => {
             const engine = EngineFactory.createForVersion('1.21');
             await assert.rejects(
-                () => EngineTestUtils.getStats(engine, { item: 'sword', xp: NaN, material: 'diamond' }),
+                () => engine.getStats({ item: 'sword', xp: NaN, material: 'diamond' }),
                 (err: Error) => {
                     assert.ok(err.message.toLowerCase().includes('xp'), `Expected "xp" in: ${err.message}`);
                     return true;
@@ -200,7 +199,7 @@ describe('Error Path Tests', () => {
         it(`XP = ${MINECRAFT_RULES.XP_CAP_MODERN + 1} throws a clear error`, async () => {
             const engine = EngineFactory.createForVersion('1.21');
             await assert.rejects(
-                () => EngineTestUtils.getStats(engine, { item: 'sword', xp: MINECRAFT_RULES.XP_CAP_MODERN + 1, material: 'diamond' }),
+                () => engine.getStats({ item: 'sword', xp: MINECRAFT_RULES.XP_CAP_MODERN + 1, material: 'diamond' }),
                 (err: Error) => {
                     assert.ok(err.message.toLowerCase().includes('xp'), `Expected "xp" in: ${err.message}`);
                     return true;
@@ -211,7 +210,7 @@ describe('Error Path Tests', () => {
         it('XP = 1000 throws a clear error', async () => {
             const engine = EngineFactory.createForVersion('1.21');
             await assert.rejects(
-                () => EngineTestUtils.getStats(engine, { item: 'sword', xp: 1000, material: 'diamond' }),
+                () => engine.getStats({ item: 'sword', xp: 1000, material: 'diamond' }),
                 (err: Error) => {
                     assert.ok(err.message.toLowerCase().includes('xp'), `Expected "xp" in: ${err.message}`);
                     return true;
@@ -221,19 +220,19 @@ describe('Error Path Tests', () => {
 
         it(`XP = ${MINECRAFT_RULES.XP_CAP_MODERN} is valid (boundary check)`, async () => {
             const engine = EngineFactory.createForVersion('1.21');
-            const stats = await EngineTestUtils.getStats(engine, { item: 'sword', xp: MINECRAFT_RULES.XP_CAP_MODERN, material: 'diamond', threshold: 0.01 });
+            const stats = await engine.getStats({ item: 'sword', xp: MINECRAFT_RULES.XP_CAP_MODERN, material: 'diamond', threshold: 0.01 });
             assert.ok(Object.keys(stats.any).length > 0, 'Should have enchantment probabilities at max XP');
         });
 
         it(`Legacy: XP = ${MINECRAFT_RULES.XP_CAP_LEGACY} is valid for 1.1`, async () => {
             const engine = EngineFactory.createForVersion('1.1');
-            const stats = await EngineTestUtils.getStats(engine, { item: 'sword', xp: MINECRAFT_RULES.XP_CAP_LEGACY, material: 'diamond', threshold: 0.01 });
+            const stats = await engine.getStats({ item: 'sword', xp: MINECRAFT_RULES.XP_CAP_LEGACY, material: 'diamond', threshold: 0.01 });
             assert.ok(Object.keys(stats.any).length > 0, 'Legacy should support XP up to 50');
         });
 
         it('XP = 1 is valid (minimum boundary check)', async () => {
             const engine = EngineFactory.createForVersion('1.21');
-            const stats = await EngineTestUtils.getStats(engine, { item: 'sword', xp: 1, material: 'diamond', threshold: 0.01 });
+            const stats = await engine.getStats({ item: 'sword', xp: 1, material: 'diamond', threshold: 0.01 });
             // At XP=1, modified levels are very low; may produce empty or minimal results - just check no crash
             assert.ok(stats !== null);
         });

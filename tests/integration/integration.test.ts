@@ -10,7 +10,6 @@ import { getEnchantId } from '#core/registry.js';
 import { ComboUtils, PRECISION } from '#utils/index.js';
 import type { PackedEnchant, TopRunView } from '#types/index.js';
 import { makeSearchSnapshot } from '#tests/infra/search-snapshot-test-utils.js';
-import { EngineTestUtils } from '#tests/infra/test-utils.js';
 
 const BASE_PAYLOAD = TEST_DATA.PAYLOADS.BASE_SWORD;
 
@@ -118,7 +117,7 @@ describe('Integration: Snapshot Integrity', () => {
 describe('Integration: Clue-Conditioned Calculation', () => {
     it('conditions the public calculation result on the shown clue', async () => {
         const engine = EngineFactory.createForVersion(TEST_DATA.VERSIONS.MODERN);
-        const stats = await EngineTestUtils.getStats(engine, {
+        const stats = await engine.getStats({
             item: TEST_DATA.ITEMS.SWORD,
             xp: 30,
             material: TEST_DATA.MATERIALS.DIAMOND,

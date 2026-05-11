@@ -2,7 +2,6 @@ import { EngineFactory } from '#engine/index.js';
 import * as fs from 'node:fs';
 import * as assert from 'node:assert';
 import { CalculationStats } from '#types/index.js';
-import { EngineTestUtils } from '#tests/infra/test-utils.js';
 
 async function debug() {
     const engine = EngineFactory.createForVersion('1.7.2');
@@ -17,7 +16,7 @@ async function debug() {
         distCache: { hits: 0, misses: 0 }
     };
 
-    await EngineTestUtils.getStats(engine, {
+    await engine.getStats({
         item,
         xp: level,
         material,

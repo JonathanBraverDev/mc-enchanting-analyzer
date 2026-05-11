@@ -1,6 +1,5 @@
 import { EngineFactory } from '#engine/index.js';
 import { EngineInstrumentation } from '#types/index.js';
-import { EngineTestUtils } from '#tests/infra/test-utils.js';
 
 
 async function run() {
@@ -30,7 +29,7 @@ async function run() {
 
     const threshold = 0.001; // 1e-3 Standard UI Fine Accuracy
     const start = performance.now();
-    const stats = await EngineTestUtils.getStats(engine, {
+    const stats = await engine.getStats({
         item,
         xp,
         material,

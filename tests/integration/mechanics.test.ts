@@ -10,13 +10,13 @@ describe('Minecraft Mechanics Integration Tests', () => {
     describe('Book Mechanics', () => {
         it('1.4.6: Books should remain single-enchantment', async () => {
             const engine146 = EngineFactory.createForVersion('1.4.6');
-            const stats = await EngineTestUtils.getStats(engine146, { item: 'book', xp: 30, material: 'book', threshold: 0.001 });
+            const stats = await engine146.getStats({ item: 'book', xp: 30, material: 'book', threshold: 0.001 });
             assert.ok((stats.count[1] ?? 0) > 0.99, '1.4.6 books should only have 1 enchantment');
         });
 
         it('1.7.2+: Books SHOULD allow multi-enchantment', async () => {
             const engine172 = EngineFactory.createForVersion('1.7.2');
-            const stats = await EngineTestUtils.getStats(engine172, { item: 'book', xp: 30, material: 'book', threshold: 0.0001 });
+            const stats = await engine172.getStats({ item: 'book', xp: 30, material: 'book', threshold: 0.0001 });
             assert.ok((stats.count[1] ?? 0) > 0.75, '1.7.2 books should still result in many single-enchant results');
             assert.ok((stats.count[2] ?? 0) > 0.10, '1.7.2 books should allow multiple enchants');
         });
@@ -33,23 +33,23 @@ describe('Minecraft Mechanics Integration Tests', () => {
     describe('Version-Specific Rules', () => {
         it('1.0: Level 50 should be possible and yield higher-tier results', async () => {
             const engine10 = EngineFactory.createForVersion('1.0');
-            const stats50 = await EngineTestUtils.getStats(engine10, { item: 'sword', xp: 50, material: 'diamond', threshold: 0.001 });
+            const stats50 = await engine10.getStats({ item: 'sword', xp: 50, material: 'diamond', threshold: 0.001 });
             const sharpnessId = getEnchantId(engine10.registry,'Sharpness');
             const sharpVId = (sharpnessId << 8) | 5;
             assert.ok((stats50.ranks[sharpVId] || 0) > 0.05);
 
-            const stats30 = await EngineTestUtils.getStats(engine10, { item: 'sword', xp: 30, material: 'diamond', threshold: 0.001 });
+            const stats30 = await engine10.getStats({ item: 'sword', xp: 30, material: 'diamond', threshold: 0.001 });
             assert.ok((stats30.ranks[sharpVId] || 0) < (stats50.ranks[sharpVId] || 0));
         });
 
         it('1.3.1: Level 30 cap bonus range impact', async () => {
             const engine131 = EngineFactory.createForVersion('1.3.1');
-            const stats30 = await EngineTestUtils.getStats(engine131, { item: 'sword', xp: 30, material: 'diamond', threshold: 0.001 });
+            const stats30 = await engine131.getStats({ item: 'sword', xp: 30, material: 'diamond', threshold: 0.001 });
             const sharpnessId = getEnchantId(engine131.registry,'Sharpness');
             const sharpIVId = (sharpnessId << 8) | 4;
 
             const engine10 = EngineFactory.createForVersion('1.0');
-            const stats30_10 = await EngineTestUtils.getStats(engine10, { item: 'sword', xp: 30, material: 'diamond', threshold: 0.001 });
+            const stats30_10 = await engine10.getStats({ item: 'sword', xp: 30, material: 'diamond', threshold: 0.001 });
             assert.ok((stats30.ranks[sharpIVId] || 0) < (stats30_10.ranks[sharpIVId] || 0));
         });
 

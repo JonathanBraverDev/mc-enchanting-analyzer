@@ -4,7 +4,6 @@ import { EngineFactory } from '#engine/index.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import { getSearchCheckpointForRefinement } from '#core/config.js';
 import { CalculationStats, SearchResult } from '#types/index.js';
-import { EngineTestUtils } from '#tests/infra/test-utils.js';
 
 function accountingTotal(stats: CalculationStats): number {
     const a = stats.accounting;
@@ -12,11 +11,11 @@ function accountingTotal(stats: CalculationStats): number {
 }
 
 describe('Search execution service', () => {
-    it('produces CalculationStats through explicit search summarization', async () => {
+    it('produces CalculationStats through the public stats API', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
         engine.resetCaches();
 
-        const stats = await EngineTestUtils.getStats(engine, {
+        const stats = await engine.getStats({
             item: 'sword',
             material: 'diamond',
             xp: 30,
@@ -33,11 +32,11 @@ describe('Search execution service', () => {
         assert.strictEqual(stats.threshold, 0);
     });
 
-    it('exposes exhaustive mode through explicit search summarization', async () => {
+    it('exposes exhaustive mode through the public stats API', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
         engine.resetCaches();
 
-        const stats = await EngineTestUtils.getStats(engine, {
+        const stats = await engine.getStats({
             item: 'mace',
             material: 'mace',
             xp: 1,
@@ -128,7 +127,7 @@ describe('Search execution service', () => {
     it('supports clue-conditioned requests through the search path', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
 
-        const stats = await EngineTestUtils.getStats(engine, {
+        const stats = await engine.getStats({
             item: 'sword',
             material: 'diamond',
             xp: 30,

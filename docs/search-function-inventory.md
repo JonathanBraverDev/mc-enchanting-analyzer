@@ -262,7 +262,7 @@ Key files/classes:
 
 - `src/lib/services/SnapshotService.ts` — `SearchRunSnapshot` -> `TopRunView` / `ChartCellView`.
 - `src/lib/services/SummaryAggregationService.ts` — shared scan over resolved combos + pending frontier.
-- `src/lib/services/SummaryService.ts` — `CalculationStats` formatter for explicit search-result summarization.
+- `src/lib/services/SummaryService.ts` — `CalculationStats` formatter used by the public `getStats(...)` convenience API and explicit search-result summarization.
 - `src/lib/services/TargetAnalysisService.ts` — target filtering/projection over combos and pending entries.
 - `src/lib/services/TargetClueAdvisorService.ts` — clue advisor projection for target requirements.
 - `src/lib/services/ClueSignalAdvisorService.ts` — level/clue signal advisor summaries.
@@ -710,9 +710,11 @@ File: `src/lib/engine/index.ts`
 | `src/lib/engine/index.ts:49` | `getModifiedLevelDist` | class method | Exposes modified-level distribution calculation. | engine-boundary, registry-derived |
 | `src/lib/engine/index.ts:56` | `getAvailablePool` | class method | Exposes eligible-list lookup with engine cache. | engine-boundary, registry |
 | `src/lib/engine/index.ts:63` | `searchSequentialCheckpoints` | class method | Validates and forwards sequential checkpoint request. | engine-boundary |
-| `src/lib/engine/index.ts:80` | `searchToCheckpoint` | class method | Validates and forwards one checkpoint request. | engine-boundary |
-| `src/lib/engine/index.ts:97` | `getPackedClue` | private method | Validates and packs clue input. | engine-boundary, clue |
-| `src/lib/engine/index.ts:101` | `validateRequest` | private method | Validates request item/material/clue fields. | engine-boundary |
+| `src/lib/engine/index.ts:70` | `searchToCheckpoint` | class method | Validates and forwards one checkpoint request. | engine-boundary |
+| `src/lib/engine/index.ts:78` | `getStats` | class method | Runs standard checkpoint search and summarizes into `CalculationStats`. | engine-boundary, projection |
+| `src/lib/engine/index.ts:107` | `prepareSearchRequest` | private method | Validates shared search request fields and attaches registry/clue context. | engine-boundary |
+| `src/lib/engine/index.ts:117` | `getPackedClue` | private method | Validates and packs clue input. | engine-boundary, clue |
+| `src/lib/engine/index.ts:121` | `validateRequest` | private method | Validates request item/material/clue fields. | engine-boundary |
 
 ### Engine Cache
 

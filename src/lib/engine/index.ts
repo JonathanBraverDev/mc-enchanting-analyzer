@@ -1,4 +1,4 @@
-import { BuiltRegistryState, CheckpointSearchRequest, EngineInstrumentation, SearchResult, SequentialCheckpointSearchRequest } from '#types/index.js';
+import { BuiltRegistryState, CalculationStats, CheckpointSearchRequest, EngineInstrumentation, SearchResult, SequentialCheckpointSearchRequest } from '#types/index.js';
 import { isItemAvailable, isMaterialEligible, getAvailablePool as getRegistryAvailablePool } from '#core/registry.js';
 import { ProbUtils } from '#utils/index.js';
 import { MINECRAFT_RULES } from '#constants/minecraft.js';
@@ -6,6 +6,8 @@ import { CacheManager } from '#engine/cache/CacheManager.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { SearchExecutionService } from '#lib/search/SearchExecutionService.js';
 import { ClueValidator } from '#core/clue.js';
+import { SummaryService } from '#services/SummaryService.js';
+import { ENGINE_LIMITS } from '#constants/engine.js';
 export { EngineFactory } from './factory.js';
 
 /**
@@ -59,34 +61,57 @@ export class EnchantEngine {
      * Runs one request through an ordered checkpoint plan and streams each completed checkpoint.
      */
     public async searchSequentialCheckpoints(request: SequentialCheckpointSearchRequest): Promise<SearchResult> {
-        this.validateRequest(request);
-        const { item, material } = request;
-        const targetClueId = request.clue ? this.getPackedClue(item, request.clue) : undefined;
-
-        return this.searchService.searchSequentialCheckpoints({
-            ...request,
-            item,
-            material,
-            registry: this.registry,
-            targetClueId
-        });
+        return this.searchService.searchSequentialCheckpoints(this.prepareSearchRequest(request));
     }
 
     /**
      * Advances one checkpoint search request and returns the completed boundary state.
      */
     public async searchToCheckpoint(request: CheckpointSearchRequest): Promise<SearchResult> {
-        this.validateRequest(request);
-        const { item, material } = request;
-        const targetClueId = request.clue ? this.getPackedClue(item, request.clue) : undefined;
+        return this.searchService.searchToCheckpoint(this.prepareSearchRequest(request));
+    }
 
-        return this.searchService.searchToCheckpoint({
+    /**
+     * Runs the standard checkpoint search and returns summarized stats for product/tool callers.
+     * This is the simple public result API: no separate stats cache, no alternate search path.
+     */
+    public async getStats(request: CheckpointSearchRequest): Promise<CalculationStats> {
+        const searchRequest = this.prepareSearchRequest(request);
+        const result = await this.searchService.searchToCheckpoint(searchRequest);
+        const { targetClueId } = searchRequest;
+        const postProcessingStart = request.timing ? performance.now() : 0;
+        const summaryRequest = {
+            combos: result.combos,
+            snapshot: result.snapshot,
+            indexToEnchant: this.registry.indexToEnchant,
+            comboLimit: request.summaryLimit ?? ENGINE_LIMITS.MAX_RESULTS_SUMMARY,
+            threshold: result.threshold,
+            isBook: request.item === 'book'
+        };
+        const stats = targetClueId === undefined
+            ? SummaryService.summarize(summaryRequest)
+            : SummaryService.summarizeConditioned({ ...summaryRequest, targetClueId });
+
+        stats.instrumentation = result.instrumentation;
+        if (request.timing) {
+            const postProcessingMs = performance.now() - postProcessingStart;
+            request.timing.postProcessingMs = (request.timing.postProcessingMs ?? 0) + postProcessingMs;
+            request.timing.totalMs += postProcessingMs;
+            stats.timing = { ...request.timing };
+        } else {
+            stats.timing = result.timing;
+        }
+        return stats;
+    }
+
+    private prepareSearchRequest<T extends CheckpointSearchRequest | SequentialCheckpointSearchRequest>(request: T): T & { registry: BuiltRegistryState; targetClueId?: number | undefined } {
+        this.validateRequest(request);
+        const targetClueId = request.clue ? this.getPackedClue(request.item, request.clue) : undefined;
+        return {
             ...request,
-            item,
-            material,
             registry: this.registry,
             targetClueId
-        });
+        };
     }
 
     private getPackedClue(item: string, clue: string): number {
