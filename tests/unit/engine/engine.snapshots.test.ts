@@ -14,7 +14,7 @@ async function calculateSnapshot(engine: EnchantEngine, request: { item: string;
     return await engine.getStats({
         ...request,
         exhaustive: TEST_DEFAULTS.SNAPSHOT_EXHAUSTIVE,
-        summaryLimit: TEST_DEFAULTS.SNAPSHOT_RESULTS_LIMIT,
+        uncappedResults: true,
         useCache: false
     });
 }

@@ -43,7 +43,8 @@ export class SnapshotService {
     snapshot: SearchRunSnapshot,
     request: SnapshotRequest
   ): TopRunView | ChartCellView {
-    const { snapshotType, refinementLevel, clue, comboLimit } = request;
+    const { snapshotType, refinementLevel, clue } = request;
+    const comboLimit = this.resolveComboLimit(request.comboLimit, request.uncappedResults);
     const combos = new Map(snapshot.results);
     const includeCombos = request.includeCombos ?? snapshotType === 'top';
     const isBook = request.input.item === 'book';
@@ -106,7 +107,7 @@ export class SnapshotService {
       indexToEnchant: state.indexToEnchant,
       targets: packedTargets,
       pendingEntries: isConditioned ? [] : snapshot.pendingEntries,
-      comboLimit: includeCombos ? comboLimit ?? ENGINE_LIMITS.MAX_RESULTS_SUMMARY : 0,
+      comboLimit: includeCombos ? comboLimit ?? result.combos.size : 0,
       registry: state,
       isBook
     });
@@ -175,7 +176,7 @@ export class SnapshotService {
         normalization,
         accounting,
         displayResult,
-        comboLimit ?? ENGINE_LIMITS.MAX_RESULTS_SUMMARY,
+        comboLimit,
         targetDiagnostics,
         clueAdvisor,
         clueSignalAdvisor
@@ -193,6 +194,19 @@ export class SnapshotService {
         clueSignalAdvisor
       );
     }
+  }
+
+  private static resolveComboLimit(comboLimit: number | undefined, uncappedResults: boolean | undefined): number | undefined {
+    if (comboLimit !== undefined) {
+      if (!Number.isInteger(comboLimit) || comboLimit < 0) {
+        throw new Error(`Invalid comboLimit: ${comboLimit}. Must be a non-negative integer.`);
+      }
+      if (!uncappedResults && comboLimit > ENGINE_LIMITS.RESULT_ENTRY_SAFETY_CAP) {
+        throw new Error(`Invalid comboLimit: ${comboLimit}. Must be <= ${ENGINE_LIMITS.RESULT_ENTRY_SAFETY_CAP}, or set uncappedResults: true.`);
+      }
+      return comboLimit;
+    }
+    return uncappedResults ? undefined : ENGINE_LIMITS.MAX_RESULTS_SUMMARY;
   }
 
   private static toMassMap(masses: bigint[]): Map<number, bigint> {
@@ -214,7 +228,7 @@ export class SnapshotService {
     normalization: NormalizationView,
     accounting: AccountingView,
     result: { anyMass: Map<number, bigint>, rankMass: Map<number, bigint>, countMass: Map<number, bigint>, combos: ReadonlyMap<PackedCombo, bigint> },
-    comboLimit: number,
+    comboLimit: number | undefined,
     target?: TargetDiagnosticsView,
     clueAdvisor?: TargetClueAdvisorView,
     clueSignalAdvisor?: ClueSignalAdvisorView
@@ -222,7 +236,7 @@ export class SnapshotService {
     const combos: TopComboView[] = [];
     const entries = [...result.combos.entries()].sort((a, b) => b[1] > a[1] ? 1 : (b[1] < a[1] ? -1 : 0));
 
-    const limitedEntries = comboLimit > 0 ? entries.slice(0, comboLimit) : entries;
+    const limitedEntries = comboLimit === undefined ? entries : comboLimit > 0 ? entries.slice(0, comboLimit) : [];
 
     for (const [packed, mass] of limitedEntries) {
       const enchants = ComboUtils.unpack(packed, state.indexToEnchant);

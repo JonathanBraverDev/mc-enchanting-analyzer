@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { EngineFactory } from '#engine/index.js';
+import { ENGINE_LIMITS } from '#constants/engine.js';
 import { getDefaultStatsCheckpoint, getSearchCheckpointForRefinement } from '#core/config.js';
 import { EnchantStats, SearchResult } from '#types/index.js';
 
@@ -78,6 +79,30 @@ describe('Search execution service', () => {
         assert.ok((stats.instrumentation?.totalIterations ?? 0) <= checkpoint.limit);
     });
 
+    it('requires uncappedResults for summary limits above the normal export cap', async () => {
+        const engine = EngineFactory.createForVersion('1.21.11');
+        engine.resetCaches();
+
+        await assert.rejects(
+            () => engine.getStats({
+                item: 'sword',
+                material: 'diamond',
+                xp: 30,
+                summaryLimit: ENGINE_LIMITS.RESULT_ENTRY_SAFETY_CAP + 1
+            }),
+            /uncappedResults/
+        );
+
+        const stats = await engine.getStats({
+            item: 'sword',
+            material: 'diamond',
+            xp: 30,
+            summaryLimit: ENGINE_LIMITS.RESULT_ENTRY_SAFETY_CAP + 1,
+            uncappedResults: true
+        });
+        assert.ok(Object.keys(stats.combos).length > 0);
+    });
+
     it('omits classified-mass targets from named refinement checkpoints by default', () => {
         const checkpoint = getSearchCheckpointForRefinement('ultra', true);
 
@@ -130,8 +155,6 @@ describe('Search execution service', () => {
             item: 'book',
             material: 'book',
             xp: 30,
-            threshold: 0,
-            maxIterations: 100_000,
             targetClassifiedMass: 0.25,
             instrumentation: {
                 poolCache: { hits: 0, misses: 0 },
@@ -149,6 +172,69 @@ describe('Search execution service', () => {
         assert.strictEqual(result.instrumentation?.exitReason, 'mass');
         assert.ok(result.snapshot.lastExpandedMass > 0n);
         assert.ok((result.instrumentation?.search?.lastExpandedMass ?? 0) > 0);
+    });
+
+    it('rejects public non-exhaustive searches without any bounded stop condition', async () => {
+        const engine = EngineFactory.createForVersion('1.21.11');
+        engine.resetCaches();
+
+        await assert.rejects(
+            () => engine.searchToCheckpoint({
+                item: 'book',
+                material: 'book',
+                xp: 30,
+                threshold: 0
+            }),
+            /no bounded stop condition/
+        );
+    });
+
+    it('rejects NaN probability controls with descriptive validation errors', async () => {
+        const engine = EngineFactory.createForVersion('1.21.11');
+        engine.resetCaches();
+
+        await assert.rejects(
+            () => engine.searchToCheckpoint({
+                item: 'book',
+                material: 'book',
+                xp: 30,
+                threshold: Number.NaN,
+                maxIterations: 1
+            }),
+            /Invalid threshold: NaN\. Threshold must be between 0 and 1\.0\./
+        );
+
+        await assert.rejects(
+            () => engine.searchToCheckpoint({
+                item: 'book',
+                material: 'book',
+                xp: 30,
+                targetClassifiedMass: Number.NaN
+            }),
+            /Invalid targetClassifiedMass: NaN\. Must be between 0 and 1\.0\./
+        );
+
+        await assert.rejects(
+            () => engine.searchSequentialCheckpoints({
+                item: 'book',
+                material: 'book',
+                xp: 30,
+                checkpoints: [{ threshold: Number.NaN, limit: 1 }],
+                onCheckpointComplete: () => {}
+            }),
+            /Invalid checkpoint threshold: NaN\. Threshold must be between 0 and 1\.0\./
+        );
+
+        await assert.rejects(
+            () => engine.searchSequentialCheckpoints({
+                item: 'book',
+                material: 'book',
+                xp: 30,
+                checkpoints: [{ threshold: 0, limit: 1, targetClassifiedMass: Number.NaN }],
+                onCheckpointComplete: () => {}
+            }),
+            /Invalid checkpoint targetClassifiedMass: NaN\. Must be between 0 and 1\.0\./
+        );
     });
 
     it('streams sequential checkpoints with monotonic resolved mass', async () => {

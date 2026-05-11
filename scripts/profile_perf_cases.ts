@@ -49,8 +49,8 @@ async function runCase(testCase: PerfCase) {
         material: testCase.material,
         clue: testCase.clue,
         threshold: TEST_DEFAULTS.SNAPSHOT_THRESHOLD,
-        maxIterations: ENGINE_LIMITS.MAX_ITERATIONS_UNBOUNDED,
-        summaryLimit: ENGINE_LIMITS.MAX_RESULTS_UNBOUNDED,
+        maxIterations: ENGINE_LIMITS.SEARCH_ITERATION_SAFETY_CAP,
+        uncappedResults: true,
         useCache: false,
         timing
     });

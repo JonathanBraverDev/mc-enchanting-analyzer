@@ -225,4 +225,30 @@ describe('SearchRun', () => {
         assert.strictEqual(BigInt(snapshot.mass.units!.pending), 0n);
         assert.strictEqual(totalMassUnits(snapshot), PRECISION);
     });
+
+    it('rejects unlimited non-exhaustive searches without a stop condition', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'mace', material: 'mace' });
+        const run = new SearchRun(kernel);
+
+        run.seedXp(1);
+        assert.throws(
+            () => run.searchToCheckpoint({ threshold: 0 }),
+            /no bounded stop condition/
+        );
+    });
+
+    it('rejects invalid direct maxIterations values before counting them as bounded', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'mace', material: 'mace' });
+
+        for (const maxIterations of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+            const run = new SearchRun(kernel);
+            run.seedXp(1);
+            assert.throws(
+                () => run.searchToCheckpoint({ maxIterations }),
+                /Invalid maxIterations: .*Must be a positive integer\./
+            );
+        }
+    });
 });

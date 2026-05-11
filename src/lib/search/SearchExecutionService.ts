@@ -1,4 +1,3 @@
-import { ENGINE_LIMITS } from '#constants/engine.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { SearchResult, SequentialCheckpointSearchContext, CheckpointSearchContext, EngineInstrumentation, SearchTiming } from '#types/index.js';
 import { RegistryKernel } from '#lib/search/registry/RegistryKernel.js';
@@ -30,15 +29,15 @@ export class SearchExecutionService {
         let recordedSearchMs = 0;
         const run = this.getRun(request);
         const snapshot = await run.searchToCheckpointAsync({
-            threshold: request.exhaustive ? 0n : request.threshold ?? ENGINE_LIMITS.DEFAULT_THRESHOLD,
-            maxIterations: request.exhaustive ? undefined : request.maxIterations ?? ENGINE_LIMITS.MAX_ITERATIONS_UNBOUNDED,
+            threshold: request.exhaustive ? 0n : request.threshold ?? 0n,
+            maxIterations: request.exhaustive ? undefined : request.maxIterations,
             exhaustive: request.exhaustive,
             targetClassifiedMass: request.exhaustive ? undefined : request.targetClassifiedMass,
             signal: request.signal
         });
 
         recordedSearchMs = this.finishTiming(request.timing, timingStart, recordedSearchMs);
-        return this.toSearchResult(snapshot, request.exhaustive ? 0n : request.threshold, request.targetClassifiedMass, request.instrumentation, request.timing);
+        return this.toSearchResult(snapshot, request.exhaustive ? 0n : request.threshold ?? 0n, request.targetClassifiedMass, request.instrumentation, request.timing);
     }
 
     /** Advances one run through an ordered checkpoint plan, streaming each completed boundary. */

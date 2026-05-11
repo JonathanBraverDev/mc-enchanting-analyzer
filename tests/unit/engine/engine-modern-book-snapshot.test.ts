@@ -34,7 +34,7 @@ describe('Modern Book Mass-Targeted Regression Snapshot', () => {
             combos: snapshot.results,
             snapshot,
             indexToEnchant: engine.registry.indexToEnchant,
-            comboLimit: TEST_DEFAULTS.SNAPSHOT_RESULTS_LIMIT,
+            uncappedResults: true,
             threshold: 0,
             isBook: true
         });

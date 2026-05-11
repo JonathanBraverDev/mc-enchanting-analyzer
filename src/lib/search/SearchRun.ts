@@ -20,15 +20,25 @@ export interface SearchRunOptions {
     readonly graphCache?: SearchGraphCache | undefined;
 }
 
-/** Stop conditions for advancing a SearchRun to the next checkpoint boundary. */
+/**
+ * Stop conditions for advancing a SearchRun to the next checkpoint boundary.
+ * At least one of `threshold`, `maxIterations`, or a mass target is required unless
+ * `exhaustive: true` is set. Two or more stop conditions are recommended for
+ * user-facing flows; single-condition requests are useful for controlled diagnostics.
+ */
 export interface SearchRunCheckpointRequest {
-    /** Stop when the largest pending node mass falls below this probability. */
+    /** Stop when the largest pending node mass falls below this probability. Use 0/omit to disable this stop. */
     readonly threshold?: number | bigint | undefined;
-    /** Maximum graph-node expansions to perform before stopping. */
+    /**
+     * Maximum graph-node expansions to perform before stopping. Work cap only; pair with a
+     * quality/mass stop when possible. Lower caps usually return sooner all else equal, and
+     * iterations are the most direct work-budget metric, but no search control is a linear
+     * runtime proxy.
+     */
     readonly maxIterations?: number | undefined;
-    /** Ignore threshold and iteration cap, searching until the frontier is empty. */
+    /** Ignore threshold, iteration cap, and classified-mass target, searching until the frontier is empty. */
     readonly exhaustive?: boolean | undefined;
-    /** Stop once non-pending mass reaches this absolute fixed-point/number target. */
+    /** Stop once non-pending mass reaches this absolute fixed-point/number target. Omitted means no classified-mass stop. */
     readonly targetClassifiedMass?: number | bigint | undefined;
     /** Stop once resolved result mass reaches this absolute fixed-point/number target. Internal/specialized use only. */
     readonly targetResolvedMass?: number | bigint | undefined;
@@ -188,20 +198,51 @@ export class SearchRun {
     private createAdvanceCriteria(request: SearchRunCheckpointRequest): AdvanceCriteria {
         if (!this.seeded) throw new Error('SearchRun must be seeded before searching.');
 
+        if (request.maxIterations !== undefined && (!Number.isFinite(request.maxIterations) || !Number.isInteger(request.maxIterations) || request.maxIterations <= 0)) {
+            throw new Error(`Invalid maxIterations: ${request.maxIterations}. Must be a positive integer.`);
+        }
+        this.validateProbabilityInput(request.threshold, 'threshold', 'Threshold must be between 0 and 1.0.');
+        this.validateProbabilityInput(request.targetClassifiedMass, 'targetClassifiedMass', 'Must be between 0 and 1.0.');
+        this.validateProbabilityInput(request.targetResolvedMass, 'targetResolvedMass', 'Must be between 0 and 1.0.');
+        this.validateProbabilityInput(request.probabilityFloor, 'probabilityFloor', 'Must be between 0 and 1.0.');
+
+        const targetClassifiedMass = request.targetClassifiedMass !== undefined
+            ? ProbUtils.toBigInt(request.targetClassifiedMass)
+            : undefined;
+        const targetResolvedMass = request.targetResolvedMass !== undefined
+            ? ProbUtils.toBigInt(request.targetResolvedMass)
+            : undefined;
+        const threshold = request.exhaustive ? 0n : ProbUtils.toBigInt(request.threshold ?? 0n);
+        const maxIterations = request.exhaustive
+            ? Number.POSITIVE_INFINITY
+            : request.maxIterations ?? Number.POSITIVE_INFINITY;
+
+        const hasBoundedStopCondition = targetClassifiedMass !== undefined
+            || targetResolvedMass !== undefined
+            || (request.threshold !== undefined && threshold > 0n)
+            || request.maxIterations !== undefined;
+        if (!request.exhaustive && !hasBoundedStopCondition) {
+            throw new Error('SearchRun has no bounded stop condition. Provide a positive threshold, a finite maxIterations, a mass target, or set exhaustive: true.');
+        }
+
         return {
-            threshold: request.exhaustive ? 0n : ProbUtils.toBigInt(request.threshold ?? ENGINE_LIMITS.DEFAULT_THRESHOLD),
-            maxIterations: request.exhaustive ? Number.POSITIVE_INFINITY : request.maxIterations ?? ENGINE_LIMITS.MAX_ITERATIONS_UNBOUNDED,
-            targetClassifiedMass: request.targetClassifiedMass !== undefined
-                ? ProbUtils.toBigInt(request.targetClassifiedMass)
-                : undefined,
-            targetResolvedMass: request.targetResolvedMass !== undefined
-                ? ProbUtils.toBigInt(request.targetResolvedMass)
-                : undefined,
+            threshold,
+            maxIterations,
+            targetClassifiedMass,
+            targetResolvedMass,
             probabilityFloor: request.probabilityFloor !== undefined
                 ? ProbUtils.toBigInt(request.probabilityFloor)
                 : 0n,
             signal: request.signal
         };
+    }
+
+    private validateProbabilityInput(value: number | bigint | undefined, label: string, requirement: string): void {
+        if (value === undefined) return;
+        const normalized = ProbUtils.toNumber(value);
+        if (!Number.isFinite(normalized) || normalized < 0 || normalized > 1.0) {
+            throw new Error(`Invalid ${label}: ${normalized}. ${requirement}`);
+        }
     }
 
     /**

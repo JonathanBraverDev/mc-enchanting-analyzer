@@ -155,7 +155,11 @@ targetClassifiedMass   = optional early-stop target once enough mass is classifi
 classified mass      = non-pending bucketed mass obtainable under that budget/floor/target
 ```
 
-The named constant `MAX_ITERATIONS_UNBOUNDED` is historical and should be read as a large safety cap, not truly unbounded execution. Diagnostic bottom-out runs should use `exhaustive: true`, which deliberately forces threshold `0` and disables the iteration cap so the search runs until the frontier is empty, aborts, or exhausts host resources.
+`SEARCH_ITERATION_SAFETY_CAP` is a large finite safety cap, not an unlimited search mode. Diagnostic bottom-out runs should use `exhaustive: true`, which deliberately forces threshold `0` and disables the iteration cap so the search runs until the frontier is empty, aborts, or exhausts host resources.
+
+No search control should be treated as a linear runtime or quality proxy. Lower limits are generally faster all else equal, and iteration count is probably the most direct work-budget metric, but runtime also depends on frontier shape, tree complexity, result projection, conditioning, and host/runtime behavior.
+
+Result export caps are separate from search caps. `summaryLimit`/`comboLimit` only control how many already-computed combo entries are serialized into presentation output; they do not reduce search work. Normal exports are capped by `RESULT_ENTRY_SAFETY_CAP`, while `uncappedResults: true` is the explicit opt-in for larger limits or all-result exports.
 
 `targetClassifiedMass` is first-party checkpoint control for “do we need to keep going?” behavior. It belongs on checkpoint definitions alongside threshold and limit; named refinement presets can opt in per mode/book-vs-other case, but the default named modes intentionally leave it absent. It targets non-pending mass, not result-only mass: resolved results, clue-incompatible mass, overflow, sieve/cap buckets, and rounding all count as classified because they are no longer frontier uncertainty. It is an early-stop condition, not a guarantee: threshold, iteration limits, abort signals, and host limits can still stop the search before the target is reached. When the target is the stopping condition, instrumentation reports `exitReason: 'mass'`. For convergence probes, combine it with threshold `0` and an explicit iteration/runtime budget; for true stress probes, use exhaustive mode instead.
 

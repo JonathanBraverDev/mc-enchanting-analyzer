@@ -1,6 +1,5 @@
 import { EngineFactory } from '#engine/index.js';
 import { TEST_DEFAULTS } from '#constants/testing.js';
-import { ENGINE_LIMITS } from '#constants/engine.js';
 
 async function profile() {
     const args = process.argv.slice(2);
@@ -21,7 +20,7 @@ async function profile() {
             xp: 30,
             material: 'book',
             exhaustive: TEST_DEFAULTS.SNAPSHOT_EXHAUSTIVE,
-            summaryLimit: ENGINE_LIMITS.MAX_RESULTS_UNBOUNDED,
+            uncappedResults: true,
             useCache: false,
             timing
         });

@@ -509,7 +509,7 @@ function parseCliOptions(args: string[]): SearchOverlapOptions & { stdoutJson: b
         xp: Number.parseInt(findArg('--xp') ?? String(DEFAULT_XP), 10),
         clue: findArg('--clue') ?? undefined,
         threshold: Number(findArg('--threshold') ?? DEFAULT_THRESHOLD),
-        maxIterations: Number.parseInt(findArg('--limit') ?? findArg('--max-iterations') ?? String(ENGINE_LIMITS.MAX_ITERATIONS_UNBOUNDED), 10),
+        maxIterations: Number.parseInt(findArg('--limit') ?? findArg('--max-iterations') ?? String(ENGINE_LIMITS.SEARCH_ITERATION_SAFETY_CAP), 10),
         targetClassifiedMass: parseOptionalNumber(findArg('--target-classified-mass') ?? findArg('--mass-target')),
         stdoutJson: hasFlag('--stdout-json') || hasFlag('--json')
     };

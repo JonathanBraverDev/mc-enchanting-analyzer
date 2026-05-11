@@ -49,7 +49,9 @@ export interface CacheConfig {
 }
 
 export interface SearchCheckpoint {
+  /** Stop when the largest pending node mass falls below this value. Use 0 to disable the threshold stop. */
   threshold: number;
+  /** Maximum graph-node expansions for this checkpoint. */
   limit: number;
   /** Optional classified-mass target for this checkpoint. Search may still stop earlier on threshold/limit. */
   targetClassifiedMass?: number | bigint | undefined;
@@ -229,18 +231,42 @@ export type ProbabilityValue = bigint & { __brand: "ProbabilityValue" };
 export interface SearchConfig {
     /** The observed enchantment clue (e.g. "Sharpness IV"). Trigger Bayesian conditioning if set. */
     clue?: string | null | undefined;
+    /**
+     * Search-detail stop: stop when the largest pending node mass falls below this value.
+     * At least one of `threshold`, `maxIterations`, or `targetClassifiedMass` is required unless
+     * `exhaustive: true` is set. Supplying two or more stop conditions is recommended for
+     * user-facing/product flows so searches have both a quality target and a safety bound.
+     */
     threshold?: number | bigint | undefined;
-    /** Optional direct checkpoint target: stop once non-pending mass reaches this value. */
+    /**
+     * Classified-mass stop: stop once non-pending mass reaches this value. When omitted, no
+     * classified-mass stop is installed. A mass target by itself is valid for diagnostics/snapshots
+     * that know the desired completion target; add `maxIterations` too when a work budget matters.
+     */
     targetClassifiedMass?: number | bigint | undefined;
     signal?: AbortSignal | undefined;
     onProgress?: ((update: ProgressUpdate) => void) | undefined;
+    /**
+     * Work-budget stop: maximum graph-node expansions to perform before returning a checkpoint.
+     * This is a safety/work cap, not a quality target. Lower caps usually return sooner all else
+     * equal, and iterations are the most direct work-budget metric, but no search control is a
+     * linear runtime proxy. Prefer pairing it with `threshold` or `targetClassifiedMass` for
+     * meaningful results.
+     */
     maxIterations?: number | undefined;
     /**
-     * Diagnostic escape hatch: ignore threshold and iteration cap, searching until the frontier is empty.
+     * Explicit full-search escape hatch: ignore threshold, iteration cap, and classified-mass target,
+     * searching until the frontier is empty, aborted, or host resources are exhausted.
      * This can be extremely expensive on modern book searches; keep product flows on checkpoint limits.
      */
     exhaustive?: boolean | undefined;
+    /**
+     * Maximum number of combo entries to include in summarized presentation output.
+     * Does not limit search work. Values above the normal export cap require `uncappedResults: true`.
+     */
     summaryLimit?: number | undefined;
+    /** Explicitly allow summarized presentation output to include every combo result. Does not affect search work. */
+    uncappedResults?: boolean | undefined;
     useCache?: boolean | undefined;
     instrumentation?: EngineInstrumentation | undefined;
     timing?: SearchTiming | undefined;
@@ -265,7 +291,10 @@ export interface SummaryRequest {
     combos: ReadonlyMap<PackedCombo, bigint>;
     snapshot: SearchRunSnapshot;
     indexToEnchant: number[];
+    /** Maximum combo entries to include. Values above the normal export cap require `uncappedResults: true`. */
     comboLimit?: number | undefined;
+    /** Explicitly allow every combo entry in presentation output. */
+    uncappedResults?: boolean | undefined;
     threshold?: number | undefined;
     isBook?: boolean | undefined;
 }
