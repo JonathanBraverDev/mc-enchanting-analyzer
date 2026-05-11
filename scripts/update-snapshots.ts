@@ -1,6 +1,5 @@
 import { EnchantEngine, EngineFactory } from '#engine/index.js';
 import { SnapshotUtils } from '#tests/infra/test-utils.js';
-import { ENGINE_LIMITS } from '#constants/engine.js';
 import { TEST_DEFAULTS } from '#constants/testing.js';
 import { ClueValidator } from '#core/clue.js';
 import { SummaryService } from '#services/SummaryService.js';
@@ -89,9 +88,7 @@ async function getStats(engine: EnchantEngine, testCase: SnapshotCase): Promise<
         combos: snapshot.results,
         snapshot,
         indexToEnchant: engine.registry.indexToEnchant,
-        comboLimit: testCase.targetClassifiedMass === undefined
-            ? ENGINE_LIMITS.MAX_RESULTS_UNBOUNDED
-            : TEST_DEFAULTS.SNAPSHOT_RESULTS_LIMIT,
+        uncappedResults: true,
         threshold: testCase.targetClassifiedMass === undefined && TEST_DEFAULTS.SNAPSHOT_EXHAUSTIVE ? 0 : threshold,
         isBook: testCase.item === 'book'
     };

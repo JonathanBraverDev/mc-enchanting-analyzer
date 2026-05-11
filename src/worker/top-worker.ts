@@ -46,7 +46,7 @@ shell.onRun = async (msg: WorkerRequest, engine, signal) => {
 
         for (const cached of latestTopRun.checkpoints) {
             if (signal.aborted || shell.runId !== runId) return;
-            postTopSnapshot(runId, engine.registry, input, cached.refinementLevel, cached.result);
+            postTopSnapshot(runId, engine.registry, input, cached.refinementLevel, cached.result, msg.view);
         }
         return;
     }
@@ -81,7 +81,7 @@ shell.onRun = async (msg: WorkerRequest, engine, signal) => {
                 baseKey,
                 checkpoints: cachedCheckpoints.filter(Boolean)
             };
-            postTopSnapshot(runId, engine.registry, input, level, result);
+            postTopSnapshot(runId, engine.registry, input, level, result, msg.view);
         },
         clue: input.clue,
         signal
@@ -117,18 +117,18 @@ function postTopSnapshot(
     registry: RegistryState,
     input: TopInputSignature,
     refinementLevel: RefinementLevelName,
-    result: SearchResult
+    result: SearchResult,
+    viewOptions?: { comboLimit?: number; uncappedResults?: boolean }
 ): void {
-    const view = SnapshotService.create(
-        registry,
-        result.snapshot,
-        {
-            snapshotType: 'top',
-            input,
-            refinementLevel,
-            clue: input.clue
-        }
-    );
+    const request = {
+        snapshotType: 'top' as const,
+        input,
+        refinementLevel,
+        clue: input.clue,
+        ...(viewOptions?.comboLimit !== undefined ? { comboLimit: viewOptions.comboLimit } : {}),
+        ...(viewOptions?.uncappedResults !== undefined ? { uncappedResults: viewOptions.uncappedResults } : {})
+    };
+    const view = SnapshotService.create(registry, result.snapshot, request);
 
     const response: TopUpdateResponse = {
         type: 'topUpdate',

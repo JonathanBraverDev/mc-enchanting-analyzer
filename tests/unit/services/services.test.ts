@@ -16,6 +16,7 @@ import { TopComboSortService } from '#services/TopComboSortService.js';
 import { UiMetadataService } from '#services/UiMetadataService.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { EngineFactory } from '#engine/factory.js';
+import { ENGINE_LIMITS } from '#constants/engine.js';
 import { ComboUtils } from '#utils/domain/ComboUtils.js';
 import { ProbUtils } from '#utils/index.js';
 import { makePendingEntry, makeSearchSnapshot } from '#tests/infra/search-snapshot-test-utils.js';
@@ -256,6 +257,34 @@ describe('SummaryService', () => {
         assert.strictEqual(numericKeys.length, 300, 'should return exactly 300 combos');
         assert.ok(!numericKeys.includes(1),   'key 1 should be excluded');
         assert.ok(numericKeys.includes(400),  'key 400 should be included');
+    });
+
+    it('requires uncappedResults for combo limits above the normal export cap', () => {
+        const combos = new Map<PackedCombo, bigint>([[1 as PackedCombo, PRECISION]]);
+        const snapshot = makeSearchSnapshot({ results: combos, units: { resolved: PRECISION } });
+
+        assert.throws(
+            () => SummaryService.summarize({ combos, snapshot, indexToEnchant: [], comboLimit: ENGINE_LIMITS.RESULT_ENTRY_SAFETY_CAP + 1 }),
+            /uncappedResults/
+        );
+
+        const result = SummaryService.summarize({
+            combos,
+            snapshot,
+            indexToEnchant: [],
+            comboLimit: ENGINE_LIMITS.RESULT_ENTRY_SAFETY_CAP + 1,
+            uncappedResults: true
+        });
+        assert.deepStrictEqual(Object.keys(result.combos), ['1']);
+    });
+
+    it('uncappedResults without comboLimit exports every combo', () => {
+        const combos = new Map<PackedCombo, bigint>();
+        for (let i = 1; i <= ENGINE_LIMITS.MAX_RESULTS_SUMMARY + 1; i++) combos.set(i as PackedCombo, BigInt(i));
+        const snapshot = makeSearchSnapshot({ results: combos, units: { resolved: PRECISION } });
+        const result = SummaryService.summarize({ combos, snapshot, indexToEnchant: [], uncappedResults: true });
+
+        assert.strictEqual(Object.keys(result.combos).length, ENGINE_LIMITS.MAX_RESULTS_SUMMARY + 1);
     });
 
     it('stores combo keys as lowercase hex strings', () => {

@@ -9,9 +9,10 @@ export const ENGINE_LIMITS = {
     UNKNOWN_ENCHANT_ID: 255,
     UNKNOWN_MATERIAL_ID: 255,
     UNKNOWN_ITEM_ID: 63,
-    MAX_RESULTS_UNBOUNDED: 1000000,
-    MAX_RESULTS_SIZE: 1000000,
-    MAX_ITERATIONS_UNBOUNDED: 1000000,
+    /** Normal maximum for summarized/exported combo entries; set uncappedResults for an explicit larger/all-results export. */
+    RESULT_ENTRY_SAFETY_CAP: 50000,
+    /** Large default search cap used with thresholded searches; true full search requires exhaustive: true. */
+    SEARCH_ITERATION_SAFETY_CAP: 1000000,
     /** Cooperative async search slice size. Yield points are scheduler boundaries, not result checkpoints. */
     ASYNC_SEARCH_CHUNK_ITERATIONS: 2048,
     DEFAULT_THRESHOLD: 0.0001,

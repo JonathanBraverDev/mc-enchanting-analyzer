@@ -303,9 +303,9 @@ For each function:
 - **path:line** `src/lib/search/SearchRun.ts:180`
   - **current symbol:** `createAdvanceCriteria`
   - **inputs/parameters used:** `request.exhaustive`, `request.threshold`, `request.maxIterations`, `request.targetClassifiedMass`, `request.targetResolvedMass`, `request.probabilityFloor`, `request.signal`
-  - **state read/written:** reads `seeded`; reads `ENGINE_LIMITS` defaults; converts numeric inputs with `ProbUtils.toBigInt`
-  - **return/side effects:** returns normalized stop criteria; throws if search starts before seeding
-  - **body-derived behavior summary:** rejects unseeded runs, then converts caller-facing checkpoint settings into an internal criteria object with bigint thresholds/floors and infinite or default iteration limits when exhaustive mode is requested.
+  - **state read/written:** reads `seeded`; converts numeric inputs with `ProbUtils`; does not install implicit threshold/iteration search defaults for non-exhaustive direct calls
+  - **return/side effects:** returns normalized stop criteria; throws if search starts before seeding, if probability/work-budget controls are invalid, or if a non-exhaustive call has no bounded stop condition
+  - **body-derived behavior summary:** rejects unseeded or unbounded non-exhaustive runs, validates finite probability and positive finite integer iteration controls, then converts caller-facing checkpoint settings into internal bigint/infinite criteria; explicit exhaustive mode forces threshold `0` and infinite iteration budget.
 
 - **path:line** `src/lib/search/SearchRun.ts:206`
   - **current symbol:** `advanceUntilCheckpoint`
@@ -600,7 +600,7 @@ For each function:
   - **inputs/parameters used:** `request.timing`, `request.exhaustive`, `request.threshold`, `request.maxIterations`, `request.signal`, `request.instrumentation`
   - **state read/written:** reads service cache/run state via `getRun`; advances the run with `run.searchToCheckpointAsync`; mutates `request.timing` through `finishTiming`; may populate instrumentation in `toSearchResult`
   - **return/side effects:** returns one checkpoint/final result for the request
-  - **body-derived behavior summary:** gets or creates the matching seeded run, advances it once using zero threshold and unbounded iterations for exhaustive mode or request/default limits otherwise, records elapsed timing when requested, and converts the snapshot into a public result.
+  - **body-derived behavior summary:** gets or creates the matching seeded run, advances it once with no threshold or iteration cap for explicit exhaustive mode, otherwise uses request/default bounded limits, records elapsed timing when requested, and converts the snapshot into a public result.
 
 - **path:line** `src/lib/search/SearchExecutionService.ts:44`
   - **current symbol:** `searchSequentialCheckpoints`
@@ -835,7 +835,7 @@ For each function:
 
 - **path:line** `src/lib/engine/index.ts:79`
   - **current symbol:** `EnchantEngine.getStats`
-  - **inputs/parameters used:** `request`, including item/material/xp search config, optional clue, optional threshold/maxIterations, optional summaryLimit, instrumentation, and timing
+  - **inputs/parameters used:** `request`, including item/material/xp search config, optional clue, optional threshold/maxIterations/targetClassifiedMass, optional summaryLimit/uncappedResults, instrumentation, and timing
   - **state read/written:** calls `getDefaultStatsCheckpoint`; calls `prepareSearchRequest`; reads `registry.indexToEnchant`; calls `searchService.searchToCheckpoint(...)`; calls `SummaryService.summarize(...)` or `SummaryService.summarizeConditioned(...)`; may update `request.timing.postProcessingMs` and `request.timing.totalMs`
   - **return/side effects:** returns summarized `EnchantStats` with search instrumentation and timing attached
   - **body-derived behavior summary:** provides the simple public stats API by filling missing threshold/iteration settings from the shared default stats checkpoint, using the same checkpoint search path as raw search callers, then converting the raw `SearchResult` into presented stats without a separate stats cache or alternate search route.
@@ -856,10 +856,10 @@ For each function:
 
 - **path:line** `src/lib/engine/index.ts:121`
   - **current symbol:** `EnchantEngine.validateRequest`
-  - **inputs/parameters used:** `request.item`, `request.material`, `request.xp`, optional `request.threshold`, `request.maxIterations`, optional `request.checkpoints`
+  - **inputs/parameters used:** `request.item`, `request.material`, `request.xp`, optional `request.threshold`, `request.maxIterations`, `request.targetClassifiedMass`, `request.summaryLimit`, `request.uncappedResults`, optional `request.checkpoints`
   - **state read/written:** reads `registry.mechanics.xp_cap`, `registry.version`; falls back to `MINECRAFT_RULES.XP_CAP_LEGACY`; calls `isItemAvailable`, `isMaterialEligible`, `ProbUtils.toNumber`; iterates `request.checkpoints` when present; no writes
   - **return/side effects:** throws descriptive errors for invalid request fields; otherwise returns nothing
-  - **body-derived behavior summary:** enforces positive integer XP within the version-specific cap, requires an available item/material pairing, validates threshold and checkpoint target masses as numbers between 0 and 1, and requires positive integer `maxIterations`.
+  - **body-derived behavior summary:** enforces positive integer XP within the version-specific cap, requires an available item/material pairing, validates finite threshold/classified-mass controls and checkpoint threshold/limit/target fields, requires positive finite integer `maxIterations` when supplied, requires a bounded stop condition unless `exhaustive: true`, and rejects `summaryLimit` above the normal result cap unless `uncappedResults: true`.
   - **naming notes:** this is full request-shape/range validation across multiple request types, not just a lightweight sanity check.
 
 ### `src/lib/engine/cache/CacheManager.ts`

@@ -1,5 +1,5 @@
 import { ProbUtils } from '#utils/index.js';
-import { ENGINE_LIMITS } from '#constants/engine.js';
+import { ENGINE_LIMITS, SEARCH_CONSTANTS } from '#constants/engine.js';
 import { EnchantStats, ConditionedSummaryRequest, SummaryRequest } from '#types/index.js';
 import { ClueAnalysisService } from '#services/ClueAnalysisService.js';
 import { SummaryAggregationService } from '#services/SummaryAggregationService.js';
@@ -16,10 +16,10 @@ export class SummaryService {
             combos,
             snapshot,
             indexToEnchant,
-            comboLimit = ENGINE_LIMITS.MAX_RESULTS_SUMMARY,
             threshold = 0,
             isBook = false
         } = request;
+        const comboLimit = this.resolveComboLimit(request.comboLimit, request.uncappedResults);
         const accounting = snapshot.mass;
         const stats: EnchantStats = {
             ranks: {},
@@ -44,17 +44,17 @@ export class SummaryService {
         SummaryService.populateStats(stats.count, derived.count);
         SummaryService.populateStats(stats.shownClueDistribution!, derived.shownClueDistribution);
 
-        // Ensure we always return sorted results if a limit is set > 0
+        // Ensure exported combo results are sorted and capped unless explicitly uncapped.
         let comboSource: Iterable<[number, bigint]> = [];
         const compareProbDesc = (a: [any, bigint], b: [any, bigint]) => {
             if (a[1] !== b[1]) return a[1] > b[1] ? -1 : 1;
             return a[0] < b[0] ? 1 : (a[0] > b[0] ? -1 : 0);
         };
 
-        if (comboLimit > 0) {
-            if (combos.size <= comboLimit) {
+        if (comboLimit === undefined || comboLimit > 0) {
+            if (comboLimit === undefined || combos.size <= comboLimit) {
                 comboSource = [...combos.entries()].sort(compareProbDesc);
-            } else if (comboLimit <= 250) {
+            } else if (comboLimit <= SEARCH_CONSTANTS.MAX_RESULTS_SUMMARY_OPTIMIZED_THRESHOLD) {
                 const results: [number, bigint][] = [];
                 for (const entry of combos.entries()) {
                     const prob = entry[1];
@@ -90,7 +90,7 @@ export class SummaryService {
      * @param combos Combination distribution before clue conditioning.
      * @param indexToEnchant Registry mapping.
      * @param targetClueId The observed clue ID.
-     * @param comboLimit Result set limit.
+     * @param comboLimit Result set limit; values above the normal export cap require uncappedResults.
      * @returns Conditioned enchant stats.
      */
     public static summarizeConditioned(request: ConditionedSummaryRequest): EnchantStats {
@@ -98,9 +98,9 @@ export class SummaryService {
             combos,
             snapshot,
             indexToEnchant,
-            targetClueId,
-            comboLimit = ENGINE_LIMITS.MAX_RESULTS_SUMMARY
+            targetClueId
         } = request;
+        const comboLimit = this.resolveComboLimit(request.comboLimit, request.uncappedResults);
         const accounting = snapshot.mass;
         const stats: EnchantStats = {
             ranks: {},
@@ -145,9 +145,9 @@ export class SummaryService {
             return a[0] < b[0] ? 1 : (a[0] > b[0] ? -1 : 0);
         };
 
-        if (comboLimit > 0) {
+        if (comboLimit === undefined || comboLimit > 0) {
             comboSource = [...conditioned.combos.entries()].sort(compareProbDesc);
-            if (comboSource.length > comboLimit) {
+            if (comboLimit !== undefined && comboSource.length > comboLimit) {
                 comboSource = comboSource.slice(0, comboLimit);
             }
         }
@@ -157,6 +157,19 @@ export class SummaryService {
         }
 
         return stats;
+    }
+
+    private static resolveComboLimit(comboLimit: number | undefined, uncappedResults: boolean | undefined): number | undefined {
+        if (comboLimit !== undefined) {
+            if (!Number.isInteger(comboLimit) || comboLimit < 0) {
+                throw new Error(`Invalid comboLimit: ${comboLimit}. Must be a non-negative integer.`);
+            }
+            if (!uncappedResults && comboLimit > ENGINE_LIMITS.RESULT_ENTRY_SAFETY_CAP) {
+                throw new Error(`Invalid comboLimit: ${comboLimit}. Must be <= ${ENGINE_LIMITS.RESULT_ENTRY_SAFETY_CAP}, or set uncappedResults: true.`);
+            }
+            return comboLimit;
+        }
+        return uncappedResults ? undefined : ENGINE_LIMITS.MAX_RESULTS_SUMMARY;
     }
 
     private static populateStats(target: { [key: number]: number }, source: Map<number, bigint> | BigUint64Array | bigint[]): void {

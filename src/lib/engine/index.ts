@@ -90,7 +90,8 @@ export class EnchantEngine {
             combos: result.combos,
             snapshot: result.snapshot,
             indexToEnchant: this.registry.indexToEnchant,
-            comboLimit: request.summaryLimit ?? ENGINE_LIMITS.MAX_RESULTS_SUMMARY,
+            comboLimit: request.summaryLimit,
+            uncappedResults: request.uncappedResults,
             threshold: result.threshold,
             isBook: request.item === 'book'
         };
@@ -144,28 +145,70 @@ export class EnchantEngine {
 
         // Config validation
         if (request.threshold !== undefined) {
-            const t = ProbUtils.toNumber(request.threshold);
+            const t = this.validateProbabilityInput(request.threshold, 'threshold', 'Threshold must be between 0 and 1.0.');
             if (t < 0 || t > 1.0) {
                 throw new Error(`Invalid threshold: ${t}. Threshold must be between 0 and 1.0.`);
             }
         }
         if (request.targetClassifiedMass !== undefined) {
-            const target = ProbUtils.toNumber(request.targetClassifiedMass);
+            const target = this.validateProbabilityInput(request.targetClassifiedMass, 'targetClassifiedMass', 'Must be between 0 and 1.0.');
             if (target < 0 || target > 1.0) {
                 throw new Error(`Invalid targetClassifiedMass: ${target}. Must be between 0 and 1.0.`);
             }
         }
-        if (request.maxIterations !== undefined && (request.maxIterations <= 0 || !Number.isInteger(request.maxIterations))) {
+        if (request.maxIterations !== undefined && (!Number.isFinite(request.maxIterations) || request.maxIterations <= 0 || !Number.isInteger(request.maxIterations))) {
             throw new Error(`Invalid maxIterations: ${request.maxIterations}. Must be a positive integer.`);
         }
+        this.validateSummaryLimit(request.summaryLimit, request.uncappedResults);
         if ('checkpoints' in request) {
-            for (const checkpoint of request.checkpoints) {
-                if (checkpoint.targetClassifiedMass === undefined) continue;
-                const target = ProbUtils.toNumber(checkpoint.targetClassifiedMass);
-                if (target < 0 || target > 1.0) {
-                    throw new Error(`Invalid checkpoint targetClassifiedMass: ${target}. Must be between 0 and 1.0.`);
+            for (const [index, checkpoint] of request.checkpoints.entries()) {
+                const threshold = this.validateProbabilityInput(checkpoint.threshold, 'checkpoint threshold', 'Threshold must be between 0 and 1.0.');
+                if (threshold < 0 || threshold > 1.0) {
+                    throw new Error(`Invalid checkpoint threshold: ${threshold}. Threshold must be between 0 and 1.0.`);
+                }
+                if (!Number.isFinite(checkpoint.limit) || checkpoint.limit <= 0 || !Number.isInteger(checkpoint.limit)) {
+                    throw new Error(`Invalid checkpoint limit: ${checkpoint.limit}. Must be a positive integer.`);
+                }
+                if (checkpoint.targetClassifiedMass !== undefined) {
+                    const target = this.validateProbabilityInput(checkpoint.targetClassifiedMass, 'checkpoint targetClassifiedMass', 'Must be between 0 and 1.0.');
+                    if (target < 0 || target > 1.0) {
+                        throw new Error(`Invalid checkpoint targetClassifiedMass: ${target}. Must be between 0 and 1.0.`);
+                    }
+                }
+                if (!request.exhaustive && !this.hasBoundedStopCondition(checkpoint.threshold, checkpoint.limit, checkpoint.targetClassifiedMass)) {
+                    throw new Error(`Checkpoint ${index} has no bounded stop condition. Provide a positive threshold, a finite iteration limit, a targetClassifiedMass, or set exhaustive: true.`);
                 }
             }
+        } else if (!request.exhaustive && !this.hasBoundedStopCondition(request.threshold, request.maxIterations, request.targetClassifiedMass)) {
+            throw new Error('Search request has no bounded stop condition. Provide a positive threshold, a finite maxIterations, a targetClassifiedMass, or set exhaustive: true.');
         }
+    }
+
+    private validateProbabilityInput(value: number | bigint, label: string, requirement: string): number {
+        const normalized = ProbUtils.toNumber(value);
+        if (!Number.isFinite(normalized)) {
+            throw new Error(`Invalid ${label}: ${normalized}. ${requirement}`);
+        }
+        return normalized;
+    }
+
+    private validateSummaryLimit(summaryLimit: number | undefined, uncappedResults: boolean | undefined): void {
+        if (summaryLimit === undefined) return;
+        if (!Number.isInteger(summaryLimit) || summaryLimit < 0) {
+            throw new Error(`Invalid summaryLimit: ${summaryLimit}. Must be a non-negative integer.`);
+        }
+        if (!uncappedResults && summaryLimit > ENGINE_LIMITS.RESULT_ENTRY_SAFETY_CAP) {
+            throw new Error(`Invalid summaryLimit: ${summaryLimit}. Must be <= ${ENGINE_LIMITS.RESULT_ENTRY_SAFETY_CAP}, or set uncappedResults: true.`);
+        }
+    }
+
+    private hasBoundedStopCondition(
+        threshold: number | bigint | undefined,
+        maxIterations: number | undefined,
+        targetClassifiedMass: number | bigint | undefined
+    ): boolean {
+        if (targetClassifiedMass !== undefined) return true;
+        if (threshold !== undefined && ProbUtils.toBigInt(threshold) > 0n) return true;
+        return maxIterations !== undefined;
     }
 }
