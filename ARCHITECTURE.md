@@ -62,7 +62,7 @@ UI input
 | `searchSequentialCheckpoints({ item, xp, material, checkpoints, onCheckpointComplete, ...config })` | Searches multiple checkpoints in order and streams each completed `SearchResult` |
 | `searchModifiedLevel({ item, modLevel, material, ...config })` | Searches one modified level and returns its reusable `SearchState` |
 | `getModifiedLevelDist(xp, enchantability, instrumentation?)` | Returns the BigInt distribution over modified levels |
-| `getEligibleListNumeric(item, level, bitset?)` | Returns packed eligible enchant/rank IDs for an item and level |
+| `getAvailablePool(item, level, bitset?)` | Returns packed eligible enchant/rank IDs for an item and level |
 
 The public calls use request objects so callers can pass optional search, instrumentation, timing, clue, and abort options without positional argument drift. V6 uses `item` and `material` consistently across engine calls, workers, UI code, tests, and scripts.
 

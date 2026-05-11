@@ -1,10 +1,12 @@
-import { getEligiblePool, getEnchantability } from '#core/registry.js';
+import { getCandidatePool, getEnchantability } from '#core/registry.js';
 import { BIGINT_CONSTANTS, PACKING_CONSTANTS } from '#constants/engine.js';
 import { PackedEnchant, RegistryState } from '#types/index.js';
 
-export type PoolSignature = string & { readonly __brand: 'PoolSignature' };
+/** Stable fingerprint for all rules that affect a modified-level enchantment pool. */
+export type SearchPoolSignature = string & { readonly __brand: 'SearchPoolSignature' };
 
-export interface PoolEntry {
+/** One packed enchantment option plus the precomputed data needed by search graphs. */
+export interface SearchPoolEntry {
     readonly packedEnchant: PackedEnchant;
     readonly enchantId: number;
     readonly rank: number;
@@ -14,18 +16,20 @@ export interface PoolEntry {
     readonly conflictBitset: bigint;
 }
 
-export interface PoolProjection {
+/** Immutable eligible-enchantment pool for one item at one modified level. */
+export interface SearchPool {
     readonly item: string;
     readonly level: number;
-    readonly signature: PoolSignature;
-    readonly entries: readonly PoolEntry[];
+    readonly signature: SearchPoolSignature;
+    readonly entries: readonly SearchPoolEntry[];
     readonly totalWeight: number;
 }
 
-export interface PoolGroup {
-    readonly signature: PoolSignature;
+/** Modified levels that share the same pool signature and can therefore share a graph. */
+export interface SearchPoolGroup {
+    readonly signature: SearchPoolSignature;
     readonly levels: readonly number[];
-    readonly pool: PoolProjection;
+    readonly pool: SearchPool;
 }
 
 export interface RegistryKernelRequest {
@@ -35,12 +39,11 @@ export interface RegistryKernelRequest {
 }
 
 /**
- * Request-scoped registry projection for shared search.
+ * Request-scoped view of registry data needed by shared search.
  *
- * This is the first seam for the shared-search rewrite: it turns the mutable-looking
- * V6 registry helpers into immutable pool projections with stable structural
- * signatures. Search programs can key off these signatures instead of rebuilding
- * per-modified-level structural work.
+ * It converts registry lookups into immutable search pools with stable structural
+ * signatures. Search graphs key off those signatures so modified levels with the
+ * same eligibility/conflict/weight rules reuse one structural graph.
  */
 export class RegistryKernel {
     public readonly registry: RegistryState;
@@ -50,7 +53,7 @@ export class RegistryKernel {
     public readonly enchantability: number;
     public readonly multiEnchantBooks: boolean;
 
-    private readonly poolCache = new Map<number, PoolProjection>();
+    private readonly poolCache = new Map<number, SearchPool>();
 
     public constructor(request: RegistryKernelRequest) {
         this.registry = request.registry;
@@ -61,15 +64,15 @@ export class RegistryKernel {
         this.multiEnchantBooks = request.registry.multiEnchantBooks;
     }
 
-    public getPool(level: number): PoolProjection {
+    public getPool(level: number): SearchPool {
         const cached = this.poolCache.get(level);
         if (cached) return cached;
 
-        const packedPool = getEligiblePool(this.registry, this.item, level);
-        const entries = packedPool.map(packedEnchant => this.createPoolEntry(packedEnchant));
+        const packedPool = getCandidatePool(this.registry, this.item, level);
+        const entries = packedPool.map(packedEnchant => this.toPoolEntry(packedEnchant));
         const totalWeight = entries.reduce((sum, entry) => sum + entry.weight, 0);
         const signature = this.createPoolSignature(entries);
-        const projection: PoolProjection = Object.freeze({
+        const pool: SearchPool = Object.freeze({
             item: this.item,
             level,
             signature,
@@ -77,12 +80,13 @@ export class RegistryKernel {
             totalWeight
         });
 
-        this.poolCache.set(level, projection);
-        return projection;
+        this.poolCache.set(level, pool);
+        return pool;
     }
 
-    public getPoolGroups(levels: readonly number[]): PoolGroup[] {
-        const groups = new Map<PoolSignature, { levels: number[]; pool: PoolProjection }>();
+    /** Groups modified levels by identical pool signature for graph sharing. */
+    public groupLevelsByPoolSignature(levels: readonly number[]): SearchPoolGroup[] {
+        const groups = new Map<SearchPoolSignature, { levels: number[]; pool: SearchPool }>();
 
         for (const level of levels) {
             const pool = this.getPool(level);
@@ -101,14 +105,14 @@ export class RegistryKernel {
         }));
     }
 
-    private createPoolEntry(packedEnchant: PackedEnchant): PoolEntry {
+    private toPoolEntry(packedEnchant: PackedEnchant): SearchPoolEntry {
         const enchantId = packedEnchant >> PACKING_CONSTANTS.ENCHANT_SHIFT;
         const rank = packedEnchant & PACKING_CONSTANTS.RANK_MASK;
         const weight = this.registry.weightMap[enchantId] ?? 0;
         const comboIndex = this.registry.enchantToIndex.get(packedEnchant) ?? 0;
         const idBit = BIGINT_CONSTANTS.ID_BIT_LOOKUP[enchantId];
         if (idBit === undefined) {
-            throw new Error(`Registry kernel supports enchant IDs 0-${BIGINT_CONSTANTS.ID_BIT_LOOKUP.length - 1}; pool contains ID ${enchantId}.`);
+            throw new Error(`RegistryKernel supports enchant IDs 0-${BIGINT_CONSTANTS.ID_BIT_LOOKUP.length - 1}; pool contains ID ${enchantId}.`);
         }
 
         return Object.freeze({
@@ -122,7 +126,7 @@ export class RegistryKernel {
         });
     }
 
-    private createPoolSignature(entries: readonly PoolEntry[]): PoolSignature {
+    private createPoolSignature(entries: readonly SearchPoolEntry[]): SearchPoolSignature {
         const parts = [
             `v=${this.version}`,
             `item=${this.item}`,
@@ -135,7 +139,7 @@ export class RegistryKernel {
             ].join(':'))
         ];
 
-        return `pool:${fnv1a64(parts.join('|'))}` as PoolSignature;
+        return `pool:${fnv1a64(parts.join('|'))}` as SearchPoolSignature;
     }
 }
 

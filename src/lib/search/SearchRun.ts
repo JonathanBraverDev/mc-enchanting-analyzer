@@ -5,21 +5,26 @@ import { ENGINE_LIMITS } from '#constants/engine.js';
 import { MassAccountingBreakdown } from '#types/mass.js';
 import { PackedCombo } from '#types/index.js';
 import { AsyncUtils, ComboUtils, PRECISION, ProbUtils } from '#utils/index.js';
-import { RegistryKernel, PoolProjection, PoolSignature } from '#lib/search/registry/RegistryKernel.js';
-import { SearchProgram, ProgramExpansion, ProgramNodeId } from '#lib/search/SearchProgram.js';
+import { RegistryKernel, SearchPool, SearchPoolSignature } from '#lib/search/registry/RegistryKernel.js';
+import { SearchGraph, SearchGraphExpansion, SearchGraphNodeId } from '#lib/search/SearchGraph.js';
 
-export interface SearchProgramCache {
-    getOrCreateProgram(kernel: RegistryKernel, pool: PoolProjection, clueMode?: string | null): SearchProgram;
+/** Minimal cache surface a SearchRun needs for structural graph reuse. */
+export interface SearchGraphCache {
+    getOrCreateGraph(kernel: RegistryKernel, pool: SearchPool, clueMode?: string | null): SearchGraph;
 }
 
+/** Construction options for one resumable XP-cell search run. */
 export interface SearchRunOptions {
     readonly distributionService?: ModifiedLevelDistributionService | undefined;
     readonly targetClueId?: number | undefined;
-    readonly programCache?: SearchProgramCache | undefined;
+    readonly graphCache?: SearchGraphCache | undefined;
 }
 
+/** Stop conditions for advancing a SearchRun to the next checkpoint boundary. */
 export interface SearchRunCheckpointRequest {
+    /** Stop when the largest pending node mass falls below this probability. */
     readonly threshold?: number | bigint | undefined;
+    /** Maximum graph-node expansions to perform before stopping. */
     readonly maxIterations?: number | undefined;
     /** Ignore threshold and iteration cap, searching until the frontier is empty. */
     readonly exhaustive?: boolean | undefined;
@@ -30,18 +35,20 @@ export interface SearchRunCheckpointRequest {
     /** Optional internal forward-mass floor. Defaults to 0 so validation can dig into the full tail. */
     readonly probabilityFloor?: number | bigint | undefined;
     readonly signal?: AbortSignal | undefined;
-    /** Async search yield cadence. Used by the worker adapter so abort messages can be observed. */
+    /** Async search yield cadence. Used by the worker-facing search execution service so abort messages can be observed. */
     readonly yieldEveryIterations?: number | undefined;
 }
 
+/** Pending graph-node mass exported for presentation projections and diagnostics. */
 export interface PendingFrontierEntry {
-    readonly programId: number;
-    readonly nodeId: ProgramNodeId;
+    readonly graphId: number;
+    readonly nodeId: SearchGraphNodeId;
     readonly mass: bigint;
     readonly combo: PackedCombo;
     readonly count: number;
 }
 
+/** Explicit materialized snapshot of live SearchRun state. Expensive for large frontiers. */
 export interface SearchRunSnapshot {
     readonly results: ReadonlyMap<PackedCombo, bigint>;
     readonly mass: MassAccountingBreakdown;
@@ -49,27 +56,27 @@ export interface SearchRunSnapshot {
     readonly pendingCount: number;
     readonly largestPendingMass: bigint;
     readonly pendingEntries: readonly PendingFrontierEntry[];
-    readonly programCount: number;
+    readonly graphCount: number;
     readonly seededLevelCount: number;
     readonly activeResidueCount: number;
     readonly activeResidueMass: bigint;
     readonly fullyResolved: boolean;
 }
 
-interface ProgramRecord {
+interface GraphRecord {
     readonly id: number;
-    readonly program: SearchProgram;
+    readonly graph: SearchGraph;
     readonly cluePolicy?: ClueSearchPolicy | undefined;
 }
 
 interface FrontierPopTarget {
-    programId: number;
-    nodeId: ProgramNodeId;
+    graphId: number;
+    nodeId: SearchGraphNodeId;
     mass: bigint;
 }
 
 interface EdgeMassShare {
-    readonly childId: ProgramNodeId;
+    readonly childId: SearchGraphNodeId;
     mass: bigint;
 }
 
@@ -83,21 +90,21 @@ interface AdvanceCriteria {
 }
 
 /**
- * Minimal single-cell probability flow executor.
+ * Resumable probability-flow executor for one item/material/XP cell.
  *
- * This is intentionally small: one output cell, optional clue conditioning, no worker
- * protocol, and no projection layer. It implements the shared-search premise that modified
- * level mass can be seeded directly into shared lazy programs and expanded by one
- * global weighted frontier.
+ * A run seeds the modified-level distribution into shared search graphs, then
+ * repeatedly expands the largest weighted pending graph node. It owns probability
+ * mass, residue accounting, clue pruning, and resolved result mass; it does not
+ * own worker protocol or presentation projection.
  */
 export class SearchRun {
     public readonly results = new Map<PackedCombo, bigint>();
     public readonly mass = new ProbabilityMassAccountant();
 
     private readonly distributionService: ModifiedLevelDistributionService;
-    private readonly programCache: SearchProgramCache | undefined;
-    private readonly programsBySignature = new Map<PoolSignature, ProgramRecord>();
-    private readonly programs: ProgramRecord[] = [];
+    private readonly graphCache: SearchGraphCache | undefined;
+    private readonly graphsBySignature = new Map<SearchPoolSignature, GraphRecord>();
+    private readonly graphs: GraphRecord[] = [];
     private readonly forwardingResidues: BigUint64Array[] = [];
     private readonly targetClueId: number | undefined;
     private readonly frontier = new SearchRunFrontier();
@@ -110,10 +117,11 @@ export class SearchRun {
         options: SearchRunOptions = {}
     ) {
         this.distributionService = options.distributionService ?? new ModifiedLevelDistributionService();
-        this.programCache = options.programCache;
+        this.graphCache = options.graphCache;
         this.targetClueId = options.targetClueId;
     }
 
+    /** Seeds the run with the modified-level distribution for one table XP value. */
     public seedXp(xp: number): void {
         if (this.seeded) throw new Error('SearchRun can only be seeded once. Create a new run for a new cell.');
         this.seeded = true;
@@ -129,16 +137,16 @@ export class SearchRun {
             if (rootMass === 0n) continue;
             const level = Number(levelText);
             const pool = this.kernel.getPool(level);
-            const program = this.getProgram(pool);
-            if (program.cluePolicy && !program.cluePolicy.isReachableInPool) {
+            const graph = this.graphForPool(pool);
+            if (graph.cluePolicy && !graph.cluePolicy.isReachableInPool) {
                 this.mass.record('clueIncompatible', rootMass);
                 seededMass += rootMass;
                 this._seededLevelCount++;
                 continue;
             }
 
-            const root = program.program.getRootNode(level);
-            this.pushPending(program.id, root.id, rootMass);
+            const root = graph.graph.getRootNode(level);
+            this.pushPending(graph.id, root.id, rootMass);
             seededMass += rootMass;
             this._seededLevelCount++;
         }
@@ -147,12 +155,14 @@ export class SearchRun {
         if (seededMass > PRECISION) throw new Error(`Modified-level distribution overflowed precision by ${seededMass - PRECISION} units.`);
     }
 
+    /** Synchronously advances to a checkpoint/final boundary and returns a materialized snapshot. */
     public searchToCheckpoint(request: SearchRunCheckpointRequest = {}): SearchRunSnapshot {
         const criteria = this.createAdvanceCriteria(request);
         this.advanceUntilCheckpoint(criteria);
         return this.snapshot();
     }
 
+    /** Asynchronously advances to a checkpoint while yielding between scheduler chunks. */
     public async searchToCheckpointAsync(request: SearchRunCheckpointRequest = {}): Promise<SearchRunSnapshot> {
         const criteria = this.createAdvanceCriteria(request);
         const chunkIterations = Math.max(
@@ -194,7 +204,7 @@ export class SearchRun {
      * @returns true when the requested checkpoint is reached; false when only the chunk budget was exhausted.
      */
     private advanceUntilCheckpoint(criteria: AdvanceCriteria, chunkIterations?: number): boolean {
-        const current = { programId: 0, nodeId: 0 as ProgramNodeId, mass: 0n };
+        const current = { graphId: 0, nodeId: 0 as SearchGraphNodeId, mass: 0n };
         let advancedInChunk = 0;
 
         while (true) {
@@ -208,12 +218,13 @@ export class SearchRun {
             if (!this.frontier.pop(current)) return true;
 
             this.mass.subtract('pending', current.mass);
-            this.expand(current.programId, current.nodeId, current.mass, criteria.probabilityFloor);
+            this.expand(current.graphId, current.nodeId, current.mass, criteria.probabilityFloor);
             this._iterations++;
             advancedInChunk++;
         }
     }
 
+    /** Materializes the current run state without advancing search. */
     public snapshot(): SearchRunSnapshot {
         const residue = this.getActiveResidueStats();
         return Object.freeze({
@@ -223,7 +234,7 @@ export class SearchRun {
             pendingCount: this.frontier.size,
             largestPendingMass: this.frontier.peekMass(),
             pendingEntries: Object.freeze(this.getPendingEntries()),
-            programCount: this.programs.length,
+            graphCount: this.graphs.length,
             seededLevelCount: this._seededLevelCount,
             activeResidueCount: residue.count,
             activeResidueMass: residue.mass,
@@ -231,21 +242,21 @@ export class SearchRun {
         });
     }
 
-    private expand(programId: number, nodeId: ProgramNodeId, incomingMass: bigint, probabilityFloor: bigint): void {
-        const record = this.getProgramById(programId);
-        const { program, cluePolicy } = record;
-        const expansion = program.getExpansion(nodeId);
+    private expand(graphId: number, nodeId: SearchGraphNodeId, incomingMass: bigint, probabilityFloor: bigint): void {
+        const record = this.getGraphById(graphId);
+        const { graph, cluePolicy } = record;
+        const expansion = graph.getExpansion(nodeId);
 
         if (expansion.isRoot) {
-            this.expandRoot(programId, nodeId, expansion, incomingMass, cluePolicy);
+            this.expandRoot(graphId, nodeId, expansion, incomingMass, cluePolicy);
             return;
         }
 
         this.expandSearchNode(
-            programId,
+            graphId,
             nodeId,
-            program.getNodeCombo(nodeId),
-            program.getNodeCount(nodeId),
+            graph.getNodeCombo(nodeId),
+            graph.getNodeCount(nodeId),
             expansion,
             incomingMass,
             probabilityFloor,
@@ -254,9 +265,9 @@ export class SearchRun {
     }
 
     private expandRoot(
-        programId: number,
-        nodeId: ProgramNodeId,
-        expansion: ProgramExpansion,
+        graphId: number,
+        nodeId: SearchGraphNodeId,
+        expansion: SearchGraphExpansion,
         incomingMass: bigint,
         cluePolicy: ClueSearchPolicy | undefined
     ): void {
@@ -265,15 +276,15 @@ export class SearchRun {
             return;
         }
 
-        this.distributeToEdges(programId, nodeId, expansion, incomingMass, 0 as PackedCombo, cluePolicy);
+        this.forwardMass(graphId, nodeId, expansion, incomingMass, 0 as PackedCombo, cluePolicy);
     }
 
     private expandSearchNode(
-        programId: number,
-        nodeId: ProgramNodeId,
+        graphId: number,
+        nodeId: SearchGraphNodeId,
         combo: PackedCombo,
         count: number,
-        expansion: ProgramExpansion,
+        expansion: SearchGraphExpansion,
         incomingMass: bigint,
         probabilityFloor: bigint,
         cluePolicy: ClueSearchPolicy | undefined
@@ -281,7 +292,7 @@ export class SearchRun {
         const probStop = ProbUtils.scale(incomingMass, PRECISION - expansion.probContinue);
         const probForward = incomingMass - probStop;
 
-        this.settleResolved(combo, count, probStop, cluePolicy);
+        this.recordResolved(combo, count, probStop, cluePolicy);
 
         if (probForward === 0n) return;
 
@@ -291,7 +302,7 @@ export class SearchRun {
         }
 
         if (expansion.totalWeight <= 0 || expansion.edges.length === 0) {
-            this.settleResolved(combo, count, probForward, cluePolicy);
+            this.recordResolved(combo, count, probForward, cluePolicy);
             return;
         }
 
@@ -300,19 +311,19 @@ export class SearchRun {
             return;
         }
 
-        this.distributeToEdges(programId, nodeId, expansion, probForward, combo, cluePolicy);
+        this.forwardMass(graphId, nodeId, expansion, probForward, combo, cluePolicy);
     }
 
-    private distributeToEdges(
-        programId: number,
-        nodeId: ProgramNodeId,
-        expansion: ProgramExpansion,
+    private forwardMass(
+        graphId: number,
+        nodeId: SearchGraphNodeId,
+        expansion: SearchGraphExpansion,
         mass: bigint,
         combo: PackedCombo,
         cluePolicy: ClueSearchPolicy | undefined
     ): void {
         const totalWeight = BigInt(expansion.totalWeight);
-        const oldResidue = this.getForwardingResidue(programId, nodeId);
+        const oldResidue = this.getForwardingResidue(graphId, nodeId);
         const totalToDistribute = mass + oldResidue;
         const shares: EdgeMassShare[] = [];
         let assigned = 0n;
@@ -334,24 +345,24 @@ export class SearchRun {
         }
 
         const newResidue = totalToDistribute - assigned;
-        this.setForwardingResidue(programId, nodeId, newResidue);
+        this.setForwardingResidue(graphId, nodeId, newResidue);
         this.recordResidueDelta(oldResidue, newResidue);
 
         for (const share of shares) {
-            this.pushPending(programId, share.childId, share.mass);
+            this.pushPending(graphId, share.childId, share.mass);
         }
     }
 
     private getPendingEntries(): PendingFrontierEntry[] {
         const entries: PendingFrontierEntry[] = [];
-        this.frontier.forEach((programId, nodeId, mass) => {
-            const program = this.getProgramById(programId).program;
+        this.frontier.forEach((graphId, nodeId, mass) => {
+            const graph = this.getGraphById(graphId).graph;
             entries.push(Object.freeze({
-                programId,
+                graphId,
                 nodeId,
                 mass,
-                combo: program.getNodeCombo(nodeId),
-                count: program.getNodeCount(nodeId)
+                combo: graph.getNodeCombo(nodeId),
+                count: graph.getNodeCount(nodeId)
             }));
         });
         return entries;
@@ -384,27 +395,27 @@ export class SearchRun {
         }
     }
 
-    private getForwardingResidue(programId: number, nodeId: ProgramNodeId): bigint {
-        const storage = this.forwardingResidues[programId];
+    private getForwardingResidue(graphId: number, nodeId: SearchGraphNodeId): bigint {
+        const storage = this.forwardingResidues[graphId];
         return storage?.[nodeId as number] ?? 0n;
     }
 
-    private setForwardingResidue(programId: number, nodeId: ProgramNodeId, residue: bigint): void {
+    private setForwardingResidue(graphId: number, nodeId: SearchGraphNodeId, residue: bigint): void {
         const nodeIndex = nodeId as number;
-        let storage = this.forwardingResidues[programId];
+        let storage = this.forwardingResidues[graphId];
 
         if (!storage) {
             let capacity = SearchRunFrontier.INITIAL_NODE_CAPACITY;
             while (capacity <= nodeIndex) capacity *= 2;
             storage = new BigUint64Array(capacity);
-            this.forwardingResidues[programId] = storage;
+            this.forwardingResidues[graphId] = storage;
         } else if (nodeIndex >= storage.length) {
             let capacity = storage.length;
             while (capacity <= nodeIndex) capacity *= 2;
             const expanded = new BigUint64Array(capacity);
             expanded.set(storage);
             storage = expanded;
-            this.forwardingResidues[programId] = storage;
+            this.forwardingResidues[graphId] = storage;
         }
 
         storage[nodeIndex] = residue;
@@ -414,7 +425,7 @@ export class SearchRun {
         return cluePolicy.containsTargetClue(combo, this.kernel.registry.indexToEnchant);
     }
 
-    private settleResolved(
+    private recordResolved(
         combo: PackedCombo,
         count: number,
         mass: bigint,
@@ -466,14 +477,14 @@ export class SearchRun {
         this.mass.record('resolved', mass);
     }
 
-    private pushPending(programId: number, nodeId: ProgramNodeId, mass: bigint): void {
+    private pushPending(graphId: number, nodeId: SearchGraphNodeId, mass: bigint): void {
         if (mass === 0n) return;
-        this.frontier.pushOrMerge(programId, nodeId, mass);
+        this.frontier.pushOrMerge(graphId, nodeId, mass);
         this.mass.record('pending', mass);
     }
 
-    private getProgram(pool: PoolProjection): ProgramRecord {
-        const existing = this.programsBySignature.get(pool.signature);
+    private graphForPool(pool: SearchPool): GraphRecord {
+        const existing = this.graphsBySignature.get(pool.signature);
         if (existing) return existing;
 
         const initialPool = pool.entries.map(entry => entry.packedEnchant);
@@ -481,23 +492,23 @@ export class SearchRun {
             ? ClueSearchPolicy.create(this.kernel.registry, initialPool, this.targetClueId)
             : undefined;
         const record = Object.freeze({
-            id: this.programs.length,
-            program: this.programCache?.getOrCreateProgram(this.kernel, pool, null) ?? new SearchProgram(this.kernel, pool),
+            id: this.graphs.length,
+            graph: this.graphCache?.getOrCreateGraph(this.kernel, pool, null) ?? new SearchGraph(this.kernel, pool),
             cluePolicy
         });
-        this.programs.push(record);
-        this.programsBySignature.set(pool.signature, record);
+        this.graphs.push(record);
+        this.graphsBySignature.set(pool.signature, record);
         return record;
     }
 
-    private getProgramById(programId: number): ProgramRecord {
-        const record = this.programs[programId];
-        if (!record) throw new Error(`Unknown search program ID ${programId}`);
+    private getGraphById(graphId: number): GraphRecord {
+        const record = this.graphs[graphId];
+        if (!record) throw new Error(`Unknown search graph ID ${graphId}`);
         return record;
     }
 }
 
-interface FrontierProgramStorage {
+interface FrontierGraphStorage {
     masses: BigUint64Array;
     positions: Int32Array;
 }
@@ -505,16 +516,16 @@ interface FrontierProgramStorage {
 class SearchRunFrontier {
     public static readonly INITIAL_NODE_CAPACITY = 1024;
 
-    private readonly heapProgramIds: number[] = [];
+    private readonly heapGraphIds: number[] = [];
     private readonly heapNodeIds: number[] = [];
-    private readonly storages: FrontierProgramStorage[] = [];
+    private readonly storages: FrontierGraphStorage[] = [];
 
     public get size(): number {
         return this.heapNodeIds.length;
     }
 
-    public pushOrMerge(programId: number, nodeId: ProgramNodeId, mass: bigint): void {
-        const storage = this.ensureStorage(programId, nodeId);
+    public pushOrMerge(graphId: number, nodeId: SearchGraphNodeId, mass: bigint): void {
+        const storage = this.ensureStorage(graphId, nodeId);
         const nodeIndex = nodeId as number;
         const existingIndex = storage.positions[nodeIndex]!;
         if (existingIndex !== -1) {
@@ -524,7 +535,7 @@ class SearchRunFrontier {
         }
 
         const heapIndex = this.heapNodeIds.length;
-        this.heapProgramIds.push(programId);
+        this.heapGraphIds.push(graphId);
         this.heapNodeIds.push(nodeIndex);
         storage.masses[nodeIndex] = mass;
         storage.positions[nodeIndex] = heapIndex;
@@ -535,33 +546,33 @@ class SearchRunFrontier {
         return this.heapNodeIds.length === 0 ? 0n : this.massAt(0);
     }
 
-    public forEach(callback: (programId: number, nodeId: ProgramNodeId, mass: bigint) => void): void {
+    public forEach(callback: (graphId: number, nodeId: SearchGraphNodeId, mass: bigint) => void): void {
         for (let i = 0; i < this.heapNodeIds.length; i++) {
-            const programId = this.heapProgramIds[i]!;
-            const nodeId = this.heapNodeIds[i]! as ProgramNodeId;
-            callback(programId, nodeId, this.getNodeMass(programId, nodeId as number));
+            const graphId = this.heapGraphIds[i]!;
+            const nodeId = this.heapNodeIds[i]! as SearchGraphNodeId;
+            callback(graphId, nodeId, this.getNodeMass(graphId, nodeId as number));
         }
     }
 
     public pop(out: FrontierPopTarget): boolean {
         if (this.heapNodeIds.length === 0) return false;
 
-        const programId = this.heapProgramIds[0]!;
+        const graphId = this.heapGraphIds[0]!;
         const nodeId = this.heapNodeIds[0]!;
-        const storage = this.storages[programId]!;
+        const storage = this.storages[graphId]!;
 
-        out.programId = programId;
-        out.nodeId = nodeId as ProgramNodeId;
+        out.graphId = graphId;
+        out.nodeId = nodeId as SearchGraphNodeId;
         out.mass = storage.masses[nodeId]!;
         storage.positions[nodeId] = -1;
         storage.masses[nodeId] = 0n;
 
-        const lastProgramId = this.heapProgramIds.pop();
+        const lastGraphId = this.heapGraphIds.pop();
         const lastNodeId = this.heapNodeIds.pop();
-        if (this.heapNodeIds.length > 0 && lastProgramId !== undefined && lastNodeId !== undefined) {
-            this.heapProgramIds[0] = lastProgramId;
+        if (this.heapNodeIds.length > 0 && lastGraphId !== undefined && lastNodeId !== undefined) {
+            this.heapGraphIds[0] = lastGraphId;
             this.heapNodeIds[0] = lastNodeId;
-            this.storages[lastProgramId]!.positions[lastNodeId] = 0;
+            this.storages[lastGraphId]!.positions[lastNodeId] = 0;
             this.sinkDown(0);
         }
 
@@ -570,9 +581,9 @@ class SearchRunFrontier {
 
     private bubbleUp(index: number): void {
         let current = index;
-        const programId = this.heapProgramIds[current]!;
+        const graphId = this.heapGraphIds[current]!;
         const nodeId = this.heapNodeIds[current]!;
-        const mass = this.getNodeMass(programId, nodeId);
+        const mass = this.getNodeMass(graphId, nodeId);
 
         while (current > 0) {
             const parent = (current - 1) >>> 1;
@@ -581,16 +592,16 @@ class SearchRunFrontier {
             current = parent;
         }
 
-        this.heapProgramIds[current] = programId;
+        this.heapGraphIds[current] = graphId;
         this.heapNodeIds[current] = nodeId;
-        this.storages[programId]!.positions[nodeId] = current;
+        this.storages[graphId]!.positions[nodeId] = current;
     }
 
     private sinkDown(index: number): void {
         let current = index;
-        const programId = this.heapProgramIds[current]!;
+        const graphId = this.heapGraphIds[current]!;
         const nodeId = this.heapNodeIds[current]!;
-        const mass = this.getNodeMass(programId, nodeId);
+        const mass = this.getNodeMass(graphId, nodeId);
 
         while (true) {
             const left = (current << 1) + 1;
@@ -605,32 +616,32 @@ class SearchRunFrontier {
             current = child;
         }
 
-        this.heapProgramIds[current] = programId;
+        this.heapGraphIds[current] = graphId;
         this.heapNodeIds[current] = nodeId;
-        this.storages[programId]!.positions[nodeId] = current;
+        this.storages[graphId]!.positions[nodeId] = current;
     }
 
     private moveHeapEntry(from: number, to: number): void {
-        const programId = this.heapProgramIds[from]!;
+        const graphId = this.heapGraphIds[from]!;
         const nodeId = this.heapNodeIds[from]!;
-        this.heapProgramIds[to] = programId;
+        this.heapGraphIds[to] = graphId;
         this.heapNodeIds[to] = nodeId;
-        this.storages[programId]!.positions[nodeId] = to;
+        this.storages[graphId]!.positions[nodeId] = to;
     }
 
     private massAt(index: number): bigint {
-        return this.getNodeMass(this.heapProgramIds[index]!, this.heapNodeIds[index]!);
+        return this.getNodeMass(this.heapGraphIds[index]!, this.heapNodeIds[index]!);
     }
 
-    private getNodeMass(programId: number, nodeId: number): bigint {
-        return this.storages[programId]!.masses[nodeId]!;
+    private getNodeMass(graphId: number, nodeId: number): bigint {
+        return this.storages[graphId]!.masses[nodeId]!;
     }
 
-    private ensureStorage(programId: number, nodeId: ProgramNodeId): FrontierProgramStorage {
-        let storage = this.storages[programId];
+    private ensureStorage(graphId: number, nodeId: SearchGraphNodeId): FrontierGraphStorage {
+        let storage = this.storages[graphId];
         if (!storage) {
             storage = this.createStorage(Math.max(SearchRunFrontier.INITIAL_NODE_CAPACITY, (nodeId as number) + 1));
-            this.storages[programId] = storage;
+            this.storages[graphId] = storage;
             return storage;
         }
 
@@ -640,7 +651,7 @@ class SearchRunFrontier {
         return storage;
     }
 
-    private createStorage(capacity: number): FrontierProgramStorage {
+    private createStorage(capacity: number): FrontierGraphStorage {
         const normalized = this.nextPowerOfTwo(capacity);
         const positions = new Int32Array(normalized);
         positions.fill(-1);
@@ -650,7 +661,7 @@ class SearchRunFrontier {
         };
     }
 
-    private growStorage(storage: FrontierProgramStorage, required: number): void {
+    private growStorage(storage: FrontierGraphStorage, required: number): void {
         const nextCapacity = this.nextPowerOfTwo(required);
         const nextMasses = new BigUint64Array(nextCapacity);
         nextMasses.set(storage.masses);

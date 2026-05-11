@@ -30,7 +30,7 @@ class SingleModifiedLevelDistribution extends ModifiedLevelDistributionService {
 }
 
 describe('SearchRun', () => {
-    it('seeds one XP cell into shared pool programs', () => {
+    it('seeds one XP cell into shared pool graphs', () => {
         const registry = RegistryFactory.build('1.21.11');
         const kernel = new RegistryKernel({ registry, item: 'sword', material: 'diamond' });
         const run = new SearchRun(kernel);
@@ -39,8 +39,8 @@ describe('SearchRun', () => {
         const snapshot = run.snapshot();
 
         assert.ok(snapshot.seededLevelCount > 1);
-        assert.ok(snapshot.programCount > 1);
-        assert.ok(snapshot.programCount < snapshot.seededLevelCount, 'modified levels should share pool programs');
+        assert.ok(snapshot.graphCount > 1);
+        assert.ok(snapshot.graphCount < snapshot.seededLevelCount, 'modified levels should share pool graphs');
         assert.strictEqual(totalMassUnits(snapshot), PRECISION);
         assert.strictEqual(BigInt(snapshot.mass.units!.pending), PRECISION);
     });

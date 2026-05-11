@@ -12,7 +12,7 @@ async function debug() {
     console.log(`Profiling 1.7.2 Book search...`);
 
     const instrumentation: any = {
-        frontierCache: { hits: 0, misses: 0 },
+        statsCache: { hits: 0, misses: 0 },
         poolCache: { hits: 0, misses: 0 },
         distCache: { hits: 0, misses: 0 }
     };

@@ -10,7 +10,7 @@ function accountingTotal(stats: CalculationStats): number {
     return a.resolved + a.clueIncompatible + a.pending + a.sieved + a.overflow + a.capped + a.rounding;
 }
 
-describe('Search engine adapter', () => {
+describe('Search execution service', () => {
     it('produces CalculationStats through the normal calculate boundary', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
         engine.resetCaches();
@@ -68,7 +68,7 @@ describe('Search engine adapter', () => {
         const instrumentation = {
             poolCache: { hits: 0, misses: 0 },
             distCache: { hits: 0, misses: 0 },
-            frontierCache: { hits: 0, misses: 0 },
+            statsCache: { hits: 0, misses: 0 },
             totalIterations: 0,
             totalPrunedNodes: 0,
             roundingErrorEvents: 0,
@@ -146,12 +146,12 @@ describe('Search engine adapter', () => {
         assert.ok(Object.keys(stats.combos).length > 0);
     });
 
-    it('projects pending frontier nodes and native instrumentation through the adapter', async () => {
+    it('projects pending frontier nodes and search instrumentation through the search execution service', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
         const instrumentation = {
             poolCache: { hits: 0, misses: 0 },
             distCache: { hits: 0, misses: 0 },
-            frontierCache: { hits: 0, misses: 0 },
+            statsCache: { hits: 0, misses: 0 },
             totalIterations: 0,
             totalPrunedNodes: 0,
             roundingErrorEvents: 0,
@@ -172,12 +172,12 @@ describe('Search engine adapter', () => {
         assert.ok(result.snapshot.pendingEntries.length > 0);
         assert.ok(result.snapshot.mass.pending > 0);
         assert.ok(result.instrumentation?.search);
-        assert.ok(result.instrumentation.search.programCount > 0);
+        assert.ok(result.instrumentation.search.graphCount > 0);
         assert.strictEqual(result.instrumentation.search.pendingEntryCount, result.snapshot.pendingEntries.length);
         assert.ok(result.instrumentation.search.canImprove);
     });
 
-    it('aborts checkpoint searches through the adapter', async () => {
+    it('aborts checkpoint searches through the search execution service', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
         const controller = new AbortController();
         controller.abort();
@@ -208,7 +208,7 @@ describe('Search engine adapter', () => {
             instrumentation: {
                 poolCache: { hits: 0, misses: 0 },
                 distCache: { hits: 0, misses: 0 },
-                frontierCache: { hits: 0, misses: 0 },
+                statsCache: { hits: 0, misses: 0 },
                 totalIterations: 0,
                 totalPrunedNodes: 0,
                 roundingErrorEvents: 0,
@@ -227,7 +227,7 @@ describe('Search engine adapter', () => {
             instrumentation: {
                 poolCache: { hits: 0, misses: 0 },
                 distCache: { hits: 0, misses: 0 },
-                frontierCache: { hits: 0, misses: 0 },
+                statsCache: { hits: 0, misses: 0 },
                 totalIterations: 0,
                 totalPrunedNodes: 0,
                 roundingErrorEvents: 0,
@@ -251,7 +251,7 @@ describe('Search engine adapter', () => {
             instrumentation: {
                 poolCache: { hits: 0, misses: 0 },
                 distCache: { hits: 0, misses: 0 },
-                frontierCache: { hits: 0, misses: 0 },
+                statsCache: { hits: 0, misses: 0 },
                 totalIterations: 0,
                 totalPrunedNodes: 0,
                 roundingErrorEvents: 0,
@@ -264,7 +264,7 @@ describe('Search engine adapter', () => {
         assert.strictEqual(fresh.instrumentation?.totalIterations, 10);
     });
 
-    it('reuses structural programs across fresh XP-cell runs', async () => {
+    it('reuses structural graphs across fresh XP-cell runs', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
         engine.resetCaches();
 
@@ -278,7 +278,7 @@ describe('Search engine adapter', () => {
             instrumentation: {
                 poolCache: { hits: 0, misses: 0 },
                 distCache: { hits: 0, misses: 0 },
-                frontierCache: { hits: 0, misses: 0 },
+                statsCache: { hits: 0, misses: 0 },
                 totalIterations: 0,
                 totalPrunedNodes: 0,
                 roundingErrorEvents: 0,
@@ -287,7 +287,7 @@ describe('Search engine adapter', () => {
                 fullyResolved: false
             }
         });
-        const firstMisses = first.instrumentation?.search?.programCacheMisses ?? 0;
+        const firstMisses = first.instrumentation?.search?.graphCacheMisses ?? 0;
 
         const second = await engine.searchToCheckpoint({
             item: 'sword',
@@ -299,7 +299,7 @@ describe('Search engine adapter', () => {
             instrumentation: {
                 poolCache: { hits: 0, misses: 0 },
                 distCache: { hits: 0, misses: 0 },
-                frontierCache: { hits: 0, misses: 0 },
+                statsCache: { hits: 0, misses: 0 },
                 totalIterations: 0,
                 totalPrunedNodes: 0,
                 roundingErrorEvents: 0,
@@ -310,7 +310,7 @@ describe('Search engine adapter', () => {
         });
 
         assert.ok(firstMisses > 0);
-        assert.ok((second.instrumentation?.search?.programCacheHits ?? 0) >= firstMisses);
+        assert.ok((second.instrumentation?.search?.graphCacheHits ?? 0) >= firstMisses);
     });
 
 });

@@ -21,7 +21,7 @@ export function makeSearchSnapshot(options: {
         pendingCount: pendingEntries.length,
         largestPendingMass: pendingEntries.reduce((max, entry) => entry.mass > max ? entry.mass : max, 0n),
         pendingEntries: Object.freeze([...pendingEntries]),
-        programCount: 1,
+        graphCount: 1,
         seededLevelCount: 1,
         activeResidueCount: 0,
         activeResidueMass: 0n,
@@ -30,7 +30,7 @@ export function makeSearchSnapshot(options: {
 }
 
 export function makePendingEntry(combo: PackedCombo, count: number, mass: bigint): PendingFrontierEntry {
-    return { programId: 0, nodeId: 0 as any, combo, count, mass };
+    return { graphId: 0, nodeId: 0 as any, combo, count, mass };
 }
 
 function makeMass(overrides: UnitOverrides = {}): MassAccountingBreakdown {

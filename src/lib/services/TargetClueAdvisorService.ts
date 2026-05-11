@@ -1,5 +1,5 @@
 import { PACKING_CONSTANTS } from '#constants/engine.js';
-import { getEligiblePool, getEnchantability, getFullEnchantName } from '#core/registry.js';
+import { getCandidatePool, getEnchantability, getFullEnchantName } from '#core/registry.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { TargetAnalysisService } from '#services/TargetAnalysisService.js';
 import type {
@@ -111,7 +111,7 @@ export class TargetClueAdvisorService {
         const distribution = this.distributionService.getModifiedLevelDist(registry, xpLevel, enchantability);
 
         for (const modLevelText of Object.keys(distribution)) {
-            const pool = getEligiblePool(registry, item, Number(modLevelText));
+            const pool = getCandidatePool(registry, item, Number(modLevelText));
             if (this.poolSupportsTargets(pool, targets)) return true;
         }
 

@@ -77,9 +77,12 @@ export interface SearchTiming {
 export type EngineExitReason = 'threshold' | 'iterations' | 'mass' | 'aborted' | 'empty' | 'exhausted';
 
 export interface EngineInstrumentation {
+  /** Eligible-pool registry cache metrics. */
   poolCache: CacheStats;
+  /** Modified-level distribution cache metrics. */
   distCache: CacheStats;
-  frontierCache: CacheStats;
+  /** Final CalculationStats cache metrics. */
+  statsCache: CacheStats;
   totalIterations: number;
   totalPrunedNodes: number;
   roundingErrorEvents: number;
@@ -90,10 +93,8 @@ export interface EngineInstrumentation {
 
   /** Total entries in the combinations results map */
   resultsSize?: number | undefined;
-  /** Current number of nodes in the priority queue */
+  /** Current number of pending weighted graph nodes in the frontier heap. */
   queueSize?: number | undefined;
-  /** Size of the heap's internal deduplication map */
-  indexMapSize?: number | undefined;
   /** Current heap usage in MB */
   memoryMB?: number | undefined;
 
@@ -114,16 +115,16 @@ export interface EngineInstrumentation {
   /** Optional: If true, perform expensive global heap scans for cache nodes/results */
   trackGlobalMetrics?: boolean | undefined;
 
-  /** Native search diagnostics. Present when the engine records them. */
+  /** Shared search diagnostics. Present when the engine records them. */
   search?: SearchInstrumentation | undefined;
 }
 
 export interface SearchInstrumentation {
-  /** Number of structural search programs currently used by the run. */
-  programCount: number;
+  /** Number of structural search graphs currently used by the run. */
+  graphCount: number;
   /** Number of modified levels seeded into the run. */
   seededLevelCount: number;
-  /** Number of distinct `(program, node)` entries still pending in the global frontier. */
+  /** Number of distinct `(graph, node)` entries still pending in the global frontier. */
   pendingEntryCount: number;
   /** Largest pending frontier mass as a normalized probability. */
   largestPendingMass: number;
@@ -133,10 +134,10 @@ export interface SearchInstrumentation {
   activeResidueMass: number;
   /** Whether this snapshot can still improve under a lower threshold or higher iteration cap. */
   canImprove: boolean;
-  /** Cumulative structural SearchProgram cache hits for this engine instance. */
-  programCacheHits?: number | undefined;
-  /** Cumulative structural SearchProgram cache misses for this engine instance. */
-  programCacheMisses?: number | undefined;
+  /** Cumulative structural SearchGraph cache hits for this engine instance. */
+  graphCacheHits?: number | undefined;
+  /** Cumulative structural SearchGraph cache misses for this engine instance. */
+  graphCacheMisses?: number | undefined;
   /** Cumulative resumable SearchRun cache hits for this engine instance. */
   runCacheHits?: number | undefined;
   /** Cumulative resumable SearchRun cache misses for this engine instance. */

@@ -1,12 +1,13 @@
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import { PackedCombo } from '#types/index.js';
 import { ComboUtils, PRECISION, ProbUtils } from '#utils/index.js';
-import { RegistryKernel, PoolEntry, PoolProjection, PoolSignature } from '#lib/search/registry/RegistryKernel.js';
+import { RegistryKernel, SearchPoolEntry, SearchPool, SearchPoolSignature } from '#lib/search/registry/RegistryKernel.js';
 
-export type ProgramNodeId = number & { readonly __brand: 'ProgramNodeId' };
+/** Dense numeric ID for a node inside one SearchGraph. */
+export type SearchGraphNodeId = number & { readonly __brand: 'SearchGraphNodeId' };
 
 
-class NumericNodeIndex {
+class NumericGraphNodeIndex {
     private static readonly INITIAL_CAPACITY = 131072;
     private static readonly MAX_LOAD_FACTOR = 0.7;
 
@@ -17,23 +18,23 @@ class NumericNodeIndex {
     private resizeAt: number;
     private count = 0;
 
-    public constructor(capacity: number = NumericNodeIndex.INITIAL_CAPACITY) {
-        const size = NumericNodeIndex.nextPowerOfTwo(capacity);
+    public constructor(capacity: number = NumericGraphNodeIndex.INITIAL_CAPACITY) {
+        const size = NumericGraphNodeIndex.nextPowerOfTwo(capacity);
         this.keys = new Float64Array(size);
         this.values = new Int32Array(size);
         this.values.fill(-1);
         this.used = new Uint8Array(size);
         this.mask = size - 1;
-        this.resizeAt = Math.floor(size * NumericNodeIndex.MAX_LOAD_FACTOR);
+        this.resizeAt = Math.floor(size * NumericGraphNodeIndex.MAX_LOAD_FACTOR);
     }
 
-    public get(key: number): ProgramNodeId | undefined {
+    public get(key: number): SearchGraphNodeId | undefined {
         let idx = this.hash(key) & this.mask;
 
         while (this.used[idx] !== 0) {
             if (this.keys[idx] === key) {
                 const value = this.values[idx]!;
-                return value === -1 ? undefined : value as ProgramNodeId;
+                return value === -1 ? undefined : value as SearchGraphNodeId;
             }
             idx = (idx + 1) & this.mask;
         }
@@ -41,12 +42,12 @@ class NumericNodeIndex {
         return undefined;
     }
 
-    public set(key: number, value: ProgramNodeId): void {
+    public set(key: number, value: SearchGraphNodeId): void {
         if (this.count >= this.resizeAt) this.grow();
         this.insert(key, value);
     }
 
-    private insert(key: number, value: ProgramNodeId): void {
+    private insert(key: number, value: SearchGraphNodeId): void {
         let idx = this.hash(key) & this.mask;
 
         while (this.used[idx] !== 0) {
@@ -74,11 +75,11 @@ class NumericNodeIndex {
         this.values.fill(-1);
         this.used = new Uint8Array(nextSize);
         this.mask = nextSize - 1;
-        this.resizeAt = Math.floor(nextSize * NumericNodeIndex.MAX_LOAD_FACTOR);
+        this.resizeAt = Math.floor(nextSize * NumericGraphNodeIndex.MAX_LOAD_FACTOR);
         this.count = 0;
 
         for (let i = 0; i < oldKeys.length; i++) {
-            if (oldUsed[i] !== 0) this.insert(oldKeys[i]!, oldValues[i]! as ProgramNodeId);
+            if (oldUsed[i] !== 0) this.insert(oldKeys[i]!, oldValues[i]! as SearchGraphNodeId);
         }
     }
 
@@ -100,51 +101,55 @@ class NumericNodeIndex {
     }
 }
 
-export interface ProgramKey {
+/** Cache key dimensions for structural graph reuse. */
+export interface SearchGraphKey {
     readonly version: string;
     readonly item: string;
-    readonly poolSignature: PoolSignature;
+    readonly poolSignature: SearchPoolSignature;
     readonly bookMode: 'single-book' | 'multi-book' | 'item';
     readonly clueMode: string | null;
 }
 
-export interface ProgramNode {
-    readonly id: ProgramNodeId;
+/** Structural search node: selected enchants, current continuation level, and packed combo. */
+export interface SearchGraphNode {
+    readonly id: SearchGraphNodeId;
     readonly selectedMask: bigint;
     readonly currentLevel: number;
     readonly combo: PackedCombo;
     readonly count: number;
 }
 
-export interface ProgramEdge {
-    readonly entry: PoolEntry;
+/** Weighted transition from one graph node to a child node after selecting an enchantment. */
+export interface SearchGraphEdge {
+    readonly entry: SearchPoolEntry;
     readonly weight: number;
-    readonly childId: ProgramNodeId;
+    readonly childId: SearchGraphNodeId;
 }
 
-export type ProgramTerminalReason = 'max-enchants' | 'single-book' | 'no-eligible' | null;
+/** Why a node cannot forward additional mass, or null when it can continue. */
+export type SearchGraphTerminalReason = 'max-enchants' | 'single-book' | 'no-eligible' | null;
 
-export interface ProgramExpansion {
-    readonly nodeId: ProgramNodeId;
+/** Cached outgoing structure for a node, independent of probability mass. */
+export interface SearchGraphExpansion {
+    readonly nodeId: SearchGraphNodeId;
     readonly isRoot: boolean;
     readonly probContinue: bigint;
     readonly totalWeight: number;
     readonly eligibleCount: number;
-    readonly edges: readonly ProgramEdge[];
-    readonly terminalReason: ProgramTerminalReason;
+    readonly edges: readonly SearchGraphEdge[];
+    readonly terminalReason: SearchGraphTerminalReason;
 }
 
 /**
- * Immutable/lazy structural search program for one pool signature.
+ * Lazy structural graph for one search pool signature.
  *
- * The program owns node identity and expansion structure only. It deliberately
- * stores no probability mass; SearchRun will later attach weighted mass vectors
- * to these nodes and can share future work whenever `(programKey, nodeKey)` is
- * identical.
+ * A graph owns node identity and expansion structure only. It deliberately stores
+ * no probability mass; `SearchRun` attaches weighted mass to graph nodes and can
+ * reuse the same graph whenever pool rules, item/book mode, and clue mode match.
  */
-export class SearchProgram {
-    public readonly key: ProgramKey;
-    public readonly pool: PoolProjection;
+export class SearchGraph {
+    public readonly key: SearchGraphKey;
+    public readonly pool: SearchPool;
 
     private readonly selectedMasks: bigint[] = [];
     private readonly currentLevels: number[] = [];
@@ -152,13 +157,13 @@ export class SearchProgram {
     private readonly counts: number[] = [];
     private static readonly MAX_NUMERIC_MASK = BigInt(Math.floor(Number.MAX_SAFE_INTEGER / 256));
 
-    private readonly numericNodeIndex = new NumericNodeIndex();
-    private readonly bigintNodeIndex = new Map<bigint, ProgramNodeId>();
-    private readonly expansionCache: Array<ProgramExpansion | undefined> = [];
+    private readonly numericNodeIndex = new NumericGraphNodeIndex();
+    private readonly bigintNodeIndex = new Map<bigint, SearchGraphNodeId>();
+    private readonly expansionCache: Array<SearchGraphExpansion | undefined> = [];
 
     public constructor(
         private readonly kernel: RegistryKernel,
-        pool: PoolProjection,
+        pool: SearchPool,
         options: { clueMode?: string | null } = {}
     ) {
         this.pool = pool;
@@ -171,15 +176,18 @@ export class SearchProgram {
         });
     }
 
+    /** Number of structural nodes materialized so far. */
     public get size(): number {
         return this.combos.length;
     }
 
-    public getRootNode(initialLevel: number): ProgramNode {
+    /** Returns the root node for a modified level, creating it if needed. */
+    public getRootNode(initialLevel: number): SearchGraphNode {
         return this.getNode(this.getOrCreateNodeId(0n, initialLevel, 0 as PackedCombo, 0));
     }
 
-    public getNode(id: ProgramNodeId): ProgramNode {
+    /** Returns a copy of the structural node metadata for an existing node ID. */
+    public getNode(id: SearchGraphNodeId): SearchGraphNode {
         this.assertNode(id);
         return {
             id,
@@ -190,17 +198,18 @@ export class SearchProgram {
         };
     }
 
-    public getNodeCombo(id: ProgramNodeId): PackedCombo {
+    public getNodeCombo(id: SearchGraphNodeId): PackedCombo {
         this.assertNode(id);
         return this.combos[id]!;
     }
 
-    public getNodeCount(id: ProgramNodeId): number {
+    public getNodeCount(id: SearchGraphNodeId): number {
         this.assertNode(id);
         return this.counts[id]!;
     }
 
-    public getExpansion(nodeId: ProgramNodeId): ProgramExpansion {
+    /** Returns the cached outgoing expansion for a node, building it lazily. */
+    public getExpansion(nodeId: SearchGraphNodeId): SearchGraphExpansion {
         const cached = this.expansionCache[nodeId];
         if (cached) return cached;
 
@@ -211,7 +220,7 @@ export class SearchProgram {
         return expansion;
     }
 
-    private buildRootExpansion(nodeId: ProgramNodeId): ProgramExpansion {
+    private buildRootExpansion(nodeId: SearchGraphNodeId): SearchGraphExpansion {
         const currentLevel = this.currentLevels[nodeId]!;
         const edges = this.pool.entries.map(entry => ({
             entry,
@@ -230,7 +239,7 @@ export class SearchProgram {
         };
     }
 
-    private buildSearchExpansion(nodeId: ProgramNodeId): ProgramExpansion {
+    private buildSearchExpansion(nodeId: SearchGraphNodeId): SearchGraphExpansion {
         const selectedMask = this.selectedMasks[nodeId]!;
         const currentLevel = this.currentLevels[nodeId]!;
         const combo = this.combos[nodeId]!;
@@ -239,7 +248,7 @@ export class SearchProgram {
         const probContinue = terminalReason === 'single-book'
             ? 0n
             // currentLevel only drives the chance of another enchantment slot.
-            // Eligibility remains fixed by this program's initial pool signature.
+            // Eligibility remains fixed by this graph's initial pool signature.
             : (ProbUtils.PROB_CONTINUE_TABLE[currentLevel] ?? PRECISION);
 
         if (terminalReason === 'max-enchants' || terminalReason === 'single-book') {
@@ -248,7 +257,7 @@ export class SearchProgram {
 
         const nextLevel = Math.floor(currentLevel / 2);
         const nextCount = count + 1;
-        const edges: ProgramEdge[] = [];
+        const edges: SearchGraphEdge[] = [];
         let totalWeight = 0;
 
         for (const entry of this.pool.entries) {
@@ -270,13 +279,13 @@ export class SearchProgram {
     }
 
     private createExpansion(
-        nodeId: ProgramNodeId,
+        nodeId: SearchGraphNodeId,
         count: number,
         probContinue: bigint,
-        edges: readonly ProgramEdge[],
-        terminalReason: ProgramTerminalReason,
+        edges: readonly SearchGraphEdge[],
+        terminalReason: SearchGraphTerminalReason,
         totalWeight = edges.reduce((sum, edge) => sum + edge.weight, 0)
-    ): ProgramExpansion {
+    ): SearchGraphExpansion {
         return {
             nodeId,
             isRoot: count === 0,
@@ -293,7 +302,7 @@ export class SearchProgram {
         currentLevel: number,
         combo: PackedCombo,
         count: number
-    ): ProgramNodeId {
+    ): SearchGraphNodeId {
         const numericKey = this.createNumericNodeKey(selectedMask, currentLevel);
         if (numericKey !== undefined) {
             const existing = this.numericNodeIndex.get(numericKey);
@@ -304,7 +313,7 @@ export class SearchProgram {
             if (existing !== undefined) return existing;
         }
 
-        const nodeId = this.combos.length as ProgramNodeId;
+        const nodeId = this.combos.length as SearchGraphNodeId;
         this.selectedMasks.push(selectedMask);
         this.currentLevels.push(currentLevel);
         this.combos.push(combo);
@@ -319,7 +328,7 @@ export class SearchProgram {
     }
 
     private createNumericNodeKey(selectedMask: bigint, currentLevel: number): number | undefined {
-        if (selectedMask > SearchProgram.MAX_NUMERIC_MASK) return undefined;
+        if (selectedMask > SearchGraph.MAX_NUMERIC_MASK) return undefined;
         return Number(selectedMask) * 256 + currentLevel;
     }
 
@@ -327,7 +336,7 @@ export class SearchProgram {
         return (selectedMask << 8n) | BigInt(currentLevel);
     }
 
-    private getTerminalReason(count: number): ProgramTerminalReason {
+    private getTerminalReason(count: number): SearchGraphTerminalReason {
         if (this.kernel.item === 'book' && !this.kernel.multiEnchantBooks && count >= 1) {
             return 'single-book';
         }
@@ -337,13 +346,13 @@ export class SearchProgram {
         return null;
     }
 
-    private assertNode(id: ProgramNodeId): void {
+    private assertNode(id: SearchGraphNodeId): void {
         if (id < 0 || id >= this.combos.length) {
-            throw new Error(`Unknown search program node ${id}`);
+            throw new Error(`Unknown search graph node ${id}`);
         }
     }
 
-    private getBookMode(kernel: RegistryKernel): ProgramKey['bookMode'] {
+    private getBookMode(kernel: RegistryKernel): SearchGraphKey['bookMode'] {
         if (kernel.item !== 'book') return 'item';
         return kernel.multiEnchantBooks ? 'multi-book' : 'single-book';
     }

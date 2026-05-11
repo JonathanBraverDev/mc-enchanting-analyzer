@@ -83,13 +83,13 @@ export class CacheManager {
     }
 
     /**
-     * For internal engine metrics, merges item and book frontier caches into 'frontierCache'.
+     * Returns cache metrics using the public EngineInstrumentation cache field names.
      */
-    public getEngineMetrics(): { distCache: CacheStats; poolCache: CacheStats; frontierCache: CacheStats } {
+    public getEngineMetrics(): { distCache: CacheStats; poolCache: CacheStats; statsCache: CacheStats } {
         return {
             distCache: { ...this.metrics.dist },
             poolCache: { ...this.metrics.pool },
-            frontierCache: { hits: 0, misses: 0 }
+            statsCache: { ...this.metrics.stats }
         };
     }
 

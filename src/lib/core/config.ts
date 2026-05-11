@@ -4,8 +4,6 @@ import { RefinementLevelName, SearchCheckpoint } from '#types/index.js';
 export interface RefinementCheckpointPreset {
     thresholdBook: number;
     thresholdOther: number;
-    v7ThresholdBook: number;
-    v7ThresholdOther: number;
     limitBook: number;
     limitOther: number;
     targetClassifiedMassBook?: number | undefined;
@@ -50,37 +48,29 @@ export const UI_DEFAULTS = {
 
 export const REFINEMENT_CHECKPOINTS: Record<RefinementLevelName, RefinementCheckpointPreset> = {
     coarse: {
-        thresholdBook: 0.05,
-        thresholdOther: 0.01,
-        v7ThresholdBook: 0.007,
-        v7ThresholdOther: 0.001,
+        thresholdBook: 0.007,
+        thresholdOther: 0.001,
         limitBook: 5000,
         limitOther: 2000,
         status: UI_TEXTS.STATUS_SEARCHING
     },
     standard: {
-        thresholdBook: 0.005,
-        thresholdOther: 0.0005,
-        v7ThresholdBook: 0.001,
-        v7ThresholdOther: 0.00005,
+        thresholdBook: 0.001,
+        thresholdOther: 0.00005,
         limitBook: 20000,
         limitOther: 10000,
         status: UI_TEXTS.STATUS_REFINING
     },
     deep: {
-        thresholdBook: 0.0005,
-        thresholdOther: 0.00005,
-        v7ThresholdBook: 0.00005,
-        v7ThresholdOther: 0.000005,
+        thresholdBook: 0.00005,
+        thresholdOther: 0.000005,
         limitBook: 60000,
         limitOther: 30000,
         status: UI_TEXTS.STATUS_FINALIZING
     },
     ultra: {
-        thresholdBook: 0.0001,
-        thresholdOther: 0.000005,
-        v7ThresholdBook: 0.00001,
-        v7ThresholdOther: 0.000001,
+        thresholdBook: 0.00001,
+        thresholdOther: 0.000001,
         limitBook: 150000,
         limitOther: 75000,
         status: UI_TEXTS.STATUS_OPTIMIZING
@@ -97,7 +87,7 @@ export const REFINEMENT_LEVEL_COLORS: Record<RefinementStatusLevel, { bg: string
 
 export function getSearchCheckpointForRefinement(level: RefinementLevelName, isBook: boolean): RefinementSearchCheckpoint {
     const mode = REFINEMENT_CHECKPOINTS[level];
-    const threshold = isBook ? mode.v7ThresholdBook : mode.v7ThresholdOther;
+    const threshold = isBook ? mode.thresholdBook : mode.thresholdOther;
     const targetClassifiedMass = isBook ? mode.targetClassifiedMassBook : mode.targetClassifiedMassOther;
 
     return {

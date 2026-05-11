@@ -1,0 +1,698 @@
+[
+  {
+    "path": "src/lib/search/registry/RegistryKernel.ts",
+    "line": 58,
+    "symbol": "RegistryKernel.constructor",
+    "kind": "constructor"
+  },
+  {
+    "path": "src/lib/search/registry/RegistryKernel.ts",
+    "line": 67,
+    "symbol": "RegistryKernel.getPool",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/search/registry/RegistryKernel.ts",
+    "line": 88,
+    "symbol": "RegistryKernel.groupLevelsByPoolSignature",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/search/registry/RegistryKernel.ts",
+    "line": 108,
+    "symbol": "RegistryKernel.toPoolEntry",
+    "kind": "private method"
+  },
+  {
+    "path": "src/lib/search/registry/RegistryKernel.ts",
+    "line": 129,
+    "symbol": "RegistryKernel.createPoolSignature",
+    "kind": "private method"
+  },
+  {
+    "path": "src/lib/search/registry/RegistryKernel.ts",
+    "line": 146,
+    "symbol": "fnv1a64",
+    "kind": "local helper"
+  },
+  {
+    "path": "src/lib/search/SearchGraph.ts",
+    "line": 21,
+    "symbol": "NumericGraphNodeIndex.constructor",
+    "kind": "constructor"
+  },
+  {
+    "path": "src/lib/search/SearchGraph.ts",
+    "line": 31,
+    "symbol": "NumericGraphNodeIndex.get",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/search/SearchGraph.ts",
+    "line": 45,
+    "symbol": "NumericGraphNodeIndex.set",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/search/SearchGraph.ts",
+    "line": 50,
+    "symbol": "NumericGraphNodeIndex.insert",
+    "kind": "private method"
+  },
+  {
+    "path": "src/lib/search/SearchGraph.ts",
+    "line": 67,
+    "symbol": "NumericGraphNodeIndex.grow",
+    "kind": "private method"
+  },
+  {
+    "path": "src/lib/search/SearchGraph.ts",
+    "line": 86,
+    "symbol": "NumericGraphNodeIndex.hash",
+    "kind": "private method"
+  },
+  {
+    "path": "src/lib/search/SearchGraph.ts",
+    "line": 97,
+    "symbol": "NumericGraphNodeIndex.nextPowerOfTwo",
+    "kind": "private method"
+  },
+  {
+    "path": "src/lib/search/SearchGraph.ts",
+    "line": 164,
+    "symbol": "SearchGraph.constructor",
+    "kind": "constructor"
+  },
+  {
+    "path": "src/lib/search/SearchGraph.ts",
+    "line": 180,
+    "symbol": "SearchGraph.size",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/search/SearchGraph.ts",
+    "line": 185,
+    "symbol": "SearchGraph.getRootNode",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/search/SearchGraph.ts",
+    "line": 190,
+    "symbol": "SearchGraph.getNode",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/search/SearchGraph.ts",
+    "line": 201,
+    "symbol": "SearchGraph.getNodeCombo",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/search/SearchGraph.ts",
+    "line": 206,
+    "symbol": "SearchGraph.getNodeCount",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/search/SearchGraph.ts",
+    "line": 212,
+    "symbol": "SearchGraph.getExpansion",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/search/SearchGraph.ts",
+    "line": 223,
+    "symbol": "SearchGraph.buildRootExpansion",
+    "kind": "private method"
+  },
+  {
+    "path": "src/lib/search/SearchGraph.ts",
+    "line": 242,
+    "symbol": "SearchGraph.buildSearchExpansion",
+    "kind": "private method"
+  },
+  {
+    "path": "src/lib/search/SearchGraph.ts",
+    "line": 330,
+    "symbol": "SearchGraph.createNumericNodeKey",
+    "kind": "private method"
+  },
+  {
+    "path": "src/lib/search/SearchGraph.ts",
+    "line": 335,
+    "symbol": "SearchGraph.createBigIntNodeKey",
+    "kind": "private method"
+  },
+  {
+    "path": "src/lib/search/SearchGraph.ts",
+    "line": 339,
+    "symbol": "SearchGraph.getTerminalReason",
+    "kind": "private method"
+  },
+  {
+    "path": "src/lib/search/SearchGraph.ts",
+    "line": 349,
+    "symbol": "SearchGraph.assertNode",
+    "kind": "private method"
+  },
+  {
+    "path": "src/lib/search/SearchGraph.ts",
+    "line": 355,
+    "symbol": "SearchGraph.getBookMode",
+    "kind": "private method"
+  },
+  {
+    "path": "src/lib/search/SearchRun.ts",
+    "line": 115,
+    "symbol": "SearchRun.constructor",
+    "kind": "constructor"
+  },
+  {
+    "path": "src/lib/search/SearchRun.ts",
+    "line": 125,
+    "symbol": "SearchRun.seedXp",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/search/SearchRun.ts",
+    "line": 159,
+    "symbol": "SearchRun.searchToCheckpoint",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/search/SearchRun.ts",
+    "line": 166,
+    "symbol": "SearchRun.searchToCheckpointAsync",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/search/SearchRun.ts",
+    "line": 180,
+    "symbol": "SearchRun.createAdvanceCriteria",
+    "kind": "private method"
+  },
+  {
+    "path": "src/lib/search/SearchRun.ts",
+    "line": 206,
+    "symbol": "SearchRun.advanceUntilCheckpoint",
+    "kind": "private method"
+  },
+  {
+    "path": "src/lib/search/SearchRun.ts",
+    "line": 228,
+    "symbol": "SearchRun.snapshot",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/search/SearchRun.ts",
+    "line": 245,
+    "symbol": "SearchRun.expand",
+    "kind": "private method"
+  },
+  {
+    "path": "src/lib/search/SearchRun.ts",
+    "line": 356,
+    "symbol": "SearchRun.getPendingEntries",
+    "kind": "private method"
+  },
+  {
+    "path": "src/lib/search/SearchRun.ts",
+    "line": 371,
+    "symbol": "SearchRun.getActiveResidueStats",
+    "kind": "private method"
+  },
+  {
+    "path": "src/lib/search/SearchRun.ts",
+    "line": 385,
+    "symbol": "SearchRun.recordResidueDelta",
+    "kind": "private method"
+  },
+  {
+    "path": "src/lib/search/SearchRun.ts",
+    "line": 398,
+    "symbol": "SearchRun.getForwardingResidue",
+    "kind": "private method"
+  },
+  {
+    "path": "src/lib/search/SearchRun.ts",
+    "line": 403,
+    "symbol": "SearchRun.setForwardingResidue",
+    "kind": "private method"
+  },
+  {
+    "path": "src/lib/search/SearchRun.ts",
+    "line": 424,
+    "symbol": "SearchRun.containsTargetClue",
+    "kind": "private method"
+  },
+  {
+    "path": "src/lib/search/SearchRun.ts",
+    "line": 480,
+    "symbol": "SearchRun.pushPending",
+    "kind": "private method"
+  },
+  {
+    "path": "src/lib/search/SearchRun.ts",
+    "line": 486,
+    "symbol": "SearchRun.graphForPool",
+    "kind": "private method"
+  },
+  {
+    "path": "src/lib/search/SearchRun.ts",
+    "line": 504,
+    "symbol": "SearchRun.getGraphById",
+    "kind": "private method"
+  },
+  {
+    "path": "src/lib/search/SearchRun.ts",
+    "line": 523,
+    "symbol": "SearchRunFrontier.size",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/search/SearchRun.ts",
+    "line": 527,
+    "symbol": "SearchRunFrontier.pushOrMerge",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/search/SearchRun.ts",
+    "line": 545,
+    "symbol": "SearchRunFrontier.peekMass",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/search/SearchRun.ts",
+    "line": 549,
+    "symbol": "SearchRunFrontier.forEach",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/search/SearchRun.ts",
+    "line": 557,
+    "symbol": "SearchRunFrontier.pop",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/search/SearchRun.ts",
+    "line": 582,
+    "symbol": "SearchRunFrontier.bubbleUp",
+    "kind": "private method"
+  },
+  {
+    "path": "src/lib/search/SearchRun.ts",
+    "line": 600,
+    "symbol": "SearchRunFrontier.sinkDown",
+    "kind": "private method"
+  },
+  {
+    "path": "src/lib/search/SearchRun.ts",
+    "line": 624,
+    "symbol": "SearchRunFrontier.moveHeapEntry",
+    "kind": "private method"
+  },
+  {
+    "path": "src/lib/search/SearchRun.ts",
+    "line": 632,
+    "symbol": "SearchRunFrontier.massAt",
+    "kind": "private method"
+  },
+  {
+    "path": "src/lib/search/SearchRun.ts",
+    "line": 636,
+    "symbol": "SearchRunFrontier.getNodeMass",
+    "kind": "private method"
+  },
+  {
+    "path": "src/lib/search/SearchRun.ts",
+    "line": 640,
+    "symbol": "SearchRunFrontier.ensureStorage",
+    "kind": "private method"
+  },
+  {
+    "path": "src/lib/search/SearchRun.ts",
+    "line": 654,
+    "symbol": "SearchRunFrontier.createStorage",
+    "kind": "private method"
+  },
+  {
+    "path": "src/lib/search/SearchRun.ts",
+    "line": 664,
+    "symbol": "SearchRunFrontier.growStorage",
+    "kind": "private method"
+  },
+  {
+    "path": "src/lib/search/SearchRun.ts",
+    "line": 675,
+    "symbol": "SearchRunFrontier.nextPowerOfTwo",
+    "kind": "private method"
+  },
+  {
+    "path": "src/lib/search/SearchStateCache.ts",
+    "line": 41,
+    "symbol": "SearchStateCache.constructor",
+    "kind": "constructor"
+  },
+  {
+    "path": "src/lib/search/SearchStateCache.ts",
+    "line": 47,
+    "symbol": "SearchStateCache.getOrCreateGraph",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/search/SearchStateCache.ts",
+    "line": 62,
+    "symbol": "SearchStateCache.getOrCreateRun",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/search/SearchStateCache.ts",
+    "line": 75,
+    "symbol": "SearchStateCache.clearRuns",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/search/SearchStateCache.ts",
+    "line": 80,
+    "symbol": "SearchStateCache.clearAll",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/search/SearchStateCache.ts",
+    "line": 86,
+    "symbol": "SearchStateCache.resetMetrics",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/search/SearchStateCache.ts",
+    "line": 91,
+    "symbol": "SearchStateCache.getMetrics",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/search/SearchStateCache.ts",
+    "line": 98,
+    "symbol": "SearchStateCache.createSearchGraphKey",
+    "kind": "private method"
+  },
+  {
+    "path": "src/lib/search/SearchExecutionService.ts",
+    "line": 17,
+    "symbol": "SearchExecutionService.constructor",
+    "kind": "constructor"
+  },
+  {
+    "path": "src/lib/search/SearchExecutionService.ts",
+    "line": 23,
+    "symbol": "SearchExecutionService.clearCache",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/search/SearchExecutionService.ts",
+    "line": 28,
+    "symbol": "SearchExecutionService.searchToCheckpoint",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/search/SearchExecutionService.ts",
+    "line": 44,
+    "symbol": "SearchExecutionService.searchSequentialCheckpoints",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/search/SearchExecutionService.ts",
+    "line": 81,
+    "symbol": "SearchExecutionService.getRun",
+    "kind": "private method"
+  },
+  {
+    "path": "src/lib/search/SearchExecutionService.ts",
+    "line": 87,
+    "symbol": "SearchExecutionService.createRun",
+    "kind": "private method"
+  },
+  {
+    "path": "src/lib/search/SearchExecutionService.ts",
+    "line": 102,
+    "symbol": "SearchExecutionService.createRunCacheKey",
+    "kind": "private method"
+  },
+  {
+    "path": "src/lib/search/SearchExecutionService.ts",
+    "line": 169,
+    "symbol": "SearchExecutionService.finishTiming",
+    "kind": "private method"
+  },
+  {
+    "path": "src/lib/core/registry.ts",
+    "line": 12,
+    "symbol": "getEligibleMaterials",
+    "kind": "exported function"
+  },
+  {
+    "path": "src/lib/core/registry.ts",
+    "line": 20,
+    "symbol": "isMaterialEligible",
+    "kind": "exported function"
+  },
+  {
+    "path": "src/lib/core/registry.ts",
+    "line": 31,
+    "symbol": "getEnchantName",
+    "kind": "exported function"
+  },
+  {
+    "path": "src/lib/core/registry.ts",
+    "line": 43,
+    "symbol": "getRankRoman",
+    "kind": "exported function"
+  },
+  {
+    "path": "src/lib/core/registry.ts",
+    "line": 53,
+    "symbol": "getItemId",
+    "kind": "exported function"
+  },
+  {
+    "path": "src/lib/core/registry.ts",
+    "line": 63,
+    "symbol": "getMaterialId",
+    "kind": "exported function"
+  },
+  {
+    "path": "src/lib/core/registry.ts",
+    "line": 73,
+    "symbol": "getEnchantId",
+    "kind": "exported function"
+  },
+  {
+    "path": "src/lib/core/registry.ts",
+    "line": 84,
+    "symbol": "hasConflict",
+    "kind": "exported function"
+  },
+  {
+    "path": "src/lib/core/registry.ts",
+    "line": 94,
+    "symbol": "isItemAvailable",
+    "kind": "exported function"
+  },
+  {
+    "path": "src/lib/core/registry.ts",
+    "line": 105,
+    "symbol": "getItemPool",
+    "kind": "exported function"
+  },
+  {
+    "path": "src/lib/core/registry.ts",
+    "line": 115,
+    "symbol": "getFullEnchantName",
+    "kind": "exported function"
+  },
+  {
+    "path": "src/lib/core/registry.ts",
+    "line": 133,
+    "symbol": "getCandidatePool",
+    "kind": "exported function"
+  },
+  {
+    "path": "src/lib/core/registry.ts",
+    "line": 168,
+    "symbol": "getAvailablePool",
+    "kind": "exported function"
+  },
+  {
+    "path": "src/lib/core/registry.ts",
+    "line": 185,
+    "symbol": "isEnchantmentAchievable",
+    "kind": "exported function"
+  },
+  {
+    "path": "src/lib/core/registry.ts",
+    "line": 206,
+    "symbol": "getEnchantability",
+    "kind": "exported function"
+  },
+  {
+    "path": "src/lib/core/registry.ts",
+    "line": 218,
+    "symbol": "sortMaterials",
+    "kind": "local helper"
+  },
+  {
+    "path": "src/lib/engine/index.ts",
+    "line": 20,
+    "symbol": "EnchantEngine.registry",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/engine/index.ts",
+    "line": 22,
+    "symbol": "EnchantEngine.constructor",
+    "kind": "constructor"
+  },
+  {
+    "path": "src/lib/engine/index.ts",
+    "line": 32,
+    "symbol": "EnchantEngine.resetCaches",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/engine/index.ts",
+    "line": 38,
+    "symbol": "EnchantEngine.resetStatsCache",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/engine/index.ts",
+    "line": 43,
+    "symbol": "EnchantEngine.getCacheMetrics",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/engine/index.ts",
+    "line": 47,
+    "symbol": "EnchantEngine.destroy",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/engine/index.ts",
+    "line": 54,
+    "symbol": "EnchantEngine.getModifiedLevelDist",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/engine/index.ts",
+    "line": 61,
+    "symbol": "EnchantEngine.getAvailablePool",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/engine/index.ts",
+    "line": 68,
+    "symbol": "EnchantEngine.searchSequentialCheckpoints",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/engine/index.ts",
+    "line": 85,
+    "symbol": "EnchantEngine.searchToCheckpoint",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/engine/index.ts",
+    "line": 109,
+    "symbol": "EnchantEngine.calculate",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/engine/index.ts",
+    "line": 197,
+    "symbol": "EnchantEngine.getPackedClue",
+    "kind": "private method"
+  },
+  {
+    "path": "src/lib/engine/index.ts",
+    "line": 201,
+    "symbol": "EnchantEngine.getStatsKey",
+    "kind": "private method"
+  },
+  {
+    "path": "src/lib/engine/index.ts",
+    "line": 213,
+    "symbol": "EnchantEngine.validateRequest",
+    "kind": "private method"
+  },
+  {
+    "path": "src/lib/engine/cache/CacheManager.ts",
+    "line": 22,
+    "symbol": "CacheManager.constructor",
+    "kind": "constructor"
+  },
+  {
+    "path": "src/lib/engine/cache/CacheManager.ts",
+    "line": 28,
+    "symbol": "CacheManager.getDist",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/engine/cache/CacheManager.ts",
+    "line": 33,
+    "symbol": "CacheManager.setDist",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/engine/cache/CacheManager.ts",
+    "line": 38,
+    "symbol": "CacheManager.getPool",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/engine/cache/CacheManager.ts",
+    "line": 43,
+    "symbol": "CacheManager.setPool",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/engine/cache/CacheManager.ts",
+    "line": 48,
+    "symbol": "CacheManager.getStats",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/engine/cache/CacheManager.ts",
+    "line": 53,
+    "symbol": "CacheManager.setStats",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/engine/cache/CacheManager.ts",
+    "line": 58,
+    "symbol": "CacheManager.clearAll",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/engine/cache/CacheManager.ts",
+    "line": 65,
+    "symbol": "CacheManager.clearStats",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/engine/cache/CacheManager.ts",
+    "line": 71,
+    "symbol": "CacheManager.resetMetrics",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/engine/cache/CacheManager.ts",
+    "line": 77,
+    "symbol": "CacheManager.getMetrics",
+    "kind": "class method"
+  },
+  {
+    "path": "src/lib/engine/cache/CacheManager.ts",
+    "line": 88,
+    "symbol": "CacheManager.getEngineMetrics",
+    "kind": "class method"
+  }
+]

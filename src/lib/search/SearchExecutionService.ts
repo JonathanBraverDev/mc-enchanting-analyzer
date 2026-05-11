@@ -3,25 +3,28 @@ import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedL
 import { SearchResult, SequentialCheckpointSearchContext, CheckpointSearchContext, EngineInstrumentation, SearchTiming } from '#types/index.js';
 import { RegistryKernel } from '#lib/search/registry/RegistryKernel.js';
 import { SearchRun, SearchRunSnapshot } from '#lib/search/SearchRun.js';
-import { SearchCache } from '#lib/search/SearchCache.js';
+import { SearchStateCache } from '#lib/search/SearchStateCache.js';
 import { PRECISION, ProbUtils } from '#utils/index.js';
 
 /**
- * Adapter for the existing engine boundary.
+ * Engine-facing service that advances shared search runs to checkpoint boundaries.
  *
- * This intentionally returns the existing SearchResult shape so SummaryService,
- * SnapshotService, and workers can be migrated before their public contracts move.
+ * It owns run lookup/resume, checkpoint sequencing, instrumentation, and timing.
+ * Lower-level `SearchRun` owns probability flow; higher-level services own public
+ * summary and UI projection.
  */
-export class SearchService {
+export class SearchExecutionService {
     public constructor(
         private readonly distributionService: ModifiedLevelDistributionService = new ModifiedLevelDistributionService(),
-        private readonly cache: SearchCache = new SearchCache()
+        private readonly cache: SearchStateCache = new SearchStateCache()
     ) {}
 
+    /** Clears all cached structural graphs and resumable runs owned by this service. */
     public clearCache(): void {
         this.cache.clearAll();
     }
 
+    /** Advances one request to its next checkpoint or final stop condition. */
     public async searchToCheckpoint(request: CheckpointSearchContext): Promise<SearchResult> {
         const timingStart = request.timing ? performance.now() : 0;
         let recordedSearchMs = 0;
@@ -37,6 +40,7 @@ export class SearchService {
         return this.toSearchResult(snapshot, request.exhaustive ? 0n : request.threshold, undefined, request.instrumentation, request.timing);
     }
 
+    /** Advances one run through an ordered checkpoint plan, streaming each completed boundary. */
     public async searchSequentialCheckpoints(request: SequentialCheckpointSearchContext): Promise<SearchResult> {
         const timingStart = request.timing ? performance.now() : 0;
         let recordedSearchMs = 0;
@@ -89,7 +93,7 @@ export class SearchService {
         const run = new SearchRun(kernel, {
             distributionService: this.distributionService,
             targetClueId: request.targetClueId,
-            programCache: this.cache
+            graphCache: this.cache
         });
         run.seedXp(request.xp);
         return run;
@@ -130,7 +134,6 @@ export class SearchService {
             instrumentation.fullyResolved = snapshot.fullyResolved;
             instrumentation.resultsSize = snapshot.results.size;
             instrumentation.queueSize = snapshot.pendingCount;
-            instrumentation.indexMapSize = snapshot.pendingCount;
             instrumentation.exitReason = snapshot.fullyResolved
                 ? 'empty'
                 : targetClassifiedMassUnits !== undefined && classifiedMassUnits >= targetClassifiedMassUnits
@@ -138,17 +141,17 @@ export class SearchService {
                     : snapshot.largestPendingMass < thresholdUnits ? 'threshold' : 'iterations';
             instrumentation.poolCache = instrumentation.poolCache ?? { hits: 0, misses: 0 };
             instrumentation.distCache = instrumentation.distCache ?? { hits: 0, misses: 0 };
-            instrumentation.frontierCache = instrumentation.frontierCache ?? { hits: 0, misses: 0 };
+            instrumentation.statsCache = instrumentation.statsCache ?? { hits: 0, misses: 0 };
             instrumentation.search = {
-                programCount: snapshot.programCount,
+                graphCount: snapshot.graphCount,
                 seededLevelCount: snapshot.seededLevelCount,
                 pendingEntryCount: snapshot.pendingCount,
                 largestPendingMass: ProbUtils.toNumber(snapshot.largestPendingMass),
                 activeResidueCount: snapshot.activeResidueCount,
                 activeResidueMass: ProbUtils.toNumber(snapshot.activeResidueMass),
                 canImprove: !snapshot.fullyResolved && snapshot.largestPendingMass >= thresholdUnits,
-                programCacheHits: cacheMetrics.programs.hits,
-                programCacheMisses: cacheMetrics.programs.misses,
+                graphCacheHits: cacheMetrics.graphs.hits,
+                graphCacheMisses: cacheMetrics.graphs.misses,
                 runCacheHits: cacheMetrics.runs.hits,
                 runCacheMisses: cacheMetrics.runs.misses
             };

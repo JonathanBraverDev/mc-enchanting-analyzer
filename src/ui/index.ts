@@ -235,7 +235,7 @@ class AppController {
         const registry = UiMetadataService.getRegistry(version);
         const sortMode = this.params.getValues().sortMode;
 
-        this.results.updateV5(
+        this.results.updateRunView(
             view,
             registry,
             sortMode === 'advisor' ? TargetClueAdvisorService.summarizeSweep(this.refinement.currentSweep) : undefined,

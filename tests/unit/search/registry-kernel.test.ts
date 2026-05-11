@@ -7,7 +7,7 @@ describe('RegistryKernel', () => {
         const registry = RegistryFactory.build('1.21.11');
         const kernel = new RegistryKernel({ registry, item: 'sword', material: 'diamond' });
         const levels = Array.from({ length: 50 }, (_, i) => i + 1);
-        const groups = kernel.getPoolGroups(levels);
+        const groups = kernel.groupLevelsByPoolSignature(levels);
 
         assert.ok(groups.length > 1, 'test fixture should include more than one distinct pool');
         assert.ok(groups.length < levels.length, 'adjacent levels should collapse into fewer structural pools');
@@ -27,7 +27,7 @@ describe('RegistryKernel', () => {
         assert.notStrictEqual(sword.getPool(30).signature, pickaxe.getPool(30).signature);
     });
 
-    it('projects packed pool entries needed by shared search programs', () => {
+    it('projects packed pool entries needed by shared search graphs', () => {
         const registry = RegistryFactory.build('1.21.11');
         const kernel = new RegistryKernel({ registry, item: 'sword', material: 'diamond' });
         const pool = kernel.getPool(30);

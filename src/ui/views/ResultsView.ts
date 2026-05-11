@@ -76,9 +76,9 @@ export class ResultsView {
     }
 
     /**
-     * V5 update path using the pre-projected TopRunView.
+     * Updates results from the pre-projected worker TopRunView.
      */
-    public updateV5(
+    public updateRunView(
         view: TopRunView,
         registry: RegistryState,
         levelClueAdvisor?: TargetLevelClueAdvisorView | undefined,
@@ -93,7 +93,7 @@ export class ResultsView {
             || view.target
             || (advisorMode && (view.clueAdvisor || levelClueAdvisor || view.clueSignalAdvisor || levelClueSignalAdvisor))
         ) {
-            this.renderCombosV5(
+            this.renderProjectedCombos(
                 view,
                 registry,
                 advisorMode ? levelClueAdvisor : undefined,
@@ -101,7 +101,7 @@ export class ResultsView {
                 advisorMode,
                 displayMode
             );
-            this.renderEnchantsV5(view, registry);
+            this.renderProjectedRanks(view, registry);
         } else {
             this.showNoResults();
         }
@@ -184,7 +184,7 @@ export class ResultsView {
         this.rankEl.replaceChildren(fragment);
     }
 
-    private renderCombosV5(
+    private renderProjectedCombos(
         view: TopRunView,
         _registry: RegistryState,
         levelClueAdvisor?: TargetLevelClueAdvisorView | undefined,
@@ -532,7 +532,7 @@ export class ResultsView {
         return row;
     }
 
-    private renderEnchantsV5(view: TopRunView, registry: RegistryState): void {
+    private renderProjectedRanks(view: TopRunView, registry: RegistryState): void {
         if (!this.rankEl) return;
 
         const fragment = document.createDocumentFragment();

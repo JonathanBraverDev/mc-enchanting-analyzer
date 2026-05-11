@@ -8,7 +8,7 @@ test('Engine Instrumentation Collection', async () => {
     const instrumentation: EngineInstrumentation = {
         poolCache: { hits: 0, misses: 0 },
         distCache: { hits: 0, misses: 0 },
-        frontierCache: { hits: 0, misses: 0 },
+        statsCache: { hits: 0, misses: 0 },
         totalIterations: 0, totalPrunedNodes: 0, roundingErrorEvents: 0, levelsProcessed: 0, levelsFullyResolved: 0, fullyResolved: false
     };
 
@@ -16,7 +16,7 @@ test('Engine Instrumentation Collection', async () => {
     await engine.calculate({ item: 'leggings', xp: 30, material: 'diamond', instrumentation, threshold: 0.0001 });
 
     assert.ok(instrumentation.totalIterations > 0, 'Should have recorded iterations');
-    assert.ok((instrumentation.search?.programCacheMisses ?? 0) > 0, 'Should have search program cache misses');
+    assert.ok((instrumentation.search?.graphCacheMisses ?? 0) > 0, 'Should have search graph cache misses');
     assert.ok((instrumentation.search?.runCacheMisses ?? 0) > 0, 'Should have search run cache misses');
     assert.ok(instrumentation.exitReason, 'Should have an exit reason');
 
@@ -26,7 +26,7 @@ test('Engine Instrumentation Collection', async () => {
     const instrumentation2: EngineInstrumentation = {
         poolCache: { hits: 0, misses: 0 },
         distCache: { hits: 0, misses: 0 },
-        frontierCache: { hits: 0, misses: 0 },
+        statsCache: { hits: 0, misses: 0 },
         totalIterations: 0, totalPrunedNodes: 0, roundingErrorEvents: 0, levelsProcessed: 0, levelsFullyResolved: 0, fullyResolved: false
     };
 
@@ -40,19 +40,19 @@ test('Search run cache instrumentation (resumption)', async () => {
     const instrumentation: EngineInstrumentation = {
         poolCache: { hits: 0, misses: 0 },
         distCache: { hits: 0, misses: 0 },
-        frontierCache: { hits: 0, misses: 0 },
+        statsCache: { hits: 0, misses: 0 },
         totalIterations: 0, totalPrunedNodes: 0, roundingErrorEvents: 0, levelsProcessed: 0, levelsFullyResolved: 0, fullyResolved: false
     };
 
     // Run a coarse search
     await engine.calculate({ item: 'sword', xp: 30, material: 'netherite', threshold: 0.01, instrumentation });
 
-    // Run a deep search - should hit frontierCache to resume
+    // Run a deeper search - should hit the resumable search-run cache
     engine.resetStatsCache();
     const instrumentation2: EngineInstrumentation = {
         poolCache: { hits: 0, misses: 0 },
         distCache: { hits: 0, misses: 0 },
-        frontierCache: { hits: 0, misses: 0 },
+        statsCache: { hits: 0, misses: 0 },
         totalIterations: 0, totalPrunedNodes: 0, roundingErrorEvents: 0, levelsProcessed: 0, levelsFullyResolved: 0, fullyResolved: false
     };
 

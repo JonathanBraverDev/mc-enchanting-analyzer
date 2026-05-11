@@ -1,12 +1,12 @@
 import { BuiltRegistryState, CalculationRequest, CalculationStats, CheckpointSearchRequest, EngineInstrumentation, SearchResult, SearchConfig, SequentialCheckpointSearchRequest } from '#types/index.js';
-import { getItemId, getMaterialId, isItemAvailable, isMaterialEligible, getEligibleListNumeric as getRegistryEligibleListNumeric } from '#core/registry.js';
+import { getItemId, getMaterialId, isItemAvailable, isMaterialEligible, getAvailablePool as getRegistryAvailablePool } from '#core/registry.js';
 import { KeyUtils, ProbUtils } from '#utils/index.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import { MINECRAFT_RULES } from '#constants/minecraft.js';
 import { CacheManager } from '#engine/cache/CacheManager.js';
 import { SummaryService } from '#services/SummaryService.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
-import { SearchService } from '#lib/search/SearchService.js';
+import { SearchExecutionService } from '#lib/search/SearchExecutionService.js';
 import { ClueValidator } from '#core/clue.js';
 export { EngineFactory } from './factory.js';
 
@@ -23,7 +23,7 @@ export class EnchantEngine {
         registry: BuiltRegistryState,
         private readonly cache: CacheManager,
         private readonly distributionService: ModifiedLevelDistributionService,
-        private readonly searchService: SearchService = new SearchService(distributionService)
+        private readonly searchService: SearchExecutionService = new SearchExecutionService(distributionService)
     ) {
         this._registry = registry;
     }
@@ -40,7 +40,7 @@ export class EnchantEngine {
     }
 
     /** Returns current cache performance metrics. */
-    public getCacheMetrics(): { distCache: { hits: number; misses: number }; poolCache: { hits: number; misses: number }; frontierCache: { hits: number; misses: number } } {
+    public getCacheMetrics(): { distCache: { hits: number; misses: number }; poolCache: { hits: number; misses: number }; statsCache: { hits: number; misses: number } } {
         return this.cache.getEngineMetrics();
     }
 
@@ -58,13 +58,12 @@ export class EnchantEngine {
     /**
      * Returns a list of eligible enchantments filtered by conflict bitset.
      */
-    public getEligibleListNumeric(item: string, level: number, bitset: bigint = 0n): number[] {
-        return getRegistryEligibleListNumeric(this._registry, item, level, bitset, this.cache, this._registry.version);
+    public getAvailablePool(item: string, level: number, bitset: bigint = 0n): number[] {
+        return getRegistryAvailablePool(this._registry, item, level, bitset, this.cache, this._registry.version);
     }
 
     /**
-     * Sequential checkpoint version of searchToCheckpoint for v5 workers.
-     * Streams search results via callback for each checkpoint.
+     * Runs one request through an ordered checkpoint plan and streams each completed checkpoint.
      */
     public async searchSequentialCheckpoints(request: SequentialCheckpointSearchRequest): Promise<SearchResult> {
         this.validateRequest(request);
@@ -81,7 +80,7 @@ export class EnchantEngine {
     }
 
     /**
-     * Internal method for v5 workers to get search results.
+     * Advances one checkpoint search request and returns the completed boundary state.
      */
     public async searchToCheckpoint(request: CheckpointSearchRequest): Promise<SearchResult> {
         this.validateRequest(request);
