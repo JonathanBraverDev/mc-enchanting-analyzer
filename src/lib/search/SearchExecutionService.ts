@@ -26,7 +26,6 @@ export class SearchExecutionService {
     /** Advances one request to its next checkpoint or final stop condition. */
     public async searchToCheckpoint(request: CheckpointSearchContext): Promise<SearchResult> {
         const timingStart = request.timing ? performance.now() : 0;
-        let recordedSearchMs = 0;
         const run = this.getRun(request);
         const snapshot = await run.searchToCheckpointAsync({
             threshold: request.exhaustive ? 0n : request.threshold ?? 0n,
@@ -36,7 +35,7 @@ export class SearchExecutionService {
             signal: request.signal
         });
 
-        recordedSearchMs = this.finishTiming(request.timing, timingStart, recordedSearchMs);
+        this.finishTiming(request.timing, timingStart, 0);
         return this.toSearchResult(snapshot, request.exhaustive ? 0n : request.threshold ?? 0n, request.targetClassifiedMass, request.instrumentation, request.timing);
     }
 
@@ -73,7 +72,7 @@ export class SearchExecutionService {
 
         if (lastResult) return lastResult;
 
-        recordedSearchMs = this.finishTiming(request.timing, timingStart, recordedSearchMs);
+        this.finishTiming(request.timing, timingStart, recordedSearchMs);
         const emptySnapshot = run.snapshot();
         return this.toSearchResult(emptySnapshot, 0, undefined, request.instrumentation, request.timing);
     }
