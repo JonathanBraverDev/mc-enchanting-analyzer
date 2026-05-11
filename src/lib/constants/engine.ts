@@ -95,7 +95,6 @@ export const MATH_CONSTANTS = {
 export const CACHE_CONFIG = {
     COMBO_OTHER_SIZE: 128,
     COMBO_BOOK_SIZE: 64,
-    STATS_SIZE: 8,
     POOL_SIZE: 200
 };
 

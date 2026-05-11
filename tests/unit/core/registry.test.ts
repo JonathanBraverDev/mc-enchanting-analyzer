@@ -12,6 +12,7 @@ import {
     getMaterialId,
     isMaterialEligible
 } from '#core/registry.js';
+import { EngineTestUtils } from '#tests/infra/test-utils.js';
 
 describe('Registry & Data Rules Test Suite', () => {
 
@@ -152,7 +153,7 @@ describe('Registry & Data Rules Test Suite', () => {
                     `${version}: helper should reject ${item}/${material}`
                 );
                 await assert.rejects(
-                    () => engine.calculate({ item, material, xp: 1, threshold: 0.5, resultsLimit: 10 }),
+                    () => EngineTestUtils.getStats(engine, { item, material, xp: 1, threshold: 0.5, resultsLimit: 10 }),
                     /not available/,
                     `${version}: engine should reject ${item}/${material}`
                 );
@@ -172,8 +173,8 @@ describe('Registry & Data Rules Test Suite', () => {
                 const registry = engine.registry;
                 assert.strictEqual(isMaterialEligible(registry, item, material), true, `${version}: ${item}/${material} should be eligible`);
                 assert.doesNotThrow(() => getEnchantability(registry, material, item));
-                const stats = await engine.calculate({ item, material, xp: 1, threshold: 0.5, resultsLimit: 10 });
-                assert.ok(stats.accuracy >= 0, `${version}: ${item}/${material} should calculate`);
+                const stats = await EngineTestUtils.getStats(engine, { item, material, xp: 1, threshold: 0.5, resultsLimit: 10 });
+                assert.ok(stats.accuracy >= 0, `${version}: ${item}/${material} should summarize`);
             }
         });
 

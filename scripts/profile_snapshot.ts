@@ -1,6 +1,7 @@
 import { EngineFactory } from '#engine/index.js';
 import { TEST_DEFAULTS } from '#constants/testing.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
+import { EngineTestUtils } from '#tests/infra/test-utils.js';
 
 async function profile() {
     const args = process.argv.slice(2);
@@ -16,7 +17,7 @@ async function profile() {
 
     const timing = { totalMs: 0, searchMs: 0, postProcessingMs: 0 };
     console.time('TargetSnapshot');
-    const stats = await engine.calculate({
+    const stats = await EngineTestUtils.getStats(engine, {
             item: 'book',
             xp: 30,
             material: 'book',

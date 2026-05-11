@@ -295,7 +295,7 @@ describe('EngineFactory', () => {
 
         const cached = EngineFactory.createForVersion('1.21.11');
         const overrideEngine = EngineFactory.createForVersion('1.21.11', {
-            cache: new CacheManager({ comboOtherSize: 10, comboBookSize: 10, statsSize: 10, poolSize: 10 })
+            cache: new CacheManager({ comboOtherSize: 10, comboBookSize: 10, poolSize: 10 })
         });
         const cachedAgain = EngineFactory.createForVersion('1.21.11');
 

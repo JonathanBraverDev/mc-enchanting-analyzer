@@ -1,5 +1,6 @@
 import { EngineFactory } from '#engine/index.js';
 import { EngineInstrumentation } from '#types/index.js';
+import { EngineTestUtils } from '#tests/infra/test-utils.js';
 
 
 async function run() {
@@ -21,7 +22,6 @@ async function run() {
     const instrumentation: EngineInstrumentation = {
         poolCache: { hits: 0, misses: 0 },
         distCache: { hits: 0, misses: 0 },
-        statsCache: { hits: 0, misses: 0 },
         totalIterations: 0, totalPrunedNodes: 0, roundingErrorEvents: 0, levelsProcessed: 0, levelsFullyResolved: 0, fullyResolved: false
     };
 
@@ -30,7 +30,7 @@ async function run() {
 
     const threshold = 0.001; // 1e-3 Standard UI Fine Accuracy
     const start = performance.now();
-    const stats = await engine.calculate({
+    const stats = await EngineTestUtils.getStats(engine, {
         item,
         xp,
         material,
@@ -44,7 +44,6 @@ async function run() {
     console.log(`Caches:`);
     console.log(`  Pool:     ${instrumentation.poolCache.hits} hits, ${instrumentation.poolCache.misses} misses`);
     console.log(`  Dist:     ${instrumentation.distCache.hits} hits, ${instrumentation.distCache.misses} misses`);
-    console.log(`  Stats: ${instrumentation.statsCache.hits} hits, ${instrumentation.statsCache.misses} misses`);
     console.log(`\nSearch Performance:`);
     console.log(`  Total Iterations: ${instrumentation.totalIterations}`);
     console.log(`  Execution Time:   ${(end - start).toFixed(2)}ms`);

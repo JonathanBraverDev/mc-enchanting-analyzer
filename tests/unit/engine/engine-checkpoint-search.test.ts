@@ -1,3 +1,4 @@
+import { EngineTestUtils } from '#tests/infra/test-utils.js';
 /**
  * Tests for EnchantEngine sequential checkpoint search.
  */
@@ -16,7 +17,7 @@ const MATERIAL = TEST_DATA.MATERIALS.DIAMOND;
 const VERSION = TEST_DATA.VERSIONS.MODERN;
 
 describe('EnchantEngine: sequential checkpoint aggregation', () => {
-    const cacheConfig: CacheConfig = { comboOtherSize: 1000, comboBookSize: 1000, statsSize: 100, poolSize: 1000 };
+    const cacheConfig: CacheConfig = { comboOtherSize: 1000, comboBookSize: 1000, poolSize: 1000 };
     let cache: CacheManager;
 
     function createEngine() {
@@ -157,7 +158,7 @@ describe('EnchantEngine checkpoint search', () => {
         engine.resetCaches();
     });
 
-    it('searchSequentialCheckpoints produces same summarized result as calculate', async () => {
+    it('searchSequentialCheckpoints produces same summarized result as direct stats helper', async () => {
         const engine = EngineFactory.createForVersion(VERSION);
         engine.resetCaches();
 
@@ -181,7 +182,7 @@ describe('EnchantEngine checkpoint search', () => {
 
         engine.resetCaches();
 
-        const fullStats = await engine.calculate({
+        const fullStats = await EngineTestUtils.getStats(engine, {
             item: ITEM,
             xp: XP,
             material: MATERIAL,

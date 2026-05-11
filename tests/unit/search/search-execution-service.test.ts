@@ -4,6 +4,7 @@ import { EngineFactory } from '#engine/index.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import { getSearchCheckpointForRefinement } from '#core/config.js';
 import { CalculationStats, SearchResult } from '#types/index.js';
+import { EngineTestUtils } from '#tests/infra/test-utils.js';
 
 function accountingTotal(stats: CalculationStats): number {
     const a = stats.accounting;
@@ -11,11 +12,11 @@ function accountingTotal(stats: CalculationStats): number {
 }
 
 describe('Search execution service', () => {
-    it('produces CalculationStats through the normal calculate boundary', async () => {
+    it('produces CalculationStats through explicit search summarization', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
         engine.resetCaches();
 
-        const stats = await engine.calculate({
+        const stats = await EngineTestUtils.getStats(engine, {
             item: 'sword',
             material: 'diamond',
             xp: 30,
@@ -32,11 +33,11 @@ describe('Search execution service', () => {
         assert.strictEqual(stats.threshold, 0);
     });
 
-    it('exposes exhaustive mode through the calculate boundary', async () => {
+    it('exposes exhaustive mode through explicit search summarization', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
         engine.resetCaches();
 
-        const stats = await engine.calculate({
+        const stats = await EngineTestUtils.getStats(engine, {
             item: 'mace',
             material: 'mace',
             xp: 1,
@@ -68,8 +69,7 @@ describe('Search execution service', () => {
         const instrumentation = {
             poolCache: { hits: 0, misses: 0 },
             distCache: { hits: 0, misses: 0 },
-            statsCache: { hits: 0, misses: 0 },
-            totalIterations: 0,
+                totalIterations: 0,
             totalPrunedNodes: 0,
             roundingErrorEvents: 0,
             levelsProcessed: 0,
@@ -128,7 +128,7 @@ describe('Search execution service', () => {
     it('supports clue-conditioned requests through the search path', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
 
-        const stats = await engine.calculate({
+        const stats = await EngineTestUtils.getStats(engine, {
             item: 'sword',
             material: 'diamond',
             xp: 30,
@@ -151,8 +151,7 @@ describe('Search execution service', () => {
         const instrumentation = {
             poolCache: { hits: 0, misses: 0 },
             distCache: { hits: 0, misses: 0 },
-            statsCache: { hits: 0, misses: 0 },
-            totalIterations: 0,
+                totalIterations: 0,
             totalPrunedNodes: 0,
             roundingErrorEvents: 0,
             levelsProcessed: 0,
@@ -208,8 +207,7 @@ describe('Search execution service', () => {
             instrumentation: {
                 poolCache: { hits: 0, misses: 0 },
                 distCache: { hits: 0, misses: 0 },
-                statsCache: { hits: 0, misses: 0 },
-                totalIterations: 0,
+                        totalIterations: 0,
                 totalPrunedNodes: 0,
                 roundingErrorEvents: 0,
                 levelsProcessed: 0,
@@ -227,8 +225,7 @@ describe('Search execution service', () => {
             instrumentation: {
                 poolCache: { hits: 0, misses: 0 },
                 distCache: { hits: 0, misses: 0 },
-                statsCache: { hits: 0, misses: 0 },
-                totalIterations: 0,
+                        totalIterations: 0,
                 totalPrunedNodes: 0,
                 roundingErrorEvents: 0,
                 levelsProcessed: 0,
@@ -251,8 +248,7 @@ describe('Search execution service', () => {
             instrumentation: {
                 poolCache: { hits: 0, misses: 0 },
                 distCache: { hits: 0, misses: 0 },
-                statsCache: { hits: 0, misses: 0 },
-                totalIterations: 0,
+                        totalIterations: 0,
                 totalPrunedNodes: 0,
                 roundingErrorEvents: 0,
                 levelsProcessed: 0,
@@ -278,8 +274,7 @@ describe('Search execution service', () => {
             instrumentation: {
                 poolCache: { hits: 0, misses: 0 },
                 distCache: { hits: 0, misses: 0 },
-                statsCache: { hits: 0, misses: 0 },
-                totalIterations: 0,
+                        totalIterations: 0,
                 totalPrunedNodes: 0,
                 roundingErrorEvents: 0,
                 levelsProcessed: 0,
@@ -299,8 +294,7 @@ describe('Search execution service', () => {
             instrumentation: {
                 poolCache: { hits: 0, misses: 0 },
                 distCache: { hits: 0, misses: 0 },
-                statsCache: { hits: 0, misses: 0 },
-                totalIterations: 0,
+                        totalIterations: 0,
                 totalPrunedNodes: 0,
                 roundingErrorEvents: 0,
                 levelsProcessed: 0,

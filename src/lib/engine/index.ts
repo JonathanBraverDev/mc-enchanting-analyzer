@@ -1,10 +1,8 @@
-import { BuiltRegistryState, CalculationRequest, CalculationStats, CheckpointSearchRequest, EngineInstrumentation, SearchResult, SearchConfig, SequentialCheckpointSearchRequest } from '#types/index.js';
-import { getItemId, getMaterialId, isItemAvailable, isMaterialEligible, getAvailablePool as getRegistryAvailablePool } from '#core/registry.js';
-import { KeyUtils, ProbUtils } from '#utils/index.js';
-import { ENGINE_LIMITS } from '#constants/engine.js';
+import { BuiltRegistryState, CheckpointSearchRequest, EngineInstrumentation, SearchResult, SequentialCheckpointSearchRequest } from '#types/index.js';
+import { isItemAvailable, isMaterialEligible, getAvailablePool as getRegistryAvailablePool } from '#core/registry.js';
+import { ProbUtils } from '#utils/index.js';
 import { MINECRAFT_RULES } from '#constants/minecraft.js';
 import { CacheManager } from '#engine/cache/CacheManager.js';
-import { SummaryService } from '#services/SummaryService.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { SearchExecutionService } from '#lib/search/SearchExecutionService.js';
 import { ClueValidator } from '#core/clue.js';
@@ -34,13 +32,8 @@ export class EnchantEngine {
         this.searchService.clearCache();
     }
 
-    /** Clears only the stats cache. */
-    public resetStatsCache(): void {
-        this.cache.clearStats();
-    }
-
     /** Returns current cache performance metrics. */
-    public getCacheMetrics(): { distCache: { hits: number; misses: number }; poolCache: { hits: number; misses: number }; statsCache: { hits: number; misses: number } } {
+    public getCacheMetrics(): { distCache: { hits: number; misses: number }; poolCache: { hits: number; misses: number } } {
         return this.cache.getEngineMetrics();
     }
 
@@ -96,121 +89,11 @@ export class EnchantEngine {
         });
     }
 
-    /**
-     * Aggregates all statistics for a given enchantment attempt.
-     * Use this for standard single-pass calculations (e.g. standard UI search).
-     *
-     * @param item The item type (e.g., 'sword', 'pickaxe').
-     * @param xp The base XP level from the enchantment table (1-50).
-     * @param material The item material (e.g., 'diamond', 'netherite').
-     * @param config Optional search configuration (threshold, signals, etc).
-     * @returns A promise resolving to the final aggregated statistics.
-     */
-    public async calculate(request: CalculationRequest): Promise<CalculationStats> {
-        this.validateRequest(request);
-        const { item, material } = request;
-
-        const {
-            xp,
-            clue,
-            threshold = ENGINE_LIMITS.DEFAULT_THRESHOLD,
-            signal,
-            onProgress,
-            maxIterations,
-            exhaustive,
-            summaryLimit = ENGINE_LIMITS.MAX_RESULTS_SUMMARY,
-            resultsLimit = ENGINE_LIMITS.MAX_RESULTS_UNBOUNDED,
-            useCache,
-            instrumentation,
-            timing
-        } = request;
-
-        const packedClue = clue ? this.getPackedClue(item, clue) : null;
-        const effectiveThreshold = exhaustive ? 0 : threshold;
-
-        const cacheKey = this.getStatsKey(item, xp, material, packedClue);
-
-        const cachedStats = useCache === false || exhaustive ? undefined : this.cache.getStats(this.registry.version, cacheKey);
-        if (cachedStats && cachedStats.threshold <= effectiveThreshold) return cachedStats;
-
-        const searchConfig: SearchConfig = {
-            threshold: effectiveThreshold,
-            signal,
-            onProgress,
-            maxIterations,
-            exhaustive,
-            resultsLimit,
-            useCache,
-            instrumentation,
-            timing
-        };
-
-        const finalResult = await this.searchService.searchToCheckpoint({
-            registry: this.registry,
-            item,
-            xp,
-            material,
-            targetClueId: packedClue ?? undefined,
-            ...searchConfig
-        });
-
-        const isBook = item === "book";
-        const postProcessingStart = timing ? performance.now() : 0;
-        const finalStats = packedClue
-            ? SummaryService.summarizeConditioned({
-                combos: finalResult.combos,
-                snapshot: finalResult.snapshot,
-                indexToEnchant: this.registry.indexToEnchant,
-                targetClueId: packedClue,
-                comboLimit: summaryLimit,
-                isBook
-            })
-            : SummaryService.summarize({
-                combos: finalResult.combos,
-                snapshot: finalResult.snapshot,
-                indexToEnchant: this.registry.indexToEnchant,
-                comboLimit: summaryLimit,
-                threshold: finalResult.threshold,
-                isBook
-            });
-
-        finalStats.instrumentation = finalResult.instrumentation;
-        if (timing) {
-            const postProcessingMs = performance.now() - postProcessingStart;
-            timing.postProcessingMs = (timing.postProcessingMs ?? 0) + postProcessingMs;
-            timing.totalMs += postProcessingMs;
-            finalStats.timing = { ...timing };
-        } else {
-            finalStats.timing = finalResult.timing;
-        }
-
-        if (useCache !== false && !exhaustive) {
-            const currentCached = this.cache.getStats(this.registry.version, cacheKey);
-            if (!currentCached || finalStats.accuracy > currentCached.accuracy) {
-                this.cache.setStats(this.registry.version, cacheKey, finalStats);
-            }
-        }
-
-        return finalStats;
-    }
-
     private getPackedClue(item: string, clue: string): number {
         return ClueValidator.validate(this.registry, item, clue);
     }
 
-    private getStatsKey(item: string, xp: number, material: string, packedClue: number | null = null): number {
-        const itemId = getItemId(this.registry, item);
-        const materialId = getMaterialId(this.registry, material);
-
-        let key = KeyUtils.getStatsKey(itemId, materialId, xp);
-        if (packedClue !== null) {
-            // Encode the clue into the high bits above the item/material/level fields.
-            key += packedClue * (2 ** 18);
-        }
-        return key;
-    }
-
-    private validateRequest(request: CalculationRequest | CheckpointSearchRequest | SequentialCheckpointSearchRequest): void {
+    private validateRequest(request: CheckpointSearchRequest | SequentialCheckpointSearchRequest): void {
         const { item, material } = request;
         const { xp } = request;
 

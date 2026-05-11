@@ -1,3 +1,4 @@
+import { EngineTestUtils } from '#tests/infra/test-utils.js';
 /**
  * Probability conservation tests.
  *
@@ -36,7 +37,7 @@ describe('Probability Conservation', () => {
 
     it('pending mass is non-negative for a partially-converged search', async () => {
         const engine = EngineFactory.createForVersion(TEST_DATA.VERSIONS.MODERN);
-        const stats  = await engine.calculate({ item: 'chestplate', xp: 15, material: 'iron', threshold: 0.01 });
+        const stats  = await EngineTestUtils.getStats(engine, { item: 'chestplate', xp: 15, material: 'iron', threshold: 0.01 });
 
         assert.ok(
             stats.accounting.pending >= 0,
@@ -46,7 +47,7 @@ describe('Probability Conservation', () => {
 
     it('sum(buckets) ≈ 1.0 for a partially-converged search', async () => {
         const engine = EngineFactory.createForVersion('1.21');
-        const stats  = await engine.calculate({ item: 'chestplate', xp: 15, material: 'iron', threshold: 0.01 });
+        const stats  = await EngineTestUtils.getStats(engine, { item: 'chestplate', xp: 15, material: 'iron', threshold: 0.01 });
 
         const total = massTotal(stats);
         assert.ok(
@@ -57,7 +58,7 @@ describe('Probability Conservation', () => {
 
     it('sum(buckets) ≈ 1.0 for a fully-converged book search (modern)', async () => {
         const engine = EngineFactory.createForVersion(TEST_DATA.VERSIONS.MODERN);
-        const stats  = await engine.calculate({ item: TEST_DATA.ITEMS.BOOK, xp: 30, material: TEST_DATA.MATERIALS.BOOK, threshold: TEST_DATA.THRESHOLDS.PROB_MIN });
+        const stats  = await EngineTestUtils.getStats(engine, { item: TEST_DATA.ITEMS.BOOK, xp: 30, material: TEST_DATA.MATERIALS.BOOK, threshold: TEST_DATA.THRESHOLDS.PROB_MIN });
 
         const total = massTotal(stats);
         assert.ok(
@@ -76,7 +77,7 @@ describe('Probability Conservation', () => {
 
         for (const { version, item, level, material } of cases) {
             const engine = EngineFactory.createForVersion(version);
-            const stats  = await engine.calculate({ item: item, xp: level, material: material, threshold: 0.001 });
+            const stats  = await EngineTestUtils.getStats(engine, { item: item, xp: level, material: material, threshold: 0.001 });
             const label  = `${version} ${item}@${level} ${material}`;
 
             assert.ok(
@@ -94,7 +95,7 @@ describe('Probability Conservation', () => {
 
     it('guaranteed clue result remains complete for bow (Power IV)', async () => {
         const engine  = EngineFactory.createForVersion(TEST_DATA.VERSIONS.MODERN);
-        const stats   = await engine.calculate({
+        const stats   = await EngineTestUtils.getStats(engine, {
             item: 'bow',
             xp: 30,
             material: 'bow',

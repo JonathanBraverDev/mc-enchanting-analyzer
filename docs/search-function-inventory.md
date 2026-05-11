@@ -206,7 +206,6 @@ Key files/classes:
 
 - `src/lib/engine/index.ts` — `EnchantEngine`
 - Public-ish methods:
-  - `calculate`
   - `searchToCheckpoint`
   - `searchSequentialCheckpoints`
   - `getModifiedLevelDist`
@@ -263,7 +262,7 @@ Key files/classes:
 
 - `src/lib/services/SnapshotService.ts` — `SearchRunSnapshot` -> `TopRunView` / `ChartCellView`.
 - `src/lib/services/SummaryAggregationService.ts` — shared scan over resolved combos + pending frontier.
-- `src/lib/services/SummaryService.ts` — `CalculationStats` formatter for `calculate` path.
+- `src/lib/services/SummaryService.ts` — `CalculationStats` formatter for explicit search-result summarization.
 - `src/lib/services/TargetAnalysisService.ts` — target filtering/projection over combos and pending entries.
 - `src/lib/services/TargetClueAdvisorService.ts` — clue advisor projection for target requirements.
 - `src/lib/services/ClueSignalAdvisorService.ts` — level/clue signal advisor summaries.
@@ -706,17 +705,14 @@ File: `src/lib/engine/index.ts`
 |---|---|---|---|---|
 | `src/lib/engine/index.ts:22` | `EnchantEngine.constructor` | constructor | Wires registry, cache, distribution service, and search execution service. | engine-boundary |
 | `src/lib/engine/index.ts:32` | `resetCaches` | class method | Clears engine and search execution caches. | engine-boundary, cache |
-| `src/lib/engine/index.ts:38` | `resetStatsCache` | class method | Clears final stats cache. | engine-boundary, cache |
-| `src/lib/engine/index.ts:43` | `getCacheMetrics` | class method | Returns current cache metrics. | engine-boundary, instrumentation |
-| `src/lib/engine/index.ts:47` | `destroy` | class method | Clears engine resources. | engine-boundary |
-| `src/lib/engine/index.ts:54` | `getModifiedLevelDist` | class method | Exposes modified-level distribution calculation. | engine-boundary, registry-derived |
-| `src/lib/engine/index.ts:61` | `getAvailablePool` | class method | Exposes eligible-list lookup with engine cache. | engine-boundary, registry |
-| `src/lib/engine/index.ts:68` | `searchSequentialCheckpoints` | class method | Validates and forwards sequential checkpoint request. | engine-boundary |
-| `src/lib/engine/index.ts:85` | `searchToCheckpoint` | class method | Validates and forwards one checkpoint request. | engine-boundary |
-| `src/lib/engine/index.ts:109` | `calculate` | class method | Public calculation entry point: cache, checkpoint search, summary conversion. | engine-boundary, projection |
-| `src/lib/engine/index.ts:197` | `getPackedClue` | private method | Validates and packs clue input. | engine-boundary, clue |
-| `src/lib/engine/index.ts:201` | `getStatsKey` | private method | Builds final stats cache key. | cache |
-| `src/lib/engine/index.ts:213` | `validateRequest` | private method | Validates request item/material/clue fields. | engine-boundary |
+| `src/lib/engine/index.ts:38` | `getCacheMetrics` | class method | Returns current cache metrics. | engine-boundary, instrumentation |
+| `src/lib/engine/index.ts:42` | `destroy` | class method | Clears engine resources. | engine-boundary |
+| `src/lib/engine/index.ts:49` | `getModifiedLevelDist` | class method | Exposes modified-level distribution calculation. | engine-boundary, registry-derived |
+| `src/lib/engine/index.ts:56` | `getAvailablePool` | class method | Exposes eligible-list lookup with engine cache. | engine-boundary, registry |
+| `src/lib/engine/index.ts:63` | `searchSequentialCheckpoints` | class method | Validates and forwards sequential checkpoint request. | engine-boundary |
+| `src/lib/engine/index.ts:80` | `searchToCheckpoint` | class method | Validates and forwards one checkpoint request. | engine-boundary |
+| `src/lib/engine/index.ts:97` | `getPackedClue` | private method | Validates and packs clue input. | engine-boundary, clue |
+| `src/lib/engine/index.ts:101` | `validateRequest` | private method | Validates request item/material/clue fields. | engine-boundary |
 
 ### Engine Cache
 
@@ -724,18 +720,15 @@ File: `src/lib/engine/cache/CacheManager.ts`
 
 | Location | Symbol | Kind | Responsibility | Tags |
 |---|---|---|---|---|
-| `src/lib/engine/cache/CacheManager.ts:22` | `CacheManager.constructor` | constructor | Initializes pool and stats LRU caches. | cache |
-| `src/lib/engine/cache/CacheManager.ts:28` | `getDist` | class method | Reads modified-level distribution cache. | cache |
-| `src/lib/engine/cache/CacheManager.ts:33` | `setDist` | class method | Writes modified-level distribution cache. | cache |
-| `src/lib/engine/cache/CacheManager.ts:38` | `getPool` | class method | Reads eligible-pool cache. | cache |
-| `src/lib/engine/cache/CacheManager.ts:43` | `setPool` | class method | Writes eligible-pool cache. | cache |
-| `src/lib/engine/cache/CacheManager.ts:48` | `getStats` | class method | Reads final calculation stats cache. | cache |
-| `src/lib/engine/cache/CacheManager.ts:53` | `setStats` | class method | Writes final calculation stats cache. | cache |
-| `src/lib/engine/cache/CacheManager.ts:58` | `clearAll` | class method | Clears all engine caches and metrics. | cache |
-| `src/lib/engine/cache/CacheManager.ts:65` | `clearStats` | class method | Clears final stats cache and stats metrics. | cache |
-| `src/lib/engine/cache/CacheManager.ts:71` | `resetMetrics` | class method | Resets all engine cache metrics. | cache, instrumentation |
-| `src/lib/engine/cache/CacheManager.ts:77` | `getMetrics` | class method | Returns raw internal cache metrics. | cache, instrumentation |
-| `src/lib/engine/cache/CacheManager.ts:88` | `getEngineMetrics` | class method | Returns metrics in public instrumentation field shape. | cache, instrumentation |
+| `src/lib/engine/cache/CacheManager.ts:21` | `CacheManager.constructor` | constructor | Initializes pool LRU cache. | cache |
+| `src/lib/engine/cache/CacheManager.ts:26` | `getDist` | class method | Reads modified-level distribution cache. | cache |
+| `src/lib/engine/cache/CacheManager.ts:31` | `setDist` | class method | Writes modified-level distribution cache. | cache |
+| `src/lib/engine/cache/CacheManager.ts:36` | `getPool` | class method | Reads eligible-pool cache. | cache |
+| `src/lib/engine/cache/CacheManager.ts:41` | `setPool` | class method | Writes eligible-pool cache. | cache |
+| `src/lib/engine/cache/CacheManager.ts:47` | `clearAll` | class method | Clears all engine caches and metrics. | cache |
+| `src/lib/engine/cache/CacheManager.ts:53` | `resetMetrics` | class method | Resets all engine cache metrics. | cache, instrumentation |
+| `src/lib/engine/cache/CacheManager.ts:58` | `getMetrics` | class method | Returns raw internal cache metrics. | cache, instrumentation |
+| `src/lib/engine/cache/CacheManager.ts:68` | `getEngineMetrics` | class method | Returns metrics in public instrumentation field shape. | cache, instrumentation |
 
 ### Test Helpers
 

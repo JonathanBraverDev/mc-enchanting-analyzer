@@ -141,7 +141,6 @@ export class SearchExecutionService {
                     : snapshot.largestPendingMass < thresholdUnits ? 'threshold' : 'iterations';
             instrumentation.poolCache = instrumentation.poolCache ?? { hits: 0, misses: 0 };
             instrumentation.distCache = instrumentation.distCache ?? { hits: 0, misses: 0 };
-            instrumentation.statsCache = instrumentation.statsCache ?? { hits: 0, misses: 0 };
             instrumentation.search = {
                 graphCount: snapshot.graphCount,
                 seededLevelCount: snapshot.seededLevelCount,

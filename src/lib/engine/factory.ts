@@ -42,7 +42,6 @@ export class EngineFactory {
         const cache = overrides.cache || new CacheManager({
             comboOtherSize: CACHE_CONFIG.COMBO_OTHER_SIZE,
             comboBookSize: CACHE_CONFIG.COMBO_BOOK_SIZE,
-            statsSize: CACHE_CONFIG.STATS_SIZE,
             poolSize: CACHE_CONFIG.POOL_SIZE
         });
 

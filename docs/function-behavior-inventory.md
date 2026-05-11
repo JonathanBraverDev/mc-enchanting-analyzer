@@ -790,21 +790,14 @@ For each function:
   - **body-derived behavior summary:** requests a full reset of the direct engine caches and also the search service's cached run/graph state.
   - **naming notes:** plural is warranted because it clears two cache-owning collaborators, not just one store.
 
-- **path:line** `src/lib/engine/index.ts:38`
-  - **current symbol:** `EnchantEngine.resetStatsCache`
-  - **inputs/parameters used:** none
-  - **state read/written:** calls `cache.clearStats()`
-  - **return/side effects:** removes cached aggregated stats only
-  - **body-derived behavior summary:** targets just the stats cache without disturbing distribution/pool/search caches.
-
-- **path:line** `src/lib/engine/index.ts:43`
+- **path:line** `src/lib/engine/index.ts:35`
   - **current symbol:** `EnchantEngine.getCacheMetrics`
   - **inputs/parameters used:** none
   - **state read/written:** reads metrics through `cache.getEngineMetrics()`
   - **return/side effects:** returns a metrics snapshot object from the cache manager
   - **body-derived behavior summary:** delegates cache hit/miss reporting to the cache manager without adding engine-local metrics.
 
-- **path:line** `src/lib/engine/index.ts:47`
+- **path:line** `src/lib/engine/index.ts:40`
   - **current symbol:** `EnchantEngine.destroy`
   - **inputs/parameters used:** none
   - **state read/written:** no reads or writes beyond the comment
@@ -812,57 +805,42 @@ For each function:
   - **body-derived behavior summary:** intentionally does nothing; teardown does not clear shared caches or release dependencies.
   - **naming notes:** the body is an explicit no-op placeholder, so the name suggests stronger teardown semantics than are currently implemented.
 
-- **path:line** `src/lib/engine/index.ts:54`
+- **path:line** `src/lib/engine/index.ts:47`
   - **current symbol:** `EnchantEngine.getModifiedLevelDist`
   - **inputs/parameters used:** `xp`, `enchantability`, optional `instrumentation`
   - **state read/written:** reads `registry`, `cache`, `distributionService`; passes `instrumentation` through
   - **return/side effects:** returns the modified-level probability map produced by the distribution service
   - **body-derived behavior summary:** forwards the current registry, request inputs, cache, and optional instrumentation to the injected distribution service.
 
-- **path:line** `src/lib/engine/index.ts:61`
+- **path:line** `src/lib/engine/index.ts:54`
   - **current symbol:** `EnchantEngine.getAvailablePool`
   - **inputs/parameters used:** `item`, `level`, optional `bitset` defaulting to `0n`
   - **state read/written:** reads `_registry`, `cache`, `_registry.version`; no writes
   - **return/side effects:** returns the registry helper's filtered packed-enchant list
   - **body-derived behavior summary:** asks the registry helper for the eligible packed enchants at one level, optionally excluding entries whose enchant ids are already present in the provided bigint bitset.
 
-- **path:line** `src/lib/engine/index.ts:68`
+- **path:line** `src/lib/engine/index.ts:61`
   - **current symbol:** `EnchantEngine.searchSequentialCheckpoints`
   - **inputs/parameters used:** `request`, especially `item`, `material`, optional `clue`
   - **state read/written:** calls `validateRequest`; may call `getPackedClue`; reads `registry`; calls `searchService.searchSequentialCheckpoints(...)`
   - **return/side effects:** returns the search service result for the sequential checkpoint plan
   - **body-derived behavior summary:** validates the request, converts an optional clue string into a validated packed clue id, then forwards the request plus the engine registry and packed clue target into the search service.
 
-- **path:line** `src/lib/engine/index.ts:85`
+- **path:line** `src/lib/engine/index.ts:78`
   - **current symbol:** `EnchantEngine.searchToCheckpoint`
   - **inputs/parameters used:** `request`, especially `item`, `material`, optional `clue`
   - **state read/written:** calls `validateRequest`; may call `getPackedClue`; reads `registry`; calls `searchService.searchToCheckpoint(...)`
   - **return/side effects:** returns one checkpoint/final search result
   - **body-derived behavior summary:** performs the same validation and clue packing as the sequential variant, but advances only one checkpoint request through the search service.
 
-- **path:line** `src/lib/engine/index.ts:109`
-  - **current symbol:** `EnchantEngine.calculate`
-  - **inputs/parameters used:** `request.xp`, `request.item`, `request.material`, optional `clue`, `threshold`, `signal`, `onProgress`, `maxIterations`, `exhaustive`, `summaryLimit`, `resultsLimit`, `useCache`, `instrumentation`, `timing`
-  - **state read/written:** calls `validateRequest`; may call `getPackedClue`, `getStatsKey`; reads `cache`, `registry.version`, `registry.indexToEnchant`; may return `cache.getStats(...)`; calls `searchService.searchToCheckpoint(...)`; calls `SummaryService.summarizeConditioned` or `SummaryService.summarize`; mutates `finalStats.instrumentation`; may mutate `timing.postProcessingMs` and `timing.totalMs`; may call `cache.setStats(...)`
-  - **return/side effects:** returns aggregated calculation stats, optionally reusing/storing cached stats and augmenting timing/instrumentation
-  - **body-derived behavior summary:** validates the request, normalizes defaults, disables thresholding when exhaustive, skips stats-cache reuse for exhaustive or uncached calls, runs the search, summarizes either conditioned-on-clue or unconditioned combos, merges timing/instrumentation into the summary, and stores the result only when caching is enabled and the new accuracy improves on any cached entry.
-  - **naming notes:** despite the generic name, this method is specifically “search then summarize and maybe cache,” not a purely arithmetic helper.
-
-- **path:line** `src/lib/engine/index.ts:197`
+- **path:line** `src/lib/engine/index.ts:92`
   - **current symbol:** `EnchantEngine.getPackedClue`
   - **inputs/parameters used:** `item`, `clue`
   - **state read/written:** reads `registry`; calls `ClueValidator.validate(...)`
   - **return/side effects:** returns a numeric packed clue id; throws when validation fails
   - **body-derived behavior summary:** validates the clue string against the current registry/item context and returns the packed clue representation used by the search layer.
 
-- **path:line** `src/lib/engine/index.ts:201`
-  - **current symbol:** `EnchantEngine.getStatsKey`
-  - **inputs/parameters used:** `item`, `xp`, `material`, optional `packedClue` defaulting to `null`
-  - **state read/written:** reads `registry`; calls `getItemId`, `getMaterialId`, `KeyUtils.getStatsKey`; local `key` is conditionally incremented by `packedClue * (2 ** 18)`
-  - **return/side effects:** returns a numeric cache key
-  - **body-derived behavior summary:** converts item and material names to ids, packs them with XP into a base stats key, and when a clue is present shifts that clue into higher bits above the existing item/material/xp fields.
-
-- **path:line** `src/lib/engine/index.ts:213`
+- **path:line** `src/lib/engine/index.ts:96`
   - **current symbol:** `EnchantEngine.validateRequest`
   - **inputs/parameters used:** `request.item`, `request.material`, `request.xp`, optional `request.threshold`, `request.maxIterations`, optional `request.checkpoints`, optional `request.resultsLimit`
   - **state read/written:** reads `registry.mechanics.xp_cap`, `registry.version`; falls back to `MINECRAFT_RULES.XP_CAP_LEGACY`; calls `isItemAvailable`, `isMaterialEligible`, `ProbUtils.toNumber`; iterates `request.checkpoints` when present; no writes
@@ -872,90 +850,68 @@ For each function:
 
 ### `src/lib/engine/cache/CacheManager.ts`
 
-- **path:line** `src/lib/engine/cache/CacheManager.ts:22`
+- **path:line** `src/lib/engine/cache/CacheManager.ts:20`
   - **current symbol:** `constructor`
-  - **inputs/parameters used:** `config.poolSize`, `config.statsSize`
-  - **state read/written:** writes instance `pool` and `stats`; leaves `dist` and `metrics` at field-initialized defaults
-  - **return/side effects:** initializes two LRU-backed cache partitions; no explicit return
-  - **body-derived behavior summary:** creates the pool cache and stats cache with caller-supplied capacities while relying on field initializers for the distribution map and zeroed metrics.
+  - **inputs/parameters used:** `config.poolSize`
+  - **state read/written:** writes instance `pool`; leaves `dist` and `metrics` at field-initialized defaults
+  - **return/side effects:** initializes the pool LRU cache; no explicit return
+  - **body-derived behavior summary:** creates the pool cache with caller-supplied capacity while relying on field initializers for the distribution map and zeroed metrics.
 
-- **path:line** `src/lib/engine/cache/CacheManager.ts:28`
+- **path:line** `src/lib/engine/cache/CacheManager.ts:25`
   - **current symbol:** `getDist`
   - **inputs/parameters used:** `version`, `key`
   - **state read/written:** reads `dist`; increments `metrics.dist.hits` or `metrics.dist.misses`
   - **return/side effects:** returns the stored level-to-bigint distribution object or `undefined`
   - **body-derived behavior summary:** looks up a distribution entry under a `version:key` string and updates the distribution hit/miss counter based on whether the map returned a truthy value.
-  - **naming notes:** metric accounting treats any falsy cached value as a miss, though stored values here are expected to be objects.
 
-- **path:line** `src/lib/engine/cache/CacheManager.ts:33`
+- **path:line** `src/lib/engine/cache/CacheManager.ts:30`
   - **current symbol:** `setDist`
   - **inputs/parameters used:** `version`, `key`, `val`
   - **state read/written:** writes `dist`
   - **return/side effects:** stores the provided distribution object under the composed cache key
   - **body-derived behavior summary:** concatenates version and key with `:` and writes the passed distribution map into the plain `Map` cache.
 
-- **path:line** `src/lib/engine/cache/CacheManager.ts:38`
+- **path:line** `src/lib/engine/cache/CacheManager.ts:35`
   - **current symbol:** `getPool`
   - **inputs/parameters used:** `version`, `key`
   - **state read/written:** reads `pool`; increments `metrics.pool.hits` or `metrics.pool.misses`
   - **return/side effects:** returns the cached packed-enchant array or `undefined`
   - **body-derived behavior summary:** fetches a pool entry from the LRU cache using the same `version:key` scheme and records a hit or miss from the returned value.
 
-- **path:line** `src/lib/engine/cache/CacheManager.ts:43`
+- **path:line** `src/lib/engine/cache/CacheManager.ts:40`
   - **current symbol:** `setPool`
   - **inputs/parameters used:** `version`, `key`, `val`
   - **state read/written:** writes `pool`
   - **return/side effects:** inserts or refreshes one pool-cache entry in the LRU store
   - **body-derived behavior summary:** stores the packed-enchant array in the pool LRU cache under the composed string key.
 
-- **path:line** `src/lib/engine/cache/CacheManager.ts:48`
-  - **current symbol:** `getStats`
-  - **inputs/parameters used:** `version`, `key`
-  - **state read/written:** reads `stats`; increments `metrics.stats.hits` or `metrics.stats.misses`
-  - **return/side effects:** returns the cached `CalculationStats` object or `undefined`
-  - **body-derived behavior summary:** retrieves one stats entry from the LRU cache using `version:key` stringification even though `key` is numeric at the API boundary, then updates stats hit/miss counters.
-
-- **path:line** `src/lib/engine/cache/CacheManager.ts:53`
-  - **current symbol:** `setStats`
-  - **inputs/parameters used:** `version`, `key`, `val`
-  - **state read/written:** writes `stats`
-  - **return/side effects:** inserts or refreshes one stats-cache entry in the LRU store
-  - **body-derived behavior summary:** stringifies the numeric key as part of `version:key` and stores the provided calculation summary in the stats LRU cache.
-
-- **path:line** `src/lib/engine/cache/CacheManager.ts:58`
+- **path:line** `src/lib/engine/cache/CacheManager.ts:45`
   - **current symbol:** `clearAll`
   - **inputs/parameters used:** none
-  - **state read/written:** clears `dist`, `pool`, and `stats`; calls `resetMetrics`
-  - **return/side effects:** removes all cached entries and zeroes all counters
-  - **body-derived behavior summary:** wipes every cache partition regardless of backend type, then delegates to the shared metric reset routine so all hit/miss buckets are replaced with zeroed objects.
+  - **state read/written:** clears `dist` and `pool`; calls `resetMetrics`
+  - **return/side effects:** removes cached entries and zeroes counters
+  - **body-derived behavior summary:** wipes every cache partition regardless of backend type, then delegates to the shared metric reset routine.
 
-- **path:line** `src/lib/engine/cache/CacheManager.ts:65`
-  - **current symbol:** `clearStats`
-  - **inputs/parameters used:** none
-  - **state read/written:** clears `stats`; sets `metrics.stats.hits` and `metrics.stats.misses` to zero
-  - **return/side effects:** removes only cached stats entries and resets only stats counters
-  - **body-derived behavior summary:** targets the stats partition alone, preserving distribution/pool entries and leaving their metrics untouched while zeroing the existing stats metric object in place.
-
-- **path:line** `src/lib/engine/cache/CacheManager.ts:71`
+- **path:line** `src/lib/engine/cache/CacheManager.ts:51`
   - **current symbol:** `resetMetrics`
   - **inputs/parameters used:** none
-  - **state read/written:** overwrites `metrics.dist`, `metrics.pool`, and `metrics.stats`
+  - **state read/written:** overwrites `metrics.dist` and `metrics.pool`
   - **return/side effects:** zeroes all hit/miss counters without clearing cache contents
-  - **body-derived behavior summary:** replaces each metrics bucket with a fresh `{ hits: 0, misses: 0 }` object, leaving all cached values intact.
+  - **body-derived behavior summary:** replaces each metrics bucket with a fresh `{ hits: 0, misses: 0 }` object, leaving cached values intact.
 
-- **path:line** `src/lib/engine/cache/CacheManager.ts:77`
+- **path:line** `src/lib/engine/cache/CacheManager.ts:56`
   - **current symbol:** `getMetrics`
   - **inputs/parameters used:** none
-  - **state read/written:** reads `metrics.dist`, `metrics.pool`, and `metrics.stats`
-  - **return/side effects:** returns a detached snapshot keyed as `dist`, `pool`, and `stats`
+  - **state read/written:** reads `metrics.dist` and `metrics.pool`
+  - **return/side effects:** returns a detached snapshot keyed as `dist` and `pool`
   - **body-derived behavior summary:** exposes current metrics through shallow copies so callers cannot mutate the live counter objects through the returned structure.
 
-- **path:line** `src/lib/engine/cache/CacheManager.ts:88`
+- **path:line** `src/lib/engine/cache/CacheManager.ts:66`
   - **current symbol:** `getEngineMetrics`
   - **inputs/parameters used:** none
-  - **state read/written:** reads `metrics.dist`, `metrics.pool`, and `metrics.stats`
-  - **return/side effects:** returns a detached snapshot keyed as `distCache`, `poolCache`, and `statsCache`
-  - **body-derived behavior summary:** repackages the same three metric buckets under engine-instrumentation field names while still cloning each counter object before returning it.
+  - **state read/written:** reads `metrics.dist` and `metrics.pool`
+  - **return/side effects:** returns a detached snapshot keyed as `distCache` and `poolCache`
+  - **body-derived behavior summary:** repackages the same two metric buckets under engine-instrumentation field names while still cloning each counter object before returning it.
   - **naming notes:** this does not compute different metrics; it only renames the output fields for a public consumer.
 
 <!-- Fresh-subagent results get appended below. -->

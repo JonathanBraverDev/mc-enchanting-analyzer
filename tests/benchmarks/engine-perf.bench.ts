@@ -1,5 +1,6 @@
 import { performance } from 'node:perf_hooks';
 import { EngineFactory } from '#engine/factory.js';
+import { EngineTestUtils } from '#tests/infra/test-utils.js';
 
 async function runBenchmark() {
     console.log('--- Enchantment Engine Performance Benchmark ---');
@@ -15,7 +16,7 @@ async function runBenchmark() {
         console.log(`\nScenario: ${s.name}`);
 
         // Warmup
-        await engine.calculate({ item: s.item, xp: s.xp, material: s.material, threshold: 0.001 });
+        await EngineTestUtils.getStats(engine, { item: s.item, xp: s.xp, material: s.material, threshold: 0.001 });
         engine.resetCaches();
 
         const iterations = 5;
@@ -23,7 +24,7 @@ async function runBenchmark() {
 
         for (let i = 0; i < iterations; i++) {
             const start = performance.now();
-            await engine.calculate({ item: s.item, xp: s.xp, material: s.material, threshold: 0.0001 });
+            await EngineTestUtils.getStats(engine, { item: s.item, xp: s.xp, material: s.material, threshold: 0.0001 });
             const end = performance.now();
             totalMs += (end - start);
             engine.resetCaches();

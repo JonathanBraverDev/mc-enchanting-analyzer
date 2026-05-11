@@ -559,12 +559,6 @@
   },
   {
     "path": "src/lib/engine/index.ts",
-    "line": 38,
-    "symbol": "EnchantEngine.resetStatsCache",
-    "kind": "class method"
-  },
-  {
-    "path": "src/lib/engine/index.ts",
     "line": 43,
     "symbol": "EnchantEngine.getCacheMetrics",
     "kind": "class method"
@@ -601,20 +595,8 @@
   },
   {
     "path": "src/lib/engine/index.ts",
-    "line": 109,
-    "symbol": "EnchantEngine.calculate",
-    "kind": "class method"
-  },
-  {
-    "path": "src/lib/engine/index.ts",
     "line": 197,
     "symbol": "EnchantEngine.getPackedClue",
-    "kind": "private method"
-  },
-  {
-    "path": "src/lib/engine/index.ts",
-    "line": 201,
-    "symbol": "EnchantEngine.getStatsKey",
     "kind": "private method"
   },
   {
@@ -669,12 +651,6 @@
     "path": "src/lib/engine/cache/CacheManager.ts",
     "line": 58,
     "symbol": "CacheManager.clearAll",
-    "kind": "class method"
-  },
-  {
-    "path": "src/lib/engine/cache/CacheManager.ts",
-    "line": 65,
-    "symbol": "CacheManager.clearStats",
     "kind": "class method"
   },
   {

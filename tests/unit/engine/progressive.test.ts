@@ -13,7 +13,7 @@ describe('EnchantEngine: Sequential Checkpoint Search', () => {
 
     beforeEach(() => {
         EngineFactory.clearCaches();
-        cache = new CacheManager({ statsSize: 100, comboOtherSize: 100, comboBookSize: 100, poolSize: 100 });
+        cache = new CacheManager({ comboOtherSize: 100, comboBookSize: 100, poolSize: 100 });
         engine = EngineFactory.create(RegistryFactory.build(TEST_DATA.VERSIONS.MODERN), { cache });
     });
 

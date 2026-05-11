@@ -2,6 +2,7 @@ import { EngineFactory } from '#engine/index.js';
 import * as fs from 'node:fs';
 import * as assert from 'node:assert';
 import { CalculationStats } from '#types/index.js';
+import { EngineTestUtils } from '#tests/infra/test-utils.js';
 
 async function debug() {
     const engine = EngineFactory.createForVersion('1.7.2');
@@ -12,12 +13,11 @@ async function debug() {
     console.log(`Profiling 1.7.2 Book search...`);
 
     const instrumentation: any = {
-        statsCache: { hits: 0, misses: 0 },
         poolCache: { hits: 0, misses: 0 },
         distCache: { hits: 0, misses: 0 }
     };
 
-    await engine.calculate({
+    await EngineTestUtils.getStats(engine, {
         item,
         xp: level,
         material,

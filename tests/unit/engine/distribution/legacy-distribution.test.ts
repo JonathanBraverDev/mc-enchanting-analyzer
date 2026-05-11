@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { EngineFactory } from '#engine/factory.js';
+import { EngineTestUtils } from '#tests/infra/test-utils.js';
 
 describe('Legacy Distribution & Mechanics (Beta 1.9 - 1.2.5)', () => {
     it('should support XP levels up to 50 for version 1.1', async () => {
@@ -35,7 +36,7 @@ describe('Legacy Distribution & Mechanics (Beta 1.9 - 1.2.5)', () => {
         const engine = EngineFactory.createForVersion('1.21');
 
         await assert.rejects(async () => {
-            await engine.calculate({ item: 'sword', xp: 31, material: 'diamond' });
+            await EngineTestUtils.getStats(engine, { item: 'sword', xp: 31, material: 'diamond' });
         }, /XP level 31 exceeds the maximum/);
     });
 });

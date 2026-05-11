@@ -57,7 +57,6 @@ UI input
 
 | API | Purpose |
 |---|---|
-| `calculate({ item, xp, material, ...config })` | Runs a standard calculation and returns summarized `CalculationStats` |
 | `searchToCheckpoint({ item, xp, material, ...config })` | Searches one target checkpoint and returns a `SearchResult` |
 | `searchSequentialCheckpoints({ item, xp, material, checkpoints, onCheckpointComplete, ...config })` | Searches multiple checkpoints in order and streams each completed `SearchResult` |
 | `searchModifiedLevel({ item, modLevel, material, ...config })` | Searches one modified level and returns its reusable `SearchState` |
@@ -181,9 +180,8 @@ The browser uses two dedicated workers:
 | distribution cache | Modified-level distributions by version/xp/enchantability |
 | pool cache | Eligible enchant pools by version/item/level; material is intentionally absent because it affects modified-level distribution, not per-level eligibility |
 | frontier cache | Reusable modified-level search states keyed by version/item/material/modified level |
-| stats cache | Final `CalculationStats` summaries keyed by version/item/material/xp and clue when relevant |
 
-The registry rule model declares item/material compatibility together, but the engine cache keys still follow the computation they cache. Pool entries only depend on the fixed enchantable item pool at a modified level. Frontier and stats entries include material because material changes enchantability, which changes the modified-level distribution and therefore the final weighted result. Threshold-aware reads can reuse more precise cached state when it already satisfies the requested checkpoint.
+The registry rule model declares item/material compatibility together, but the engine cache keys still follow the computation they cache. Pool entries only depend on the fixed enchantable item pool at a modified level. Frontier entries include material because material changes enchantability, which changes the modified-level distribution and therefore the weighted search state. Threshold-aware reads can reuse more precise cached state when it already satisfies the requested checkpoint.
 
 ## Release Documentation Rule
 

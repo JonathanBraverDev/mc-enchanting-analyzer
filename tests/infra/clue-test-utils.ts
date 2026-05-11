@@ -4,6 +4,7 @@ import { EngineFactory } from '#engine/factory.js';
 import { SummaryService } from '#services/SummaryService.js';
 import { TEST_DATA } from '#tests/infra/test-data.js';
 import type { CalculationStats } from '#types/index.js';
+import { EngineTestUtils } from '#tests/infra/test-utils.js';
 
 type TestEngine = ReturnType<typeof EngineFactory.createForVersion>;
 type CheckpointResult = Awaited<ReturnType<TestEngine['searchToCheckpoint']>>;
@@ -60,7 +61,7 @@ export async function calculateWithPruning(
 ): Promise<CalculationStats> {
     const engine = EngineFactory.createForVersion('1.21.11');
     engine.resetCaches();
-    return engine.calculate({
+    return EngineTestUtils.getStats(engine, {
         item,
         xp: 30,
         material,

@@ -45,7 +45,6 @@ export interface CacheStats {
 export interface CacheConfig {
   comboOtherSize: number;
   comboBookSize: number;
-  statsSize: number;
   poolSize: number;
 }
 
@@ -81,8 +80,6 @@ export interface EngineInstrumentation {
   poolCache: CacheStats;
   /** Modified-level distribution cache metrics. */
   distCache: CacheStats;
-  /** Final CalculationStats cache metrics. */
-  statsCache: CacheStats;
   totalIterations: number;
   totalPrunedNodes: number;
   roundingErrorEvents: number;
@@ -250,10 +247,6 @@ export interface ItemSelectionRequest {
     item: string;
     material: string;
 }
-
-export type CalculationRequest = SearchConfig & ItemSelectionRequest & {
-    xp: number;
-};
 
 export type CheckpointSearchRequest = SearchConfig & ItemSelectionRequest & {
     xp: number;
