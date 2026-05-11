@@ -140,6 +140,20 @@ export interface SearchGraphExpansion {
     readonly terminalReason: SearchGraphTerminalReason;
 }
 
+export interface SearchGraphMaterializedNode {
+    readonly node: SearchGraphNode;
+    readonly hasExpansion: boolean;
+}
+
+export interface SearchGraphDiagnostics {
+    readonly key: SearchGraphKey;
+    readonly poolSize: number;
+    readonly totalWeight: number;
+    readonly nodeCount: number;
+    readonly expansionCount: number;
+    readonly nodes: readonly SearchGraphMaterializedNode[];
+}
+
 /**
  * Lazy structural graph for one search pool signature.
  *
@@ -218,6 +232,25 @@ export class SearchGraph {
             : this.buildSearchExpansion(nodeId);
         this.expansionCache[nodeId] = expansion;
         return expansion;
+    }
+
+    /** Returns diagnostic metadata without materializing new expansions. */
+    public getDiagnostics(includeNodes = false): SearchGraphDiagnostics {
+        const nodes = includeNodes
+            ? this.combos.map((_, index) => Object.freeze({
+                node: this.getNode(index as SearchGraphNodeId),
+                hasExpansion: this.expansionCache[index] !== undefined
+            }))
+            : [];
+
+        return Object.freeze({
+            key: this.key,
+            poolSize: this.pool.entries.length,
+            totalWeight: this.pool.totalWeight,
+            nodeCount: this.size,
+            expansionCount: this.expansionCache.reduce((count, expansion) => count + (expansion === undefined ? 0 : 1), 0),
+            nodes: Object.freeze(nodes)
+        });
     }
 
     private buildRootExpansion(nodeId: SearchGraphNodeId): SearchGraphExpansion {

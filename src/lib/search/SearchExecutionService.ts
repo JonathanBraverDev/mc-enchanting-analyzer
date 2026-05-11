@@ -33,11 +33,12 @@ export class SearchExecutionService {
             threshold: request.exhaustive ? 0n : request.threshold ?? ENGINE_LIMITS.DEFAULT_THRESHOLD,
             maxIterations: request.exhaustive ? undefined : request.maxIterations ?? ENGINE_LIMITS.MAX_ITERATIONS_UNBOUNDED,
             exhaustive: request.exhaustive,
+            targetClassifiedMass: request.exhaustive ? undefined : request.targetClassifiedMass,
             signal: request.signal
         });
 
         recordedSearchMs = this.finishTiming(request.timing, timingStart, recordedSearchMs);
-        return this.toSearchResult(snapshot, request.exhaustive ? 0n : request.threshold, undefined, request.instrumentation, request.timing);
+        return this.toSearchResult(snapshot, request.exhaustive ? 0n : request.threshold, request.targetClassifiedMass, request.instrumentation, request.timing);
     }
 
     /** Advances one run through an ordered checkpoint plan, streaming each completed boundary. */
@@ -146,6 +147,7 @@ export class SearchExecutionService {
                 seededLevelCount: snapshot.seededLevelCount,
                 pendingEntryCount: snapshot.pendingCount,
                 largestPendingMass: ProbUtils.toNumber(snapshot.largestPendingMass),
+                lastExpandedMass: ProbUtils.toNumber(snapshot.lastExpandedMass),
                 activeResidueCount: snapshot.activeResidueCount,
                 activeResidueMass: ProbUtils.toNumber(snapshot.activeResidueMass),
                 canImprove: !snapshot.fullyResolved && snapshot.largestPendingMass >= thresholdUnits,

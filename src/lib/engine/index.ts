@@ -149,6 +149,12 @@ export class EnchantEngine {
                 throw new Error(`Invalid threshold: ${t}. Threshold must be between 0 and 1.0.`);
             }
         }
+        if (request.targetClassifiedMass !== undefined) {
+            const target = ProbUtils.toNumber(request.targetClassifiedMass);
+            if (target < 0 || target > 1.0) {
+                throw new Error(`Invalid targetClassifiedMass: ${target}. Must be between 0 and 1.0.`);
+            }
+        }
         if (request.maxIterations !== undefined && (request.maxIterations <= 0 || !Number.isInteger(request.maxIterations))) {
             throw new Error(`Invalid maxIterations: ${request.maxIterations}. Must be a positive integer.`);
         }
