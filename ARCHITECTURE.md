@@ -1,5 +1,7 @@
 # Architecture Map - Minecraft Enchantment Analyzer (V7)
 
+Release-reviewed for v7.0.0: the public engine surface is `getStats(...)` for summarized probabilities plus checkpoint APIs for raw or streaming search results.
+
 ## Entry Points
 
 | Entry point | Purpose |

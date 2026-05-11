@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## v7.0.0 (2026-05-11)
+
+### Added
+- **Shared V7 search engine**: Replaced independent per-modified-level searches with a globally weighted checkpoint search that expands the highest-probability frontier first.
+- **Checkpoint and mass-target controls**: Added raw checkpoint search APIs, sequential checkpoint streaming, exhaustive search mode, classified-mass exits, and pending frontier diagnostics.
+- **Public stats API**: Added `getStats(...)` as the standard summarized-probability entry point for product and tooling callers.
+
+### Improved
+- **Book search coverage**: Modern book regression coverage now uses a bounded 99.95% classified-mass fixture that preserves the full classified combo distribution without requiring exhaustive latest-version tail expansion.
+- **Clue-conditioned search**: Clue-aware pruning now runs natively through V7 search and worker paths while preserving incompatible mass accounting.
+- **Release readiness**: Refreshed architecture docs, README references, snapshots, and UI tests around the V7 engine semantics.
+
+### Developer Experience
+- **Snapshot tooling**: Snapshot generation supports mass-targeted cases, and engine snapshot tests reserve enough V8 heap for large book fixtures.
+- **Test coverage**: Golden snapshots, mass conservation checks, worker protocol tests, UI regression tests, and release validation now exercise V7-native outputs.
+
+### Breaking
+- Removed the legacy `calculate(...)` engine entry point. Use `getStats(...)` for summarized probabilities or checkpoint APIs for raw search results.
+- Removed obsolete V6 search scaffolding and V7-prefixed internal API names now that the shared search engine is the primary engine path.
+
 ## v6.1.0 (2026-05-09)
 
 ### Added
