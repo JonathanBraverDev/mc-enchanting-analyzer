@@ -36,7 +36,6 @@ describe('EnchantEngine: sequential checkpoint aggregation', () => {
             xp: XP,
             material: MATERIAL,
             threshold: TEST_DATA.THRESHOLDS.PROB_MIN,
-            resultsLimit: 10000
         });
         const singleStats = SummaryService.summarize({
             combos: singleResult.combos,
@@ -56,7 +55,6 @@ describe('EnchantEngine: sequential checkpoint aggregation', () => {
             ],
             onCheckpointComplete: () => {},
             threshold: TEST_DATA.THRESHOLDS.PROB_MIN,
-            resultsLimit: 10000
         });
         const sequentialStats = SummaryService.summarize({
             combos: sequentialResult.combos,
@@ -187,7 +185,6 @@ describe('EnchantEngine checkpoint search', () => {
             material: MATERIAL,
             threshold: TEST_DATA.THRESHOLDS.PROB_MIN,
             summaryLimit: 10000,
-            resultsLimit: 10000
         });
 
         assert.strictEqual(Object.keys(sequentialStats.combos).length, Object.keys(fullStats.combos).length);

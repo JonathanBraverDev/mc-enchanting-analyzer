@@ -15,7 +15,6 @@ async function calculateSnapshot(engine: EnchantEngine, request: { item: string;
         ...request,
         exhaustive: TEST_DEFAULTS.SNAPSHOT_EXHAUSTIVE,
         summaryLimit: TEST_DEFAULTS.SNAPSHOT_RESULTS_LIMIT,
-        resultsLimit: TEST_DEFAULTS.SNAPSHOT_RESULTS_LIMIT,
         useCache: false
     });
 }

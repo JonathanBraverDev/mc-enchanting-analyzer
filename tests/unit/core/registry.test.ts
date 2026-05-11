@@ -152,7 +152,7 @@ describe('Registry & Data Rules Test Suite', () => {
                     `${version}: helper should reject ${item}/${material}`
                 );
                 await assert.rejects(
-                    () => engine.getStats({ item, material, xp: 1, threshold: 0.5, resultsLimit: 10 }),
+                    () => engine.getStats({ item, material, xp: 1, threshold: 0.5 }),
                     /not available/,
                     `${version}: engine should reject ${item}/${material}`
                 );
@@ -172,7 +172,7 @@ describe('Registry & Data Rules Test Suite', () => {
                 const registry = engine.registry;
                 assert.strictEqual(isMaterialEligible(registry, item, material), true, `${version}: ${item}/${material} should be eligible`);
                 assert.doesNotThrow(() => getEnchantability(registry, material, item));
-                const stats = await engine.getStats({ item, material, xp: 1, threshold: 0.5, resultsLimit: 10 });
+                const stats = await engine.getStats({ item, material, xp: 1, threshold: 0.5 });
                 assert.ok(stats.accuracy >= 0, `${version}: ${item}/${material} should summarize`);
             }
         });

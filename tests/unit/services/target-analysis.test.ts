@@ -91,23 +91,31 @@ describe('TargetAnalysisService', () => {
         assert.deepStrictEqual([...result!.combos.keys()], [terminalCombo, frontierCombo]);
     });
 
-    it('uses pending book target mass without displaying pre-removal combos', () => {
+    it('uses post-removal pending book target mass without displaying pre-removal combos', () => {
         const terminalCombo = pack([EFF_V, FORT_III]);
         const frontierCombo = pack([EFF_IV, FORT_III, UNBR_III]);
         const frontierMass = PRECISION / 4n;
         const frontierScale = PRECISION / 2n;
         const expectedFrontier = ProbUtils.scale(frontierMass, frontierScale);
+        const targets = [target(EFF_IV), target(FORT_III)];
+        const redistributed = ComboUtils.removeAdditional(frontierCombo);
+        const postRemovalShare = expectedFrontier / BigInt(redistributed.length);
+        let expectedPostRemovalMatch = 0n;
+        for (const combo of redistributed) {
+            if (TargetAnalysisService.matchesCombo(combo, targets, indexToEnchant)) expectedPostRemovalMatch += postRemovalShare;
+        }
 
         const result = TargetAnalysisService.aggregate({
             combos: new Map([[terminalCombo, PRECISION / 2n], [pack([EFF_V]), PRECISION / 8n]]),
             indexToEnchant,
-            targets: [target(EFF_IV), target(FORT_III)],
+            targets,
             pendingEntries: [makePendingEntry(frontierCombo, 3, expectedFrontier)],
             comboLimit: 10,
             isBook: true
         });
 
-        assert.strictEqual(result?.matchMass, PRECISION / 2n + expectedFrontier);
+        assert.ok(expectedPostRemovalMatch < expectedFrontier);
+        assert.strictEqual(result?.matchMass, PRECISION / 2n + expectedPostRemovalMatch);
         assert.strictEqual(result?.matchingComboCount, 1);
         assert.deepStrictEqual([...result!.combos.keys()], [terminalCombo]);
     });

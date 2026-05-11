@@ -51,7 +51,6 @@ async function runCase(testCase: PerfCase) {
         threshold: TEST_DEFAULTS.SNAPSHOT_THRESHOLD,
         maxIterations: ENGINE_LIMITS.MAX_ITERATIONS_UNBOUNDED,
         summaryLimit: ENGINE_LIMITS.MAX_RESULTS_UNBOUNDED,
-        resultsLimit: ENGINE_LIMITS.MAX_RESULTS_UNBOUNDED,
         useCache: false,
         timing
     });
