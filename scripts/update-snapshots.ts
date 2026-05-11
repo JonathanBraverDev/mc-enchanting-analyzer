@@ -14,6 +14,8 @@ interface SnapshotCase {
     xp: number;
     material: string;
     clue?: string;
+    targetClassifiedMass?: number;
+    maxIterations?: number;
     expensive?: boolean;
 }
 
@@ -22,7 +24,15 @@ const SNAPSHOT_CASES: SnapshotCase[] = [
     { name: '1.21_mace_30_mace', version: '1.21', item: 'mace', xp: 30, material: 'mace' },
     { name: '1.7.2_book_30_book', version: '1.7.2', item: 'book', xp: 30, material: 'book' },
     { name: '1.21.11_spear_30_diamond', version: '1.21.11', item: 'spear', xp: 30, material: 'diamond' },
-    { name: '1.21.11_book_30_book', version: '1.21.11', item: 'book', xp: 30, material: 'book', expensive: true },
+    {
+        name: '1.21.11_book_30_book',
+        version: '1.21.11',
+        item: 'book',
+        xp: 30,
+        material: 'book',
+        targetClassifiedMass: TEST_DEFAULTS.MODERN_BOOK_SNAPSHOT_TARGET_CLASSIFIED_MASS,
+        maxIterations: TEST_DEFAULTS.MODERN_BOOK_SNAPSHOT_ITERATIONS
+    },
     { name: '1.21_sword_30_diamond_clue_sharpness', version: '1.21', item: 'sword', xp: 30, material: 'diamond', clue: 'Sharpness IV' },
     { name: '1.8_bow_30_bow_clue_power', version: '1.8', item: 'bow', xp: 30, material: 'bow', clue: 'Power IV' }
 ];
@@ -65,18 +75,24 @@ async function getStats(engine: EnchantEngine, testCase: SnapshotCase): Promise<
 
     // Snapshot generation is a final artifact export. Use the synchronous search run path
     // so the search loop does not repeatedly materialize full checkpoint snapshots
-    // while yielding; modern book exhaustive runs have millions of pending entries.
+    // while yielding; modern book runs have millions of pending entries.
+    const threshold = testCase.targetClassifiedMass === undefined
+        ? TEST_DEFAULTS.SNAPSHOT_THRESHOLD
+        : 0;
     const snapshot = run.searchToCheckpoint({
-        exhaustive: TEST_DEFAULTS.SNAPSHOT_EXHAUSTIVE,
-        threshold: TEST_DEFAULTS.SNAPSHOT_THRESHOLD,
-        maxIterations: TEST_DEFAULTS.SNAPSHOT_ITERATIONS
+        exhaustive: testCase.targetClassifiedMass === undefined ? TEST_DEFAULTS.SNAPSHOT_EXHAUSTIVE : false,
+        threshold,
+        maxIterations: testCase.maxIterations ?? TEST_DEFAULTS.SNAPSHOT_ITERATIONS,
+        targetClassifiedMass: testCase.targetClassifiedMass
     });
     const summaryRequest = {
         combos: snapshot.results,
         snapshot,
         indexToEnchant: engine.registry.indexToEnchant,
-        comboLimit: ENGINE_LIMITS.MAX_RESULTS_UNBOUNDED,
-        threshold: TEST_DEFAULTS.SNAPSHOT_EXHAUSTIVE ? 0 : TEST_DEFAULTS.SNAPSHOT_THRESHOLD,
+        comboLimit: testCase.targetClassifiedMass === undefined
+            ? ENGINE_LIMITS.MAX_RESULTS_UNBOUNDED
+            : TEST_DEFAULTS.SNAPSHOT_RESULTS_LIMIT,
+        threshold: testCase.targetClassifiedMass === undefined && TEST_DEFAULTS.SNAPSHOT_EXHAUSTIVE ? 0 : threshold,
         isBook: testCase.item === 'book'
     };
 
@@ -86,7 +102,7 @@ async function getStats(engine: EnchantEngine, testCase: SnapshotCase): Promise<
 }
 
 async function updateSnapshots() {
-    console.log('Updating exhaustive regression snapshots...');
+    console.log('Updating regression snapshots...');
 
     for (const testCase of getRequestedCases()) {
         console.log(`Generating ${testCase.name}...`);
@@ -96,7 +112,7 @@ async function updateSnapshots() {
         await SnapshotUtils.saveSnapshot(testCase.name, stats, engine.registry);
     }
 
-    console.log('Exhaustive snapshots updated successfully.');
+    console.log('Regression snapshots updated successfully.');
 }
 
 updateSnapshots().catch(err => {

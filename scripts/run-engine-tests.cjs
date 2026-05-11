@@ -40,10 +40,17 @@ if (process.argv.includes('--check')) {
 }
 
 const tsxBin = join(root, 'node_modules', '.bin', process.platform === 'win32' ? 'tsx.cmd' : 'tsx');
+const requiredNodeOption = '--max-old-space-size=8192';
+const existingNodeOptions = process.env.NODE_OPTIONS ?? '';
+const nodeOptions = existingNodeOptions.includes('--max-old-space-size=')
+  ? existingNodeOptions
+  : `${existingNodeOptions} ${requiredNodeOption}`.trim();
+
 const result = spawnSync(tsxBin, ['--test', '--test-concurrency=1', ...testFiles], {
   cwd: root,
   stdio: 'inherit',
   shell: process.platform === 'win32',
+  env: { ...process.env, NODE_OPTIONS: nodeOptions },
 });
 
 if (result.error) {

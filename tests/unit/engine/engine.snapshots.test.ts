@@ -58,13 +58,4 @@ describe('Enchantment Engine Exhaustive Regression Snapshots', () => {
         const stats = await calculateSnapshot(engine, { item: TEST_DATA.ITEMS.BOOK, xp: 30, material: TEST_DATA.MATERIALS.BOOK });
         await SnapshotUtils.assertSnapshot('1.7.2_book_30_book', stats, engine.registry);
     });
-
-    it.skip('Snapshot: 1.21.11 Book @ Level 30', async () => {
-        // Blocked: exhaustive generation currently exceeds practical local runtime/heap budgets.
-        // Keep the fixture out of the golden suite until the book-tail implementation can bottom out.
-        const engine = EngineFactory.createForVersion('1.21.11');
-        engine.resetCaches();
-        const stats = await calculateSnapshot(engine, { item: TEST_DATA.ITEMS.BOOK, xp: 30, material: TEST_DATA.MATERIALS.BOOK });
-        await SnapshotUtils.assertSnapshot('1.21.11_book_30_book', stats, engine.registry);
-    });
 });

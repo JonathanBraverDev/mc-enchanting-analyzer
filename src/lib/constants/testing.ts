@@ -13,6 +13,12 @@ export const TEST_DEFAULTS = {
     /** Max iterations for non-exhaustive refinement/performance probes. */
     SNAPSHOT_ITERATIONS: ENGINE_LIMITS.MAX_ITERATIONS_UNBOUNDED,
 
+    /** Modern book golden snapshot target: classify 99.95% of probability mass without exhaustive bottom-out. */
+    MODERN_BOOK_SNAPSHOT_TARGET_CLASSIFIED_MASS: 0.9995,
+
+    /** Iteration ceiling high enough for the modern book snapshot to reach its 99.95% mass target. */
+    MODERN_BOOK_SNAPSHOT_ITERATIONS: 3_000_000,
+
     /** Results limit for snapshot generation to capture the full distribution tail. */
     SNAPSHOT_RESULTS_LIMIT: ENGINE_LIMITS.MAX_RESULTS_UNBOUNDED,
 
