@@ -1,15 +1,12 @@
 import { Enchantment, MaterialValues, RegistryMutation, RomanMap } from '#types/domain.js';
-import { NodeIdSearchFrontier } from '#engine/search/NodeIdSearchFrontier.js';
-import { SearchPoolPlan } from '#engine/search/SearchPoolPlan.js';
-import { SearchNodeGraph } from '#engine/search/SearchNodeGraph.js';
-import type { ClueSearchPolicy } from '#engine/search/ClueSearchPolicy.js';
+import type { SearchRunSnapshot } from '#lib/search/SearchRun.js';
 
 import { MassAccountingBreakdown } from '#types/mass.js';
 
 /**
- * Presented calculation statistics from the search engine.
+ * Presented enchant stats from the search engine.
  */
-export interface CalculationStats {
+export interface EnchantStats {
   /** Map of enchantment rank IDs to their total cumulative probability. Key is (enchantId << 8 | rank). */
   ranks: { [idAndRank: number]: number };
   /** Map of base enchantment IDs to their total probability on the item (any rank). */
@@ -48,13 +45,16 @@ export interface CacheStats {
 export interface CacheConfig {
   comboOtherSize: number;
   comboBookSize: number;
-  statsSize: number;
   poolSize: number;
 }
 
 export interface SearchCheckpoint {
+  /** Stop when the largest pending node mass falls below this value. Use 0 to disable the threshold stop. */
   threshold: number;
+  /** Maximum graph-node expansions for this checkpoint. */
   limit: number;
+  /** Optional classified-mass target for this checkpoint. Search may still stop earlier on threshold/limit. */
+  targetClassifiedMass?: number | bigint | undefined;
 }
 
 export interface ExploredMassSample {
@@ -78,9 +78,10 @@ export interface SearchTiming {
 export type EngineExitReason = 'threshold' | 'iterations' | 'mass' | 'aborted' | 'empty' | 'exhausted';
 
 export interface EngineInstrumentation {
+  /** Eligible-pool registry cache metrics. */
   poolCache: CacheStats;
+  /** Modified-level distribution cache metrics. */
   distCache: CacheStats;
-  frontierCache: CacheStats;
   totalIterations: number;
   totalPrunedNodes: number;
   roundingErrorEvents: number;
@@ -91,18 +92,16 @@ export interface EngineInstrumentation {
 
   /** Total entries in the combinations results map */
   resultsSize?: number | undefined;
-  /** Current number of nodes in the priority queue */
+  /** Current number of pending weighted graph nodes in the frontier heap. */
   queueSize?: number | undefined;
-  /** Size of the heap's internal deduplication map */
-  indexMapSize?: number | undefined;
   /** Current heap usage in MB */
   memoryMB?: number | undefined;
 
   /** Total unique results aggregated across all modified levels so far in this specific calculation */
   globalResultsSize?: number | undefined;
-  /** Total nodes currently stored in ALL frontiers across the entire engine's LRU caches */
+  /** Total nodes currently stored in engine-wide cached pending search state */
   globalCacheNodes?: number | undefined;
-  /** Total results currently stored in ALL frontiers across the entire engine's LRU caches */
+  /** Total results currently stored in engine-wide cached search state */
   globalCacheResults?: number | undefined;
 
   /** Optional script/diagnostic targets for recording explored mass crossings. */
@@ -114,6 +113,36 @@ export interface EngineInstrumentation {
 
   /** Optional: If true, perform expensive global heap scans for cache nodes/results */
   trackGlobalMetrics?: boolean | undefined;
+
+  /** Shared search diagnostics. Present when the engine records them. */
+  search?: SearchInstrumentation | undefined;
+}
+
+export interface SearchInstrumentation {
+  /** Number of structural search graphs currently used by the run. */
+  graphCount: number;
+  /** Number of modified levels seeded into the run. */
+  seededLevelCount: number;
+  /** Number of distinct `(graph, node)` entries still pending in the global frontier. */
+  pendingEntryCount: number;
+  /** Largest pending frontier mass as a normalized probability. */
+  largestPendingMass: number;
+  /** Most recent expanded frontier-node mass as a normalized probability. */
+  lastExpandedMass: number;
+  /** Active node-local split-residue buckets with non-zero mass. */
+  activeResidueCount: number;
+  /** Total active node-local split residue as a normalized probability. */
+  activeResidueMass: number;
+  /** Whether this snapshot can still improve under a lower threshold or higher iteration cap. */
+  canImprove: boolean;
+  /** Cumulative structural SearchGraph cache hits for this engine instance. */
+  graphCacheHits?: number | undefined;
+  /** Cumulative structural SearchGraph cache misses for this engine instance. */
+  graphCacheMisses?: number | undefined;
+  /** Cumulative resumable SearchRun cache hits for this engine instance. */
+  runCacheHits?: number | undefined;
+  /** Cumulative resumable SearchRun cache misses for this engine instance. */
+  runCacheMisses?: number | undefined;
 }
 
 export interface ResolvedRegistry {
@@ -155,46 +184,6 @@ export interface ExpansionBlueprint {
     edgeStart: number;
     currentCount: number;
     currentCombo: PackedCombo;
-}
-
-/**
- * Shared context for mass distribution and forwarding operations.
- * Bundles search state to reduce parameter ceremony.
- */
-export interface ForwardingContext {
-    registry: RegistryState;
-    results: Map<PackedCombo, bigint>;
-    queue: NodeIdSearchFrontier;
-    graph: SearchNodeGraph;
-    resultsLimit: number;
-    instrumentation?: EngineInstrumentation | undefined;
-    timing?: SearchTiming | undefined;
-
-    // Search-global parameters
-    item: string;
-    poolPlan: SearchPoolPlan;
-    cluePolicy?: ClueSearchPolicy | undefined;
-}
-
-
-/**
- * State of a search for enchantment combinations.
- */
-export interface SearchState {
-    queue: NodeIdSearchFrontier;
-    graph: SearchNodeGraph;
-    results: Map<PackedCombo, bigint>;
-    tracker: import('../engine/search/SearchStateTracker.js').SearchStateTracker;
-    threshold: bigint;
-    iterations: number;
-    nodesProcessed: number;
-    exitReason?: EngineExitReason | undefined;  // per-call output; not carried over on resume
-}
-
-export interface SearchFrontierSnapshot {
-    frontier: NodeIdSearchFrontier;
-    graph: SearchNodeGraph;
-    scale: bigint;
 }
 
 /**
@@ -242,12 +231,42 @@ export type ProbabilityValue = bigint & { __brand: "ProbabilityValue" };
 export interface SearchConfig {
     /** The observed enchantment clue (e.g. "Sharpness IV"). Trigger Bayesian conditioning if set. */
     clue?: string | null | undefined;
+    /**
+     * Search-detail stop: stop when the largest pending node mass falls below this value.
+     * At least one of `threshold`, `maxIterations`, or `targetClassifiedMass` is required unless
+     * `exhaustive: true` is set. Supplying two or more stop conditions is recommended for
+     * user-facing/product flows so searches have both a quality target and a safety bound.
+     */
     threshold?: number | bigint | undefined;
+    /**
+     * Classified-mass stop: stop once non-pending mass reaches this value. When omitted, no
+     * classified-mass stop is installed. A mass target by itself is valid for diagnostics/snapshots
+     * that know the desired completion target; add `maxIterations` too when a work budget matters.
+     */
+    targetClassifiedMass?: number | bigint | undefined;
     signal?: AbortSignal | undefined;
     onProgress?: ((update: ProgressUpdate) => void) | undefined;
+    /**
+     * Work-budget stop: maximum graph-node expansions to perform before returning a checkpoint.
+     * This is a safety/work cap, not a quality target. Lower caps usually return sooner all else
+     * equal, and iterations are the most direct work-budget metric, but no search control is a
+     * linear runtime proxy. Prefer pairing it with `threshold` or `targetClassifiedMass` for
+     * meaningful results.
+     */
     maxIterations?: number | undefined;
+    /**
+     * Explicit full-search escape hatch: ignore threshold, iteration cap, and classified-mass target,
+     * searching until the frontier is empty, aborted, or host resources are exhausted.
+     * This can be extremely expensive on modern book searches; keep product flows on checkpoint limits.
+     */
+    exhaustive?: boolean | undefined;
+    /**
+     * Maximum number of combo entries to include in summarized presentation output.
+     * Does not limit search work. Values above the normal export cap require `uncappedResults: true`.
+     */
     summaryLimit?: number | undefined;
-    resultsLimit?: number | undefined;
+    /** Explicitly allow summarized presentation output to include every combo result. Does not affect search work. */
+    uncappedResults?: boolean | undefined;
     useCache?: boolean | undefined;
     instrumentation?: EngineInstrumentation | undefined;
     timing?: SearchTiming | undefined;
@@ -257,18 +276,6 @@ export interface ItemSelectionRequest {
     item: string;
     material: string;
 }
-
-export type CalculationRequest = SearchConfig & ItemSelectionRequest & {
-    xp: number;
-};
-
-export type ModifiedLevelSearchRequest = ItemSelectionRequest & {
-    modLevel: number;
-    threshold?: bigint | undefined;
-    maxIterations?: number | undefined;
-    resultsLimit?: number | undefined;
-    instrumentation?: EngineInstrumentation | undefined;
-};
 
 export type CheckpointSearchRequest = SearchConfig & ItemSelectionRequest & {
     xp: number;
@@ -281,12 +288,14 @@ export type SequentialCheckpointSearchRequest = SearchConfig & ItemSelectionRequ
 };
 
 export interface SummaryRequest {
-    combos: Map<PackedCombo, bigint>;
-    tracker: import('../engine/search/SearchStateTracker.js').SearchStateTracker;
+    combos: ReadonlyMap<PackedCombo, bigint>;
+    snapshot: SearchRunSnapshot;
     indexToEnchant: number[];
+    /** Maximum combo entries to include. Values above the normal export cap require `uncappedResults: true`. */
     comboLimit?: number | undefined;
+    /** Explicitly allow every combo entry in presentation output. */
+    uncappedResults?: boolean | undefined;
     threshold?: number | undefined;
-    frontiers?: SearchFrontierSnapshot[] | undefined;
     isBook?: boolean | undefined;
 }
 
@@ -315,35 +324,11 @@ export interface ProgressReporter {
 
 /** Search results before presentation summarization. */
 export interface SearchResult {
-    combos: Map<PackedCombo, bigint>;
-    tracker: import('../engine/search/SearchStateTracker.js').SearchStateTracker;
-    frontiers?: SearchFrontierSnapshot[] | undefined;
+    snapshot: SearchRunSnapshot;
+    combos: ReadonlyMap<PackedCombo, bigint>;
     instrumentation?: EngineInstrumentation | undefined;
     timing?: SearchTiming | undefined;
     threshold: number;
-}
-
-/**
- * Context for the Best-First search algorithm tracking.
- * Used internally by the SearchController and SearchService.
- */
-export interface SearchContext {
-    threshold: bigint;
-    limit: number;
-    resultsLimit: number;
-    signal?: AbortSignal | undefined;
-    instrumentation?: EngineInstrumentation | undefined;
-    timing?: SearchTiming | undefined;
-}
-
-export interface ModifiedLevelSearchContext extends SearchContext {
-    registry: RegistryState;
-    item: string;
-    modLevel: number;
-    material?: string | undefined;
-    existingState?: SearchState | undefined;
-    useCache?: boolean | undefined;
-    targetClueId?: number | undefined;
 }
 
 export interface CheckpointSearchContext extends SearchConfig {

@@ -1,5 +1,5 @@
 import { PACKING_CONSTANTS } from '#constants/engine.js';
-import { getEligiblePool, getEnchantability, getFullEnchantName } from '#core/registry.js';
+import { getCandidatePool, getEnchantability, getFullEnchantName } from '#core/registry.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { TargetAnalysisService } from '#services/TargetAnalysisService.js';
 import type {
@@ -7,18 +7,18 @@ import type {
     PackedCombo,
     PackedTargetRequirement,
     RegistryState,
-    SearchFrontierSnapshot,
     TargetLevelClueAdvisorView,
     TargetLevelClueRecommendationView
 } from '#types/index.js';
-import { ComboUtils, ProbUtils, PRECISION } from '#utils/index.js';
+import type { PendingFrontierEntry } from '#lib/search/SearchRun.js';
+import { ComboUtils, PRECISION, ProbUtils } from '#utils/index.js';
 
 export interface TargetClueAdvisorRequest {
-    combos: Map<PackedCombo, bigint>;
+    combos: ReadonlyMap<PackedCombo, bigint>;
     indexToEnchant: number[];
     targets: PackedTargetRequirement[];
     registry: RegistryState;
-    frontiers?: SearchFrontierSnapshot[] | undefined;
+    pendingEntries?: readonly PendingFrontierEntry[] | undefined;
     limit?: number | undefined;
 }
 
@@ -52,7 +52,7 @@ export class TargetClueAdvisorService {
             indexToEnchant,
             targets,
             registry,
-            frontiers = [],
+            pendingEntries = [],
             limit = 5
         } = request;
 
@@ -64,17 +64,10 @@ export class TargetClueAdvisorService {
             this.addComboContribution(buckets, packed, mass, indexToEnchant, targets);
         }
 
-        for (const { frontier, graph, scale } of frontiers) {
-            frontier.forEachNode((nodeId, prob) => {
-                this.addComboContribution(
-                    buckets,
-                    graph.getCombo(nodeId),
-                    ProbUtils.scale(prob, scale),
-                    indexToEnchant,
-                    targets
-                );
-            });
+        for (const entry of pendingEntries) {
+            this.addComboContribution(buckets, entry.combo, entry.mass, indexToEnchant, targets);
         }
+
 
         const anyBaselineChanceMass = this.calculateBaselineChance(buckets, () => true);
         const compatibleBaselineChanceMass = this.calculateBaselineChance(
@@ -118,7 +111,7 @@ export class TargetClueAdvisorService {
         const distribution = this.distributionService.getModifiedLevelDist(registry, xpLevel, enchantability);
 
         for (const modLevelText of Object.keys(distribution)) {
-            const pool = getEligiblePool(registry, item, Number(modLevelText));
+            const pool = getCandidatePool(registry, item, Number(modLevelText));
             if (this.poolSupportsTargets(pool, targets)) return true;
         }
 

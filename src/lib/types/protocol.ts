@@ -49,6 +49,7 @@ export interface TopRunStartRequest {
   refinementLevels: RefinementLevelName[];
   view?: {
     comboLimit?: number;
+    uncappedResults?: boolean;
   };
 }
 
@@ -60,6 +61,7 @@ export interface TopRunProjectRequest {
   refinementLevels: RefinementLevelName[];
   view?: {
     comboLimit?: number;
+    uncappedResults?: boolean;
   };
 }
 

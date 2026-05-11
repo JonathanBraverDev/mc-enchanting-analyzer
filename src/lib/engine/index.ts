@@ -1,14 +1,14 @@
-import { BuiltRegistryState, CalculationRequest, CalculationStats, CheckpointSearchRequest, EngineInstrumentation, ModifiedLevelSearchRequest, SearchResult, SearchConfig, SearchState, SequentialCheckpointSearchRequest } from '#types/index.js';
-import { KeyUtils, ProbUtils } from '#utils/index.js';
-import { getItemId, getMaterialId, isItemAvailable, isMaterialEligible, getEligibleListNumeric as getRegistryEligibleListNumeric } from '#core/registry.js';
-import { ENGINE_LIMITS } from '#constants/engine.js';
+import { BuiltRegistryState, EnchantStats, CheckpointSearchRequest, EngineInstrumentation, SearchResult, SequentialCheckpointSearchRequest } from '#types/index.js';
+import { isItemAvailable, isMaterialEligible, getAvailablePool as getRegistryAvailablePool } from '#core/registry.js';
+import { ProbUtils } from '#utils/index.js';
 import { MINECRAFT_RULES } from '#constants/minecraft.js';
-import { getSearchLimit } from '#engine/utils.js';
 import { CacheManager } from '#engine/cache/CacheManager.js';
-import { SummaryService } from '#services/SummaryService.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
-import { SearchService } from '#engine/search/SearchService.js';
+import { SearchExecutionService } from '#lib/search/SearchExecutionService.js';
 import { ClueValidator } from '#core/clue.js';
+import { SummaryService } from '#services/SummaryService.js';
+import { ENGINE_LIMITS } from '#constants/engine.js';
+import { getDefaultStatsCheckpoint } from '#core/config.js';
 export { EngineFactory } from './factory.js';
 
 /**
@@ -24,7 +24,7 @@ export class EnchantEngine {
         registry: BuiltRegistryState,
         private readonly cache: CacheManager,
         private readonly distributionService: ModifiedLevelDistributionService,
-        private readonly searchService: SearchService
+        private readonly searchService: SearchExecutionService = new SearchExecutionService(distributionService)
     ) {
         this._registry = registry;
     }
@@ -32,15 +32,11 @@ export class EnchantEngine {
     /** Clears all engine-level caches. */
     public resetCaches(): void {
         this.cache.clearAll();
-    }
-
-    /** Clears only the stats cache. */
-    public resetStatsCache(): void {
-        this.cache.clearStats();
+        this.searchService.clearCache();
     }
 
     /** Returns current cache performance metrics. */
-    public getCacheMetrics(): { distCache: { hits: number; misses: number }; poolCache: { hits: number; misses: number }; frontierCache: { hits: number; misses: number } } {
+    public getCacheMetrics(): { distCache: { hits: number; misses: number }; poolCache: { hits: number; misses: number } } {
         return this.cache.getEngineMetrics();
     }
 
@@ -58,204 +54,78 @@ export class EnchantEngine {
     /**
      * Returns a list of eligible enchantments filtered by conflict bitset.
      */
-    public getEligibleListNumeric(item: string, level: number, bitset: bigint = 0n): number[] {
-        return getRegistryEligibleListNumeric(this._registry, item, level, bitset, this.cache, this._registry.version);
+    public getAvailablePool(item: string, level: number, bitset: bigint = 0n): number[] {
+        return getRegistryAvailablePool(this._registry, item, level, bitset, this.cache, this._registry.version);
     }
 
     /**
-     * Search for enchantment combinations at a specific modified level.
-     *
-     * @param item Item type.
-     * @param modLevel The pre-computed modified level for this search.
-     * @param material Item material.
-     * @param threshold High-precision bigint threshold (1.0 = 10^18).
-     * @param maxIterations Max nodes to process.
-     * @param resultsLimit Max unique combinations to retain before recording capped mass.
-     * @param instrumentation Optional performance tracking.
-     */
-    public async searchModifiedLevel(request: ModifiedLevelSearchRequest): Promise<SearchState> {
-        const { item, material } = request;
-        const {
-            modLevel,
-            threshold = ProbUtils.toBigInt(ENGINE_LIMITS.DEFAULT_THRESHOLD),
-            maxIterations,
-            resultsLimit = ENGINE_LIMITS.MAX_RESULTS_UNBOUNDED,
-            instrumentation
-        } = request;
-        const cacheKey = this.getPackedKey(item, modLevel, material);
-        const cached = this.cache.getSearchState(item, this.registry.version, cacheKey) as SearchState | undefined;
-        // This one-level API returns a frontier directly, so a complete cached frontier is already
-        // the full answer. Request-level searches still enter SearchService to preserve reporting.
-        if (cached && cached.threshold <= threshold) return cached;
-
-        return this.searchService.searchModifiedLevel({
-            registry: this.registry,
-            item,
-            modLevel,
-            material,
-            useCache: true,
-            existingState: cached,
-            threshold,
-            limit: getSearchLimit(item, ProbUtils.toNumber(threshold), maxIterations),
-            resultsLimit,
-            instrumentation
-        });
-    }
-
-    /**
-     * Sequential checkpoint version of searchToCheckpoint for v5 workers.
-     * Streams search results via callback for each checkpoint.
+     * Runs one request through an ordered checkpoint plan and streams each completed checkpoint.
      */
     public async searchSequentialCheckpoints(request: SequentialCheckpointSearchRequest): Promise<SearchResult> {
-        this.validateRequest(request);
-        const { item, material } = request;
-        const targetClueId = request.clue ? this.getPackedClue(item, request.clue) : undefined;
-
-        return this.searchService.searchSequentialCheckpoints({
-            ...request,
-            item,
-            material,
-            registry: this.registry,
-            targetClueId
-        });
+        return this.searchService.searchSequentialCheckpoints(this.prepareSearchRequest(request));
     }
 
     /**
-     * Internal method for v5 workers to get search results.
+     * Advances one checkpoint search request and returns the completed boundary state.
      */
     public async searchToCheckpoint(request: CheckpointSearchRequest): Promise<SearchResult> {
-        this.validateRequest(request);
-        const { item, material } = request;
-        const targetClueId = request.clue ? this.getPackedClue(item, request.clue) : undefined;
-
-        return this.searchService.searchToCheckpoint({
-            ...request,
-            item,
-            material,
-            registry: this.registry,
-            targetClueId
-        });
+        return this.searchService.searchToCheckpoint(this.prepareSearchRequest(request));
     }
 
     /**
-     * Aggregates all statistics for a given enchantment attempt.
-     * Use this for standard single-pass calculations (e.g. standard UI search).
-     *
-     * @param item The item type (e.g., 'sword', 'pickaxe').
-     * @param xp The base XP level from the enchantment table (1-50).
-     * @param material The item material (e.g., 'diamond', 'netherite').
-     * @param config Optional search configuration (threshold, signals, etc).
-     * @returns A promise resolving to the final aggregated statistics.
+     * Runs the standard checkpoint search and returns summarized stats for product/tool callers.
+     * This is the simple public result API: no separate stats cache, no alternate search path.
      */
-    public async calculate(request: CalculationRequest): Promise<CalculationStats> {
-        this.validateRequest(request);
-        const { item, material } = request;
-
-        const {
-            xp,
-            clue,
-            threshold = ENGINE_LIMITS.DEFAULT_THRESHOLD,
-            signal,
-            onProgress,
-            maxIterations,
-            summaryLimit = ENGINE_LIMITS.MAX_RESULTS_SUMMARY,
-            resultsLimit = ENGINE_LIMITS.MAX_RESULTS_UNBOUNDED,
-            useCache,
-            instrumentation,
-            timing
-        } = request;
-
-        const packedClue = clue ? this.getPackedClue(item, clue) : null;
-
-        const cacheKey = this.getStatsKey(item, xp, material, packedClue);
-
-        const cachedStats = this.cache.getStats(this.registry.version, cacheKey);
-        if (cachedStats && cachedStats.threshold <= threshold) return cachedStats;
-
-        const searchConfig: SearchConfig = {
-            threshold,
-            signal,
-            onProgress,
-            maxIterations,
-            resultsLimit,
-            useCache,
-            instrumentation,
-            timing
-        };
-
-        const finalResult = await this.searchService.searchToCheckpoint({
-            registry: this.registry,
-            item,
-            xp,
-            material,
-            targetClueId: packedClue ?? undefined,
-            ...searchConfig
+    public async getStats(request: CheckpointSearchRequest): Promise<EnchantStats> {
+        const checkpoint = getDefaultStatsCheckpoint(request.item === 'book');
+        const searchRequest = this.prepareSearchRequest({
+            ...request,
+            threshold: request.threshold ?? checkpoint.threshold,
+            maxIterations: request.maxIterations ?? checkpoint.limit
         });
+        const result = await this.searchService.searchToCheckpoint(searchRequest);
+        const { targetClueId } = searchRequest;
+        const postProcessingStart = request.timing ? performance.now() : 0;
+        const summaryRequest = {
+            combos: result.combos,
+            snapshot: result.snapshot,
+            indexToEnchant: this.registry.indexToEnchant,
+            comboLimit: request.summaryLimit,
+            uncappedResults: request.uncappedResults,
+            threshold: result.threshold,
+            isBook: request.item === 'book'
+        };
+        const stats = targetClueId === undefined
+            ? SummaryService.summarize(summaryRequest)
+            : SummaryService.summarizeConditioned({ ...summaryRequest, targetClueId });
 
-        const isBook = item === "book";
-        const postProcessingStart = timing ? performance.now() : 0;
-        const finalStats = packedClue
-            ? SummaryService.summarizeConditioned({
-                combos: finalResult.combos,
-                tracker: finalResult.tracker,
-                indexToEnchant: this.registry.indexToEnchant,
-                targetClueId: packedClue,
-                comboLimit: summaryLimit,
-                frontiers: finalResult.frontiers,
-                isBook
-            })
-            : SummaryService.summarize({
-                combos: finalResult.combos,
-                tracker: finalResult.tracker,
-                indexToEnchant: this.registry.indexToEnchant,
-                comboLimit: summaryLimit,
-                threshold: finalResult.threshold,
-                frontiers: finalResult.frontiers,
-                isBook
-            });
-
-        finalStats.instrumentation = finalResult.instrumentation;
-        if (timing) {
+        stats.instrumentation = result.instrumentation;
+        if (request.timing) {
             const postProcessingMs = performance.now() - postProcessingStart;
-            timing.postProcessingMs = (timing.postProcessingMs ?? 0) + postProcessingMs;
-            timing.totalMs += postProcessingMs;
-            finalStats.timing = { ...timing };
+            request.timing.postProcessingMs = (request.timing.postProcessingMs ?? 0) + postProcessingMs;
+            request.timing.totalMs += postProcessingMs;
+            stats.timing = { ...request.timing };
         } else {
-            finalStats.timing = finalResult.timing;
+            stats.timing = result.timing;
         }
+        return stats;
+    }
 
-        const currentCached = this.cache.getStats(this.registry.version, cacheKey);
-        if (!currentCached || finalStats.accuracy > currentCached.accuracy) {
-            this.cache.setStats(this.registry.version, cacheKey, finalStats);
-        }
-
-        return finalStats;
+    private prepareSearchRequest<T extends CheckpointSearchRequest | SequentialCheckpointSearchRequest>(request: T): T & { registry: BuiltRegistryState; targetClueId?: number | undefined } {
+        this.validateRequest(request);
+        const targetClueId = request.clue ? this.getPackedClue(request.item, request.clue) : undefined;
+        return {
+            ...request,
+            registry: this.registry,
+            targetClueId
+        };
     }
 
     private getPackedClue(item: string, clue: string): number {
         return ClueValidator.validate(this.registry, item, clue);
     }
 
-    private getPackedKey(item: string, modLevel: number, material: string): number {
-        const itemId = getItemId(this.registry, item);
-        const materialId = getMaterialId(this.registry, material);
-
-        return KeyUtils.getPackedKey(itemId, materialId, modLevel);
-    }
-
-    private getStatsKey(item: string, xp: number, material: string, packedClue: number | null = null): number {
-        const itemId = getItemId(this.registry, item);
-        const materialId = getMaterialId(this.registry, material);
-
-        let key = KeyUtils.getStatsKey(itemId, materialId, xp);
-        if (packedClue !== null) {
-            // Encode the clue into the high bits above the item/material/level fields.
-            key |= (packedClue << 18);
-        }
-        return key;
-    }
-
-    private validateRequest(request: CalculationRequest | CheckpointSearchRequest | SequentialCheckpointSearchRequest): void {
+    private validateRequest(request: CheckpointSearchRequest | SequentialCheckpointSearchRequest): void {
         const { item, material } = request;
         const { xp } = request;
 
@@ -275,17 +145,70 @@ export class EnchantEngine {
 
         // Config validation
         if (request.threshold !== undefined) {
-            const t = ProbUtils.toNumber(request.threshold);
+            const t = this.validateProbabilityInput(request.threshold, 'threshold', 'Threshold must be between 0 and 1.0.');
             if (t < 0 || t > 1.0) {
                 throw new Error(`Invalid threshold: ${t}. Threshold must be between 0 and 1.0.`);
             }
         }
-        if (request.maxIterations !== undefined && (request.maxIterations <= 0 || !Number.isInteger(request.maxIterations))) {
+        if (request.targetClassifiedMass !== undefined) {
+            const target = this.validateProbabilityInput(request.targetClassifiedMass, 'targetClassifiedMass', 'Must be between 0 and 1.0.');
+            if (target < 0 || target > 1.0) {
+                throw new Error(`Invalid targetClassifiedMass: ${target}. Must be between 0 and 1.0.`);
+            }
+        }
+        if (request.maxIterations !== undefined && (!Number.isFinite(request.maxIterations) || request.maxIterations <= 0 || !Number.isInteger(request.maxIterations))) {
             throw new Error(`Invalid maxIterations: ${request.maxIterations}. Must be a positive integer.`);
         }
-        if (request.resultsLimit !== undefined && (request.resultsLimit <= 0 || request.resultsLimit > 1_000_000)) {
-            throw new Error(`Invalid resultsLimit: ${request.resultsLimit}. Must be between 1 and 1,000,000.`);
+        this.validateSummaryLimit(request.summaryLimit, request.uncappedResults);
+        if ('checkpoints' in request) {
+            for (const [index, checkpoint] of request.checkpoints.entries()) {
+                const threshold = this.validateProbabilityInput(checkpoint.threshold, 'checkpoint threshold', 'Threshold must be between 0 and 1.0.');
+                if (threshold < 0 || threshold > 1.0) {
+                    throw new Error(`Invalid checkpoint threshold: ${threshold}. Threshold must be between 0 and 1.0.`);
+                }
+                if (!Number.isFinite(checkpoint.limit) || checkpoint.limit <= 0 || !Number.isInteger(checkpoint.limit)) {
+                    throw new Error(`Invalid checkpoint limit: ${checkpoint.limit}. Must be a positive integer.`);
+                }
+                if (checkpoint.targetClassifiedMass !== undefined) {
+                    const target = this.validateProbabilityInput(checkpoint.targetClassifiedMass, 'checkpoint targetClassifiedMass', 'Must be between 0 and 1.0.');
+                    if (target < 0 || target > 1.0) {
+                        throw new Error(`Invalid checkpoint targetClassifiedMass: ${target}. Must be between 0 and 1.0.`);
+                    }
+                }
+                if (!request.exhaustive && !this.hasBoundedStopCondition(checkpoint.threshold, checkpoint.limit, checkpoint.targetClassifiedMass)) {
+                    throw new Error(`Checkpoint ${index} has no bounded stop condition. Provide a positive threshold, a finite iteration limit, a targetClassifiedMass, or set exhaustive: true.`);
+                }
+            }
+        } else if (!request.exhaustive && !this.hasBoundedStopCondition(request.threshold, request.maxIterations, request.targetClassifiedMass)) {
+            throw new Error('Search request has no bounded stop condition. Provide a positive threshold, a finite maxIterations, a targetClassifiedMass, or set exhaustive: true.');
         }
+    }
 
+    private validateProbabilityInput(value: number | bigint, label: string, requirement: string): number {
+        const normalized = ProbUtils.toNumber(value);
+        if (!Number.isFinite(normalized)) {
+            throw new Error(`Invalid ${label}: ${normalized}. ${requirement}`);
+        }
+        return normalized;
+    }
+
+    private validateSummaryLimit(summaryLimit: number | undefined, uncappedResults: boolean | undefined): void {
+        if (summaryLimit === undefined) return;
+        if (!Number.isInteger(summaryLimit) || summaryLimit < 0) {
+            throw new Error(`Invalid summaryLimit: ${summaryLimit}. Must be a non-negative integer.`);
+        }
+        if (!uncappedResults && summaryLimit > ENGINE_LIMITS.RESULT_ENTRY_SAFETY_CAP) {
+            throw new Error(`Invalid summaryLimit: ${summaryLimit}. Must be <= ${ENGINE_LIMITS.RESULT_ENTRY_SAFETY_CAP}, or set uncappedResults: true.`);
+        }
+    }
+
+    private hasBoundedStopCondition(
+        threshold: number | bigint | undefined,
+        maxIterations: number | undefined,
+        targetClassifiedMass: number | bigint | undefined
+    ): boolean {
+        if (targetClassifiedMass !== undefined) return true;
+        if (threshold !== undefined && ProbUtils.toBigInt(threshold) > 0n) return true;
+        return maxIterations !== undefined;
     }
 }

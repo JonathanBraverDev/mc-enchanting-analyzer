@@ -34,7 +34,7 @@ To build your own standalone version, use: `npm run build:standalone`. The resul
 
 ## 🧠 The Engine
 
-This tool uses the V5 checkpoint search engine. It prioritizes the most likely outcomes first, reports useful intermediate checkpoints to the UI, and keeps every probability bucket accounted for while deeper searches continue. The bundled registry models only enchantments reachable through the enchanting table, so treasure-only enchantments are excluded from the active search space.
+This tool uses the V7 shared checkpoint search engine. It searches a globally weighted frontier across modified levels, reports useful intermediate checkpoints to the UI, and keeps every probability bucket accounted for while deeper searches continue. The bundled registry models only enchantments reachable through the enchanting table, so treasure-only enchantments are excluded from the active search space.
 
 For implementation details, see:
 - `ARCHITECTURE.md` for the engine, worker, and checkpoint flow.

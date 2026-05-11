@@ -7,9 +7,9 @@ import { TEST_DATA } from '#tests/infra/test-data.js';
 import { SnapshotService } from '#services/SnapshotService.js';
 import { SummaryService } from '#services/SummaryService.js';
 import { getEnchantId } from '#core/registry.js';
-import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
 import { ComboUtils, PRECISION } from '#utils/index.js';
 import type { PackedEnchant, TopRunView } from '#types/index.js';
+import { makeSearchSnapshot } from '#tests/infra/search-snapshot-test-utils.js';
 
 const BASE_PAYLOAD = TEST_DATA.PAYLOADS.BASE_SWORD;
 
@@ -81,15 +81,15 @@ describe('Integration: Snapshot Integrity', () => {
 
         const summary = SummaryService.summarize({
             combos: res.combos,
-            tracker: res.tracker,
+            snapshot: res.snapshot,
             indexToEnchant: engine.registry.indexToEnchant,
-            comboLimit: 30
+            comboLimit: 30,
+            isBook: true
         });
 
         const snapshot = SnapshotService.create(
             engine.registry,
-            res.tracker,
-            res.combos,
+            res.snapshot,
             {
                 snapshotType: 'top',
                 input: {
@@ -117,7 +117,7 @@ describe('Integration: Snapshot Integrity', () => {
 describe('Integration: Clue-Conditioned Calculation', () => {
     it('conditions the public calculation result on the shown clue', async () => {
         const engine = EngineFactory.createForVersion(TEST_DATA.VERSIONS.MODERN);
-        const stats = await engine.calculate({
+        const stats = await engine.getStats({
             item: TEST_DATA.ITEMS.SWORD,
             xp: 30,
             material: TEST_DATA.MATERIALS.DIAMOND,
@@ -140,13 +140,11 @@ describe('Integration: Clue-Conditioned Calculation', () => {
         const combos = new Map([
             [ComboUtils.pack([smiteIv], engine.registry.enchantToIndex), PRECISION]
         ]);
-        const tracker = new SearchStateTracker();
-        tracker.mass.record('resolved', PRECISION);
+        const runSnapshot = makeSearchSnapshot({ results: combos, units: { resolved: PRECISION } });
 
         const snapshot = SnapshotService.create(
             engine.registry,
-            tracker,
-            combos,
+            runSnapshot,
             {
                 snapshotType: 'top',
                 input: {

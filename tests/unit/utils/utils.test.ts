@@ -364,43 +364,6 @@ describe('KeyUtils.getPackedKey', () => {
 
 });
 
-describe('KeyUtils.getStatsKey', () => {
-    it('produces the same key for identical inputs', () => {
-        const k1 = KeyUtils.getStatsKey(1, 2, 15);
-        const k2 = KeyUtils.getStatsKey(1, 2, 15);
-        assert.strictEqual(k1, k2);
-    });
-
-    it('produces different keys for different itemId', () => {
-        const k1 = KeyUtils.getStatsKey(0, 2, 15);
-        const k2 = KeyUtils.getStatsKey(1, 2, 15);
-        assert.notStrictEqual(k1, k2);
-    });
-
-    it('produces different keys for different materialId', () => {
-        const k1 = KeyUtils.getStatsKey(1, 0, 15);
-        const k2 = KeyUtils.getStatsKey(1, 1, 15);
-        assert.notStrictEqual(k1, k2);
-    });
-
-    it('produces different keys for different level', () => {
-        const k1 = KeyUtils.getStatsKey(1, 2, 10);
-        const k2 = KeyUtils.getStatsKey(1, 2, 20);
-        assert.notStrictEqual(k1, k2);
-    });
-
-    it('produces the same key regardless of limit (cross-tier cache hit)', () => {
-        // limit is NOT part of the stats key — ultra and coarse share a cache entry
-        const kCoarse = KeyUtils.getStatsKey(1, 2, 15);
-        const kUltra = KeyUtils.getStatsKey(1, 2, 15);
-        assert.strictEqual(kCoarse, kUltra);
-    });
-
-    it('preserves the existing item/material/level bit layout', () => {
-        assert.strictEqual(KeyUtils.getStatsKey(1, 2, 15), (1 << KEY_SHIFT_ITEM) | (2 << KEY_SHIFT_MATERIAL) | (15 << KEY_SHIFT_LEVEL));
-    });
-
-});
 
 // ── EnchantUtils ─────────────────────────────────────────────────────────────
 

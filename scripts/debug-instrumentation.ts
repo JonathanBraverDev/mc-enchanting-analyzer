@@ -1,7 +1,7 @@
 import { EngineFactory } from '#engine/index.js';
 import * as fs from 'node:fs';
 import * as assert from 'node:assert';
-import { CalculationStats } from '#types/index.js';
+import { EnchantStats } from '#types/index.js';
 
 async function debug() {
     const engine = EngineFactory.createForVersion('1.7.2');
@@ -12,12 +12,11 @@ async function debug() {
     console.log(`Profiling 1.7.2 Book search...`);
 
     const instrumentation: any = {
-        frontierCache: { hits: 0, misses: 0 },
         poolCache: { hits: 0, misses: 0 },
         distCache: { hits: 0, misses: 0 }
     };
 
-    await engine.calculate({
+    await engine.getStats({
         item,
         xp: level,
         material,
@@ -40,11 +39,11 @@ async function debug() {
     const snapshotPath = '../tests/snapshots/1.7.2_book_30_book.json';
     if (fs.existsSync(snapshotPath)) {
         console.log('\nSimulating Snapshot Comparison (Deep Equality Check)...');
-        const existing: CalculationStats = JSON.parse(fs.readFileSync(snapshotPath, 'utf8'));
+        const existing: EnchantStats = JSON.parse(fs.readFileSync(snapshotPath, 'utf8'));
 
         try {
             console.log('Simulating a MISMATCH in assert.deepStrictEqual (67k+ entries)...');
-            const statsMismatch: CalculationStats = JSON.parse(JSON.stringify(existing));
+            const statsMismatch: EnchantStats = JSON.parse(JSON.stringify(existing));
             const firstKey = Object.keys(statsMismatch.combos)[0];
             if (firstKey !== undefined) {
                 statsMismatch.combos[firstKey] = (statsMismatch.combos[firstKey] || 0) + 0.000000000001;

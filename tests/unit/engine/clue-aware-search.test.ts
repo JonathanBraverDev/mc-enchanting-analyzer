@@ -2,9 +2,6 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { EngineFactory } from '#engine/factory.js';
 import { ClueValidator } from '#core/clue.js';
-import { SearchProcessor } from '#engine/search/SearchProcessor.js';
-import { ClueSearchPolicy } from '#engine/search/ClueSearchPolicy.js';
-import { ComboUtils } from '#utils/domain/ComboUtils.js';
 import { TEST_DATA } from '#tests/infra/test-data.js';
 import {
     calculateByFullSearchThenCondition,
@@ -12,7 +9,7 @@ import {
     compareConditionedMaps,
     summarizeCheckpoint
 } from '#tests/infra/clue-test-utils.js';
-import type { CalculationStats, PackedCombo, PackedEnchant } from '#types/index.js';
+import type { EnchantStats } from '#types/index.js';
 
 describe('Clue-aware search optimization', () => {
     const assertMatchesFullSearchConditioning = async (item: string, material: string, clue: string, threshold = 0.005) => {
@@ -69,7 +66,7 @@ describe('Clue-aware search optimization', () => {
         compareConditionedMaps(optimized.combos, baseline.combos, `${clue} checkpoint combos`);
         assert.strictEqual(optimized.clue?.idAndRank, targetClueId);
         assert.strictEqual(optimized.shownClueDistribution, undefined);
-        assert.ok(result.tracker.mass.toPublic().clueIncompatible > (baseline.accounting.clueIncompatible ?? 0));
+        assert.ok(result.snapshot.mass.clueIncompatible > (baseline.accounting.clueIncompatible ?? 0));
     });
 
     it('searchSequentialCheckpoints forwards clue pruning for every streamed checkpoint', async () => {
@@ -86,7 +83,7 @@ describe('Clue-aware search optimization', () => {
         const engine = EngineFactory.createForVersion('1.21.11');
         engine.resetCaches();
         const targetClueId = ClueValidator.validate(engine.registry, item, clue);
-        const streamed: CalculationStats[] = [];
+        const streamed: EnchantStats[] = [];
         const clueIncompatibleMass: number[] = [];
 
         await engine.searchSequentialCheckpoints({
@@ -98,7 +95,7 @@ describe('Clue-aware search optimization', () => {
             useCache: false,
             onCheckpointComplete: (result) => {
                 streamed.push(summarizeCheckpoint(engine, result, item, clue));
-                clueIncompatibleMass.push(result.tracker.mass.toPublic().clueIncompatible);
+                clueIncompatibleMass.push(result.snapshot.mass.clueIncompatible);
             }
         });
 
@@ -117,27 +114,4 @@ describe('Clue-aware search optimization', () => {
         }
     });
 
-    it('filters redistributed book outcomes that lost the clue', () => {
-        const target = ((1 << 8) | 1) as PackedEnchant;
-        const otherA = ((2 << 8) | 1) as PackedEnchant;
-        const otherB = ((3 << 8) | 1) as PackedEnchant;
-        const enchantToIndex = new Map<number, number>([
-            [target, 1],
-            [otherA, 2],
-            [otherB, 3]
-        ]);
-        const indexToEnchant = [0, target, otherA, otherB];
-        const packed = ComboUtils.pack([target, otherA, otherB], enchantToIndex);
-        const policy = ClueSearchPolicy.create({ conflictBitsets: new BigUint64Array(4) } as any, [target], target);
-        const results = new Map<PackedCombo, bigint>();
-
-        const settlement = SearchProcessor.redistributeBookProb(packed, 6n, results, policy, indexToEnchant);
-
-        assert.strictEqual(settlement.rounding, 0n);
-        assert.strictEqual(settlement.discarded, 2n);
-        assert.strictEqual([...results.values()].reduce((sum, mass) => sum + mass, 0n), 4n);
-        for (const combo of results.keys()) {
-            assert.ok(policy.containsTargetClue(combo, indexToEnchant));
-        }
-    });
 });

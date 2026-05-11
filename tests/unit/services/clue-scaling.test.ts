@@ -2,9 +2,8 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { PRECISION } from '#utils/math/ProbUtils.js';
 import { SummaryService } from '#services/SummaryService.js';
-import { SearchStateTracker } from '#engine/search/SearchStateTracker.js';
 import { ComboUtils } from '#utils/domain/ComboUtils.js';
-import { makeFrontierSnapshot } from '#tests/infra/frontier-test-utils.js';
+import { makePendingEntry, makeSearchSnapshot } from '#tests/infra/search-snapshot-test-utils.js';
 import type { PackedEnchant } from '#types/index.js';
 
 describe('Clue Conditioning Scaling diagnostics', () => {
@@ -17,9 +16,8 @@ describe('Clue Conditioning Scaling diagnostics', () => {
         // Combo with only Sharpness II
         rawCombos.set(2, PRECISION);
 
-        const tracker = new SearchStateTracker();
-        tracker.mass.record('resolved', PRECISION);
-        const stats = SummaryService.summarizeConditioned({ combos: rawCombos as any, tracker, indexToEnchant, targetClueId });
+        const snapshot = makeSearchSnapshot({ results: rawCombos as any, units: { resolved: PRECISION } });
+        const stats = SummaryService.summarizeConditioned({ combos: rawCombos as any, snapshot, indexToEnchant, targetClueId });
 
         assert.strictEqual(stats.clue?.knownSpace, 0);
         assert.strictEqual(stats.clue?.idAndRank, targetClueId);
@@ -33,9 +31,8 @@ describe('Clue Conditioning Scaling diagnostics', () => {
         // Combo with only Sharpness I
         rawCombos.set(1, PRECISION);
 
-        const tracker = new SearchStateTracker();
-        tracker.mass.record('resolved', PRECISION);
-        const stats = SummaryService.summarizeConditioned({ combos: rawCombos as any, tracker, indexToEnchant, targetClueId });
+        const snapshot = makeSearchSnapshot({ results: rawCombos as any, units: { resolved: PRECISION } });
+        const stats = SummaryService.summarizeConditioned({ combos: rawCombos as any, snapshot, indexToEnchant, targetClueId });
 
         // pClue should be 1.0
         assert.ok(Math.abs((stats.clue?.knownSpace ?? 0) - 1.0) < 1e-12);
@@ -53,9 +50,8 @@ describe('Clue Conditioning Scaling diagnostics', () => {
         rawCombos.set(1, PRECISION / 2n);
         rawCombos.set(2, PRECISION / 2n);
 
-        const tracker = new SearchStateTracker();
-        tracker.mass.record('resolved', PRECISION); // Search is 100% accurate
-        const stats = SummaryService.summarizeConditioned({ combos: rawCombos as any, tracker, indexToEnchant, targetClueId });
+        const snapshot = makeSearchSnapshot({ results: rawCombos as any, units: { resolved: PRECISION } });
+        const stats = SummaryService.summarizeConditioned({ combos: rawCombos as any, snapshot, indexToEnchant, targetClueId });
 
         // pClue = 0.5
         assert.ok(Math.abs((stats.clue?.knownSpace ?? 0) - 0.5) < 1e-12);
@@ -69,11 +65,9 @@ describe('Clue Conditioning Scaling diagnostics', () => {
         const rawCombos = new Map<number, bigint>();
         rawCombos.set(1, PRECISION / 4n); // 25% compatible resolved mass
 
-        const tracker = new SearchStateTracker();
-        tracker.mass.record('resolved', PRECISION / 2n); // Only 50% search accuracy
-        tracker.mass.record('pending', PRECISION / 2n);
+        const snapshot = makeSearchSnapshot({ results: rawCombos as any, units: { resolved: PRECISION / 2n, pending: PRECISION / 2n } });
 
-        const stats = SummaryService.summarizeConditioned({ combos: rawCombos as any, tracker, indexToEnchant, targetClueId });
+        const stats = SummaryService.summarizeConditioned({ combos: rawCombos as any, snapshot, indexToEnchant, targetClueId });
 
         // pClue = 0.25 (Found 25% of absolute generation space)
         assert.ok(Math.abs((stats.clue?.knownSpace ?? 0) - 0.25) < 1e-12);
@@ -89,17 +83,14 @@ describe('Clue Conditioning Scaling diagnostics', () => {
             [2, 2]
         ]);
         const packed = ComboUtils.pack([targetClueId as PackedEnchant, 2 as PackedEnchant], enchantToIndex);
-        const frontiers = makeFrontierSnapshot(packed, 2, PRECISION / 2n);
-
-        const tracker = new SearchStateTracker();
-        tracker.mass.record('pending', PRECISION / 2n);
+        const pendingEntries = [makePendingEntry(packed, 2, PRECISION / 2n)];
+        const snapshot = makeSearchSnapshot({ pendingEntries, units: { pending: PRECISION / 2n } });
 
         const stats = SummaryService.summarizeConditioned({
             combos: new Map(),
-            tracker,
+            snapshot,
             indexToEnchant,
-            targetClueId,
-            frontiers
+            targetClueId
         });
 
         assert.ok(Math.abs((stats.clue?.knownSpace ?? 0) - 0.25) < 1e-12);
@@ -115,17 +106,14 @@ describe('Clue Conditioning Scaling diagnostics', () => {
             [enchantC, 3]
         ]);
         const packed = ComboUtils.pack([targetClueId as PackedEnchant, 2 as PackedEnchant, enchantC], enchantToIndex);
-        const frontiers = makeFrontierSnapshot(packed, 3, PRECISION);
-
-        const tracker = new SearchStateTracker();
-        tracker.mass.record('pending', PRECISION);
+        const pendingEntries = [makePendingEntry(packed, 3, PRECISION)];
+        const snapshot = makeSearchSnapshot({ pendingEntries, units: { pending: PRECISION } });
 
         const stats = SummaryService.summarizeConditioned({
             combos: new Map(),
-            tracker,
+            snapshot,
             indexToEnchant: bookIndexToEnchant,
             targetClueId,
-            frontiers,
             isBook: true
         });
 

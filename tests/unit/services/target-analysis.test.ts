@@ -3,7 +3,7 @@ import assert from 'node:assert';
 import { EngineFactory } from '#engine/factory.js';
 import { TargetAnalysisService } from '#services/TargetAnalysisService.js';
 import { ComboUtils, ProbUtils, PRECISION } from '#utils/index.js';
-import { makeFrontierSnapshot } from '#tests/infra/frontier-test-utils.js';
+import { makePendingEntry } from '#tests/infra/search-snapshot-test-utils.js';
 import type { PackedCombo, PackedEnchant, PackedTargetRequirement, RegistryState } from '#types/index.js';
 
 let registry: RegistryState;
@@ -82,7 +82,7 @@ describe('TargetAnalysisService', () => {
             combos: new Map([[terminalCombo, PRECISION / 2n], [pack([EFF_V]), PRECISION / 8n]]),
             indexToEnchant,
             targets: [target(EFF_IV), target(FORT_III)],
-            frontiers: makeFrontierSnapshot(frontierCombo, 3, frontierMass, frontierScale),
+            pendingEntries: [makePendingEntry(frontierCombo, 3, expectedFrontier)],
             comboLimit: 10
         });
 
@@ -91,25 +91,66 @@ describe('TargetAnalysisService', () => {
         assert.deepStrictEqual([...result!.combos.keys()], [terminalCombo, frontierCombo]);
     });
 
-    it('uses pending book target mass without displaying pre-removal combos', () => {
+    it('uses post-removal pending book target mass without displaying pre-removal combos', () => {
         const terminalCombo = pack([EFF_V, FORT_III]);
         const frontierCombo = pack([EFF_IV, FORT_III, UNBR_III]);
         const frontierMass = PRECISION / 4n;
         const frontierScale = PRECISION / 2n;
         const expectedFrontier = ProbUtils.scale(frontierMass, frontierScale);
+        const targets = [target(EFF_IV), target(FORT_III)];
+        const expectedPostRemovalMatch = expectedFrontier / 3n;
 
         const result = TargetAnalysisService.aggregate({
             combos: new Map([[terminalCombo, PRECISION / 2n], [pack([EFF_V]), PRECISION / 8n]]),
             indexToEnchant,
-            targets: [target(EFF_IV), target(FORT_III)],
-            frontiers: makeFrontierSnapshot(frontierCombo, 3, frontierMass, frontierScale),
+            targets,
+            pendingEntries: [makePendingEntry(frontierCombo, 3, expectedFrontier)],
             comboLimit: 10,
             isBook: true
         });
 
-        assert.strictEqual(result?.matchMass, PRECISION / 2n + expectedFrontier);
+        assert.ok(expectedPostRemovalMatch < expectedFrontier);
+        assert.strictEqual(result?.matchMass, PRECISION / 2n + expectedPostRemovalMatch);
         assert.strictEqual(result?.matchingComboCount, 1);
         assert.deepStrictEqual([...result!.combos.keys()], [terminalCombo]);
+    });
+
+    it('estimates pending book target mass by removal ratio without full redistribution', () => {
+        const frontierCombo = pack([EFF_IV, FORT_III, UNBR_III]);
+        const mass = PRECISION / 4n;
+
+        const result = TargetAnalysisService.aggregate({
+            combos: new Map(),
+            indexToEnchant,
+            targets: [target(EFF_IV)],
+            pendingEntries: [makePendingEntry(frontierCombo, 3, mass)],
+            comboLimit: 10,
+            isBook: true
+        });
+
+        assert.strictEqual(result?.matchMass, (mass * 2n) / 3n);
+        assert.strictEqual(result?.matchingComboCount, 0);
+        assert.deepStrictEqual([...result!.combos.keys()], []);
+    });
+
+    it('classifies non-matching pending book target mass after random removal', () => {
+        const frontierCombo = pack([EFF_IV, UNBR_III]);
+        const targets = [target(EFF_IV), target(FORT_III)];
+
+        const result = TargetAnalysisService.aggregate({
+            combos: new Map(),
+            indexToEnchant,
+            targets,
+            pendingEntries: [makePendingEntry(frontierCombo, 2, PRECISION)],
+            comboLimit: 10,
+            isBook: true
+        });
+
+        assert.strictEqual(result?.matchMass, 0n);
+        assert.strictEqual(result?.nearMissMass, PRECISION / 2n);
+        assert.strictEqual(result?.blockedMass, 0n);
+        assert.strictEqual(result?.matchingComboCount, 0);
+        assert.deepStrictEqual([...result!.combos.keys()], []);
     });
 
     it('classifies one-target-short and conflict-blocked near misses', () => {

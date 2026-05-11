@@ -15,7 +15,7 @@ async function runBenchmark() {
         console.log(`\nScenario: ${s.name}`);
 
         // Warmup
-        await engine.calculate({ item: s.item, xp: s.xp, material: s.material, threshold: 0.001 });
+        await engine.getStats({ item: s.item, xp: s.xp, material: s.material, threshold: 0.001 });
         engine.resetCaches();
 
         const iterations = 5;
@@ -23,7 +23,7 @@ async function runBenchmark() {
 
         for (let i = 0; i < iterations; i++) {
             const start = performance.now();
-            await engine.calculate({ item: s.item, xp: s.xp, material: s.material, threshold: 0.0001 });
+            await engine.getStats({ item: s.item, xp: s.xp, material: s.material, threshold: 0.0001 });
             const end = performance.now();
             totalMs += (end - start);
             engine.resetCaches();

@@ -2,6 +2,33 @@
 
 All notable changes to this project will be documented in this file.
 
+## v7.0.0 (2026-05-11)
+
+### Added
+- **More predictable limited searches**: V7 uses a shared XP-level search that spends work on the highest-probability remaining paths first, so time and iteration limits now track the whole calculation instead of being fragmented across separate XP rolls.
+- **Better modern book coverage**: Latest-version book calculations now reach a high-confidence 99.95% classified result within the release gate, preserving the full classified combo distribution without requiring exhaustive tail expansion.
+- **Simpler library stats API**: `getStats(...)` is now the standard entry point for callers that want summarized enchantment probabilities.
+
+### Fixed
+- **Search limit adherence**: Broad searches such as books now degrade much more gracefully under configured limits instead of letting each modified XP level consume an isolated budget before results are combined.
+- **Exact probability accounting**: Active probability buckets now conserve exactly at fixed-point unit precision, closing the tiny unit-level mass leaks V6 could leave after aggregating separate XP-level searches.
+- **Book combination mass splits**: Book-only random enchantment removal now carries indivisible split residue instead of assigning leftover units to one arbitrary redistributed combo.
+- **Book target diagnostics**: Pending book branches now estimate target mass after random enchantment removal instead of treating matching pre-removal combos as fully retained.
+- **Result output caps**: Large summary and snapshot exports now require an explicit `uncappedResults` opt-in, while normal UI/library calls keep bounded result materialization separate from search work.
+- **Search input validation**: Direct checkpoint calls now reject unbounded or invalid stop conditions consistently, including non-finite probability targets and invalid iteration budgets.
+- **Clue-conditioned accuracy**: Clue searches now use the same shared search/accounting path, so incompatible and pending probability mass are tracked consistently with normal searches.
+- **Large-result regression coverage**: The release suite now includes a bounded modern-book golden fixture so limit behavior stays covered without making V7.0.0 depend on exhaustive latest-book completion.
+
+### Developer Experience
+- Snapshot generation supports mass-targeted cases, and engine snapshot tests reserve enough Node memory for large book fixtures.
+- The engine test runner now resolves `tsx` from the local install, package resolution, or PATH instead of assuming a fixed `node_modules/.bin` path.
+- Golden snapshots, mass conservation checks, worker protocol tests, UI regression tests, and release validation now exercise V7-native outputs.
+
+### Breaking
+- Removed the legacy `calculate(...)` engine entry point. Use `getStats(...)` for summarized probabilities or checkpoint APIs for raw search results.
+- Removed obsolete V6 search scaffolding and V7-prefixed internal API names now that the shared search engine is the primary engine path.
+- Removed the unused `resultsLimit` request option; use `summaryLimit` for summarized output size control.
+
 ## v6.1.0 (2026-05-09)
 
 ### Added

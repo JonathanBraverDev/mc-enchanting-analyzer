@@ -1,6 +1,5 @@
 import { EngineFactory } from '#engine/index.js';
 import { TEST_DEFAULTS } from '#constants/testing.js';
-import { ENGINE_LIMITS } from '#constants/engine.js';
 
 async function profile() {
     const args = process.argv.slice(2);
@@ -16,14 +15,12 @@ async function profile() {
 
     const timing = { totalMs: 0, searchMs: 0, postProcessingMs: 0 };
     console.time('TargetSnapshot');
-    const stats = await engine.calculate({
+    const stats = await engine.getStats({
             item: 'book',
             xp: 30,
             material: 'book',
-            threshold: TEST_DEFAULTS.SNAPSHOT_THRESHOLD,
-            maxIterations: ENGINE_LIMITS.MAX_ITERATIONS_UNBOUNDED,
-            summaryLimit: ENGINE_LIMITS.MAX_RESULTS_UNBOUNDED,
-            resultsLimit: ENGINE_LIMITS.MAX_RESULTS_UNBOUNDED,
+            exhaustive: TEST_DEFAULTS.SNAPSHOT_EXHAUSTIVE,
+            uncappedResults: true,
             useCache: false,
             timing
         });

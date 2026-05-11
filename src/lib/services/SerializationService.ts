@@ -1,5 +1,5 @@
 import { ENGINE_LIMITS } from '#constants/engine.js';
-import { CompactStats, CalculationStats } from '#types/index.js';
+import { CompactStats, EnchantStats } from '#types/index.js';
 
 /**
  * Service for zero-copy binary serialization of statistics.
@@ -8,7 +8,7 @@ export class SerializationService {
     /**
      * Serializes statistics into a CompactStats object for transfer.
      */
-    public static serialize(stats: CalculationStats): { compact: CompactStats, transferables: ArrayBuffer[] } {
+    public static serialize(stats: EnchantStats): { compact: CompactStats, transferables: ArrayBuffer[] } {
         const comboEntries = Object.entries(stats.combos);
         const comboKeys = new Float64Array(comboEntries.length);
         const comboProbs = new Float64Array(comboEntries.length);
@@ -79,8 +79,8 @@ export class SerializationService {
     /**
      * Reconstructs statistics from a CompactStats object.
      */
-    public static deserialize(compact: CompactStats): CalculationStats {
-        const stats: CalculationStats = {
+    public static deserialize(compact: CompactStats): EnchantStats {
+        const stats: EnchantStats = {
             ranks: {}, any: {}, count: {}, combos: {}, shownClueDistribution: {},
             accuracy: compact.accuracy,
             accounting: compact.accounting,

@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { HumanizationService } from '#services/index.js';
 import { EnchantEngine } from '#engine/index.js';
+import type { EnchantStats, CheckpointSearchRequest } from '#types/index.js';
 
 /**
  * Utility for snapshot-based regression testing of engine results.
@@ -302,10 +303,17 @@ export const UI_TIMEOUT = process.env['CI'] ? 45000 : 15000;
  */
 export const EngineTestUtils = {
     /**
+     * Compatibility wrapper for older tests; product/tooling code should call engine.getStats directly.
+     */
+    async getStats(engine: EnchantEngine, request: CheckpointSearchRequest): Promise<EnchantStats> {
+        return engine.getStats(request);
+    },
+
+    /**
      * Performs a full enchantment simulation and returns human-readable results.
      */
     async getHumanStats(engine: EnchantEngine, item: string, xp: number, material: string, clue: string | null = null, threshold = 0.0001): Promise<any> {
-        const stats = await engine.calculate({ item: item, xp: xp, material: material, clue, threshold });
+        const stats = await engine.getStats({ item, xp, material, clue, threshold });
         return HumanizationService.humanize(stats, engine.registry);
     }
 };

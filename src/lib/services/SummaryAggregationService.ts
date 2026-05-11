@@ -1,11 +1,12 @@
 import { PACKING_CONSTANTS } from '#constants/engine.js';
-import { PackedCombo, SearchFrontierSnapshot } from '#types/index.js';
-import { ProbUtils } from '#utils/index.js';
+import { PackedCombo } from '#types/index.js';
+import type { PendingFrontierEntry } from '#lib/search/SearchRun.js';
 
 export interface SummaryAggregationRequest {
-    combos: Map<PackedCombo, bigint>;
+    combos: ReadonlyMap<PackedCombo, bigint>;
     indexToEnchant: number[];
-    frontiers?: SearchFrontierSnapshot[] | undefined;
+    /** Native pending entries from the shared search run. */
+    pendingEntries?: readonly PendingFrontierEntry[] | undefined;
     isBook?: boolean | undefined;
     includeMasses?: boolean | undefined;
     includeShownClueDistribution?: boolean | undefined;
@@ -26,7 +27,7 @@ export class SummaryAggregationService {
         const {
             combos,
             indexToEnchant,
-            frontiers = [],
+            pendingEntries = [],
             isBook = false,
             includeMasses = true,
             includeShownClueDistribution = true
@@ -43,12 +44,10 @@ export class SummaryAggregationService {
             this.addContribution(result, packed, mass, indexToEnchant, false, isBook, includeMasses, includeShownClueDistribution);
         }
 
-        for (const { frontier, graph, scale } of frontiers) {
-            frontier.forEachNode((nodeId, prob) => {
-                const mass = ProbUtils.scale(prob, scale);
-                this.addContribution(result, graph.getCombo(nodeId), mass, indexToEnchant, true, isBook, includeMasses, includeShownClueDistribution);
-            });
+        for (const entry of pendingEntries) {
+            this.addContribution(result, entry.combo, entry.mass, indexToEnchant, true, isBook, includeMasses, includeShownClueDistribution);
         }
+
 
         return result;
     }

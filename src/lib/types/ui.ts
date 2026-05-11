@@ -1,8 +1,8 @@
-import type { CalculationStats } from '#types/engine.js';
+import type { EnchantStats } from '#types/engine.js';
 import type { MassAccountingBreakdown } from '#types/mass.js';
 
 /**
- * Human-readable enchantment calculation statistics.
+ * Human-readable enchantment enchant stats.
  */
 export interface EnchantInsights {
     ranks: Record<string, number>;
@@ -35,7 +35,7 @@ export interface NameResolver {
  */
 export interface SweepData {
     l: number; // XP Level
-    s: CalculationStats; // Raw stats from the calculation engine
+    s: EnchantStats; // Raw stats from the enchant engine
 }
 
 /**

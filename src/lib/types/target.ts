@@ -85,5 +85,5 @@ export interface TargetAnalysisResult {
   nearMissComboCount: number;
   blockedMass: bigint;
   blockedComboCount: number;
-  combos: Map<PackedCombo, bigint>;
+  combos: ReadonlyMap<PackedCombo, bigint>;
 }

@@ -21,7 +21,7 @@ type RunUpdateCallback = TopUpdateCallback | ChartUpdateCallback;
 /**
  * Client wrapper around the Enchant Engine Web Workers.
  * Manages dual workers (Top and Chart) to enable parallel refinement and sweeps.
- * Implements the v5 run-based protocol with automatic supersession.
+ * Implements the run-based worker protocol with automatic supersession.
  */
 export const WorkerClient = {
     workers: {

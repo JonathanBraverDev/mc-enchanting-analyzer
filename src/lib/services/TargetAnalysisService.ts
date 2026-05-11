@@ -4,17 +4,17 @@ import type {
     PackedCombo,
     PackedTargetRequirement,
     RegistryState,
-    SearchFrontierSnapshot,
     TargetAnalysisResult,
     TargetRequirementInput
 } from '#types/index.js';
-import { ComboUtils, ProbUtils } from '#utils/index.js';
+import type { PendingFrontierEntry } from '#lib/search/SearchRun.js';
+import { ComboUtils } from '#utils/index.js';
 
 export interface TargetAnalysisRequest {
-    combos: Map<PackedCombo, bigint>;
+    combos: ReadonlyMap<PackedCombo, bigint>;
     indexToEnchant: number[];
     targets?: PackedTargetRequirement[] | undefined;
-    frontiers?: SearchFrontierSnapshot[] | undefined;
+    pendingEntries?: readonly PendingFrontierEntry[] | undefined;
     comboLimit?: number | undefined;
     registry?: RegistryState | undefined;
     isBook?: boolean | undefined;
@@ -109,7 +109,7 @@ export class TargetAnalysisService {
             combos,
             indexToEnchant,
             targets = [],
-            frontiers = [],
+            pendingEntries = [],
             comboLimit = 50,
             registry,
             isBook = false
@@ -135,26 +135,33 @@ export class TargetAnalysisService {
             }
         }
 
-        for (const { frontier, graph, scale } of frontiers) {
-            frontier.forEachNode((nodeId, prob) => {
-                const packed = graph.getCombo(nodeId);
-                const classification = this.classifyCombo(packed, targets, indexToEnchant, registry);
-                const mass = ProbUtils.scale(prob, scale);
-                if (classification.matches) {
-                    matchMass += mass;
-                    if (!isBook) this.addComboMass(matchingCombos, packed, mass);
-                } else {
-                    if (classification.nearMiss) {
-                        if (isBook) pendingNearMissMass += mass;
-                        else this.addComboMass(nearMissCombos, packed, mass);
-                    }
-                    if (classification.blockedByConflict) {
-                        if (isBook) pendingBlockedMass += mass;
-                        else this.addComboMass(blockedCombos, packed, mass);
-                    }
+        for (const entry of pendingEntries) {
+            const packed = entry.combo;
+            const mass = entry.mass;
+            if (isBook && entry.count > 1) {
+                const estimate = this.estimatePendingBookTargetMass(packed, mass, entry.count, targets, indexToEnchant, registry);
+                matchMass += estimate.matchMass;
+                pendingNearMissMass += estimate.nearMissMass;
+                pendingBlockedMass += estimate.blockedMass;
+                continue;
+            }
+
+            const classification = this.classifyCombo(packed, targets, indexToEnchant, registry);
+            if (classification.matches) {
+                matchMass += mass;
+                if (!isBook) this.addComboMass(matchingCombos, packed, mass);
+            } else {
+                if (classification.nearMiss) {
+                    if (isBook) pendingNearMissMass += mass;
+                    else this.addComboMass(nearMissCombos, packed, mass);
                 }
-            });
+                if (classification.blockedByConflict) {
+                    if (isBook) pendingBlockedMass += mass;
+                    else this.addComboMass(blockedCombos, packed, mass);
+                }
+            }
         }
+
 
         const topCombos: [PackedCombo, bigint][] = [];
         for (const entry of matchingCombos.entries()) {
@@ -170,6 +177,93 @@ export class TargetAnalysisService {
             blockedComboCount: blockedCombos.size,
             combos: new Map(topCombos)
         };
+    }
+
+    private static estimatePendingBookTargetMass(
+        packed: PackedCombo,
+        mass: bigint,
+        count: number,
+        targets: PackedTargetRequirement[],
+        indexToEnchant: number[],
+        registry?: RegistryState | undefined
+    ): { matchMass: bigint; nearMissMass: bigint; blockedMass: bigint } {
+        if (mass === 0n) return { matchMass: 0n, nearMissMass: 0n, blockedMass: 0n };
+
+        const classification = this.classifyCombo(packed, targets, indexToEnchant, registry);
+        if (count <= 1) {
+            return {
+                matchMass: classification.matches ? mass : 0n,
+                nearMissMass: classification.nearMiss ? mass : 0n,
+                blockedMass: classification.blockedByConflict ? mass : 0n
+            };
+        }
+        if (!classification.matches) {
+            return this.classifyPendingBookRemovalOutcomes(packed, mass, targets, indexToEnchant, registry);
+        }
+
+        // Pending book frontier entries are pre-random-removal combos. For target diagnostics,
+        // we only need the expected aggregate contribution, not exact per-output-combo mass.
+        // If the pre-removal combo satisfies every target, the final book still matches only
+        // when the random removal picks a non-target enchantment. Use one direct ratio and
+        // intentionally do not run the full book split/residue machinery here.
+        const requiredTargetSlots = this.countTargetSatisfyingSlots(packed, targets, indexToEnchant);
+        const preservingRemovals = Math.max(0, count - requiredTargetSlots);
+        const matchMass = (mass * BigInt(preservingRemovals)) / BigInt(count);
+        const removedTargetMass = mass - matchMass;
+        return {
+            matchMass,
+            nearMissMass: targets.length > 1 ? removedTargetMass : 0n,
+            blockedMass: 0n
+        };
+    }
+
+    private static classifyPendingBookRemovalOutcomes(
+        packed: PackedCombo,
+        mass: bigint,
+        targets: PackedTargetRequirement[],
+        indexToEnchant: number[],
+        registry?: RegistryState | undefined
+    ): { matchMass: bigint; nearMissMass: bigint; blockedMass: bigint } {
+        const redistributed = ComboUtils.removeAdditional(packed);
+        if (redistributed.length === 0) return { matchMass: 0n, nearMissMass: 0n, blockedMass: 0n };
+
+        const count = BigInt(redistributed.length);
+        const share = mass / count;
+        let residue = mass % count;
+        let matchMass = 0n;
+        let nearMissMass = 0n;
+        let blockedMass = 0n;
+
+        for (const output of redistributed) {
+            // Preserve aggregate mass in diagnostics while keeping the same deterministic
+            // one-removal-per-slot model as SearchRun's book result projection.
+            const outputMass = share + (residue > 0n ? 1n : 0n);
+            if (residue > 0n) residue--;
+            if (outputMass === 0n) continue;
+
+            const classification = this.classifyCombo(output, targets, indexToEnchant, registry);
+            if (classification.matches) matchMass += outputMass;
+            else {
+                if (classification.nearMiss) nearMissMass += outputMass;
+                if (classification.blockedByConflict) blockedMass += outputMass;
+            }
+        }
+
+        return { matchMass, nearMissMass, blockedMass };
+    }
+
+    private static countTargetSatisfyingSlots(
+        packed: PackedCombo,
+        targets: PackedTargetRequirement[],
+        indexToEnchant: number[]
+    ): number {
+        let count = 0;
+        ComboUtils.forEachEnchant(packed, indexToEnchant, (enchant) => {
+            const enchantId = ComboUtils.getEnchantId(enchant);
+            const rank = ComboUtils.getEnchantRank(enchant);
+            if (targets.some(target => target.enchantmentId === enchantId && rank >= target.rank)) count++;
+        });
+        return count;
     }
 
     public static getTargetOptions(registry: RegistryState, item: string): TargetRequirementInput[] {

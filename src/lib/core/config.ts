@@ -6,6 +6,8 @@ export interface RefinementCheckpointPreset {
     thresholdOther: number;
     limitBook: number;
     limitOther: number;
+    targetClassifiedMassBook?: number | undefined;
+    targetClassifiedMassOther?: number | undefined;
     status: string;
 }
 
@@ -14,6 +16,8 @@ export interface RefinementSearchCheckpoint extends SearchCheckpoint {
     refinementLevel: RefinementLevelName;
     status: string;
 }
+
+export type StatsCheckpoint = SearchCheckpoint;
 
 export const UI_TEXTS = {
     PAGE_TITLE: "Minecraft Enchantment Analyzer",
@@ -46,34 +50,36 @@ export const UI_DEFAULTS = {
 
 export const REFINEMENT_CHECKPOINTS: Record<RefinementLevelName, RefinementCheckpointPreset> = {
     coarse: {
-        thresholdBook: 0.05,
-        thresholdOther: 0.01,
+        thresholdBook: 0.007,
+        thresholdOther: 0.001,
         limitBook: 5000,
         limitOther: 2000,
         status: UI_TEXTS.STATUS_SEARCHING
     },
     standard: {
-        thresholdBook: 0.005,
-        thresholdOther: 0.0005,
+        thresholdBook: 0.001,
+        thresholdOther: 0.00005,
         limitBook: 20000,
         limitOther: 10000,
         status: UI_TEXTS.STATUS_REFINING
     },
     deep: {
-        thresholdBook: 0.0005,
-        thresholdOther: 0.00005,
+        thresholdBook: 0.00005,
+        thresholdOther: 0.000005,
         limitBook: 60000,
         limitOther: 30000,
         status: UI_TEXTS.STATUS_FINALIZING
     },
     ultra: {
-        thresholdBook: 0.0001,
-        thresholdOther: 0.000005,
+        thresholdBook: 0.00001,
+        thresholdOther: 0.000001,
         limitBook: 150000,
         limitOther: 75000,
         status: UI_TEXTS.STATUS_OPTIMIZING
     }
 };
+
+export const DEFAULT_STATS_REFINEMENT_LEVEL: RefinementLevelName = 'standard';
 
 export const REFINEMENT_LEVEL_COLORS: Record<RefinementStatusLevel, { bg: string; text: string }> = {
     coarse:   { bg: 'rgba(255, 193, 7, 0.15)',   text: '#ffca28' },
@@ -85,10 +91,25 @@ export const REFINEMENT_LEVEL_COLORS: Record<RefinementStatusLevel, { bg: string
 
 export function getSearchCheckpointForRefinement(level: RefinementLevelName, isBook: boolean): RefinementSearchCheckpoint {
     const mode = REFINEMENT_CHECKPOINTS[level];
+    const checkpoint = getCheckpointFromPreset(mode, isBook);
+
     return {
         refinementLevel: level,
+        ...checkpoint,
+        status: mode.status
+    };
+}
+
+export function getDefaultStatsCheckpoint(isBook: boolean): StatsCheckpoint {
+    return getCheckpointFromPreset(REFINEMENT_CHECKPOINTS[DEFAULT_STATS_REFINEMENT_LEVEL], isBook);
+}
+
+function getCheckpointFromPreset(mode: RefinementCheckpointPreset, isBook: boolean): StatsCheckpoint {
+    const targetClassifiedMass = isBook ? mode.targetClassifiedMassBook : mode.targetClassifiedMassOther;
+
+    return {
         threshold: isBook ? mode.thresholdBook : mode.thresholdOther,
         limit: isBook ? mode.limitBook : mode.limitOther,
-        status: mode.status
+        ...(targetClassifiedMass === undefined ? {} : { targetClassifiedMass })
     };
 }

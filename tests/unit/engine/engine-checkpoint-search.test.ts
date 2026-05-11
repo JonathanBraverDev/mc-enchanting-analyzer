@@ -16,7 +16,7 @@ const MATERIAL = TEST_DATA.MATERIALS.DIAMOND;
 const VERSION = TEST_DATA.VERSIONS.MODERN;
 
 describe('EnchantEngine: sequential checkpoint aggregation', () => {
-    const cacheConfig: CacheConfig = { comboOtherSize: 1000, comboBookSize: 1000, statsSize: 100, poolSize: 1000 };
+    const cacheConfig: CacheConfig = { comboOtherSize: 1000, comboBookSize: 1000, poolSize: 1000 };
     let cache: CacheManager;
 
     function createEngine() {
@@ -36,11 +36,10 @@ describe('EnchantEngine: sequential checkpoint aggregation', () => {
             xp: XP,
             material: MATERIAL,
             threshold: TEST_DATA.THRESHOLDS.PROB_MIN,
-            resultsLimit: 10000
         });
         const singleStats = SummaryService.summarize({
             combos: singleResult.combos,
-            tracker: singleResult.tracker,
+            snapshot: singleResult.snapshot,
             indexToEnchant: engine.registry.indexToEnchant,
             comboLimit: 10000,
             threshold: singleResult.threshold
@@ -56,11 +55,10 @@ describe('EnchantEngine: sequential checkpoint aggregation', () => {
             ],
             onCheckpointComplete: () => {},
             threshold: TEST_DATA.THRESHOLDS.PROB_MIN,
-            resultsLimit: 10000
         });
         const sequentialStats = SummaryService.summarize({
             combos: sequentialResult.combos,
-            tracker: sequentialResult.tracker,
+            snapshot: sequentialResult.snapshot,
             indexToEnchant: engine.registry.indexToEnchant,
             comboLimit: 10000,
             threshold: sequentialResult.threshold
@@ -139,7 +137,7 @@ describe('EnchantEngine: sequential checkpoint aggregation', () => {
                 { threshold: 0.001,  limit: 2000 },
             ],
             onCheckpointComplete: (result: SearchResult) => {
-                accuracies.push(result.tracker.mass.toPublic().resolved);
+                accuracies.push(result.snapshot.mass.resolved);
             }
         });
 
@@ -157,7 +155,7 @@ describe('EnchantEngine checkpoint search', () => {
         engine.resetCaches();
     });
 
-    it('searchSequentialCheckpoints produces same summarized result as calculate', async () => {
+    it('searchSequentialCheckpoints produces same summarized result as direct stats helper', async () => {
         const engine = EngineFactory.createForVersion(VERSION);
         engine.resetCaches();
 
@@ -173,7 +171,7 @@ describe('EnchantEngine checkpoint search', () => {
         });
         const sequentialStats = SummaryService.summarize({
             combos: sequentialResult.combos,
-            tracker: sequentialResult.tracker,
+            snapshot: sequentialResult.snapshot,
             indexToEnchant: engine.registry.indexToEnchant,
             comboLimit: 10000,
             threshold: sequentialResult.threshold
@@ -181,13 +179,12 @@ describe('EnchantEngine checkpoint search', () => {
 
         engine.resetCaches();
 
-        const fullStats = await engine.calculate({
+        const fullStats = await engine.getStats({
             item: ITEM,
             xp: XP,
             material: MATERIAL,
             threshold: TEST_DATA.THRESHOLDS.PROB_MIN,
             summaryLimit: 10000,
-            resultsLimit: 10000
         });
 
         assert.strictEqual(Object.keys(sequentialStats.combos).length, Object.keys(fullStats.combos).length);
@@ -209,13 +206,13 @@ describe('EnchantEngine checkpoint search', () => {
                 { threshold: 0.01,   limit: 500 },
                 { threshold: TEST_DATA.THRESHOLDS.PROB_MIN, limit: 10000 },
             ],
-            onCheckpointComplete: (result) => { checkpointAccuracies.push(result.tracker.mass.toPublic().resolved); }
+            onCheckpointComplete: (result) => { checkpointAccuracies.push(result.snapshot.mass.resolved); }
         });
 
         assert.strictEqual(checkpointAccuracies.length, 3);
         const ultraAccuracy = checkpointAccuracies[2];
         const futureResult = await engine.searchToCheckpoint({ item: ITEM, xp: XP, material: MATERIAL, threshold: TEST_DATA.THRESHOLDS.PROB_MIN });
-        assert.strictEqual(futureResult.tracker.mass.toPublic().resolved, ultraAccuracy);
+        assert.strictEqual(futureResult.snapshot.mass.resolved, ultraAccuracy);
     });
 
 });
