@@ -36,7 +36,6 @@ async function run() {
         instrumentation,
         threshold,
         maxIterations: 100000, // High limit for snapshot level
-        resultsLimit: 1000
     });
     const end = performance.now();
 

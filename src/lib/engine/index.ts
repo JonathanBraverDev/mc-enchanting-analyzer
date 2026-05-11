@@ -161,9 +161,5 @@ export class EnchantEngine {
                 }
             }
         }
-        if (request.resultsLimit !== undefined && (request.resultsLimit <= 0 || request.resultsLimit > 1_000_000)) {
-            throw new Error(`Invalid resultsLimit: ${request.resultsLimit}. Must be between 1 and 1,000,000.`);
-        }
-
     }
 }

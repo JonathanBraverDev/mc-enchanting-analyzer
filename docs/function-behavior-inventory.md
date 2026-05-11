@@ -856,10 +856,10 @@ For each function:
 
 - **path:line** `src/lib/engine/index.ts:121`
   - **current symbol:** `EnchantEngine.validateRequest`
-  - **inputs/parameters used:** `request.item`, `request.material`, `request.xp`, optional `request.threshold`, `request.maxIterations`, optional `request.checkpoints`, optional `request.resultsLimit`
+  - **inputs/parameters used:** `request.item`, `request.material`, `request.xp`, optional `request.threshold`, `request.maxIterations`, optional `request.checkpoints`
   - **state read/written:** reads `registry.mechanics.xp_cap`, `registry.version`; falls back to `MINECRAFT_RULES.XP_CAP_LEGACY`; calls `isItemAvailable`, `isMaterialEligible`, `ProbUtils.toNumber`; iterates `request.checkpoints` when present; no writes
   - **return/side effects:** throws descriptive errors for invalid request fields; otherwise returns nothing
-  - **body-derived behavior summary:** enforces positive integer XP within the version-specific cap, requires an available item/material pairing, validates threshold and checkpoint target masses as numbers between 0 and 1, requires positive integer `maxIterations`, and bounds `resultsLimit` to 1 through 1,000,000.
+  - **body-derived behavior summary:** enforces positive integer XP within the version-specific cap, requires an available item/material pairing, validates threshold and checkpoint target masses as numbers between 0 and 1, and requires positive integer `maxIterations`.
   - **naming notes:** this is full request-shape/range validation across multiple request types, not just a lightweight sanity check.
 
 ### `src/lib/engine/cache/CacheManager.ts`

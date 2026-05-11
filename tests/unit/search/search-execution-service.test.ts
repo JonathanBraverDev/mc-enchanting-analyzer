@@ -1,7 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { EngineFactory } from '#engine/index.js';
-import { ENGINE_LIMITS } from '#constants/engine.js';
 import { getDefaultStatsCheckpoint, getSearchCheckpointForRefinement } from '#core/config.js';
 import { EnchantStats, SearchResult } from '#types/index.js';
 
@@ -22,7 +21,6 @@ describe('Search execution service', () => {
             threshold: 0n,
             maxIterations: 250,
             summaryLimit: 10,
-            resultsLimit: ENGINE_LIMITS.MAX_RESULTS_UNBOUNDED
         });
 
         assert.ok(Object.keys(stats.combos).length > 0);
@@ -44,7 +42,6 @@ describe('Search execution service', () => {
             maxIterations: 1,
             exhaustive: true,
             summaryLimit: 10,
-            resultsLimit: ENGINE_LIMITS.MAX_RESULTS_UNBOUNDED,
             useCache: false
         });
 

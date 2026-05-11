@@ -237,7 +237,6 @@ export interface SearchConfig {
      */
     exhaustive?: boolean | undefined;
     summaryLimit?: number | undefined;
-    resultsLimit?: number | undefined;
     useCache?: boolean | undefined;
     instrumentation?: EngineInstrumentation | undefined;
     timing?: SearchTiming | undefined;

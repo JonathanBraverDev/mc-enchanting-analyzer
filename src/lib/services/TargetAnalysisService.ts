@@ -137,8 +137,23 @@ export class TargetAnalysisService {
 
         for (const entry of pendingEntries) {
             const packed = entry.combo;
-            const classification = this.classifyCombo(packed, targets, indexToEnchant, registry);
             const mass = entry.mass;
+            if (isBook && entry.count > 1) {
+                const redistributed = ComboUtils.removeAdditional(packed);
+                this.addPendingBookTargetMass({
+                    redistributed,
+                    mass,
+                    targets,
+                    indexToEnchant,
+                    registry,
+                    onMatch: (share) => { matchMass += share; },
+                    onNearMiss: (share) => { pendingNearMissMass += share; },
+                    onBlocked: (share) => { pendingBlockedMass += share; }
+                });
+                continue;
+            }
+
+            const classification = this.classifyCombo(packed, targets, indexToEnchant, registry);
             if (classification.matches) {
                 matchMass += mass;
                 if (!isBook) this.addComboMass(matchingCombos, packed, mass);
@@ -169,6 +184,32 @@ export class TargetAnalysisService {
             blockedComboCount: blockedCombos.size,
             combos: new Map(topCombos)
         };
+    }
+
+    private static addPendingBookTargetMass(request: {
+        redistributed: readonly PackedCombo[];
+        mass: bigint;
+        targets: PackedTargetRequirement[];
+        indexToEnchant: number[];
+        registry?: RegistryState | undefined;
+        onMatch: (mass: bigint) => void;
+        onNearMiss: (mass: bigint) => void;
+        onBlocked: (mass: bigint) => void;
+    }): void {
+        const { redistributed, mass, targets, indexToEnchant, registry, onMatch, onNearMiss, onBlocked } = request;
+        if (redistributed.length === 0 || mass === 0n) return;
+
+        const share = mass / BigInt(redistributed.length);
+        if (share === 0n) return;
+
+        for (const combo of redistributed) {
+            const classification = this.classifyCombo(combo, targets, indexToEnchant, registry);
+            if (classification.matches) onMatch(share);
+            else {
+                if (classification.nearMiss) onNearMiss(share);
+                if (classification.blockedByConflict) onBlocked(share);
+            }
+        }
     }
 
     public static getTargetOptions(registry: RegistryState, item: string): TargetRequirementInput[] {

@@ -22,7 +22,6 @@ async function profile() {
             material: 'book',
             exhaustive: TEST_DEFAULTS.SNAPSHOT_EXHAUSTIVE,
             summaryLimit: ENGINE_LIMITS.MAX_RESULTS_UNBOUNDED,
-            resultsLimit: ENGINE_LIMITS.MAX_RESULTS_UNBOUNDED,
             useCache: false,
             timing
         });
