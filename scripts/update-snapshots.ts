@@ -2,6 +2,10 @@ import { EnchantEngine, EngineFactory } from '#engine/index.js';
 import { SnapshotUtils } from '#tests/infra/test-utils.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import { TEST_DEFAULTS } from '#constants/testing.js';
+import { ClueValidator } from '#core/clue.js';
+import { SummaryService } from '#services/SummaryService.js';
+import { RegistryKernel, SearchRun } from '#lib/v7/index.js';
+import { CalculationStats } from '#types/index.js';
 
 interface SnapshotCase {
     name: string;
@@ -47,17 +51,38 @@ function getRequestedCases(): SnapshotCase[] {
     return selected;
 }
 
-async function getStats(engine: EnchantEngine, testCase: SnapshotCase) {
-    return await engine.calculate({
+async function getStats(engine: EnchantEngine, testCase: SnapshotCase): Promise<CalculationStats> {
+    const targetClueId = testCase.clue
+        ? ClueValidator.validate(engine.registry, testCase.item, testCase.clue)
+        : undefined;
+    const kernel = new RegistryKernel({
+        registry: engine.registry,
         item: testCase.item,
-        xp: testCase.xp,
-        material: testCase.material,
-        clue: testCase.clue,
-        exhaustive: TEST_DEFAULTS.SNAPSHOT_EXHAUSTIVE,
-        resultsLimit: ENGINE_LIMITS.MAX_RESULTS_UNBOUNDED,
-        summaryLimit: ENGINE_LIMITS.MAX_RESULTS_UNBOUNDED,
-        useCache: false
+        material: testCase.material
     });
+    const run = new SearchRun(kernel, { targetClueId });
+    run.seedXp(testCase.xp);
+
+    // Snapshot generation is a final artifact export. Use V7's synchronous run path
+    // so the search loop does not repeatedly materialize full checkpoint snapshots
+    // while yielding; modern book exhaustive runs have millions of pending entries.
+    const snapshot = run.searchToCheckpoint({
+        exhaustive: TEST_DEFAULTS.SNAPSHOT_EXHAUSTIVE,
+        threshold: TEST_DEFAULTS.SNAPSHOT_THRESHOLD,
+        maxIterations: TEST_DEFAULTS.SNAPSHOT_ITERATIONS
+    });
+    const summaryRequest = {
+        combos: snapshot.results,
+        snapshot,
+        indexToEnchant: engine.registry.indexToEnchant,
+        comboLimit: ENGINE_LIMITS.MAX_RESULTS_UNBOUNDED,
+        threshold: TEST_DEFAULTS.SNAPSHOT_EXHAUSTIVE ? 0 : TEST_DEFAULTS.SNAPSHOT_THRESHOLD,
+        isBook: testCase.item === 'book'
+    };
+
+    return targetClueId === undefined
+        ? SummaryService.summarize(summaryRequest)
+        : SummaryService.summarizeConditioned({ ...summaryRequest, targetClueId });
 }
 
 async function updateSnapshots() {

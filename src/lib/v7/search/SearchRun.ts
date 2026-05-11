@@ -73,6 +73,15 @@ interface V7EdgeMassShare {
     mass: bigint;
 }
 
+interface V7AdvanceCriteria {
+    readonly threshold: bigint;
+    readonly maxIterations: number;
+    readonly targetClassifiedMass?: bigint | undefined;
+    readonly targetResolvedMass?: bigint | undefined;
+    readonly probabilityFloor: bigint;
+    readonly signal?: AbortSignal | undefined;
+}
+
 /**
  * Minimal V7 single-cell probability flow executor.
  *
@@ -139,51 +148,69 @@ export class SearchRun {
     }
 
     public searchToCheckpoint(request: V7SearchCheckpointRequest = {}): V7SearchRunSnapshot {
-        if (!this.seeded) throw new Error('V7 SearchRun must be seeded before searching.');
+        const criteria = this.createAdvanceCriteria(request);
+        this.advanceUntilCheckpoint(criteria);
+        return this.snapshot();
+    }
 
-        const threshold = request.exhaustive ? 0n : ProbUtils.toBigInt(request.threshold ?? ENGINE_LIMITS.DEFAULT_THRESHOLD);
-        const maxIterations = request.exhaustive ? Number.POSITIVE_INFINITY : request.maxIterations ?? ENGINE_LIMITS.MAX_ITERATIONS_UNBOUNDED;
-        const targetClassifiedMass = request.targetClassifiedMass !== undefined
-            ? ProbUtils.toBigInt(request.targetClassifiedMass)
-            : undefined;
-        const targetResolvedMass = request.targetResolvedMass !== undefined
-            ? ProbUtils.toBigInt(request.targetResolvedMass)
-            : undefined;
-        const probabilityFloor = request.probabilityFloor !== undefined
-            ? ProbUtils.toBigInt(request.probabilityFloor)
-            : 0n;
-        const current = { programId: 0, nodeId: 0 as V7ProgramNodeId, mass: 0n };
+    public async searchToCheckpointAsync(request: V7SearchCheckpointRequest = {}): Promise<V7SearchRunSnapshot> {
+        const criteria = this.createAdvanceCriteria(request);
+        const chunkIterations = Math.max(
+            1,
+            request.yieldEveryIterations ?? ENGINE_LIMITS.ASYNC_SEARCH_CHUNK_ITERATIONS
+        );
 
-        while (this.frontier.size > 0 && this._iterations < maxIterations) {
-            if (request.signal?.aborted) throw new Error('Aborted');
-            if (targetClassifiedMass !== undefined && this.mass.getClassifiedMass() >= targetClassifiedMass) break;
-            if (targetResolvedMass !== undefined && this.mass.getResolvedMass() >= targetResolvedMass) break;
-            if (this.frontier.peekMass() < threshold) break;
-            if (!this.frontier.pop(current)) break;
-
-            this.mass.subtract('pending', current.mass);
-            this.expand(current.programId, current.nodeId, current.mass, probabilityFloor);
-            this._iterations++;
+        while (!this.advanceUntilCheckpoint(criteria, chunkIterations)) {
+            await AsyncUtils.yield();
         }
 
         return this.snapshot();
     }
 
-    public async searchToCheckpointAsync(request: V7SearchCheckpointRequest = {}): Promise<V7SearchRunSnapshot> {
-        const maxIterations = request.exhaustive ? Number.POSITIVE_INFINITY : request.maxIterations ?? ENGINE_LIMITS.MAX_ITERATIONS_UNBOUNDED;
-        const yieldEveryIterations = Math.max(1, request.yieldEveryIterations ?? 2048);
+    private createAdvanceCriteria(request: V7SearchCheckpointRequest): V7AdvanceCriteria {
+        if (!this.seeded) throw new Error('V7 SearchRun must be seeded before searching.');
+
+        return {
+            threshold: request.exhaustive ? 0n : ProbUtils.toBigInt(request.threshold ?? ENGINE_LIMITS.DEFAULT_THRESHOLD),
+            maxIterations: request.exhaustive ? Number.POSITIVE_INFINITY : request.maxIterations ?? ENGINE_LIMITS.MAX_ITERATIONS_UNBOUNDED,
+            targetClassifiedMass: request.targetClassifiedMass !== undefined
+                ? ProbUtils.toBigInt(request.targetClassifiedMass)
+                : undefined,
+            targetResolvedMass: request.targetResolvedMass !== undefined
+                ? ProbUtils.toBigInt(request.targetResolvedMass)
+                : undefined,
+            probabilityFloor: request.probabilityFloor !== undefined
+                ? ProbUtils.toBigInt(request.probabilityFloor)
+                : 0n,
+            signal: request.signal
+        };
+    }
+
+    /**
+     * Advances live search state until a real checkpoint/final boundary is reached.
+     * Optional chunk size is a scheduler budget only; exhausting it yields without
+     * materializing an expensive snapshot.
+     *
+     * @returns true when the requested checkpoint is reached; false when only the chunk budget was exhausted.
+     */
+    private advanceUntilCheckpoint(criteria: V7AdvanceCriteria, chunkIterations?: number): boolean {
+        const current = { programId: 0, nodeId: 0 as V7ProgramNodeId, mass: 0n };
+        let advancedInChunk = 0;
 
         while (true) {
-            if (request.signal?.aborted) throw new Error('Aborted');
-            const nextLimit = Math.min(maxIterations, this._iterations + yieldEveryIterations);
-            const snapshot = this.searchToCheckpoint({
-                ...request,
-                exhaustive: false,
-                threshold: request.exhaustive ? 0n : request.threshold,
-                maxIterations: nextLimit
-            });
-            if (snapshot.iterations < nextLimit || snapshot.iterations >= maxIterations) return snapshot;
-            await AsyncUtils.yield();
+            if (criteria.signal?.aborted) throw new Error('Aborted');
+            if (this.frontier.size === 0) return true;
+            if (this._iterations >= criteria.maxIterations) return true;
+            if (criteria.targetClassifiedMass !== undefined && this.mass.getClassifiedMass() >= criteria.targetClassifiedMass) return true;
+            if (criteria.targetResolvedMass !== undefined && this.mass.getResolvedMass() >= criteria.targetResolvedMass) return true;
+            if (this.frontier.peekMass() < criteria.threshold) return true;
+            if (chunkIterations !== undefined && advancedInChunk >= chunkIterations) return false;
+            if (!this.frontier.pop(current)) return true;
+
+            this.mass.subtract('pending', current.mass);
+            this.expand(current.programId, current.nodeId, current.mass, criteria.probabilityFloor);
+            this._iterations++;
+            advancedInChunk++;
         }
     }
 

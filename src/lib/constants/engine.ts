@@ -12,6 +12,8 @@ export const ENGINE_LIMITS = {
     MAX_RESULTS_UNBOUNDED: 1000000,
     MAX_RESULTS_SIZE: 1000000,
     MAX_ITERATIONS_UNBOUNDED: 1000000,
+    /** Cooperative async search slice size. Yield points are scheduler boundaries, not result checkpoints. */
+    ASYNC_SEARCH_CHUNK_ITERATIONS: 2048,
     DEFAULT_THRESHOLD: 0.0001,
     DEFAULT_BUFFER_SIZE: 1024,
     MAX_COUNT_STATS: 8
