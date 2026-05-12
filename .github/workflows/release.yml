@@ -25,6 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: read
     outputs:
       tag: ${{ steps.version.outputs.tag }}
       should_release: ${{ steps.version.outputs.should_release }}
@@ -41,6 +42,7 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           DISPATCH_TAG: ${{ inputs.tag }}
           DISPATCH_PR_NUMBER: ${{ inputs.pr_number }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             if [ -z "$DISPATCH_TAG" ] || [ -z "$DISPATCH_PR_NUMBER" ]; then
@@ -57,6 +59,13 @@ jobs:
           SUBJECT=$(git log -1 --pretty=%s)
           TAG=$(printf '%s\n' "$SUBJECT" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n 1 || true)
           PR_NUMBER=$(printf '%s\n' "$SUBJECT" | grep -oE '#[0-9]+' | tail -n 1 | tr -d '#' || true)
+
+          if [ -z "$PR_NUMBER" ]; then
+            PR_NUMBER=$(gh api \
+              "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" \
+              -H "Accept: application/vnd.github+json" \
+              --jq 'map(select(.base.ref == "main" and .merged_at != null)) | sort_by(.merged_at) | last | .number // ""' || true)
+          fi
 
           if [ -z "$TAG" ]; then
             echo "No semantic version found in main commit subject: $SUBJECT"
