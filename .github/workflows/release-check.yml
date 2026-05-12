@@ -1,10 +1,6 @@
 name: Release Pre-Merge Check
 
 on:
-  pull_request:
-    branches:
-      - main
-    types: [opened, edited, synchronize, reopened, ready_for_review]
   pull_request_target:
     branches:
       - main
@@ -21,10 +17,6 @@ concurrency:
 jobs:
   validate-release:
     name: Validate Release Format
-    # Migration note: keep pull_request reporting only for the v7.1.0 PR that
-    # introduces the pull_request_target gate. After this lands on main, the
-    # stable pull_request_target run is the authoritative release gate.
-    if: ${{ github.event_name == 'pull_request_target' || github.event.pull_request.head.ref == 'refactor/registry-effective-rank-intervals' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -180,9 +172,8 @@ jobs:
 
   ci-change-advisory:
     name: CI Change Advisory
-    # This is intentionally target-branch only. It becomes active after the
-    # v7.1.0 bridge release lands on main, so PR-authored workflow edits cannot
-    # suppress or soften the advisory that reviews those same edits.
+    # This is intentionally target-branch only, so PR-authored workflow edits
+    # cannot suppress or soften the advisory that reviews those same edits.
     if: ${{ github.event_name == 'pull_request_target' }}
     runs-on: ubuntu-latest
     steps:
