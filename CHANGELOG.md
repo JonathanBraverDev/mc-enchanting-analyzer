@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## v7.1.0 (2026-05-12)
+
+### Improved
+- **Registry rank intervals**: Enchantment metadata now compiles effective rank intervals up front, so registry consumers can reason about level availability without repeatedly reconstructing rank ranges.
+- **Target and clue analysis consistency**: Service-level target and clue checks now use the compiled rank intervals, keeping derived availability aligned with registry construction.
+
+### Fixed
+- **Thorns III availability**: Restored the valid Thorns III rank range so matching rolls are included again in affected versions.
+- **Registry baseline snapshots**: Updated engine baselines for book, spear, and mace cases after the rank interval correction.
+
+### Developer Experience
+- **Stable release gates**: Release PR policy now runs from the base branch workflow with `pull_request_target`, treating PR head release metadata as data so release rules cannot be bypassed by editing the PR workflow.
+- **CI change advisory**: PRs that touch CI-sensitive files now get a non-required advisory check that distinguishes normal changes, CI logic edits, and high-risk workflow trigger/target changes.
+- **Release archive fallback**: The release archive workflow can recover the source PR number for squash commits whose subject does not include the default `(#NN)` suffix.
+- **Release PR guidance**: `CONTRIBUTING.md` now documents the expected release branch shape, PR description style, and final release metadata commit.
+
 ## v7.0.0 (2026-05-11)
 
 ### Added
