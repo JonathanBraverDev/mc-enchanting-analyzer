@@ -2,6 +2,7 @@ import { describe, it, before } from 'node:test';
 import assert from 'node:assert';
 import { EngineFactory } from '#engine/factory.js';
 import { TargetAnalysisService } from '#services/TargetAnalysisService.js';
+import { ClueValidator } from '#core/clue.js';
 import { ComboUtils, ProbUtils, PRECISION } from '#utils/index.js';
 import { makePendingEntry } from '#tests/infra/search-snapshot-test-utils.js';
 import type { PackedCombo, PackedEnchant, PackedTargetRequirement, RegistryState } from '#types/index.js';
@@ -211,6 +212,26 @@ describe('TargetAnalysisService', () => {
         ]);
 
         assert.deepStrictEqual(packed.map(t => t.label), ['Efficiency V+', 'Fortune III+']);
+    });
+
+    it('uses effective ranks for target options and validation', () => {
+        const quickChargeOptions = TargetAnalysisService.getTargetOptions(registry, 'crossbow')
+            .filter(option => option.enchantment === 'Quick Charge');
+        assert.deepStrictEqual(quickChargeOptions.map(option => option.rank), [2, 1]);
+
+        assert.throws(
+            () => TargetAnalysisService.packTargets(registry, 'crossbow', [
+                { enchantment: 'Quick Charge', rank: 3, rankMode: 'atLeast' }
+            ]),
+            /exceeds max rank 2/
+        );
+    });
+
+    it('uses effective ranks for clue validation', () => {
+        assert.throws(
+            () => ClueValidator.validate(registry, 'crossbow', 'Quick Charge III'),
+            /exceeds max rank 2/
+        );
     });
 
     it('rejects conflicting target requirements', () => {

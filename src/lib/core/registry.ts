@@ -146,17 +146,12 @@ export function getCandidatePool(
     const out: PackedEnchant[] = [];
 
     for (const name of pool) {
-        const props = state.resolvedRegistry[name];
-        if (!props) continue;
-        const id = state.idMap.get(name)!;
+        const intervals = state.effectiveRankIntervals[name];
+        if (!intervals) continue;
 
-        // sortedRanks is sorted descending (highest rank first), so the first matching
-        // rank is the highest one achievable at this level. The break is correct.
-        // TODO: migrate this caller to state.effectiveRankIntervals after the projection is tested in isolation.
-        for (const [r, rankVal] of state.sortedRanks) {
-            const range = props.levels[r];
-            if (range && level >= range[0] && level <= range[1]) {
-                out.push(((id << PACKING_CONSTANTS.ENCHANT_SHIFT) | rankVal) as PackedEnchant);
+        for (const interval of intervals) {
+            if (level >= interval.min && level <= interval.max) {
+                out.push(interval.packedEnchant);
                 break;
             }
         }

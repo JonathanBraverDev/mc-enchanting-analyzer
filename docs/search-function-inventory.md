@@ -471,7 +471,7 @@ Recommendation: keep `SearchPool*` until after the `RegistryKernel` rename lands
 
 ### Registry Runtime Effective Rank Ranges
 
-`RegistryFactory` now compiles declared rank ranges into runtime effective rank intervals. Existing registry callers still use the previous raw-range paths; the compiled projection exists so the effective ranges can be tested before migrating callers.
+`RegistryFactory` compiles declared rank ranges into runtime effective rank intervals. Registry callers use those effective intervals for candidate pools and user-facing rank validation while source data keeps the vanilla declared ranges.
 
 Each enchantment exposes effective rank intervals where lower ranks have already been shadowed by higher ranks. For integer modified levels:
 
@@ -484,8 +484,8 @@ Implementation notes:
 
 - Effective rank ranges are computed during registry factory/build time.
 - Empty declared ranges such as Quick Charge III `52-50` are kept in source data and dense packed-rank indexing, but dropped from the effective interval projection.
+- `getCandidatePool`, clue validation, and target packing/options use the compiled effective intervals.
 - Original declared ranges stay in `resolvedRegistry` for docs/display/debugging so the source data still matches Minecraft tables.
-- Next migration step: move `getCandidatePool`, clue validation, and target packing/options from raw declared ranks to the compiled effective intervals.
 
 ### Priority 3: Worker Projection Vocabulary
 
