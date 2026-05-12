@@ -152,8 +152,7 @@ export function getCandidatePool(
 
         // sortedRanks is sorted descending (highest rank first), so the first matching
         // rank is the highest one achievable at this level. The break is correct.
-        // TODO(post-7.0.0): precompute effective rank intervals in the runtime registry
-        // so lower ranks shadowed by overlapping higher-rank ranges are not scanned here.
+        // TODO: migrate this caller to state.effectiveRankIntervals after the projection is tested in isolation.
         for (const [r, rankVal] of state.sortedRanks) {
             const range = props.levels[r];
             if (range && level >= range[0] && level <= range[1]) {

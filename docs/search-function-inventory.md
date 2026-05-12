@@ -469,23 +469,23 @@ Possible later alternatives:
 
 Recommendation: keep `SearchPool*` until after the `RegistryKernel` rename lands. The prefix is useful because `core/registry.ts` already has raw eligible pools.
 
-### Post-7.0.0 Registry Optimization Note: Effective Rank Ranges
+### Registry Runtime Effective Rank Ranges
 
-`getCandidatePool` currently scans every rank for every enchantment at a modified level and relies on descending rank order plus `break` to enforce the Minecraft rule: when rank ranges overlap for the same enchantment type, the higher power value wins.
+`RegistryFactory` now compiles declared rank ranges into runtime effective rank intervals. Existing registry callers still use the previous raw-range paths; the compiled projection exists so the effective ranges can be tested before migrating callers.
 
-This can be precomputed in the runtime registry. Each enchantment can expose effective rank intervals where lower ranks have already been shadowed by higher ranks. For integer modified levels:
+Each enchantment exposes effective rank intervals where lower ranks have already been shadowed by higher ranks. For integer modified levels:
 
 - If rank I is `[1, 500]` and rank II is `[6, 600]`, then rank I's effective interval is `[1, 5]`.
 - Rank I can never appear at modified level `6+`, because rank II is eligible and higher.
 - The general rule is: `effective(rank) = declared(rank) - union(declared(higher ranks))`.
 - For current Minecraft-style contiguous monotonic ranges this usually collapses to truncating the lower rank's max to `nextHigherMin - 1`, but the safer implementation should subtract higher-rank intervals rather than assume perfect shape.
 
-Potential implementation direction:
+Implementation notes:
 
-- Compute effective rank ranges during registry factory/build time.
-- Store them on the runtime `RegistryState` or a derived lookup structure.
-- Let `getCandidatePool` iterate only effective ranges or use a level-indexed lookup, avoiding repeated filtering of ranks that can never win.
-- Keep the original declared ranges for docs/display/debugging so the source data still matches Minecraft tables.
+- Effective rank ranges are computed during registry factory/build time.
+- Empty declared ranges such as Quick Charge III `52-50` are kept in source data and dense packed-rank indexing, but dropped from the effective interval projection.
+- Original declared ranges stay in `resolvedRegistry` for docs/display/debugging so the source data still matches Minecraft tables.
+- Next migration step: move `getCandidatePool`, clue validation, and target packing/options from raw declared ranks to the compiled effective intervals.
 
 ### Priority 3: Worker Projection Vocabulary
 
