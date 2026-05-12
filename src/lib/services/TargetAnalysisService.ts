@@ -42,13 +42,12 @@ export class TargetAnalysisService {
                 throw new Error(`Target enchantment "${target.enchantment}" is not applicable to item "${item}"`);
             }
 
-            const enchant = registry.resolvedRegistry[target.enchantment];
-            if (!enchant) {
+            const maxRank = this.getMaxEffectiveRank(registry, target.enchantment);
+            if (maxRank === 0) {
                 throw new Error(`Unknown target enchantment: "${target.enchantment}"`);
             }
 
             const enchantmentId = getEnchantId(registry, target.enchantment);
-            const maxRank = Object.keys(enchant.levels).length;
             if (target.rank < 1 || target.rank > maxRank) {
                 throw new Error(`Target rank ${target.rank} for "${target.enchantment}" exceeds max rank ${maxRank}`);
             }
@@ -271,9 +270,8 @@ export class TargetAnalysisService {
         const options: TargetRequirementInput[] = [];
 
         for (const enchantment of pool) {
-            const props = registry.resolvedRegistry[enchantment];
-            if (!props) continue;
-            for (let rank = 1; rank <= Object.keys(props.levels).length; rank++) {
+            const maxRank = this.getMaxEffectiveRank(registry, enchantment);
+            for (let rank = 1; rank <= maxRank; rank++) {
                 options.push({ enchantment, rank, rankMode: 'atLeast' });
             }
         }
@@ -286,6 +284,10 @@ export class TargetAnalysisService {
 
     public static getTargetOptionLabel(registry: RegistryState, target: TargetRequirementInput): string {
         return `${target.enchantment} ${getRankRoman(registry, target.rank)}+`;
+    }
+
+    private static getMaxEffectiveRank(registry: RegistryState, enchantment: string): number {
+        return Math.max(0, ...((registry.effectiveRankIntervals[enchantment] ?? []).map(interval => interval.rank)));
     }
 
     public static targetsConflict(

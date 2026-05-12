@@ -183,9 +183,9 @@ describe('EngineFactory', () => {
             () => RegistryFactory.buildWithMutations('1.21.11', {
                 type: 'patchEnchantment',
                 enchantment: 'Sharpness',
-                patch: { levels: { III: [5, 5] } }
+                patch: { levels: { III: [0, 5] } }
             }),
-            /expected \[min, max\] with 1 <= min < max/
+            /expected \[min, max\] with numeric min >= 1/
         );
     });
 

@@ -1,7 +1,7 @@
 import { RegistryState } from '#types/index.js';
 import { EnchantUtils } from '#utils/index.js';
 import { getEnchantId } from '#core/registry.js';
-import { ENGINE_LIMITS } from '#constants/engine.js';
+import { ENGINE_LIMITS, PACKING_CONSTANTS } from '#constants/engine.js';
 
 /**
  * Centralized service for validating and parsing enchantment clue input.
@@ -39,15 +39,15 @@ export class ClueValidator {
             throw new Error(`Enchantment "${parsed.name}" is not applicable to item "${item}"`);
         }
 
-        // Rank bounds check
-        const enchant = registry.resolvedRegistry[parsed.name];
-        if (enchant) {
-            const maxRank = Object.keys(enchant.levels).length;
+        // Rank bounds check against compiled runtime ranks, not raw declared ranges.
+        const intervals = registry.effectiveRankIntervals[parsed.name];
+        if (intervals) {
+            const maxRank = Math.max(0, ...intervals.map(interval => interval.rank));
             if (rank < 1 || rank > maxRank) {
                 throw new Error(`Rank ${rank} for "${parsed.name}" exceeds max rank ${maxRank}`);
             }
         }
 
-        return (enchantId << 8) | rank;
+        return (enchantId << PACKING_CONSTANTS.ENCHANT_SHIFT) | rank;
     }
 }

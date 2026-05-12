@@ -5,7 +5,7 @@
  * verifies invariants that must hold after RegistryFactory.build():
  *
  *   - Every enchantment has required fields with sensible values
- *   - Level ranges are valid (min ≥ 1, min < max)
+ *   - Level ranges are numeric with min ≥ 1; known vanilla empty ranges are explicitly allowed but dropped at runtime
  *   - Every conflict rule resolves to known enchantments and version boundaries
  *   - Every enchantment-group rule member is a known enchantment
  *   - Conflict pairs are symmetric after factory expansion
@@ -106,17 +106,14 @@ describe('Data integrity: level ranges', () => {
         assert.deepStrictEqual(bad, [], `level ranges with min < 1: ${bad.join('; ')}`);
     });
 
-    it('all level ranges have min strictly less than max', () => {
-        const bad: string[] = [];
+    it('only Quick Charge III uses a vanilla empty level range', () => {
+        const emptyRanges: string[] = [];
         for (const [name, ench] of Object.entries(registryEnchantments)) {
             for (const [roman, range] of Object.entries(ench.levels)) {
-                const key = `${name} ${roman}`;
-                if (range[0] >= range[1]) {
-                    bad.push(`${key}: [${range[0]}, ${range[1]}]`);
-                }
+                if (range[0] > range[1]) emptyRanges.push(`${name} ${roman}: [${range[0]}, ${range[1]}]`);
             }
         }
-        assert.deepStrictEqual(bad, [], `level ranges where min >= max: ${bad.join('; ')}`);
+        assert.deepStrictEqual(emptyRanges, ['Quick Charge III: [52, 50]']);
     });
 
     it('all level ranks are known and contiguous from I', () => {
@@ -163,20 +160,26 @@ describe('Data integrity: latest vanilla 1.21.11 spot checks', () => {
         assert.ok(!reg.itemPool['book']?.includes('Frost Walker'), 'Frost Walker should be excluded from the book pool');
     });
 
-    it('omits vanilla empty rank ranges that cannot be rolled by the table', () => {
+    it('keeps but drops vanilla empty rank ranges from the runtime registry', () => {
         assert.deepStrictEqual(global_enchantments['Quick Charge'].levels, {
             I: [12, 50],
-            II: [32, 50]
+            II: [32, 50],
+            III: [52, 50]
         });
-        assert.ok(!Object.hasOwn(global_enchantments['Quick Charge'].levels, 'III'), 'Quick Charge III is vanilla 52-50 and cannot be rolled');
+        assert.deepStrictEqual(reg.effectiveRankIntervals['Quick Charge']?.map(interval => interval.rankName), ['I', 'II']);
     });
 
-    it('omits Thorns III because its vanilla range starts above reachable table rolls', () => {
+    it('keeps Thorns III as a canonical rank and compiles shadowed runtime intervals', () => {
         assert.deepStrictEqual(global_enchantments.Thorns.levels, {
             I: [10, 60],
-            II: [30, 80]
+            II: [30, 80],
+            III: [50, 100]
         });
-        assert.ok(!Object.hasOwn(global_enchantments.Thorns.levels, 'III'), 'Thorns III starts at modified level 50 and cannot be rolled directly');
+        assert.deepStrictEqual(reg.effectiveRankIntervals['Thorns']?.map(({ rankName, min, max }) => ({ rankName, min, max })), [
+            { rankName: 'I', min: 10, max: 29 },
+            { rankName: 'II', min: 30, max: 49 },
+            { rankName: 'III', min: 50, max: 100 }
+        ]);
     });
 
     it('Impaling participates in the 1.21.11 damage exclusive set', () => {

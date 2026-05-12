@@ -108,8 +108,8 @@ export const global_enchantments = {
   },
   "Thorns": {
     "weight": 1,
-    // Vanilla defines Thorns III at 50-100, but the enchanting table cannot roll a modified level that high.
-    "levels": {"I": [10, 60], "II": [30, 80]},
+    // Vanilla defines Thorns III at 50-100, but normal level-30 table setups do not reach it.
+    "levels": {"I": [10, 60], "II": [30, 80], "III": [50, 100]},
     "valid_from": "1.4.6"
   },
   "Feather Falling": {
@@ -144,8 +144,8 @@ export const global_enchantments = {
   },
   "Quick Charge": {
     "weight": 5,
-    // Vanilla data lists Quick Charge III as 52-50, an empty interval that the table can never roll.
-    "levels": {"I": [12, 50], "II": [32, 50]},
+    // Vanilla data lists Quick Charge III as 52-50, an empty interval that the effective range projection drops.
+    "levels": {"I": [12, 50], "II": [32, 50], "III": [52, 50]},
     "valid_from": "1.14"
   },
   "Multishot": {

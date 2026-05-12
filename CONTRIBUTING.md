@@ -1,6 +1,23 @@
 # Contributing to Minecraft Enchantment Analyzer
 
-Thank you for your interest in contributing! This document provides guidelines for development, testing, and performance profiling.
+## Common Description
+
+This guide is the source of truth for contributing code, preparing release branches, validating changes, and preserving release history for Minecraft Enchantment Analyzer.
+
+## Table of Contents
+
+- [Workflow & Branching Strategy](#workflow--branching-strategy)
+- [Release PR Style](#release-pr-style)
+- [Development Principles](#development-principles)
+- [Linting & Style](#linting--style)
+- [Testing Guidelines](#testing-guidelines)
+- [Performance Profiling](#performance-profiling)
+- [Mass Conservation Invariants](#mass-conservation-invariants)
+- [Directory Structure](#directory-structure)
+- [Troubleshooting](#troubleshooting)
+- [References / Related Docs](#references--related-docs)
+- [Owner / Maintainer](#owner--maintainer)
+- [Last Updated](#last-updated)
 
 ## Workflow & Branching Strategy
 
@@ -11,7 +28,7 @@ We follow a specialized workflow to keep production history clean while preservi
     *   Rebase long-lived work onto `main` before opening or updating a release PR.
 2.  **Release branches (`release/vX.Y.Z`)**: Prepare each version on a branch created from `main`.
     *   Keep the normal commit history on the branch. Do not squash it before opening the PR.
-    *   Update the `CHANGELOG.md` on this branch.
+    *   Update `CHANGELOG.md`, `package.json`, and `package-lock.json` on this branch.
     *   For major releases, update `ARCHITECTURE.md`.
     *   For minor releases, update project docs when behavior, architecture, workflows, or user-facing capabilities changed.
     *   Lint, tests, CodeQL, and release-format checks must pass on the PR before merge.
@@ -22,6 +39,38 @@ We follow a specialized workflow to keep production history clean while preservi
     *   Release PR history must stay linear, because `release-history` rejects merge commits.
     *   After a release branch has been archived successfully, the release workflow deletes that same-repository PR branch.
     *   Do not push to `release-history` manually; it is maintained by the release workflow.
+
+
+## Release PR Style
+
+Release PRs into `main` are policy-checked from the base branch so the release rules cannot be relaxed by editing workflow files inside the PR. Treat the PR head as release data and keep the release metadata commit predictable.
+
+A non-required `CI Change Advisory` check also reviews CI-sensitive file changes. It should be green when no CI-sensitive files changed, warn when CI validation logic changed, and fail red when workflow triggers, branch/path filters, permissions, job conditions, runner targets, checkout targets, or status-check names changed. A red advisory is not a merge blocker by itself; it is a reviewer signal that the PR may alter whether policy checks run at all.
+
+### Required PR shape
+
+- Branch from the current `main` before opening or updating the release PR.
+- Keep the branch history linear; do not merge `main` into the release branch. Rebase instead.
+- Preserve the full release branch history until merge. Do not pre-squash the branch locally.
+- Ensure `origin/release-history` already matches `origin/main` before merging the release PR.
+- Use a PR title exactly matching `Release: vX.Y.Z`.
+- Put the matching `CHANGELOG.md` entry at the start or end of the PR description. The release heading date may be omitted from the PR body, but the rest of the block must match.
+
+### Final release metadata commit
+
+The final commit on a release PR should be the metadata/docs commit. Use the subject format:
+
+```text
+chore(release): prepare vX.Y.Z
+```
+
+That commit must update:
+
+- `CHANGELOG.md` with the release entry
+- `package.json` with version `X.Y.Z`
+- `package-lock.json` with the same root version
+
+It may also update known release documentation such as `CONTRIBUTING.md`, `README.md`, `ARCHITECTURE.md`, or `MASS_HANDLING.md`. Keep functional source, test, and snapshot changes in earlier commits so the release commit remains easy to audit.
 
 ## Development Principles
 
@@ -102,3 +151,27 @@ The engine maintains a system of "buckets" to track every atom of probability:
 - `src/ui/`: Browser UI, DOM wiring, and charts.
 - `src/worker/`: Web Worker implementation.
 - `tests/`: Root-level unit and integration tests.
+
+## Troubleshooting
+
+- If the release-format check fails on the PR title, rename the PR to exactly `Release: vX.Y.Z`.
+- If the PR description check fails, copy the matching release block from `CHANGELOG.md` into the beginning or end of the PR body.
+- If the final release commit check fails, add a new final commit that only updates release metadata and known release docs.
+- If the release archive readiness check fails, verify that `origin/release-history` has the same tree as `origin/main` before merging.
+- If a workflow change is required for a release, push with credentials that have GitHub `workflow` permission; otherwise GitHub rejects `.github/workflows/*` updates.
+- If `CI Change Advisory` is red, inspect workflow trigger, branch/path filter, permission, job condition, runner, checkout target, and status-check-name changes before treating the release as safe.
+
+## References / Related Docs
+
+- `CHANGELOG.md`
+- `.github/workflows/release-check.yml`
+- `.github/workflows/release.yml`
+- `docs/search-function-inventory.md`
+
+## Owner / Maintainer
+
+JonathanBraverDev maintains this project.
+
+## Last Updated
+
+2026-05-12
