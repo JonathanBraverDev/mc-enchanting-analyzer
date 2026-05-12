@@ -209,8 +209,18 @@ export interface RegistryState {
     conflictBitsets: BigUint64Array;
     weightMap: Uint32Array;
     sortedRanks: [string, number][];
+    effectiveRankIntervals: { [enchantment: string]: EffectiveRankInterval[] };
     enchantToIndex: Map<number, number>;
     indexToEnchant: number[];
+}
+
+/** Runtime rank interval after invalid declared ranges are dropped and higher ranks shadow lower ranks. */
+export interface EffectiveRankInterval {
+    min: number;
+    max: number;
+    rank: number;
+    rankName: string;
+    packedEnchant: PackedEnchant;
 }
 
 export interface VanillaRegistryState extends RegistryState {

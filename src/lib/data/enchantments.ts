@@ -144,8 +144,8 @@ export const global_enchantments = {
   },
   "Quick Charge": {
     "weight": 5,
-    // Vanilla data lists Quick Charge III as 52-50, an empty interval that the table can never roll.
-    "levels": {"I": [12, 50], "II": [32, 50]},
+    // Vanilla data lists Quick Charge III as 52-50, an empty interval that the effective range projection drops.
+    "levels": {"I": [12, 50], "II": [32, 50], "III": [52, 50]},
     "valid_from": "1.14"
   },
   "Multishot": {

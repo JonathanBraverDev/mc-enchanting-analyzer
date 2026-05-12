@@ -12,14 +12,20 @@ import {
     MaterialRuleSelector,
     RegistryMutation,
     RegistryState,
+    PackedEnchant,
     VanillaRegistryState,
     VersionManifest
 } from '#types/index.js';
 import { isAvailabilityActive } from '#core/availability.js';
 import { resolveManifestVersion, resolveRegistryVersion } from '#core/version-resolution.js';
 import { DATA } from '#data/index.js';
+import { PACKING_CONSTANTS } from '#constants/engine.js';
 import { VersionUtils } from '#utils/index.js';
 
+interface LevelInterval {
+    min: number;
+    max: number;
+}
 
 /**
  * Factory for building a fully initialized Registry state.
@@ -165,8 +171,8 @@ export class RegistryFactory {
                     throw new Error(`Invalid enchantment "${name}" level "${rank}": unknown rank name.`);
                 }
                 rankValues.push(rankValue);
-                if (!Array.isArray(range) || range.length !== 2 || range[0] < 1 || range[0] >= range[1]) {
-                    throw new Error(`Invalid enchantment "${name}" level "${rank}": expected [min, max] with 1 <= min < max.`);
+                if (!Array.isArray(range) || range.length !== 2 || range.some(value => typeof value !== 'number') || range[0] < 1) {
+                    throw new Error(`Invalid enchantment "${name}" level "${rank}": expected [min, max] with numeric min >= 1.`);
                 }
             }
             rankValues.sort((a, b) => a - b);
@@ -331,6 +337,7 @@ export class RegistryFactory {
             conflictBitsets: new BigUint64Array(0),
             weightMap: new Uint32Array(0),
             sortedRanks: [],
+            effectiveRankIntervals: {},
             enchantToIndex: new Map(),
             indexToEnchant: [0]
         };
@@ -401,7 +408,9 @@ export class RegistryFactory {
         // Sorted descending by rank value so getCandidatePool finds the highest achievable rank first.
         state.sortedRanks = Object.entries(romanMap).sort((a, b) => b[1] - a[1]);
 
-        // Initialize enchantment pairs (id << 8 | rank)
+        // Compile declared level ranges into a runtime projection for focused testing.
+        // Registry callers still use the existing raw-range paths until the migration is explicit.
+        this.compileEffectiveRankIntervals(state, allEnchNames);
         this.initializeEnchantmentPairs(state, data, allEnchNames);
     }
 
@@ -440,6 +449,41 @@ export class RegistryFactory {
         }
     }
 
+    private static compileEffectiveRankIntervals(state: RegistryState, allEnchNames: string[]): void {
+        state.effectiveRankIntervals = {};
+
+        for (const [id, name] of allEnchNames.entries()) {
+            if (name === undefined) continue;
+            const props = state.resolvedRegistry[name];
+            if (!props) continue;
+
+            const intervals = [];
+            let higherRankIntervals: LevelInterval[] = [];
+            for (const [rankName, rank] of state.sortedRanks) {
+                const range = props.levels[rankName];
+                if (!range) continue;
+
+                const [min, max] = range;
+                if (min > max) continue;
+
+                const declared = { min, max };
+                const effective = this.subtractIntervals([declared], higherRankIntervals);
+                for (const segment of effective) {
+                    intervals.push({
+                        ...segment,
+                        rank,
+                        rankName,
+                        packedEnchant: ((id << PACKING_CONSTANTS.ENCHANT_SHIFT) | rank) as PackedEnchant
+                    });
+                }
+
+                higherRankIntervals = this.mergeIntervals([...higherRankIntervals, declared]);
+            }
+
+            state.effectiveRankIntervals[name] = intervals.sort((a, b) => a.min - b.min || b.rank - a.rank);
+        }
+    }
+
     private static initializeEnchantmentPairs(state: RegistryState, data: EnchantmentData, allEnchNames: string[]): void {
         const allPairs: number[] = [];
         for (const [id, enName] of allEnchNames.entries()) {
@@ -448,7 +492,7 @@ export class RegistryFactory {
             if (!ench) continue;
             const rankCount = Object.keys(ench.levels).length;
             for (let rank = 1; rank <= rankCount; rank++) {
-                allPairs.push((id << 8) | rank);
+                allPairs.push((id << PACKING_CONSTANTS.ENCHANT_SHIFT) | rank);
             }
         }
         allPairs.sort((a, b) => a - b);
@@ -457,6 +501,38 @@ export class RegistryFactory {
             state.enchantToIndex.set(pair, i + 1);
             state.indexToEnchant.push(pair);
         }
+    }
+
+    private static subtractIntervals(segments: LevelInterval[], blockers: LevelInterval[]): LevelInterval[] {
+        let remaining = segments;
+        for (const blocker of blockers) {
+            const next: LevelInterval[] = [];
+            for (const segment of remaining) {
+                if (blocker.max < segment.min || blocker.min > segment.max) {
+                    next.push(segment);
+                    continue;
+                }
+                if (blocker.min > segment.min) next.push({ min: segment.min, max: blocker.min - 1 });
+                if (blocker.max < segment.max) next.push({ min: blocker.max + 1, max: segment.max });
+            }
+            remaining = next;
+            if (remaining.length === 0) break;
+        }
+        return remaining;
+    }
+
+    private static mergeIntervals(intervals: LevelInterval[]): LevelInterval[] {
+        const sorted = [...intervals].sort((a, b) => a.min - b.min || a.max - b.max);
+        const merged: LevelInterval[] = [];
+        for (const interval of sorted) {
+            const last = merged[merged.length - 1];
+            if (last && interval.min <= last.max + 1) {
+                last.max = Math.max(last.max, interval.max);
+            } else {
+                merged.push({ ...interval });
+            }
+        }
+        return merged;
     }
 
     private static initializeIdMaps(state: RegistryState, data: EnchantmentData): void {

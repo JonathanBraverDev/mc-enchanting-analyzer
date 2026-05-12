@@ -81,6 +81,10 @@ describe('UiMetadataService', () => {
         const clueOptions = UiMetadataService.getClueOptions('1.21', 'chestplate', 'gold', 30);
         assert.ok(clueOptions.includes('Thorns II'));
         assert.ok(!clueOptions.includes('Thorns III'));
+
+        const crossbowTargets = UiMetadataService.getTargetOptions('1.21', 'crossbow', 'crossbow', 30);
+        assert.ok(crossbowTargets.some(option => option.label === 'Quick Charge II+'));
+        assert.ok(!crossbowTargets.some(option => option.label === 'Quick Charge III+'));
     });
 
     it('filters target options that conflict with selected targets', () => {
