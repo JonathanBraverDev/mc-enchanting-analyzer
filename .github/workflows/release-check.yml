@@ -13,6 +13,7 @@ concurrency:
 jobs:
   validate-release:
     name: Validate Release Format
+    if: "${{ startsWith(github.event.pull_request.title, 'Release: v') }}"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
