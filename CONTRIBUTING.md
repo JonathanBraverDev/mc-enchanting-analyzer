@@ -45,6 +45,12 @@ We follow a specialized workflow to keep production history clean while preservi
 
 Release PRs into `main` are policy-checked from the base branch so the release rules cannot be relaxed by editing workflow files inside the PR. Treat the PR head as release data and keep the release metadata commit predictable.
 
+Release validation is split into separate checks so failures point at the right layer:
+
+- `Validate Release Format`: PR title, package versions, changelog entry, PR body, and SemVer jump.
+- `Validate Changelog SemVer Policy`: changelog sections that imply major/minor/patch scope, including PR comments when the proposed version should be promoted.
+- `Validate Release Branch`: final release metadata commit shape, current archive state, branch base, and linear unsquashed release history.
+
 A non-required `CI Change Advisory` check also reviews CI-sensitive file changes. It should be green when no CI-sensitive files changed, warn when CI validation logic changed, and fail red when workflow triggers, branch/path filters, permissions, job conditions, runner targets, checkout targets, or status-check names changed. A red advisory is not a merge blocker by itself; it is a reviewer signal that the PR may alter whether policy checks run at all.
 
 ### Required PR shape
@@ -55,6 +61,32 @@ A non-required `CI Change Advisory` check also reviews CI-sensitive file changes
 - Ensure `origin/release-history` already matches `origin/main` before merging the release PR.
 - Use a PR title exactly matching `Release: vX.Y.Z`.
 - Put the matching `CHANGELOG.md` entry at the start or end of the PR description. The release heading date may be omitted from the PR body, but the rest of the block must match.
+
+### Changelog section policy
+
+Release changelog entries should use concrete section headings so release intent is machine-checkable.
+
+| Section | Use for | Patch | Minor | Major | Version advice |
+| --- | --- | --- | --- | --- | --- |
+| `### Fixed` | Bug fixes, correctness fixes, release process fixes, and other patch-level repairs. | Yes | Bundled only | Bundled only | Lower minor releases that only contain fixes. |
+| `### Security` | Security fixes or hardening. | Yes | Bundled only | Yes, when breaking | Lower minor releases that only contain security fixes. |
+| `### Developer Experience` | Tooling, tests, CI, documentation, validation, diagnostics, and contributor workflow changes. | Yes | Yes | Bundled only | Valid for CI/tooling-only patch releases. |
+| `### Added` | New user-facing or public capabilities. | No | Yes | Bundled only | Patch-incompatible. |
+| `### Improved` | Meaningful improvements to existing behavior. | No | Yes | Bundled only | Patch-incompatible. |
+| `### Changed` | Behavior, workflow, or API changes that are not strictly additions or fixes. | No | Yes | Bundled only | Patch-incompatible. |
+| `### Deprecated` | Still-supported behavior planned for removal. | No | Yes | Bundled only | Patch-incompatible. |
+| `### Removed` | Removed behavior or cleanup. | No | Yes | Usually | Minor-compatible, but reviewers must confirm it did not remove supported public behavior. |
+| `### Breaking` | Breaking changes. | No | No | Required | Major-only. |
+
+SemVer section rules:
+
+- **Major releases** must include `### Breaking`.
+- **Minor releases** must include at least one of `### Added`, `### Improved`, `### Changed`, `### Developer Experience`, or `### Deprecated`.
+- **Patch releases** must include at least one of `### Fixed`, `### Security`, or `### Developer Experience`.
+- Patch releases should not use `### Added`, `### Improved`, `### Changed`, `### Deprecated`, `### Removed`, or `### Breaking`.
+- Minor releases may use `### Removed`, but this requires reviewer judgment: CI cannot know whether a deletion removed supported behavior or only cleaned up internal/non-breaking surface.
+
+When a changelog section implies a larger or smaller SemVer bump, release CI posts a PR comment asking for the version to be promoted/lowered or the section to be renamed. Developer-facing patch releases are valid when they only affect tooling, CI, validation, diagnostics, documentation, tests, or contributor workflow.
 
 ### Final release metadata commit
 
