@@ -264,18 +264,18 @@
     "sieved": 0,
     "overflow": 0,
     "capped": 0,
-    "rounding": 7.337880303381894e-16,
-    "recoveredRounding": 1.734723475976807e-17,
+    "rounding": 7.407269242420966e-16,
+    "recoveredRounding": 9.8879238130678e-17,
     "recoveredSieved": 0,
     "units": {
-      "resolved": "1152921504606846130",
+      "resolved": "1152921504606846122",
       "clueIncompatible": "0",
       "pending": "0",
       "sieved": "0",
       "overflow": "0",
       "capped": "0",
-      "rounding": "846",
-      "recoveredRounding": "20",
+      "rounding": "854",
+      "recoveredRounding": "114",
       "recoveredSieved": "0"
     }
   }

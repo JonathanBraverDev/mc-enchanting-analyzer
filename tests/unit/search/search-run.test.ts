@@ -23,6 +23,16 @@ function resultMassUnits(snapshot: ReturnType<SearchRun['snapshot']>): bigint {
     return total;
 }
 
+function diagnosticUnits(run: SearchRun): { pending: bigint; resolved: bigint; rounding: bigint; recoveredRounding: bigint } {
+    const units = run.mass.getBucketUnits();
+    return {
+        pending: units.pending,
+        resolved: units.resolved,
+        rounding: units.rounding,
+        recoveredRounding: units.recoveredRounding
+    };
+}
+
 class SingleModifiedLevelDistribution extends ModifiedLevelDistributionService {
     public override getModifiedLevelDist(): { [level: number]: bigint } {
         return { 30: PRECISION };
@@ -90,6 +100,70 @@ describe('SearchRun', () => {
         assert.ok(BigInt(snapshot.mass.units!.recoveredRounding) > 0n);
         assert.strictEqual(BigInt(snapshot.mass.units!.pending), 0n);
         assert.strictEqual(totalMassUnits(snapshot), PRECISION);
+    });
+
+    it('tracks and recovers book removal split residue instead of assigning it to one redistributed combo', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
+        const run = new SearchRun(kernel);
+        const combo = (3 + (2 * 256) + (1 * 256 * 256)) as any;
+
+        (run as any).recordResolved(combo, 3, 5n, undefined);
+        const residueSnapshot = run.snapshot();
+
+        assert.strictEqual(resultMassUnits(residueSnapshot), 3n, 'only evenly divisible shares should be assigned to visible combos');
+        assert.strictEqual(BigInt(residueSnapshot.mass.units!.resolved), 3n);
+        assert.strictEqual(BigInt(residueSnapshot.mass.units!.rounding), 2n);
+        assert.strictEqual(residueSnapshot.activeResidueMass, 2n);
+
+        (run as any).recordResolved(combo, 3, 1n, undefined);
+        const recoveredSnapshot = run.snapshot();
+
+        assert.strictEqual(resultMassUnits(recoveredSnapshot), 6n, 'later mass for the same book combo should recover the carried split residue');
+        assert.strictEqual(BigInt(recoveredSnapshot.mass.units!.resolved), 6n);
+        assert.strictEqual(BigInt(recoveredSnapshot.mass.units!.rounding), 0n);
+        assert.strictEqual(BigInt(recoveredSnapshot.mass.units!.recoveredRounding), 3n);
+        assert.strictEqual(recoveredSnapshot.activeResidueMass, 0n);
+    });
+
+    it('keeps useful book residue diagnostics stable across chunk ordering', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
+        const combo = (5 + (4 * 256) + (3 * 256 * 256) + (2 * 256 * 256 * 256) + (1 * 256 * 256 * 256 * 256)) as any;
+
+        const forward = new SearchRun(kernel);
+        for (const mass of [1n, 4n, 1n, 4n]) (forward as any).recordResolved(combo, 5, mass, undefined);
+
+        const reverse = new SearchRun(kernel);
+        for (const mass of [4n, 1n, 4n, 1n]) (reverse as any).recordResolved(combo, 5, mass, undefined);
+
+        assert.deepStrictEqual(diagnosticUnits(forward), diagnosticUnits(reverse));
+    });
+
+    it('keeps useful weighted-fanout residue diagnostics stable across chunk ordering', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'sword', material: 'diamond' });
+        const expansion = {
+            nodeId: 0,
+            isRoot: false,
+            probContinue: PRECISION,
+            totalWeight: 6,
+            eligibleCount: 3,
+            terminalReason: null,
+            edges: [
+                { entry: { packedEnchant: 1 }, weight: 1, childId: 1 },
+                { entry: { packedEnchant: 2 }, weight: 2, childId: 2 },
+                { entry: { packedEnchant: 3 }, weight: 3, childId: 3 }
+            ]
+        };
+
+        const forward = new SearchRun(kernel);
+        for (const mass of [1n, 4n, 1n, 4n]) (forward as any).forwardMass(0, 0, expansion, mass, 0, undefined);
+
+        const reverse = new SearchRun(kernel);
+        for (const mass of [4n, 1n, 4n, 1n]) (reverse as any).forwardMass(0, 0, expansion, mass, 0, undefined);
+
+        assert.deepStrictEqual(diagnosticUnits(forward), diagnosticUnits(reverse));
     });
 
     it('prunes clue-incompatible branches while preserving only matching results', () => {

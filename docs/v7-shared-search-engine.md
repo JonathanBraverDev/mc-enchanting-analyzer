@@ -78,7 +78,7 @@ Current branch state after the V7-only migration:
   - `SearchExecutionService` boundary that returns a `SearchResult` backed by `SearchRunSnapshot`.
   - Top and chart workers route both unclued and clue-conditioned requests through V7.
   - Refinement thresholds tuned for global weighted frontier semantics instead of V6 local per-modified-level semantics.
-  - Node-local edge-split residue forwarding inside `SearchRun`, matching V6's cautious recovery model: fixed-point split residue stays in `rounding` until later mass reaches the same `(graph, node)` expansion and can recover it.
+  - Edge-local split residue forwarding inside `SearchRun`, matching V6's cautious recovery model while avoiding order-dependent child allocation: fixed-point split residue stays in `rounding` until later mass reaches the same `(graph, node)` expansion and can recover it through the same outgoing edge.
   - Pending-state projection: summary, clue conditioning, target analysis, clue advice, snapshots, and chart cells consume `SearchRunSnapshot.pendingEntries` directly.
   - Async chunked checkpoint search so worker abort signals can be observed during long checkpoints.
   - Search instrumentation under `EngineInstrumentation.search` for graph count, seeded levels, pending entries, largest pending mass, active residue count/mass, improvability, and search cache hit/miss counters.
@@ -373,8 +373,9 @@ Integer split residue must be handled conservatively:
 
 - At a single expansion, compute each child share by flooring `mass * edge.weight / totalWeight`.
 - Do not eagerly assign leftover fixed-point units to child edges by largest-remainder order; that changes outcome probabilities before the engine has a true equivalence basis for doing so.
-- Carry the split residue on the exact source expansion, currently the same `(graph, node)` identity.
-- If later mass reaches that same `(graph, node)`, distribute `incomingMass + oldResidue`; any residue decrease is recorded as `recoveredRounding` and removed from active `rounding`.
+- Carry weighted split residue per outgoing edge on the exact source expansion, currently the same `(graph, node, edge)` identity. This makes child allocation stable under harmless chunk reordering.
+- If later mass reaches that same `(graph, node)`, distribute each edge from `incomingMass * edgeWeight + oldEdgeResidue`; any aggregate residue decrease is removed from active `rounding`.
+- `recoveredRounding` records the gross mass made distributable only because carried residue combined with later input. This is the stable diagnostic for useful residue recovery; the old net-shrink counter was removed because it was order/chunking dependent.
 - Do not pool residues from different modified-level roots just because they share a pool signature.
 - Pooling/recovery is valid only after mass has reached the same full equivalence point, currently the same `(graph, node)` frontier entry.
 - Book `removeAdditional` redistribution can assign its local remainder to one of the equivalent redistributed outputs because the original leaf combo has already fully resolved.

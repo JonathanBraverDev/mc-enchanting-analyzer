@@ -367,9 +367,9 @@ For each function:
 - **path:line** `src/lib/search/SearchRun.ts:385`
   - **current symbol:** `recordResidueDelta`
   - **inputs/parameters used:** `oldResidue`, `newResidue`
-  - **state read/written:** records or subtracts from `mass.rounding`; records `mass.recoveredRounding`
+  - **state read/written:** records or subtracts from `mass.rounding`; records gross useful recovery in `mass.recoveredRounding`; stores weighted split residue per outgoing edge
   - **return/side effects:** adjusts accounting for residue growth or recovery
-  - **body-derived behavior summary:** treats residue increases as newly trapped rounding mass, and residue decreases as recovered rounding that is removed from the rounding bucket and added to a separate recovered-rounding bucket.
+  - **body-derived behavior summary:** treats residue increases as newly trapped rounding mass, removes aggregate residue decreases from the active rounding bucket, and records useful residue-assisted assignment in `recoveredRounding`.
 
 - **path:line** `src/lib/search/SearchRun.ts:398`
   - **current symbol:** `getForwardingResidue`

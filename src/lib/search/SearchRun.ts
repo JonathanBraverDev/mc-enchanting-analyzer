@@ -105,7 +105,8 @@ export class SearchRun {
     private readonly graphCache: SearchGraphCache | undefined;
     private readonly graphsBySignature = new Map<SearchPoolSignature, GraphRecord>();
     private readonly graphs: GraphRecord[] = [];
-    private readonly forwardingResidues: BigUint64Array[] = [];
+    private readonly forwardingResidues: Array<Map<number, BigUint64Array> | undefined> = [];
+    private readonly bookRedistributionResidues = new Map<PackedCombo, bigint>();
     private readonly targetClueId: number | undefined;
     private readonly frontier = new SearchRunFrontier();
     private seeded = false;
@@ -323,16 +324,28 @@ export class SearchRun {
         cluePolicy: ClueSearchPolicy | undefined
     ): void {
         const totalWeight = BigInt(expansion.totalWeight);
-        const oldResidue = this.getForwardingResidue(graphId, nodeId);
-        const totalToDistribute = mass + oldResidue;
+        const oldResidues = this.getForwardingResidues(graphId, nodeId);
+        const oldResidueMass = this.calculateForwardingResidueMass(oldResidues, totalWeight);
+        const nextResidues = new BigUint64Array(expansion.edges.length);
         const shares: EdgeMassShare[] = [];
         let assigned = 0n;
+        let standaloneAssigned = 0n;
+        let nextResidueNumerator = 0n;
+        let hasResidue = false;
 
-        for (const edge of expansion.edges) {
+        for (let edgeIndex = 0; edgeIndex < expansion.edges.length; edgeIndex++) {
+            const edge = expansion.edges[edgeIndex]!;
             if (edge.weight <= 0) continue;
 
-            const childMass = (totalToDistribute * BigInt(edge.weight)) / totalWeight;
+            const weight = BigInt(edge.weight);
+            const numerator = (mass * weight) + (oldResidues?.[edgeIndex] ?? 0n);
+            const childMass = numerator / totalWeight;
+            const edgeResidue = numerator - (childMass * totalWeight);
+            nextResidues[edgeIndex] = edgeResidue;
+            nextResidueNumerator += edgeResidue;
+            hasResidue ||= edgeResidue !== 0n;
             assigned += childMass;
+            standaloneAssigned += (mass * weight) / totalWeight;
             if (cluePolicy && !cluePolicy.canSelectChild(edge.entry.packedEnchant, this.containsTargetClue(combo, cluePolicy))) {
                 this.mass.record('clueIncompatible', childMass);
                 continue;
@@ -344,9 +357,10 @@ export class SearchRun {
             });
         }
 
-        const newResidue = totalToDistribute - assigned;
-        this.setForwardingResidue(graphId, nodeId, newResidue);
-        this.recordResidueDelta(oldResidue, newResidue);
+        const newResidueMass = nextResidueNumerator / totalWeight;
+        this.setForwardingResidues(graphId, nodeId, hasResidue ? nextResidues : undefined);
+        this.recordResidueDelta(oldResidueMass, newResidueMass);
+        this.recordResiduePromotion(assigned - standaloneAssigned);
 
         for (const share of shares) {
             this.pushPending(graphId, share.childId, share.mass);
@@ -371,13 +385,26 @@ export class SearchRun {
     private getActiveResidueStats(): { count: number; mass: bigint } {
         let count = 0;
         let mass = 0n;
-        for (const storage of this.forwardingResidues) {
-            if (!storage) continue;
-            for (const residue of storage) {
-                if (residue === 0n) continue;
-                count++;
-                mass += residue;
+        for (let graphId = 0; graphId < this.forwardingResidues.length; graphId++) {
+            const graphResidues = this.forwardingResidues[graphId];
+            if (!graphResidues) continue;
+            const graph = this.getGraphById(graphId).graph;
+            for (const [nodeId, residues] of graphResidues) {
+                let residueNumerator = 0n;
+                for (const residue of residues) {
+                    if (residue === 0n) continue;
+                    count++;
+                    residueNumerator += residue;
+                }
+                if (residueNumerator === 0n) continue;
+                const expansion = graph.getExpansion(nodeId as SearchGraphNodeId);
+                mass += residueNumerator / BigInt(expansion.totalWeight);
             }
+        }
+        for (const residue of this.bookRedistributionResidues.values()) {
+            if (residue === 0n) continue;
+            count++;
+            mass += residue;
         }
         return { count, mass };
     }
@@ -389,36 +416,46 @@ export class SearchRun {
         }
 
         if (oldResidue > newResidue) {
-            const recovered = oldResidue - newResidue;
-            this.mass.subtract('rounding', recovered);
-            this.mass.record('recoveredRounding', recovered);
+            this.mass.subtract('rounding', oldResidue - newResidue);
         }
     }
 
-    private getForwardingResidue(graphId: number, nodeId: SearchGraphNodeId): bigint {
-        const storage = this.forwardingResidues[graphId];
-        return storage?.[nodeId as number] ?? 0n;
+    private recordResiduePromotion(promotedMass: bigint): void {
+        if (promotedMass > 0n) this.mass.record('recoveredRounding', promotedMass);
     }
 
-    private setForwardingResidue(graphId: number, nodeId: SearchGraphNodeId, residue: bigint): void {
-        const nodeIndex = nodeId as number;
-        let storage = this.forwardingResidues[graphId];
+    private getForwardingResidues(graphId: number, nodeId: SearchGraphNodeId): BigUint64Array | undefined {
+        return this.forwardingResidues[graphId]?.get(nodeId as number);
+    }
 
-        if (!storage) {
-            let capacity = SearchRunFrontier.INITIAL_NODE_CAPACITY;
-            while (capacity <= nodeIndex) capacity *= 2;
-            storage = new BigUint64Array(capacity);
-            this.forwardingResidues[graphId] = storage;
-        } else if (nodeIndex >= storage.length) {
-            let capacity = storage.length;
-            while (capacity <= nodeIndex) capacity *= 2;
-            const expanded = new BigUint64Array(capacity);
-            expanded.set(storage);
-            storage = expanded;
-            this.forwardingResidues[graphId] = storage;
+    private setForwardingResidues(graphId: number, nodeId: SearchGraphNodeId, residues: BigUint64Array | undefined): void {
+        let graphResidues = this.forwardingResidues[graphId];
+        if (!graphResidues) {
+            if (!residues) return;
+            graphResidues = new Map<number, BigUint64Array>();
+            this.forwardingResidues[graphId] = graphResidues;
         }
 
-        storage[nodeIndex] = residue;
+        if (residues) {
+            graphResidues.set(nodeId as number, residues);
+        } else {
+            graphResidues.delete(nodeId as number);
+        }
+    }
+
+    private calculateForwardingResidueMass(residues: BigUint64Array | undefined, totalWeight: bigint): bigint {
+        if (!residues) return 0n;
+        let numerator = 0n;
+        for (const residue of residues) numerator += residue;
+        return numerator / totalWeight;
+    }
+
+    private setBookRedistributionResidue(combo: PackedCombo, residue: bigint): void {
+        if (residue === 0n) {
+            this.bookRedistributionResidues.delete(combo);
+            return;
+        }
+        this.bookRedistributionResidues.set(combo, residue);
     }
 
     private containsTargetClue(combo: PackedCombo, cluePolicy: ClueSearchPolicy): boolean {
@@ -446,27 +483,25 @@ export class SearchRun {
                 return;
             }
 
-            let remainder = mass;
+            const oldResidue = this.bookRedistributionResidues.get(combo) ?? 0n;
+            const totalToDistribute = mass + oldResidue;
+            const share = totalToDistribute / divisor;
+            const assigned = share * divisor;
+            const standaloneAssigned = (mass / divisor) * divisor;
+            const newResidue = totalToDistribute - assigned;
+            this.setBookRedistributionResidue(combo, newResidue);
+            this.recordResidueDelta(oldResidue, newResidue);
+            this.recordResiduePromotion(assigned - standaloneAssigned);
+
             let resolved = 0n;
             let clueIncompatible = 0n;
             for (const redistributedCombo of redistributed) {
-                const share = mass / divisor;
-                remainder -= share;
                 if (cluePolicy && !this.containsTargetClue(redistributedCombo, cluePolicy)) {
                     clueIncompatible += share;
                     continue;
                 }
                 ProbUtils.addItemMass(this.results, redistributedCombo, share);
                 resolved += share;
-            }
-            if (remainder > 0n) {
-                const first = redistributed[0]!;
-                if (cluePolicy && !this.containsTargetClue(first, cluePolicy)) {
-                    clueIncompatible += remainder;
-                } else {
-                    ProbUtils.addItemMass(this.results, first, remainder);
-                    resolved += remainder;
-                }
             }
             this.mass.record('resolved', resolved);
             this.mass.record('clueIncompatible', clueIncompatible);

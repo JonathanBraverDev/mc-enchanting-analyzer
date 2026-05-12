@@ -32,9 +32,9 @@ describe('ProbabilityMassAccountant', () => {
         tracker.record('resolved', 100n);
         tracker.record('pending', 200n);
         tracker.record('sieved', 50n);
-        // recoveredRounding is a subset of rounding, not added to total
+        // Diagnostics are not added to total.
         tracker.record('rounding', 10n);
-        tracker.record('recoveredRounding', 5n);
+        tracker.record('recoveredRounding', 25n);
 
         assert.strictEqual(tracker.getTotalMass(), 360n);
     });
