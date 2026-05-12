@@ -5,22 +5,42 @@ on:
     branches:
       - main
     types: [opened, edited, synchronize, reopened, ready_for_review]
+  pull_request_target:
+    branches:
+      - main
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   validate-release:
     name: Validate Release Format
+    # Migration note: keep pull_request reporting only for the v7.1.0 PR that
+    # introduces the pull_request_target gate. After this lands on main, the
+    # stable pull_request_target run is the authoritative release gate.
+    if: ${{ github.event_name == 'pull_request_target' || github.event.pull_request.head.ref == 'refactor/registry-effective-rank-intervals' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.event.pull_request.base.ref }}
+          persist-credentials: false
 
-      - name: Install SemVer Tool
-        run: npm install semver --no-save
+      - name: Fetch release branch refs
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          git fetch origin --tags \
+            "+refs/heads/main:refs/remotes/origin/main" \
+            "+refs/heads/release-history:refs/remotes/origin/release-history" \
+            "pull/${PR_NUMBER}/head:refs/remotes/origin/release-check-head"
 
       - name: Debug Information
         env:
@@ -42,11 +62,17 @@ jobs:
           TAG=$(echo "$TITLE" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)
           echo "tag=$TAG" >> $GITHUB_OUTPUT
 
+      - name: Export release metadata from PR head
+        run: |
+          git show refs/remotes/origin/release-check-head:package.json > /tmp/release-package.json
+          git show refs/remotes/origin/release-check-head:package-lock.json > /tmp/release-package-lock.json
+          git show refs/remotes/origin/release-check-head:CHANGELOG.md > /tmp/release-CHANGELOG.md
+
       - name: Verify Title Matches Package Metadata
         run: |
           PROPOSED_TAG="${{ steps.check_title.outputs.tag }}"
           PROPOSED_VERSION="${PROPOSED_TAG#v}"
-          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          PACKAGE_VERSION=$(node -p "require('/tmp/release-package.json').version")
 
           if [ "$PACKAGE_VERSION" != "$PROPOSED_VERSION" ]; then
             echo "::error::Release PR title $PROPOSED_TAG does not match package.json version $PACKAGE_VERSION."
@@ -66,8 +92,8 @@ jobs:
       - name: Verify Changelog
         run: |
           PROPOSED_TAG="${{ steps.check_title.outputs.tag }}"
-          echo "Searching for entry for $PROPOSED_TAG in CHANGELOG.md..."
-          if ! grep -q "## \[$PROPOSED_TAG\]" CHANGELOG.md && ! grep -q "## $PROPOSED_TAG" CHANGELOG.md; then
+          echo "Searching for entry for $PROPOSED_TAG in PR head CHANGELOG.md..."
+          if ! grep -q "## \[$PROPOSED_TAG\]" /tmp/release-CHANGELOG.md && ! grep -q "## $PROPOSED_TAG" /tmp/release-CHANGELOG.md; then
             echo "::error::CHANGELOG.md does not contain a header for $PROPOSED_TAG (expected '## [$PROPOSED_TAG]' or '## $PROPOSED_TAG')"
             exit 1
           fi
@@ -77,15 +103,15 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: |
           printf '%s' "$PR_BODY" > pr-body.md
-          node scripts/validate-release-pr-body.cjs "${{ steps.check_title.outputs.tag }}" pr-body.md
+          node scripts/validate-release-pr-body.cjs "${{ steps.check_title.outputs.tag }}" pr-body.md /tmp/release-CHANGELOG.md
 
       - name: Verify Package Version
         run: |
           PROPOSED_TAG="${{ steps.check_title.outputs.tag }}"
           PROPOSED_VERSION="${PROPOSED_TAG#v}"
-          PACKAGE_VERSION=$(node -p "require('./package.json').version")
-          LOCK_VERSION=$(node -p "require('./package-lock.json').version")
-          LOCK_ROOT_VERSION=$(node -p "require('./package-lock.json').packages[''].version")
+          PACKAGE_VERSION=$(node -p "require('/tmp/release-package.json').version")
+          LOCK_VERSION=$(node -p "require('/tmp/release-package-lock.json').version")
+          LOCK_ROOT_VERSION=$(node -p "require('/tmp/release-package-lock.json').packages[''].version")
 
           if [ "$PACKAGE_VERSION" != "$PROPOSED_VERSION" ]; then
             echo "::error::package.json version $PACKAGE_VERSION does not match $PROPOSED_TAG"
@@ -99,20 +125,21 @@ jobs:
 
       - name: Validate SemVer Jump
         run: |
-          git fetch origin main --tags || true
           LATEST_TAG=$(git tag -l "v[0-9]*" --sort=v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | tail -n 1)
           PROPOSED_TAG="${{ steps.check_title.outputs.tag }}"
 
           if [ -n "$LATEST_TAG" ] && [ "$LATEST_TAG" != "$PROPOSED_TAG" ]; then
-            # Use local semver for speed and silence
-            P=$(npx semver -i patch $LATEST_TAG)
-            M=$(npx semver -i minor $LATEST_TAG)
-            J=$(npx semver -i major $LATEST_TAG)
+            LATEST_VERSION="${LATEST_TAG#v}"
+            PROPOSED_VERSION="${PROPOSED_TAG#v}"
+            IFS=. read -r LATEST_MAJOR LATEST_MINOR LATEST_PATCH <<< "$LATEST_VERSION"
+            NEXT_PATCH="${LATEST_MAJOR}.${LATEST_MINOR}.$((LATEST_PATCH + 1))"
+            NEXT_MINOR="${LATEST_MAJOR}.$((LATEST_MINOR + 1)).0"
+            NEXT_MAJOR="$((LATEST_MAJOR + 1)).0.0"
 
-            if [ "$PROPOSED_TAG" != "v$P" ] && [ "$PROPOSED_TAG" != "$P" ] && \
-               [ "$PROPOSED_TAG" != "v$M" ] && [ "$PROPOSED_TAG" != "$M" ] && \
-               [ "$PROPOSED_TAG" != "v$J" ] && [ "$PROPOSED_TAG" != "$J" ]; then
-              echo "::error::Invalid version jump. From $LATEST_TAG, the next version should be v$P, v$M, or v$J."
+            if [ "$PROPOSED_VERSION" != "$NEXT_PATCH" ] && \
+               [ "$PROPOSED_VERSION" != "$NEXT_MINOR" ] && \
+               [ "$PROPOSED_VERSION" != "$NEXT_MAJOR" ]; then
+              echo "::error::Invalid version jump. From $LATEST_TAG, the next version should be v$NEXT_PATCH, v$NEXT_MINOR, or v$NEXT_MAJOR."
               exit 1
             fi
           fi
@@ -120,14 +147,7 @@ jobs:
 
       - name: Verify Release Branch and Archive Readiness
         if: ${{ success() }}
-        env:
-          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          git fetch origin --tags \
-            "+refs/heads/main:refs/remotes/origin/main" \
-            "+refs/heads/release-history:refs/remotes/origin/release-history" \
-            "pull/${PR_NUMBER}/head:refs/remotes/origin/release-check-head"
-
           node scripts/validate-release-head-commit.cjs "${{ steps.check_title.outputs.tag }}" refs/remotes/origin/release-check-head origin/main
 
           if ! git diff --quiet origin/main origin/release-history; then
@@ -156,3 +176,64 @@ jobs:
           fi
 
           echo "origin/release-history is current with main, and the release PR starts from main with linear branch history intact."
+
+
+  ci-change-advisory:
+    name: CI Change Advisory
+    # This is intentionally target-branch only. It becomes active after the
+    # v7.1.0 bridge release lands on main, so PR-authored workflow edits cannot
+    # suppress or soften the advisory that reviews those same edits.
+    if: ${{ github.event_name == 'pull_request_target' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.base.ref }}
+          persist-credentials: false
+
+      - name: Fetch PR head
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          git fetch origin \
+            "+refs/heads/main:refs/remotes/origin/main" \
+            "pull/${PR_NUMBER}/head:refs/remotes/origin/ci-advisory-head"
+
+      - name: Classify CI changes
+        run: |
+          set -euo pipefail
+          base=origin/main
+          head=refs/remotes/origin/ci-advisory-head
+          changed_files=$(git diff --name-only "$base...$head")
+          ci_files=$(printf '%s\n' "$changed_files" | grep -E '^(\.github/workflows/.*\.ya?ml|\.github/actions/|scripts/(validate-release-|.*ci.*|.*workflow.*).*)$' || true)
+
+          if [ -z "$ci_files" ]; then
+            echo "No CI-sensitive files changed."
+            exit 0
+          fi
+
+          echo "CI-sensitive files changed:"
+          printf '%s\n' "$ci_files"
+
+          workflow_files=$(printf '%s\n' "$ci_files" | grep -E '^\.github/workflows/.*\.ya?ml$' || true)
+          if [ -z "$workflow_files" ]; then
+            echo "::warning title=CI logic changed::CI support scripts/actions changed. Review the validation logic, but no workflow trigger/target changes were detected."
+            exit 0
+          fi
+
+          git diff --unified=0 "$base...$head" -- $workflow_files > /tmp/workflow.diff
+          echo "Workflow diff excerpt:"
+          sed -n '1,220p' /tmp/workflow.diff
+
+          critical_lines=$(grep -E '^[+-]([[:space:]]*(on:|pull_request:|pull_request_target:|push:|workflow_dispatch:|workflow_call:|schedule:|branches:|branches-ignore:|paths:|paths-ignore:|types:|permissions:|if:|concurrency:|runs-on:|ref:|token:|secrets:)|[[:space:]]{2}[A-Za-z0-9_-]+:|[[:space:]]{4}name:)$' /tmp/workflow.diff | grep -v -E '^(---|\+\+\+)' || true)
+          checkout_target_lines=$(grep -E '^[+-][[:space:]]*uses:[[:space:]]+actions/checkout@|^[+-][[:space:]]*ref:' /tmp/workflow.diff | grep -v -E '^(---|\+\+\+)' || true)
+          critical_lines=$(printf '%s\n%s\n' "$critical_lines" "$checkout_target_lines" | sed '/^$/d' | sort -u)
+
+          if [ -n "$critical_lines" ]; then
+            echo "::error title=Workflow run condition or target changed::This PR changes workflow triggers, branch/path filters, permissions, job conditions, runner targets, checkout targets, or similarly sensitive workflow structure. This advisory is intentionally non-required; reviewers should treat it as a high-risk CI policy change."
+            printf '%s\n' "$critical_lines"
+            exit 1
+          fi
+
+          echo "::warning title=Workflow logic changed::Workflow files changed, but no trigger/target/permission/job-condition lines matched the critical pattern. Review the CI logic diff."
