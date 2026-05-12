@@ -1,6 +1,15 @@
 const { execFileSync } = require('node:child_process');
+const {
+  analyzeChangelogSections,
+  changelogHeaderPattern,
+  extractChangelogEntry,
+  releaseBump,
+} = require('./release-changelog-policy.cjs');
 
-const [, , tagArg, headRefArg, baseRefArg = 'origin/main'] = process.argv;
+const args = process.argv.slice(2);
+const changelogOnly = args.includes('--changelog-only');
+const positionalArgs = args.filter((arg) => !arg.startsWith('--'));
+const [tagArg, headRefArg, baseRefArg = 'origin/main'] = positionalArgs;
 
 const KNOWN_RELEASE_DOCS = new Set([
   'ARCHITECTURE.md',
@@ -37,45 +46,18 @@ function readRefJson(ref, file) {
   return JSON.parse(readRefFile(ref, file));
 }
 
-function parseVersion(value) {
-  const match = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(value ?? '');
-  if (!match) {
-    return null;
+function validateChangelogSections(bump, tag, entry) {
+  const { sections, issue } = analyzeChangelogSections({ bump, tag, entry });
+
+  if (issue) {
+    fail(issue.validatorMessage);
   }
 
-  return {
-    major: Number(match[1]),
-    minor: Number(match[2]),
-    patch: Number(match[3]),
-  };
-}
-
-function releaseBump(latestTag, proposedTag) {
-  const latest = parseVersion(latestTag);
-  const proposed = parseVersion(proposedTag);
-
-  if (!latest || !proposed || latestTag === proposedTag) {
-    return 'unknown';
-  }
-
-  if (proposed.major > latest.major) {
-    return 'major';
-  }
-
-  if (proposed.major === latest.major && proposed.minor > latest.minor) {
-    return 'minor';
-  }
-
-  return 'patch';
-}
-
-function changelogHeaderPattern(tag) {
-  const escapedTag = tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`^##\\s+(?:\\[${escapedTag}\\]|${escapedTag})(?:\\s*\\([^\\n]*\\))?\\s*$`, 'm');
+  console.log(`Changelog section validation passed for ${bump} release ${tag}: ${sections.join(', ')}`);
 }
 
 if (!tagArg || !headRefArg) {
-  fail('Usage: node scripts/validate-release-head-commit.cjs <vX.Y.Z> <head-ref> [base-ref]');
+  fail('Usage: node scripts/validate-release-head-commit.cjs <vX.Y.Z> <head-ref> [base-ref] [--changelog-only]');
 }
 
 const tag = tagArg.startsWith('v') ? tagArg : `v${tagArg}`;
@@ -83,6 +65,24 @@ const proposedVersion = tag.slice(1);
 const headRef = headRefArg;
 const parentRef = `${headRef}^`;
 const baseRef = baseRefArg;
+
+if (changelogOnly) {
+  const headChangelog = readRefFile(headRef, 'CHANGELOG.md');
+  const changelogEntry = extractChangelogEntry(headChangelog, tag);
+
+  if (!changelogEntry) {
+    fail(`CHANGELOG.md does not contain a release entry for ${tag}.`);
+  }
+
+  const latestTag = gitLines(['tag', '-l', 'v[0-9]*', '--sort=v:refname'])
+    .filter((candidate) => /^v\d+\.\d+\.\d+$/.test(candidate))
+    .at(-1);
+  const bump = releaseBump(latestTag, tag);
+
+  console.log(`Detected release bump: ${bump}`);
+  validateChangelogSections(bump, tag, changelogEntry);
+  process.exit(0);
+}
 
 const lastCommitFiles = gitLines(['diff-tree', '--no-commit-id', '--name-only', '-r', headRef]);
 console.log('Files changed in release branch head commit:');
@@ -137,8 +137,15 @@ const latestTag = gitLines(['tag', '-l', 'v[0-9]*', '--sort=v:refname'])
   .at(-1);
 const bump = releaseBump(latestTag, tag);
 const changedFiles = gitLines(['diff', '--name-only', baseRef, headRef]);
+const changelogEntry = extractChangelogEntry(headChangelog, tag);
 
 console.log(`Detected release bump: ${bump}`);
+
+if (!changelogEntry) {
+  fail(`CHANGELOG.md does not contain a release entry for ${tag}.`);
+}
+
+validateChangelogSections(bump, tag, changelogEntry);
 
 if (bump === 'major' && !lastCommitFiles.includes('ARCHITECTURE.md')) {
   fail('Major releases must update ARCHITECTURE.md in the final release metadata commit.');
