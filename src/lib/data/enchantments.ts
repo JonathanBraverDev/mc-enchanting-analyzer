@@ -108,8 +108,8 @@ export const global_enchantments = {
   },
   "Thorns": {
     "weight": 1,
-    // Vanilla defines Thorns III at 50-100, but the enchanting table cannot roll a modified level that high.
-    "levels": {"I": [10, 60], "II": [30, 80]},
+    // Vanilla defines Thorns III at 50-100, but normal level-30 table setups do not reach it.
+    "levels": {"I": [10, 60], "II": [30, 80], "III": [50, 100]},
     "valid_from": "1.4.6"
   },
   "Feather Falling": {

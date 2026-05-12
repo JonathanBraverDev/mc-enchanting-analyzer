@@ -73,6 +73,16 @@ describe('UiMetadataService', () => {
         assert.ok(targetOptions.some(option => option.label === 'Sharpness I+'));
     });
 
+    it('does not expose canonical ranks that the selected table setup cannot roll', () => {
+        const targetOptions = UiMetadataService.getTargetOptions('1.21', 'chestplate', 'gold', 30);
+        assert.ok(targetOptions.some(option => option.label === 'Thorns II+'));
+        assert.ok(!targetOptions.some(option => option.label === 'Thorns III+'));
+
+        const clueOptions = UiMetadataService.getClueOptions('1.21', 'chestplate', 'gold', 30);
+        assert.ok(clueOptions.includes('Thorns II'));
+        assert.ok(!clueOptions.includes('Thorns III'));
+    });
+
     it('filters target options that conflict with selected targets', () => {
         const selectedTargets = [{ enchantment: 'Sharpness', rank: 1, rankMode: 'atLeast' as const }];
 
