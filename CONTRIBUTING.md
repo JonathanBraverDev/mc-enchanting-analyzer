@@ -61,7 +61,7 @@ A non-required `CI Change Advisory` check also reviews CI-sensitive file changes
 - Preserve the full release branch history until merge. Do not pre-squash the branch locally.
 - Ensure `origin/release-history` already matches `origin/main` before merging the release PR.
 - Use a PR title exactly matching `Release: vX.Y.Z`.
-- Put the matching `CHANGELOG.md` entry at the start or end of the PR description. The release heading date may be omitted from the PR body, but the rest of the block must match.
+- Put the matching release notes from `CHANGELOG.md` at the start or end of the PR description. The `## vX.Y.Z` heading and date may be omitted from the PR body, but the release-note sections and bullets must match.
 
 ### Changelog section policy
 

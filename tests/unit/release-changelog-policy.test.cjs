@@ -1,4 +1,8 @@
 const assert = require('node:assert/strict');
+const { execFileSync } = require('node:child_process');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const { describe, it } = require('node:test');
 const {
   analyzeChangelogSections,
@@ -80,5 +84,46 @@ describe('release changelog section policy', () => {
   it('rejects empty or unknown sections', () => {
     assert.match(policyIssue('patch', []), /must include at least one/);
     assert.match(policyIssue('minor', ['Tweaked']), /unknown section/);
+  });
+});
+
+describe('release PR body validation', () => {
+  it('accepts release notes without the changelog version heading', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'release-pr-body-'));
+    const changelogPath = path.join(tmpDir, 'CHANGELOG.md');
+    const bodyPath = path.join(tmpDir, 'body.md');
+
+    fs.writeFileSync(changelogPath, [
+      '# Changelog',
+      '',
+      '## v2.0.0 (2026-05-13)',
+      '',
+      '### Security',
+      '- Fixture hardening.',
+      '',
+      '### Developer Experience',
+      '- Fixture workflow note.',
+      '',
+      '## v1.9.9',
+      '',
+      '### Fixed',
+      '- Older item.',
+    ].join('\n'));
+
+    fs.writeFileSync(bodyPath, [
+      '### Security',
+      '- Fixture hardening.',
+      '',
+      '### Developer Experience',
+      '- Fixture workflow note.',
+    ].join('\n'));
+
+    assert.doesNotThrow(() => {
+      execFileSync(
+        process.execPath,
+        ['scripts/validate-release-pr-body.cjs', 'v2.0.0', bodyPath, changelogPath],
+        { cwd: path.resolve(__dirname, '../..') }
+      );
+    });
   });
 });
