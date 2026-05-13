@@ -23,10 +23,11 @@ This guide is the source of truth for contributing code, preparing release branc
 
 We follow a specialized workflow to keep production history clean while preserving the granular commits that explain each release.
 
-1.  **Production (`main`)**: This branch is the source of truth and contains only squash-merged milestone commits.
-    *   Start feature, performance, registry, and release branches from the current `main`.
-    *   Rebase long-lived work onto `main` before opening or updating a release PR.
-2.  **Release branches (`release/vX.Y.Z`)**: Prepare each version on a branch created from `main`.
+1.  **Release snapshots (`main`)**: This branch is the source of truth for published snapshots, not a general integration branch.
+    *   `main` contains tagged release snapshot commits such as `Release: vX.Y.Z`.
+    *   Normal feature, performance, registry, security, and documentation work should land through a release PR rather than as standalone PRs into `main`.
+    *   Rebase long-lived release work onto the current `main` snapshot before opening or updating a release PR.
+2.  **Release preparation branches**: Prepare each version on a branch created from the current `main` snapshot.
     *   Keep the normal commit history on the branch. Do not squash it before opening the PR.
     *   Update `CHANGELOG.md`, `package.json`, and `package-lock.json` on this branch.
     *   For major releases, update `ARCHITECTURE.md`.
@@ -55,7 +56,7 @@ A non-required `CI Change Advisory` check also reviews CI-sensitive file changes
 
 ### Required PR shape
 
-- Branch from the current `main` before opening or updating the release PR.
+- Branch from the current `main` snapshot before opening or updating the release PR.
 - Keep the branch history linear; do not merge `main` into the release branch. Rebase instead.
 - Preserve the full release branch history until merge. Do not pre-squash the branch locally.
 - Ensure `origin/release-history` already matches `origin/main` before merging the release PR.
@@ -206,4 +207,4 @@ JonathanBraverDev maintains this project.
 
 ## Last Updated
 
-2026-05-12
+2026-05-13
