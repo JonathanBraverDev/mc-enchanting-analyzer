@@ -391,15 +391,18 @@ jobs:
               'Superseded by a newer CI change advisory.' \
               > /tmp/ci-change-advisory-stale.md
             for comment_id in $stale_comment_ids; do
-              gh api -X PATCH "repos/${REPOSITORY}/issues/comments/${comment_id}" -f body="$(cat /tmp/ci-change-advisory-stale.md)" >/dev/null
+              gh api -X PATCH "repos/${REPOSITORY}/issues/comments/${comment_id}" -f body="$(cat /tmp/ci-change-advisory-stale.md)" >/dev/null || \
+                echo "::warning title=CI advisory comment skipped::Could not mark stale CI advisory comment ${comment_id}."
             done
           fi
 
           post_active_comment() {
             if [ -n "$active_comment_id" ]; then
-              gh api -X PATCH "repos/${REPOSITORY}/issues/comments/${active_comment_id}" -f body="$(cat /tmp/ci-change-advisory.md)" >/dev/null
+              gh api -X PATCH "repos/${REPOSITORY}/issues/comments/${active_comment_id}" -f body="$(cat /tmp/ci-change-advisory.md)" >/dev/null || \
+                echo "::warning title=CI advisory comment skipped::Could not update CI advisory comment."
             else
-              gh api -X POST "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments" -f body="$(cat /tmp/ci-change-advisory.md)" >/dev/null
+              gh api -X POST "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments" -f body="$(cat /tmp/ci-change-advisory.md)" >/dev/null || \
+                echo "::warning title=CI advisory comment skipped::Could not create CI advisory comment."
             fi
           }
 
@@ -412,7 +415,8 @@ jobs:
                 '' \
                 'Resolved for the current PR state.' \
                 > /tmp/ci-change-advisory-resolved.md
-              gh api -X PATCH "repos/${REPOSITORY}/issues/comments/${active_comment_id}" -f body="$(cat /tmp/ci-change-advisory-resolved.md)" >/dev/null
+              gh api -X PATCH "repos/${REPOSITORY}/issues/comments/${active_comment_id}" -f body="$(cat /tmp/ci-change-advisory-resolved.md)" >/dev/null || \
+                echo "::warning title=CI advisory comment skipped::Could not mark CI advisory comment resolved."
             fi
           }
 
