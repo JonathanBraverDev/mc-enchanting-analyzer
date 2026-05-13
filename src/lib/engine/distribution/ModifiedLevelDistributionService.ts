@@ -4,6 +4,18 @@ import { MINECRAFT_RULES } from '#constants/minecraft.js';
 import { RegistryState, LevelDistribution, EngineInstrumentation } from '#types/index.js';
 import { CacheManager } from '#engine/cache/CacheManager.js';
 
+const toLevelDistribution = (entries: Iterable<readonly [number, bigint]>): LevelDistribution => {
+    return Object.fromEntries(entries) as LevelDistribution;
+};
+
+const addLevelMass = (target: Map<number, bigint>, level: number, mass: bigint): void => {
+    if (!Number.isSafeInteger(level) || level < 0) {
+        throw new RangeError(`Modified level ${level} is not a valid distribution bucket`);
+    }
+
+    target.set(level, (target.get(level) || 0n) + mass);
+};
+
 /**
  * Service for calculating the probability distribution of Modified Levels.
  * Modularized for testability and thread-safety.
@@ -34,7 +46,7 @@ export class ModifiedLevelDistributionService {
         }
 
         // 1.0 in BigInt fixed-point
-        if (enchantability <= 0) return { [xp]: PRECISION };
+        if (enchantability <= 0) return toLevelDistribution([[xp, PRECISION]]);
 
         const div = mech.enchantability_bonus_divisor ?? MINECRAFT_RULES.ENCHANTABILITY_DIVISOR_MODERN;
         const rngRange = mech.random_bonus_range ?? MINECRAFT_RULES.RANDOM_BONUS_RANGE;
@@ -89,7 +101,7 @@ export class ModifiedLevelDistributionService {
     }
 
     private applyRandomMultiplier(baseDistMap: Map<number, bigint>, rngRange: number): LevelDistribution {
-        const finalDist: LevelDistribution = {};
+        const finalDist = new Map<number, bigint>();
         const steps = MATH_CONSTANTS.RNG_STEPS_FOR_DISTRIBUTION;
         const triWeights = this.getTriangularWeights(steps);
         const totalTriWeight = BigInt(steps * steps);
@@ -105,15 +117,15 @@ export class ModifiedLevelDistributionService {
                 const modVal = Math.max(1, ProbUtils.mcRound(base * (1 + bonus)));
                 const bufVal = this.buffer[k];
                 if (bufVal === undefined) continue;
-                finalDist[modVal] = (finalDist[modVal] || 0n) + bufVal;
+                addLevelMass(finalDist, modVal, bufVal);
             }
 
             // Attribute remainder to the central peak
             const centralModVal = Math.max(1, ProbUtils.mcRound(base));
-            finalDist[centralModVal] = (finalDist[centralModVal] || 0n) + modRemainder;
+            addLevelMass(finalDist, centralModVal, modRemainder);
         }
 
-        return finalDist;
+        return toLevelDistribution(finalDist);
     }
 
     private getTriangularWeights(N: number): bigint[] {

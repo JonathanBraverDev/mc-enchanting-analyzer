@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## v7.1.2 (2026-05-13)
+
+### Security
+- **CodeQL property-write hardening**: Reworked probability mass accumulation to avoid computed object-property writes flagged by CodeQL while preserving the existing public distribution shape.
+
+### Developer Experience
+- **Release snapshot workflow guidance**: Clarified that `main` is a tagged release snapshot branch and removed prescriptive release branch naming from the contribution guide.
+- **Headerless release PR notes**: Release PR descriptions may now use the same heading-free release notes text that GitHub Releases publish, while still validating against `CHANGELOG.md`.
+- **Shared PR advisory comments**: Release-policy and CI-change advisory jobs now use one reusable marker-comment helper with consistent stale, update, create, resolve, and permission-failure handling.
+
 ## v7.1.1 (2026-05-12)
 
 ### Developer Experience

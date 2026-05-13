@@ -7,6 +7,14 @@ import { MINECRAFT_RULES } from '#constants/minecraft.js';
  */
 export const PRECISION = 1n << MATH_CONSTANTS.PRECISION_SHIFT;
 
+const addBigUint64ArrayMass = (target: BigUint64Array, key: number, prob: bigint): void => {
+    if (!Number.isSafeInteger(key) || key < 0 || key >= target.length) {
+        throw new RangeError(`BigUint64Array probability bucket index ${key} is out of bounds`);
+    }
+
+    target.set([(target[key] ?? 0n) + prob], key);
+};
+
 /**
  * Probability conversion helpers for BigInt fixed-point arithmetic.
  */
@@ -179,7 +187,7 @@ export const ProbUtils = {
      */
     addItemMass: (target: Map<number, bigint> | BigUint64Array, key: number, prob: bigint): void => {
         if (target instanceof BigUint64Array) {
-            target[key] = (target[key] ?? 0n) + prob;
+            addBigUint64ArrayMass(target, key, prob);
         } else {
             target.set(key, (target.get(key) || 0n) + prob);
         }
@@ -203,7 +211,7 @@ export const ProbUtils = {
                 const added = hasFactor ? ProbUtils.scale(mass, factor!) : mass;
                 if (targetIsArray) {
                     const arr = target as BigUint64Array;
-                    arr[i] = (arr[i] ?? 0n) + added;
+                    addBigUint64ArrayMass(arr, i, added);
                 } else {
                     const t = target as Map<number, bigint>;
                     t.set(i, (t.get(i) || 0n) + added);
@@ -215,7 +223,7 @@ export const ProbUtils = {
                 const added = hasFactor ? ProbUtils.scale(mass, factor!) : mass;
                 if (targetIsArray) {
                     const arr = target as BigUint64Array;
-                    arr[key] = (arr[key] ?? 0n) + added;
+                    addBigUint64ArrayMass(arr, key, added);
                 } else {
                     const t = target as Map<number, bigint>;
                     t.set(key, (t.get(key) || 0n) + added);

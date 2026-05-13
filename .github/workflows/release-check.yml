@@ -135,7 +135,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: read
+      pull-requests: write
       issues: write
     steps:
       - uses: actions/checkout@v4
@@ -199,63 +199,37 @@ jobs:
           fs.writeFileSync('/tmp/release-section-comment.md', `${marker}\n<!-- status:active -->\n### Release version mismatch\n\n${issue.advisoryMessage}\n\nDetected sections: ${detectedSections}\n`);
           NODE
 
-          comments_json=$(mktemp)
-          gh api "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments" --paginate --slurp > "$comments_json"
+          printf '%s\n' \
+            "$MARKER" \
+            '<!-- status:stale -->' \
+            '### Release version mismatch - stale' \
+            '' \
+            'Superseded by a newer release policy advisory.' \
+            > /tmp/release-section-stale.md
 
-          active_comment_id=$(jq -r --arg marker "$MARKER" '
-            flatten
-            | [
-              .[]
-              | select(.body | contains($marker))
-              | select((.body | contains("<!-- status:resolved -->") | not) and (.body | contains("<!-- status:stale -->") | not))
-            ]
-            | last
-            | .id // empty
-          ' "$comments_json")
-
-          stale_comment_ids=$(jq -r --arg marker "$MARKER" '
-            flatten
-            | [
-              .[]
-              | select(.body | contains($marker))
-              | select((.body | contains("<!-- status:resolved -->") | not) and (.body | contains("<!-- status:stale -->") | not))
-            ][0:-1][]?
-            | .id
-          ' "$comments_json")
-
-          if [ -n "$stale_comment_ids" ]; then
-            printf '%s\n' \
-              "$MARKER" \
-              '<!-- status:stale -->' \
-              '### Release version mismatch — stale' \
-              '' \
-              'Superseded by a newer release policy advisory.' \
-              > /tmp/release-section-stale.md
-            for comment_id in $stale_comment_ids; do
-              gh api -X PATCH "repos/${REPOSITORY}/issues/comments/${comment_id}" -f body="$(cat /tmp/release-section-stale.md)" >/dev/null
-            done
-          fi
-
+          printf '%s\n' \
+            "$MARKER" \
+            '<!-- status:resolved -->' \
+            '### Release version mismatch - resolved' \
+            '' \
+            'Resolved for the current PR state.' \
+            > /tmp/release-section-resolved.md
           if [ -s /tmp/release-section-comment.md ]; then
-            if [ -n "$active_comment_id" ]; then
-              gh api -X PATCH "repos/${REPOSITORY}/issues/comments/${active_comment_id}" -f body="$(cat /tmp/release-section-comment.md)" >/dev/null
-            else
-              gh api -X POST "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments" -f body="$(cat /tmp/release-section-comment.md)" >/dev/null
-            fi
+            node scripts/pr-marker-comment.cjs upsert \
+              --repo "$REPOSITORY" \
+              --pr "$PR_NUMBER" \
+              --marker "$MARKER" \
+              --body-file /tmp/release-section-comment.md \
+              --stale-body-file /tmp/release-section-stale.md
             echo "::error::Release changelog sections imply a different SemVer bump. See the release policy advisory comment."
             exit 1
           fi
-
-          if [ -n "$active_comment_id" ]; then
-            printf '%s\n' \
-              "$MARKER" \
-              '<!-- status:resolved -->' \
-              '### Release version mismatch — resolved' \
-              '' \
-              'Resolved for the current PR state.' \
-              > /tmp/release-section-resolved.md
-            gh api -X PATCH "repos/${REPOSITORY}/issues/comments/${active_comment_id}" -f body="$(cat /tmp/release-section-resolved.md)" >/dev/null
-          fi
+          node scripts/pr-marker-comment.cjs resolve \
+            --repo "$REPOSITORY" \
+            --pr "$PR_NUMBER" \
+            --marker "$MARKER" \
+            --body-file /tmp/release-section-resolved.md \
+            --stale-body-file /tmp/release-section-stale.md
 
       - name: Validate changelog sections
         run: |
@@ -328,7 +302,7 @@ jobs:
     name: CI Change Advisory
     permissions:
       contents: read
-      pull-requests: read
+      pull-requests: write
       issues: write
     # This is intentionally target-branch only, so PR-authored workflow edits
     # cannot suppress or soften the advisory that reviews those same edits.
@@ -358,62 +332,37 @@ jobs:
           base=origin/main
           head=refs/remotes/origin/ci-advisory-head
           MARKER='<!-- ci-change-advisory -->'
-          comments_json=$(mktemp)
-          gh api "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments" --paginate --slurp > "$comments_json"
+          printf '%s\n' \
+            "$MARKER" \
+            '<!-- status:stale -->' \
+            '### CI change advisory - stale' \
+            '' \
+            'Superseded by a newer CI change advisory.' \
+            > /tmp/ci-change-advisory-stale.md
 
-          active_comment_id=$(jq -r --arg marker "$MARKER" '
-            flatten
-            | [
-              .[]
-              | select(.body | contains($marker))
-              | select((.body | contains("<!-- status:resolved -->") | not) and (.body | contains("<!-- status:stale -->") | not))
-            ]
-            | last
-            | .id // empty
-          ' "$comments_json")
-
-          stale_comment_ids=$(jq -r --arg marker "$MARKER" '
-            flatten
-            | [
-              .[]
-              | select(.body | contains($marker))
-              | select((.body | contains("<!-- status:resolved -->") | not) and (.body | contains("<!-- status:stale -->") | not))
-            ][0:-1][]?
-            | .id
-          ' "$comments_json")
-
-          if [ -n "$stale_comment_ids" ]; then
-            printf '%s\n' \
-              "$MARKER" \
-              '<!-- status:stale -->' \
-              '### CI change advisory — stale' \
-              '' \
-              'Superseded by a newer CI change advisory.' \
-              > /tmp/ci-change-advisory-stale.md
-            for comment_id in $stale_comment_ids; do
-              gh api -X PATCH "repos/${REPOSITORY}/issues/comments/${comment_id}" -f body="$(cat /tmp/ci-change-advisory-stale.md)" >/dev/null
-            done
-          fi
-
+          printf '%s\n' \
+            "$MARKER" \
+            '<!-- status:resolved -->' \
+            '### CI change advisory - resolved' \
+            '' \
+            'Resolved for the current PR state.' \
+            > /tmp/ci-change-advisory-resolved.md
           post_active_comment() {
-            if [ -n "$active_comment_id" ]; then
-              gh api -X PATCH "repos/${REPOSITORY}/issues/comments/${active_comment_id}" -f body="$(cat /tmp/ci-change-advisory.md)" >/dev/null
-            else
-              gh api -X POST "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments" -f body="$(cat /tmp/ci-change-advisory.md)" >/dev/null
-            fi
+            node scripts/pr-marker-comment.cjs upsert \
+              --repo "$REPOSITORY" \
+              --pr "$PR_NUMBER" \
+              --marker "$MARKER" \
+              --body-file /tmp/ci-change-advisory.md \
+              --stale-body-file /tmp/ci-change-advisory-stale.md
           }
 
           resolve_active_comment() {
-            if [ -n "$active_comment_id" ]; then
-              printf '%s\n' \
-                "$MARKER" \
-                '<!-- status:resolved -->' \
-                '### CI change advisory — resolved' \
-                '' \
-                'Resolved for the current PR state.' \
-                > /tmp/ci-change-advisory-resolved.md
-              gh api -X PATCH "repos/${REPOSITORY}/issues/comments/${active_comment_id}" -f body="$(cat /tmp/ci-change-advisory-resolved.md)" >/dev/null
-            fi
+            node scripts/pr-marker-comment.cjs resolve \
+              --repo "$REPOSITORY" \
+              --pr "$PR_NUMBER" \
+              --marker "$MARKER" \
+              --body-file /tmp/ci-change-advisory-resolved.md \
+              --stale-body-file /tmp/ci-change-advisory-stale.md
           }
 
           changed_files=$(git diff --name-only "$base...$head")
