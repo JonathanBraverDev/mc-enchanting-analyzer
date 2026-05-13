@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## v7.1.1 (2026-05-12)
+
+### Developer Experience
+- **Release gate migration cleanup**: Removed the temporary `pull_request` bridge from the release pre-merge workflow now that the stable `pull_request_target` gate is present on `main`.
+- **Stable CI advisory activation**: `CI Change Advisory` now runs only from the base branch workflow on future PRs into `main`, keeps CI-sensitive review signals out of PR-authored workflow control, and maintains a single active floating PR comment that is marked stale or resolved as the PR changes.
+- **Release note section validation**: Release metadata validation now enforces a standard changelog section vocabulary, checks that major, minor, and patch entries use sections appropriate to their SemVer bump, supports Developer Experience-only patch releases for CI/tooling updates, comments when the changelog implies the PR version should be promoted or lowered, and reports release format, changelog policy, and branch/archive readiness as separate jobs.
+
 ## v7.1.0 (2026-05-12)
 
 ### Improved

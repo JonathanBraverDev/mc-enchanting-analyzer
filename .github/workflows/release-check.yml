@@ -1,10 +1,6 @@
 name: Release Pre-Merge Check
 
 on:
-  pull_request:
-    branches:
-      - main
-    types: [opened, edited, synchronize, reopened, ready_for_review]
   pull_request_target:
     branches:
       - main
@@ -19,12 +15,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  validate-release:
+  validate-release-format:
     name: Validate Release Format
-    # Migration note: keep pull_request reporting only for the v7.1.0 PR that
-    # introduces the pull_request_target gate. After this lands on main, the
-    # stable pull_request_target run is the authoritative release gate.
-    if: ${{ github.event_name == 'pull_request_target' || github.event.pull_request.head.ref == 'refactor/registry-effective-rank-intervals' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -33,28 +25,21 @@ jobs:
           ref: ${{ github.event.pull_request.base.ref }}
           persist-credentials: false
 
-      - name: Fetch release branch refs
+      - name: Fetch release metadata
         env:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           git fetch origin --tags \
             "+refs/heads/main:refs/remotes/origin/main" \
-            "+refs/heads/release-history:refs/remotes/origin/release-history" \
             "pull/${PR_NUMBER}/head:refs/remotes/origin/release-check-head"
 
-      - name: Debug Information
-        env:
-          PR_TITLE: ${{ github.event.pull_request.title }}
-        run: |
-          echo "PR Title: '$PR_TITLE'"
-          git tag -l "v[0-9]*"
-
-      - name: Check PR Title
+      - name: Check PR title
         id: check_title
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
           TITLE="$PR_TITLE"
+          echo "PR Title: '$TITLE'"
           if [[ ! "$TITLE" =~ ^Release:\ v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "::error::PR title must exactly follow the pattern 'Release: vX.Y.Z' (current: '$TITLE')"
             exit 1
@@ -68,7 +53,7 @@ jobs:
           git show refs/remotes/origin/release-check-head:package-lock.json > /tmp/release-package-lock.json
           git show refs/remotes/origin/release-check-head:CHANGELOG.md > /tmp/release-CHANGELOG.md
 
-      - name: Verify Title Matches Package Metadata
+      - name: Verify title matches package metadata
         run: |
           PROPOSED_TAG="${{ steps.check_title.outputs.tag }}"
           PROPOSED_VERSION="${PROPOSED_TAG#v}"
@@ -79,17 +64,17 @@ jobs:
             exit 1
           fi
 
-      - name: Check PR Description
+      - name: Check PR description
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: |
           BODY="$PR_BODY"
           if [ -z "$BODY" ] || [ ${#BODY} -lt 10 ]; then
-            echo "::error::PR description is too short or empty. Please provide release notes (minimum 10 characters)."
+            echo "::error::PR description is too short or empty. Please provide release notes from CHANGELOG.md."
             exit 1
           fi
 
-      - name: Verify Changelog
+      - name: Verify changelog entry exists
         run: |
           PROPOSED_TAG="${{ steps.check_title.outputs.tag }}"
           echo "Searching for entry for $PROPOSED_TAG in PR head CHANGELOG.md..."
@@ -98,14 +83,14 @@ jobs:
             exit 1
           fi
 
-      - name: Verify PR Description Matches Changelog
+      - name: Verify PR description matches changelog
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: |
           printf '%s' "$PR_BODY" > pr-body.md
           node scripts/validate-release-pr-body.cjs "${{ steps.check_title.outputs.tag }}" pr-body.md /tmp/release-CHANGELOG.md
 
-      - name: Verify Package Version
+      - name: Verify package versions
         run: |
           PROPOSED_TAG="${{ steps.check_title.outputs.tag }}"
           PROPOSED_VERSION="${PROPOSED_TAG#v}"
@@ -123,7 +108,7 @@ jobs:
             exit 1
           fi
 
-      - name: Validate SemVer Jump
+      - name: Validate SemVer jump
         run: |
           LATEST_TAG=$(git tag -l "v[0-9]*" --sort=v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | tail -n 1)
           PROPOSED_TAG="${{ steps.check_title.outputs.tag }}"
@@ -145,16 +130,176 @@ jobs:
           fi
           echo "SemVer jump validation successful."
 
-      - name: Verify Release Branch and Archive Readiness
-        if: ${{ success() }}
-        run: |
-          node scripts/validate-release-head-commit.cjs "${{ steps.check_title.outputs.tag }}" refs/remotes/origin/release-check-head origin/main
+  validate-changelog-policy:
+    name: Validate Changelog SemVer Policy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.base.ref }}
+          persist-credentials: false
 
+      - name: Fetch release metadata
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          git fetch origin --tags \
+            "pull/${PR_NUMBER}/head:refs/remotes/origin/release-check-head"
+          git show refs/remotes/origin/release-check-head:CHANGELOG.md > /tmp/release-CHANGELOG.md
+
+      - name: Check PR title
+        id: check_title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          TITLE="$PR_TITLE"
+          if [[ ! "$TITLE" =~ ^Release:\ v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::PR title must exactly follow the pattern 'Release: vX.Y.Z' (current: '$TITLE')"
+            exit 1
+          fi
+          TAG=$(echo "$TITLE" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Explain changelog SemVer policy
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          PROPOSED_TAG="${{ steps.check_title.outputs.tag }}"
+          LATEST_TAG=$(git tag -l "v[0-9]*" --sort=v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | tail -n 1)
+          MARKER='<!-- release-section-policy-advisory -->'
+          export PROPOSED_TAG LATEST_TAG MARKER
+
+          node <<'NODE'
+          const fs = require('node:fs');
+          const { analyzeChangelogSections, extractChangelogEntry, releaseBump } = require('./scripts/release-changelog-policy.cjs');
+
+          const tag = process.env.PROPOSED_TAG;
+          const latestTag = process.env.LATEST_TAG;
+          const marker = process.env.MARKER;
+          const changelog = fs.readFileSync('/tmp/release-CHANGELOG.md', 'utf8');
+          const entry = extractChangelogEntry(changelog, tag);
+          if (!entry) process.exit(0);
+
+          const bump = releaseBump(latestTag, tag);
+          const { sections, issue } = analyzeChangelogSections({ bump, tag, entry });
+          if (!issue) process.exit(0);
+
+          const detectedSections = sections.length > 0
+            ? sections.map((section) => `\`${section}\``).join(', ')
+            : '_none_';
+
+          fs.writeFileSync('/tmp/release-section-comment.md', `${marker}\n<!-- status:active -->\n### Release version mismatch\n\n${issue.advisoryMessage}\n\nDetected sections: ${detectedSections}\n`);
+          NODE
+
+          comments_json=$(mktemp)
+          gh api "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments" --paginate --slurp > "$comments_json"
+
+          active_comment_id=$(jq -r --arg marker "$MARKER" '
+            flatten
+            | [
+              .[]
+              | select(.body | contains($marker))
+              | select((.body | contains("<!-- status:resolved -->") | not) and (.body | contains("<!-- status:stale -->") | not))
+            ]
+            | last
+            | .id // empty
+          ' "$comments_json")
+
+          stale_comment_ids=$(jq -r --arg marker "$MARKER" '
+            flatten
+            | [
+              .[]
+              | select(.body | contains($marker))
+              | select((.body | contains("<!-- status:resolved -->") | not) and (.body | contains("<!-- status:stale -->") | not))
+            ][0:-1][]?
+            | .id
+          ' "$comments_json")
+
+          if [ -n "$stale_comment_ids" ]; then
+            printf '%s\n' \
+              "$MARKER" \
+              '<!-- status:stale -->' \
+              '### Release version mismatch — stale' \
+              '' \
+              'Superseded by a newer release policy advisory.' \
+              > /tmp/release-section-stale.md
+            for comment_id in $stale_comment_ids; do
+              gh api -X PATCH "repos/${REPOSITORY}/issues/comments/${comment_id}" -f body="$(cat /tmp/release-section-stale.md)" >/dev/null
+            done
+          fi
+
+          if [ -s /tmp/release-section-comment.md ]; then
+            if [ -n "$active_comment_id" ]; then
+              gh api -X PATCH "repos/${REPOSITORY}/issues/comments/${active_comment_id}" -f body="$(cat /tmp/release-section-comment.md)" >/dev/null
+            else
+              gh api -X POST "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments" -f body="$(cat /tmp/release-section-comment.md)" >/dev/null
+            fi
+            echo "::error::Release changelog sections imply a different SemVer bump. See the release policy advisory comment."
+            exit 1
+          fi
+
+          if [ -n "$active_comment_id" ]; then
+            printf '%s\n' \
+              "$MARKER" \
+              '<!-- status:resolved -->' \
+              '### Release version mismatch — resolved' \
+              '' \
+              'Resolved for the current PR state.' \
+              > /tmp/release-section-resolved.md
+            gh api -X PATCH "repos/${REPOSITORY}/issues/comments/${active_comment_id}" -f body="$(cat /tmp/release-section-resolved.md)" >/dev/null
+          fi
+
+      - name: Validate changelog sections
+        run: |
+          node scripts/validate-release-head-commit.cjs "${{ steps.check_title.outputs.tag }}" refs/remotes/origin/release-check-head origin/main --changelog-only
+
+  validate-release-branch:
+    name: Validate Release Branch
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.base.ref }}
+          persist-credentials: false
+
+      - name: Fetch release branch refs
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          git fetch origin --tags \
+            "+refs/heads/main:refs/remotes/origin/main" \
+            "+refs/heads/release-history:refs/remotes/origin/release-history" \
+            "pull/${PR_NUMBER}/head:refs/remotes/origin/release-check-head"
+
+      - name: Verify final metadata commit
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          TAG=$(echo "$PR_TITLE" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)
+          if [ -z "$TAG" ]; then
+            echo "::error::PR title must include vX.Y.Z before release branch validation can run."
+            exit 1
+          fi
+          node scripts/validate-release-head-commit.cjs "$TAG" refs/remotes/origin/release-check-head origin/main
+
+      - name: Verify release-history is current
+        run: |
           if ! git diff --quiet origin/main origin/release-history; then
             echo "::error::origin/release-history must match origin/main before this release merges. The archive is missing a previous production state."
             exit 1
           fi
 
+      - name: Verify release branch starts from current main
+        run: |
           CURRENT_MAIN=$(git rev-parse origin/main)
           RELEASE_BASE=$(git merge-base origin/main refs/remotes/origin/release-check-head)
           if [ "$RELEASE_BASE" != "$CURRENT_MAIN" ]; then
@@ -162,6 +307,8 @@ jobs:
             exit 1
           fi
 
+      - name: Verify linear unsquashed release history
+        run: |
           RELEASE_COMMIT_COUNT=$(git rev-list --count "origin/main..refs/remotes/origin/release-check-head")
           if [ "$RELEASE_COMMIT_COUNT" -lt 2 ]; then
             echo "::error::Release PRs should carry the full release branch history, not a pre-squashed single commit. Let the main PR squash happen at merge time."
@@ -177,13 +324,14 @@ jobs:
 
           echo "origin/release-history is current with main, and the release PR starts from main with linear branch history intact."
 
-
   ci-change-advisory:
     name: CI Change Advisory
-    # This is intentionally target-branch only. It becomes active after the
-    # v7.1.0 bridge release lands on main, so PR-authored workflow edits cannot
-    # suppress or soften the advisory that reviews those same edits.
-    if: ${{ github.event_name == 'pull_request_target' }}
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: write
+    # This is intentionally target-branch only, so PR-authored workflow edits
+    # cannot suppress or soften the advisory that reviews those same edits.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -201,14 +349,78 @@ jobs:
             "pull/${PR_NUMBER}/head:refs/remotes/origin/ci-advisory-head"
 
       - name: Classify CI changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
           base=origin/main
           head=refs/remotes/origin/ci-advisory-head
+          MARKER='<!-- ci-change-advisory -->'
+          comments_json=$(mktemp)
+          gh api "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments" --paginate --slurp > "$comments_json"
+
+          active_comment_id=$(jq -r --arg marker "$MARKER" '
+            flatten
+            | [
+              .[]
+              | select(.body | contains($marker))
+              | select((.body | contains("<!-- status:resolved -->") | not) and (.body | contains("<!-- status:stale -->") | not))
+            ]
+            | last
+            | .id // empty
+          ' "$comments_json")
+
+          stale_comment_ids=$(jq -r --arg marker "$MARKER" '
+            flatten
+            | [
+              .[]
+              | select(.body | contains($marker))
+              | select((.body | contains("<!-- status:resolved -->") | not) and (.body | contains("<!-- status:stale -->") | not))
+            ][0:-1][]?
+            | .id
+          ' "$comments_json")
+
+          if [ -n "$stale_comment_ids" ]; then
+            printf '%s\n' \
+              "$MARKER" \
+              '<!-- status:stale -->' \
+              '### CI change advisory — stale' \
+              '' \
+              'Superseded by a newer CI change advisory.' \
+              > /tmp/ci-change-advisory-stale.md
+            for comment_id in $stale_comment_ids; do
+              gh api -X PATCH "repos/${REPOSITORY}/issues/comments/${comment_id}" -f body="$(cat /tmp/ci-change-advisory-stale.md)" >/dev/null
+            done
+          fi
+
+          post_active_comment() {
+            if [ -n "$active_comment_id" ]; then
+              gh api -X PATCH "repos/${REPOSITORY}/issues/comments/${active_comment_id}" -f body="$(cat /tmp/ci-change-advisory.md)" >/dev/null
+            else
+              gh api -X POST "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments" -f body="$(cat /tmp/ci-change-advisory.md)" >/dev/null
+            fi
+          }
+
+          resolve_active_comment() {
+            if [ -n "$active_comment_id" ]; then
+              printf '%s\n' \
+                "$MARKER" \
+                '<!-- status:resolved -->' \
+                '### CI change advisory — resolved' \
+                '' \
+                'Resolved for the current PR state.' \
+                > /tmp/ci-change-advisory-resolved.md
+              gh api -X PATCH "repos/${REPOSITORY}/issues/comments/${active_comment_id}" -f body="$(cat /tmp/ci-change-advisory-resolved.md)" >/dev/null
+            fi
+          }
+
           changed_files=$(git diff --name-only "$base...$head")
           ci_files=$(printf '%s\n' "$changed_files" | grep -E '^(\.github/workflows/.*\.ya?ml|\.github/actions/|scripts/(validate-release-|.*ci.*|.*workflow.*).*)$' || true)
 
           if [ -z "$ci_files" ]; then
+            resolve_active_comment
             echo "No CI-sensitive files changed."
             exit 0
           fi
@@ -218,6 +430,13 @@ jobs:
 
           workflow_files=$(printf '%s\n' "$ci_files" | grep -E '^\.github/workflows/.*\.ya?ml$' || true)
           if [ -z "$workflow_files" ]; then
+            {
+              printf '%s\n' "$MARKER" '<!-- status:active -->' '### CI change advisory' ''
+              printf '%s\n' 'CI support scripts/actions changed. Review the validation logic; no workflow trigger/target changes were detected.' ''
+              printf '%s\n' 'Changed CI-sensitive files:' ''
+              printf -- '- `%s`\n' $ci_files
+            } > /tmp/ci-change-advisory.md
+            post_active_comment
             echo "::warning title=CI logic changed::CI support scripts/actions changed. Review the validation logic, but no workflow trigger/target changes were detected."
             exit 0
           fi
@@ -231,9 +450,26 @@ jobs:
           critical_lines=$(printf '%s\n%s\n' "$critical_lines" "$checkout_target_lines" | sed '/^$/d' | sort -u)
 
           if [ -n "$critical_lines" ]; then
+            {
+              printf '%s\n' "$MARKER" '<!-- status:active -->' '### CI change advisory' ''
+              printf '%s\n' 'Workflow triggers, branch/path filters, permissions, job conditions, runner targets, checkout targets, or similarly sensitive workflow structure changed.' ''
+              printf '%s\n' 'Changed CI-sensitive files:' ''
+              printf -- '- `%s`\n' $ci_files
+              printf '%s\n' '' 'Sensitive workflow diff lines:' '' '```diff'
+              printf '%s\n' "$critical_lines"
+              printf '%s\n' '```'
+            } > /tmp/ci-change-advisory.md
+            post_active_comment
             echo "::error title=Workflow run condition or target changed::This PR changes workflow triggers, branch/path filters, permissions, job conditions, runner targets, checkout targets, or similarly sensitive workflow structure. This advisory is intentionally non-required; reviewers should treat it as a high-risk CI policy change."
             printf '%s\n' "$critical_lines"
             exit 1
           fi
 
+          {
+            printf '%s\n' "$MARKER" '<!-- status:active -->' '### CI change advisory' ''
+            printf '%s\n' 'Workflow files changed, but no trigger/target/permission/job-condition lines matched the critical pattern. Review the CI logic diff.' ''
+            printf '%s\n' 'Changed CI-sensitive files:' ''
+            printf -- '- `%s`\n' $ci_files
+          } > /tmp/ci-change-advisory.md
+          post_active_comment
           echo "::warning title=Workflow logic changed::Workflow files changed, but no trigger/target/permission/job-condition lines matched the critical pattern. Review the CI logic diff."
