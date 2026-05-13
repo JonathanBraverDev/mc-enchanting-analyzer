@@ -17,6 +17,10 @@ function withoutHeaderDate(entry) {
   return lines.join('\n').trim();
 }
 
+function withoutHeader(entry) {
+  return entry.split('\n').slice(1).join('\n').trim();
+}
+
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -48,7 +52,12 @@ const entryEnd = nextHeaderOffset === -1 ? changelog.length : afterHeader + next
 const changelogEntry = changelog.slice(entryStart, entryEnd).trim();
 const changelogEntryWithoutHeaderDate = withoutHeaderDate(changelogEntry);
 
-const acceptedEntries = Array.from(new Set([changelogEntry, changelogEntryWithoutHeaderDate]));
+const acceptedEntries = Array.from(new Set([
+  changelogEntry,
+  changelogEntryWithoutHeaderDate,
+  withoutHeader(changelogEntry),
+  withoutHeader(changelogEntryWithoutHeaderDate),
+]));
 const matchesEntryBoundary = acceptedEntries.some((entry) => {
   const startsWithEntry = body === entry || body.startsWith(`${entry}\n`);
   const endsWithEntry = body === entry || body.endsWith(`\n${entry}`);
@@ -56,7 +65,7 @@ const matchesEntryBoundary = acceptedEntries.some((entry) => {
 });
 
 if (!matchesEntryBoundary) {
-  fail(`PR description must start or end with the CHANGELOG.md entry for ${tag}. The release heading date may be omitted from the PR body, but the rest of the changelog block must match.`);
+  fail(`PR description must start or end with the CHANGELOG.md entry for ${tag}. The release heading and date may be omitted from the PR body, but the release notes must match.`);
 }
 
-console.log(`PR description includes the CHANGELOG.md entry for ${tag}.`);
+console.log(`PR description includes the CHANGELOG.md release notes for ${tag}.`);
