@@ -7,6 +7,7 @@ import { PackedCombo } from '#types/index.js';
 import { AsyncUtils, ComboUtils, PRECISION, ProbUtils } from '#utils/index.js';
 import { RegistryKernel, SearchPool, SearchPoolSignature } from '#lib/search/registry/RegistryKernel.js';
 import { SearchGraph, SearchGraphDiagnostics, SearchGraphExpansion, SearchGraphNodeId } from '#lib/search/SearchGraph.js';
+import { SearchExpansionBlueprintCache } from '#lib/search/SearchExpansionBlueprintCache.js';
 
 /** Minimal cache surface a SearchRun needs for structural graph reuse. */
 export interface SearchGraphCache {
@@ -18,6 +19,7 @@ export interface SearchRunOptions {
     readonly distributionService?: ModifiedLevelDistributionService | undefined;
     readonly targetClueId?: number | undefined;
     readonly graphCache?: SearchGraphCache | undefined;
+    readonly useExpansionBlueprints?: boolean | undefined;
 }
 
 /**
@@ -119,6 +121,8 @@ export class SearchRun {
 
     private readonly distributionService: ModifiedLevelDistributionService;
     private readonly graphCache: SearchGraphCache | undefined;
+    private readonly localBlueprintCache = new SearchExpansionBlueprintCache();
+    private readonly useExpansionBlueprints: boolean;
     private readonly graphsBySignature = new Map<SearchPoolSignature, GraphRecord>();
     private readonly graphs: GraphRecord[] = [];
     private readonly forwardingResidues: Array<Map<number, BigUint64Array> | undefined> = [];
@@ -137,6 +141,7 @@ export class SearchRun {
         this.distributionService = options.distributionService ?? new ModifiedLevelDistributionService();
         this.graphCache = options.graphCache;
         this.targetClueId = options.targetClueId;
+        this.useExpansionBlueprints = options.useExpansionBlueprints ?? true;
     }
 
     /** Seeds the run with the modified-level distribution for one table XP value. */
@@ -586,7 +591,12 @@ export class SearchRun {
             : undefined;
         const record = Object.freeze({
             id: this.graphs.length,
-            graph: this.graphCache?.getOrCreateGraph(this.kernel, pool, null) ?? new SearchGraph(this.kernel, pool),
+            graph: this.graphCache && this.useExpansionBlueprints
+                ? this.graphCache.getOrCreateGraph(this.kernel, pool, null)
+                : new SearchGraph(this.kernel, pool, {
+                    blueprintCache: this.localBlueprintCache,
+                    useExpansionBlueprints: this.useExpansionBlueprints
+                }),
             cluePolicy
         });
         this.graphs.push(record);

@@ -5,6 +5,9 @@ import { PackedEnchant, RegistryState } from '#types/index.js';
 /** Stable fingerprint for all rules that affect a modified-level enchantment pool. */
 export type SearchPoolSignature = string & { readonly __brand: 'SearchPoolSignature' };
 
+/** Stable fingerprint for rank-variant pools that share base structural behavior. */
+export type SearchPoolFamilySignature = string & { readonly __brand: 'SearchPoolFamilySignature' };
+
 /** One packed enchantment option plus the precomputed data needed by search graphs. */
 export interface SearchPoolEntry {
     readonly packedEnchant: PackedEnchant;
@@ -21,6 +24,7 @@ export interface SearchPool {
     readonly item: string;
     readonly level: number;
     readonly signature: SearchPoolSignature;
+    readonly familySignature: SearchPoolFamilySignature;
     readonly entries: readonly SearchPoolEntry[];
     readonly totalWeight: number;
 }
@@ -72,10 +76,12 @@ export class RegistryKernel {
         const entries = packedPool.map(packedEnchant => this.toPoolEntry(packedEnchant));
         const totalWeight = entries.reduce((sum, entry) => sum + entry.weight, 0);
         const signature = this.createPoolSignature(entries);
+        const familySignature = this.createPoolFamilySignature(entries);
         const pool: SearchPool = Object.freeze({
             item: this.item,
             level,
             signature,
+            familySignature,
             entries: Object.freeze(entries),
             totalWeight
         });
@@ -140,6 +146,21 @@ export class RegistryKernel {
         ];
 
         return `pool:${fnv1a64(parts.join('|'))}` as SearchPoolSignature;
+    }
+
+    private createPoolFamilySignature(entries: readonly SearchPoolEntry[]): SearchPoolFamilySignature {
+        const parts = [
+            `v=${this.version}`,
+            `item=${this.item}`,
+            `book=${this.multiEnchantBooks ? 'multi' : 'single'}`,
+            ...entries.map(entry => [
+                entry.enchantId,
+                entry.weight,
+                entry.conflictBitset.toString(16)
+            ].join(':'))
+        ];
+
+        return `pool-family:${fnv1a64(parts.join('|'))}` as SearchPoolFamilySignature;
     }
 }
 

@@ -2,6 +2,7 @@ import { LRUCache } from '#utils/collections/LRUCache.js';
 import { RegistryKernel, SearchPool } from '#lib/search/registry/RegistryKernel.js';
 import { SearchGraph } from '#lib/search/SearchGraph.js';
 import { SearchRun } from '#lib/search/SearchRun.js';
+import { SearchExpansionBlueprintCache } from '#lib/search/SearchExpansionBlueprintCache.js';
 
 /** LRU capacities for structural graphs and resumable search runs. */
 export interface SearchStateCacheConfig {
@@ -32,6 +33,7 @@ export interface SearchStateCacheMetrics {
 export class SearchStateCache {
     private readonly graphs: LRUCache<string, SearchGraph>;
     private readonly runs: LRUCache<string, SearchRun>;
+    private readonly blueprints = new SearchExpansionBlueprintCache();
 
     private metrics = {
         graphs: { hits: 0, misses: 0 },
@@ -53,7 +55,7 @@ export class SearchStateCache {
         }
 
         this.metrics.graphs.misses++;
-        const graph = new SearchGraph(kernel, pool, { clueMode });
+        const graph = new SearchGraph(kernel, pool, { clueMode, blueprintCache: this.blueprints });
         this.graphs.set(key, graph);
         return graph;
     }
@@ -80,6 +82,7 @@ export class SearchStateCache {
     public clearAll(): void {
         this.graphs.clear();
         this.runs.clear();
+        this.blueprints.clear();
         this.resetMetrics();
     }
 
