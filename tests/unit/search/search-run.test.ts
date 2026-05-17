@@ -184,6 +184,28 @@ describe('SearchRun', () => {
         }
     });
 
+    it('produces identical bounded book search state with generalized blueprints enabled', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
+        const optimized = new SearchRun(kernel);
+        const baseline = new SearchRun(kernel, { useExpansionBlueprints: false });
+
+        optimized.seedXp(30);
+        baseline.seedXp(30);
+        const optimizedSnapshot = optimized.searchToCheckpoint({ threshold: 0n, maxIterations: 2_000 });
+        const baselineSnapshot = baseline.searchToCheckpoint({ threshold: 0n, maxIterations: 2_000 });
+
+        assert.deepStrictEqual(optimizedSnapshot.mass, baselineSnapshot.mass);
+        assert.deepStrictEqual([...optimizedSnapshot.results.entries()], [...baselineSnapshot.results.entries()]);
+        assert.strictEqual(optimizedSnapshot.pendingCount, baselineSnapshot.pendingCount);
+        assert.strictEqual(optimizedSnapshot.largestPendingMass, baselineSnapshot.largestPendingMass);
+        assert.strictEqual(optimizedSnapshot.iterations, baselineSnapshot.iterations);
+        assert.strictEqual(optimizedSnapshot.activeResidueMass, baselineSnapshot.activeResidueMass);
+
+        const blueprintHits = optimized.getGraphDiagnostics().reduce((sum, graph) => sum + graph.blueprints.hits, 0);
+        assert.ok(blueprintHits > 0, 'modern book search should reuse generalized blueprints');
+    });
+
     it('can stop once a requested resolved-mass target is reached', () => {
         const registry = RegistryFactory.build('1.21.11');
         const kernel = new RegistryKernel({ registry, item: 'sword', material: 'diamond' });
