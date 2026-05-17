@@ -42,5 +42,25 @@ describe('Search diagnostics scripts', () => {
         assert.ok(report.summary.currentCandidateChecks > 0);
         assert.ok(report.groups.pools.length > 0);
         assert.ok(report.generalizedPoolFamilies.length > 0);
+        assert.ok(report.blueprints.baselineCandidateChecks >= 0);
+        assert.ok(report.blueprints.blueprintCandidateChecks >= 0);
+    });
+
+    it('reports actual generalized blueprint reuse for modern book searches', async () => {
+        const report = await generateSearchOverlapReport({
+            version: '1.21.11',
+            item: 'book',
+            material: 'book',
+            xp: 30,
+            threshold: 0,
+            maxIterations: 10_000,
+            targetClassifiedMass: 0.5
+        });
+
+        assert.ok(report.blueprints.hits > 0);
+        assert.ok(report.blueprints.misses > 0);
+        assert.ok(report.blueprints.baselineCandidateChecks > 0);
+        assert.ok(report.blueprints.blueprintCandidateChecks < report.blueprints.baselineCandidateChecks);
+        assert.ok(report.summary.blueprintSavingsRatio > 0);
     });
 });

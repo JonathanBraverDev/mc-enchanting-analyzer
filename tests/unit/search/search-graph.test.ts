@@ -2,6 +2,9 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { RegistryFactory, RegistryKernel, SearchGraph } from '#lib/index.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
+import { SearchExpansionBlueprintCache } from '#lib/search/SearchExpansionBlueprintCache.js';
+import type { SearchGraphExpansion } from '#lib/search/SearchGraph.js';
+import type { SearchPool } from '#lib/search/index.js';
 
 describe('SearchGraph', () => {
     it('lazily expands root nodes into canonical one-enchant children', () => {
@@ -78,4 +81,77 @@ describe('SearchGraph', () => {
         assert.strictEqual(terminal.terminalReason, 'max-enchants');
         assert.strictEqual(terminal.edges.length, 0);
     });
+
+    it('uses generalized blueprints without changing exact expansion edges', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
+        const pair = findRankVariantPoolPair(kernel);
+        assert.ok(pair, 'fixture should include rank-variant book pools');
+
+        const sharedBlueprints = new SearchExpansionBlueprintCache();
+        const warmGraph = new SearchGraph(kernel, pair!.a, { blueprintCache: sharedBlueprints });
+        expandFirstChild(warmGraph, 30);
+
+        const optimized = new SearchGraph(kernel, pair!.b, { blueprintCache: sharedBlueprints });
+        const baseline = new SearchGraph(kernel, pair!.b, { useExpansionBlueprints: false });
+        const optimizedExpansion = expandFirstChild(optimized, 30);
+        const baselineExpansion = expandFirstChild(baseline, 30);
+
+        assertExpansionsEqual(optimized, optimizedExpansion, baseline, baselineExpansion);
+        assert.ok(optimized.getDiagnostics().blueprints.hits > 0, 'second graph should reuse a family blueprint');
+        assert.ok(optimized.getDiagnostics().blueprints.savedCandidateChecks > 0);
+    });
 });
+
+function expandFirstChild(graph: SearchGraph, level: number): SearchGraphExpansion {
+    const root = graph.getRootNode(level);
+    const firstEdge = graph.getExpansion(root.id).edges[0];
+    assert.ok(firstEdge, 'fixture should expose at least one root edge');
+    return graph.getExpansion(firstEdge.childId);
+}
+
+function assertExpansionsEqual(
+    optimizedGraph: SearchGraph,
+    optimized: SearchGraphExpansion,
+    baselineGraph: SearchGraph,
+    baseline: SearchGraphExpansion
+): void {
+    assert.strictEqual(optimized.terminalReason, baseline.terminalReason);
+    assert.strictEqual(optimized.probContinue, baseline.probContinue);
+    assert.strictEqual(optimized.totalWeight, baseline.totalWeight);
+    assert.strictEqual(optimized.edges.length, baseline.edges.length);
+
+    for (let i = 0; i < optimized.edges.length; i++) {
+        const left = optimized.edges[i]!;
+        const right = baseline.edges[i]!;
+        assert.strictEqual(left.entry.packedEnchant, right.entry.packedEnchant);
+        assert.strictEqual(left.entry.enchantId, right.entry.enchantId);
+        assert.strictEqual(left.entry.comboIndex, right.entry.comboIndex);
+        assert.strictEqual(left.weight, right.weight);
+
+        const leftChild = optimizedGraph.getNode(left.childId);
+        const rightChild = baselineGraph.getNode(right.childId);
+        assert.strictEqual(leftChild.selectedMask, rightChild.selectedMask);
+        assert.strictEqual(leftChild.currentLevel, rightChild.currentLevel);
+        assert.strictEqual(leftChild.combo, rightChild.combo);
+        assert.strictEqual(leftChild.count, rightChild.count);
+    }
+}
+
+function findRankVariantPoolPair(kernel: RegistryKernel): { a: SearchPool; b: SearchPool } | undefined {
+    const byFamily = new Map<string, SearchPool[]>();
+    for (let level = 1; level <= 50; level++) {
+        const pool = kernel.getPool(level);
+        let family = byFamily.get(pool.familySignature);
+        if (!family) {
+            family = [];
+            byFamily.set(pool.familySignature, family);
+        }
+        if (!family.some(candidate => candidate.signature === pool.signature)) family.push(pool);
+    }
+
+    for (const pools of byFamily.values()) {
+        if (pools.length >= 2) return { a: pools[0]!, b: pools[1]! };
+    }
+    return undefined;
+}
