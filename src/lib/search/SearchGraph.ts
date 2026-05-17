@@ -2,6 +2,7 @@ import { ENGINE_LIMITS } from '#constants/engine.js';
 import { PackedCombo } from '#types/index.js';
 import { ComboUtils, PRECISION, ProbUtils } from '#utils/index.js';
 import { RegistryKernel, SearchPoolEntry, SearchPool, SearchPoolSignature } from '#lib/search/registry/RegistryKernel.js';
+import { SearchExpansionBlueprintCache } from '#lib/search/SearchExpansionBlueprintCache.js';
 
 /** Dense numeric ID for a node inside one SearchGraph. */
 export type SearchGraphNodeId = number & { readonly __brand: 'SearchGraphNodeId' };
@@ -151,7 +152,17 @@ export interface SearchGraphDiagnostics {
     readonly totalWeight: number;
     readonly nodeCount: number;
     readonly expansionCount: number;
+    readonly blueprints: SearchGraphBlueprintDiagnostics;
     readonly nodes: readonly SearchGraphMaterializedNode[];
+}
+
+export interface SearchGraphBlueprintDiagnostics {
+    readonly enabled: boolean;
+    readonly hits: number;
+    readonly misses: number;
+    readonly baselineCandidateChecks: number;
+    readonly blueprintCandidateChecks: number;
+    readonly savedCandidateChecks: number;
 }
 
 /**
@@ -174,13 +185,25 @@ export class SearchGraph {
     private readonly numericNodeIndex = new NumericGraphNodeIndex();
     private readonly bigintNodeIndex = new Map<bigint, SearchGraphNodeId>();
     private readonly expansionCache: Array<SearchGraphExpansion | undefined> = [];
+    private readonly blueprintCache: SearchExpansionBlueprintCache;
+    private readonly useExpansionBlueprints: boolean;
+    private blueprintHits = 0;
+    private blueprintMisses = 0;
+    private baselineCandidateChecks = 0;
+    private blueprintCandidateChecks = 0;
 
     public constructor(
         private readonly kernel: RegistryKernel,
         pool: SearchPool,
-        options: { clueMode?: string | null } = {}
+        options: {
+            clueMode?: string | null;
+            blueprintCache?: SearchExpansionBlueprintCache | undefined;
+            useExpansionBlueprints?: boolean | undefined;
+        } = {}
     ) {
         this.pool = pool;
+        this.blueprintCache = options.blueprintCache ?? new SearchExpansionBlueprintCache();
+        this.useExpansionBlueprints = options.useExpansionBlueprints ?? true;
         this.key = Object.freeze({
             version: kernel.version,
             item: kernel.item,
@@ -249,6 +272,14 @@ export class SearchGraph {
             totalWeight: this.pool.totalWeight,
             nodeCount: this.size,
             expansionCount: this.expansionCache.reduce((count, expansion) => count + (expansion === undefined ? 0 : 1), 0),
+            blueprints: Object.freeze({
+                enabled: this.useExpansionBlueprints,
+                hits: this.blueprintHits,
+                misses: this.blueprintMisses,
+                baselineCandidateChecks: this.baselineCandidateChecks,
+                blueprintCandidateChecks: this.blueprintCandidateChecks,
+                savedCandidateChecks: this.baselineCandidateChecks - this.blueprintCandidateChecks
+            }),
             nodes: Object.freeze(nodes)
         });
     }
@@ -293,22 +324,49 @@ export class SearchGraph {
         const edges: SearchGraphEdge[] = [];
         let totalWeight = 0;
 
-        for (const entry of this.pool.entries) {
-            if ((selectedMask & entry.idBit) !== 0n) continue;
-            if ((selectedMask & entry.conflictBitset) !== 0n) continue;
+        this.baselineCandidateChecks += this.pool.entries.length;
 
-            const childMask = selectedMask | entry.idBit;
-            const childCombo = ComboUtils.packAppendIndex(combo, entry.comboIndex, count);
-            const childId = this.getOrCreateNodeId(childMask, nextLevel, childCombo, nextCount);
-            totalWeight += entry.weight;
-            edges.push({
-                entry,
-                weight: entry.weight,
-                childId
-            });
+        if (this.useExpansionBlueprints) {
+            const lookup = this.blueprintCache.getOrCreate(this.pool, selectedMask, currentLevel, count);
+            if (lookup.hit) this.blueprintHits++;
+            else this.blueprintMisses++;
+            this.blueprintCandidateChecks += lookup.candidateChecks;
+            totalWeight = lookup.blueprint.totalWeight;
+
+            for (const entryIndex of lookup.blueprint.eligibleEntryIndexes) {
+                this.addExpansionEdge(edges, this.pool.entries[entryIndex]!, selectedMask, combo, count, nextLevel, nextCount);
+            }
+        } else {
+            this.blueprintCandidateChecks += this.pool.entries.length;
+            for (const entry of this.pool.entries) {
+                if ((selectedMask & entry.idBit) !== 0n) continue;
+                if ((selectedMask & entry.conflictBitset) !== 0n) continue;
+
+                totalWeight += entry.weight;
+                this.addExpansionEdge(edges, entry, selectedMask, combo, count, nextLevel, nextCount);
+            }
         }
 
         return this.createExpansion(nodeId, count, probContinue, edges, edges.length === 0 ? 'no-eligible' : null, totalWeight);
+    }
+
+    private addExpansionEdge(
+        edges: SearchGraphEdge[],
+        entry: SearchPoolEntry,
+        selectedMask: bigint,
+        combo: PackedCombo,
+        count: number,
+        nextLevel: number,
+        nextCount: number
+    ): void {
+        const childMask = selectedMask | entry.idBit;
+        const childCombo = ComboUtils.packAppendIndex(combo, entry.comboIndex, count);
+        const childId = this.getOrCreateNodeId(childMask, nextLevel, childCombo, nextCount);
+        edges.push({
+            entry,
+            weight: entry.weight,
+            childId
+        });
     }
 
     private createExpansion(
