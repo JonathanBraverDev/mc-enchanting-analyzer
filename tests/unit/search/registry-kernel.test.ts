@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { RegistryFactory, RegistryKernel } from '#lib/index.js';
+import type { SearchPool } from '#lib/search/index.js';
 
 describe('RegistryKernel', () => {
     it('creates stable pool signatures for equivalent modified-level pools', () => {
@@ -27,6 +28,49 @@ describe('RegistryKernel', () => {
         assert.notStrictEqual(sword.getPool(30).signature, pickaxe.getPool(30).signature);
     });
 
+    it('keeps exact rank-variant pools separate while sharing a family signature', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
+        const pair = findRankVariantPoolPair(kernel);
+
+        assert.ok(pair, 'fixture should include rank-variant book pools');
+        assert.notStrictEqual(pair!.a.signature, pair!.b.signature);
+        assert.strictEqual(pair!.a.familySignature, pair!.b.familySignature);
+    });
+
+    it('includes ordered base candidates in family signatures', () => {
+        const forward = RegistryFactory.buildWithMutations('1.21.11', [
+            { type: 'removeEnchantableItemRule', selector: { item: 'sword', valid_from: '1.0' } },
+            {
+                type: 'addEnchantableItemRule',
+                rule: {
+                    item: 'sword',
+                    valid_from: '1.0',
+                    groups: ['Sharpness', 'Smite', 'Bane of Arthropods'],
+                    materials: ['tool'],
+                    enchantability: 'tool'
+                }
+            }
+        ]);
+        const reversed = RegistryFactory.buildWithMutations('1.21.11', [
+            { type: 'removeEnchantableItemRule', selector: { item: 'sword', valid_from: '1.0' } },
+            {
+                type: 'addEnchantableItemRule',
+                rule: {
+                    item: 'sword',
+                    valid_from: '1.0',
+                    groups: ['Bane of Arthropods', 'Smite', 'Sharpness'],
+                    materials: ['tool'],
+                    enchantability: 'tool'
+                }
+            }
+        ]);
+        const forwardPool = new RegistryKernel({ registry: forward, item: 'sword', material: 'diamond' }).getPool(30);
+        const reversedPool = new RegistryKernel({ registry: reversed, item: 'sword', material: 'diamond' }).getPool(30);
+
+        assert.notStrictEqual(forwardPool.familySignature, reversedPool.familySignature);
+    });
+
     it('projects packed pool entries needed by shared search graphs', () => {
         const registry = RegistryFactory.build('1.21.11');
         const kernel = new RegistryKernel({ registry, item: 'sword', material: 'diamond' });
@@ -43,3 +87,21 @@ describe('RegistryKernel', () => {
         }
     });
 });
+
+function findRankVariantPoolPair(kernel: RegistryKernel): { a: SearchPool; b: SearchPool } | undefined {
+    const byFamily = new Map<string, SearchPool[]>();
+    for (let level = 1; level <= 50; level++) {
+        const pool = kernel.getPool(level);
+        let family = byFamily.get(pool.familySignature);
+        if (!family) {
+            family = [];
+            byFamily.set(pool.familySignature, family);
+        }
+        if (!family.some(candidate => candidate.signature === pool.signature)) family.push(pool);
+    }
+
+    for (const pools of byFamily.values()) {
+        if (pools.length >= 2) return { a: pools[0]!, b: pools[1]! };
+    }
+    return undefined;
+}
