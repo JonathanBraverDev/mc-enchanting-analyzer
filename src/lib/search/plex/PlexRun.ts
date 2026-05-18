@@ -1,11 +1,12 @@
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { ProbabilityMassAccountant } from '#engine/search/ProbabilityMassAccountant.js';
 import type { MassAccountingBreakdown } from '#types/mass.js';
-import { PRECISION } from '#utils/index.js';
+import { PRECISION, ProbUtils } from '#utils/index.js';
 import type { SearchPool, SearchPoolSignature } from '#lib/search/registry/RegistryKernel.js';
 import { RegistryKernel } from '#lib/search/registry/RegistryKernel.js';
 import { PlexGraph, type PlexNodeId } from '#lib/search/plex/PlexGraph.js';
 import {
+    appendPlexPayloadEdge,
     EMPTY_PLEX_PAYLOAD,
     type PlexPayload
 } from '#lib/search/plex/PlexPayload.js';
@@ -25,6 +26,8 @@ export interface PlexPendingEntry {
 
 export interface PlexRunSnapshot {
     readonly mass: MassAccountingBreakdown;
+    readonly iterations: number;
+    readonly lastExpandedMass: bigint;
     readonly pendingCount: number;
     readonly largestPendingMass: bigint;
     readonly pendingEntries: readonly PlexPendingEntry[];
@@ -62,6 +65,8 @@ export class PlexRun {
     private readonly pending: PendingPlexWork[] = [];
     private seeded = false;
     private _seededLevelCount = 0;
+    private _iterations = 0;
+    private _lastExpandedMass = 0n;
 
     public constructor(
         private readonly kernel: RegistryKernel,
@@ -97,9 +102,23 @@ export class PlexRun {
         if (seededMass > PRECISION) throw new Error(`Modified-level distribution overflowed precision by ${seededMass - PRECISION} units.`);
     }
 
+    public step(): boolean {
+        if (!this.seeded) throw new Error('PlexRun must be seeded before stepping.');
+        const current = this.popLargestPending();
+        if (!current) return false;
+
+        this.mass.subtract('pending', current.mass);
+        this._lastExpandedMass = current.mass;
+        this.expand(current);
+        this._iterations++;
+        return true;
+    }
+
     public snapshot(): PlexRunSnapshot {
         return Object.freeze({
             mass: this.mass.toPublic(),
+            iterations: this._iterations,
+            lastExpandedMass: this._lastExpandedMass,
             pendingCount: this.pending.length,
             largestPendingMass: this.pending.reduce((largest, entry) => entry.mass > largest ? entry.mass : largest, 0n),
             pendingEntries: Object.freeze(this.getPendingEntries()),
@@ -113,10 +132,78 @@ export class PlexRun {
         return this.getGraphById(graphId).graph;
     }
 
+    private expand(current: PendingPlexWork): void {
+        const graph = this.getGraphById(current.graphId).graph;
+        const expansion = graph.getExpansion(current.nodeId);
+
+        if (expansion.isRoot) {
+            this.forwardOrResolve(current, current.mass);
+            return;
+        }
+
+        const probStop = ProbUtils.scale(current.mass, PRECISION - expansion.probContinue);
+        const probForward = current.mass - probStop;
+        this.recordResolved(probStop);
+
+        if (probForward === 0n) return;
+        if (expansion.terminalReason === 'max-enchants') {
+            this.mass.record('overflow', probForward);
+            return;
+        }
+
+        this.forwardOrResolve(current, probForward);
+    }
+
+    private forwardOrResolve(current: PendingPlexWork, mass: bigint): void {
+        if (mass === 0n) return;
+        const graph = this.getGraphById(current.graphId).graph;
+        const expansion = graph.getExpansion(current.nodeId);
+        if (expansion.totalWeight <= 0 || expansion.edges.length === 0) {
+            this.recordResolved(mass);
+            return;
+        }
+
+        let assigned = 0n;
+        const totalWeight = BigInt(expansion.totalWeight);
+        for (const edge of expansion.edges) {
+            if (edge.weight <= 0) continue;
+            const childMass = (mass * BigInt(edge.weight)) / totalWeight;
+            assigned += childMass;
+            this.pushPending(
+                current.graphId,
+                edge.childId,
+                childMass,
+                appendPlexPayloadEdge(current.payload, edge)
+            );
+        }
+
+        const remainder = mass - assigned;
+        if (remainder > 0n) this.mass.record('rounding', remainder);
+    }
+
+    private recordResolved(mass: bigint): void {
+        if (mass > 0n) this.mass.record('resolved', mass);
+    }
+
     private pushPending(graphId: number, nodeId: PlexNodeId, mass: bigint, payload: PlexPayload): void {
         if (mass === 0n) return;
         this.pending.push(Object.freeze({ graphId, nodeId, mass, payload }));
         this.mass.record('pending', mass);
+    }
+
+    private popLargestPending(): PendingPlexWork | undefined {
+        let bestIndex = -1;
+        let bestMass = 0n;
+        for (let i = 0; i < this.pending.length; i++) {
+            const mass = this.pending[i]!.mass;
+            if (bestIndex === -1 || mass > bestMass) {
+                bestIndex = i;
+                bestMass = mass;
+            }
+        }
+        if (bestIndex === -1) return undefined;
+        const [entry] = this.pending.splice(bestIndex, 1);
+        return entry;
     }
 
     private getPendingEntries(): PlexPendingEntry[] {
