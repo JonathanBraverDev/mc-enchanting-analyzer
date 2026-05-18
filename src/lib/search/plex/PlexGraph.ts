@@ -28,6 +28,8 @@ export interface PlexNode {
 
 export interface PlexEdge {
     readonly alternatives: CanonicalPackedEnchantList;
+    /** Per-alternative concrete weights, aligned with `alternatives`. */
+    readonly weights: readonly number[];
     readonly weight: number;
     readonly childExclusionMask: bigint;
     readonly childId: PlexNodeId;
@@ -50,7 +52,7 @@ export interface PlexExpansion {
 
 interface PendingEdgeGroup {
     readonly childExclusionMask: bigint;
-    readonly alternatives: PackedEnchant[];
+    readonly weightsByAlternative: Map<PackedEnchant, number>;
     weight: number;
 }
 
@@ -181,19 +183,23 @@ export class PlexGraph {
             const key = childExclusionMask.toString(16);
             let group = groupsByChildExclusion.get(key);
             if (!group) {
-                group = { childExclusionMask, alternatives: [], weight: 0 };
+                group = { childExclusionMask, weightsByAlternative: new Map<PackedEnchant, number>(), weight: 0 };
                 groupsByChildExclusion.set(key, group);
             }
-            group.alternatives.push(entry.packedEnchant);
+            group.weightsByAlternative.set(
+                entry.packedEnchant,
+                (group.weightsByAlternative.get(entry.packedEnchant) ?? 0) + entry.weight
+            );
             group.weight += entry.weight;
         }
 
         return Object.freeze([...groupsByChildExclusion.values()]
             .map(group => {
-                const alternatives = canonicalizePackedEnchantList(group.alternatives);
+                const alternatives = canonicalizePackedEnchantList([...group.weightsByAlternative.keys()]);
                 const child = this.getOrCreateNode(group.childExclusionMask, childLevel, childCount);
                 return Object.freeze({
                     alternatives,
+                    weights: Object.freeze(alternatives.map(alternative => group.weightsByAlternative.get(alternative)!)),
                     weight: group.weight,
                     childExclusionMask: group.childExclusionMask,
                     childId: child.id

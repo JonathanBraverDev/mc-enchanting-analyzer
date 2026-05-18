@@ -54,6 +54,8 @@ describe('PlexGraph', () => {
         assert.strictEqual(aggregateRoot.eligibleEntryCount, concreteRoot.edges.length);
         assert.strictEqual(aggregateRoot.totalWeight, concreteRoot.totalWeight);
         assert.ok(aggregateRoot.edges.length <= concreteRoot.edges.length);
+        assert.ok(aggregateRoot.edges.every(edge => edge.alternatives.length === edge.weights.length));
+        assert.ok(aggregateRoot.edges.every(edge => edge.weight === edge.weights.reduce((sum, weight) => sum + weight, 0)));
         assert.strictEqual(plex.getExpansion(plex.getRootNode(30).id), aggregateRoot, 'expansion should be cached');
     });
 
@@ -69,6 +71,10 @@ describe('PlexGraph', () => {
         for (const name of ['Sharpness', 'Smite', 'Bane of Arthropods', 'Impaling', 'Density', 'Breach']) {
             assert.ok(names.has(name), `expected damage edge to include ${name}`);
         }
+        assert.deepStrictEqual(
+            damageEdge.weights,
+            damageEdge.alternatives.map(alternative => registry.weightMap[ComboUtils.getEnchantId(alternative)]!)
+        );
 
         const child = graph.getNode(damageEdge.childId);
         assert.strictEqual(child.exclusionMask, damageEdge.childExclusionMask);
