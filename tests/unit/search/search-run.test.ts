@@ -209,7 +209,7 @@ describe('SearchRun', () => {
     it('preserves exhaustive search accounting with suffix merging enabled', () => {
         const registry = RegistryFactory.build('1.21.11');
         const kernel = new RegistryKernel({ registry, item: 'mace', material: 'mace' });
-        const merged = new SearchRun(kernel);
+        const merged = new SearchRun(kernel, { useSuffixMerging: true });
         const baseline = new SearchRun(kernel, { useSuffixMerging: false });
 
         merged.seedXp(1);
@@ -228,7 +228,7 @@ describe('SearchRun', () => {
     it('records suffix merge hits for modern book searches while conserving mass', () => {
         const registry = RegistryFactory.build('1.21.11');
         const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
-        const run = new SearchRun(kernel);
+        const run = new SearchRun(kernel, { useSuffixMerging: true });
 
         run.seedXp(30);
         const snapshot = run.searchToCheckpoint({ threshold: 0n, maxIterations: 10_000, targetClassifiedMass: 0.5 });
