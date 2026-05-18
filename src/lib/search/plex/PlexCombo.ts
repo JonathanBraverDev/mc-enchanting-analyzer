@@ -4,6 +4,7 @@ import {
     canonicalizeChoiceSet,
     canonicalizePackedEnchantList,
     comparePackedEnchantLists,
+    getPlexChoicePackedEnchants,
     type CanonicalChoiceSet,
     type CanonicalPackedEnchantList
 } from '#lib/search/plex/PlexChoice.js';
@@ -29,16 +30,14 @@ export function createPlexCombo(
     });
 }
 
-export function appendPlexEdge(combo: PlexCombo, edge: Pick<PlexEdge, 'alternatives'>): PlexCombo {
-    if (edge.alternatives.length === 0) {
-        throw new Error('Cannot append an empty plex edge.');
+export function appendPlexEdge(combo: PlexCombo, edge: Pick<PlexEdge, 'choice'>): PlexCombo {
+    const alternatives = getPlexChoicePackedEnchants(edge.choice);
+
+    if (alternatives.length === 1) {
+        return createPlexCombo([...combo.fixed, alternatives[0]!], combo.choices);
     }
 
-    if (edge.alternatives.length === 1) {
-        return createPlexCombo([...combo.fixed, edge.alternatives[0]!], combo.choices);
-    }
-
-    return createPlexCombo(combo.fixed, [...combo.choices, edge.alternatives]);
+    return createPlexCombo(combo.fixed, [...combo.choices, alternatives]);
 }
 
 export function getPlexSlotCount(combo: PlexCombo): number {

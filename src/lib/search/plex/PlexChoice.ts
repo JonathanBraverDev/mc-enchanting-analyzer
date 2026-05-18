@@ -3,6 +3,16 @@ import type { PackedEnchant } from '#types/index.js';
 export type CanonicalPackedEnchantList = readonly PackedEnchant[];
 export type CanonicalChoiceSet = readonly CanonicalPackedEnchantList[];
 
+export interface PlexAlternative {
+    readonly packedEnchant: PackedEnchant;
+    readonly ratio: number;
+}
+
+export interface PlexWeightedChoice {
+    readonly alternatives: readonly PlexAlternative[];
+    readonly totalRatio: number;
+}
+
 /**
  * Returns a canonical copy of one exact edge-local choice list.
  *
@@ -32,6 +42,44 @@ export function canonicalizeChoiceSet(
         .map(choice => canonicalizePackedEnchantList(choice))
         .sort(comparePackedEnchantLists);
     return Object.freeze(normalized);
+}
+
+export function canonicalizeWeightedChoice(
+    alternatives: readonly { readonly packedEnchant: PackedEnchant; readonly weight: number }[]
+): PlexWeightedChoice {
+    if (alternatives.length === 0) {
+        throw new Error('Cannot create an empty plex weighted choice.');
+    }
+
+    const weightsByAlternative = new Map<PackedEnchant, number>();
+    for (const alternative of alternatives) {
+        if (!Number.isInteger(alternative.weight) || alternative.weight <= 0) {
+            throw new Error('Plex choice weights must be positive integers.');
+        }
+        weightsByAlternative.set(
+            alternative.packedEnchant,
+            (weightsByAlternative.get(alternative.packedEnchant) ?? 0) + alternative.weight
+        );
+    }
+
+    const gcd = greatestCommonDivisor([...weightsByAlternative.values()]);
+    const packedEnchants = canonicalizePackedEnchantList([...weightsByAlternative.keys()]);
+    const weightedAlternatives = packedEnchants.map(packedEnchant => Object.freeze({
+        packedEnchant,
+        ratio: weightsByAlternative.get(packedEnchant)! / gcd
+    }));
+    return Object.freeze({
+        alternatives: Object.freeze(weightedAlternatives),
+        totalRatio: weightedAlternatives.reduce((sum, alternative) => sum + alternative.ratio, 0)
+    });
+}
+
+export function getPlexChoicePackedEnchants(choice: PlexWeightedChoice): CanonicalPackedEnchantList {
+    return Object.freeze(choice.alternatives.map(alternative => alternative.packedEnchant));
+}
+
+export function comparePlexWeightedChoices(a: PlexWeightedChoice, b: PlexWeightedChoice): number {
+    return comparePackedEnchantLists(getPlexChoicePackedEnchants(a), getPlexChoicePackedEnchants(b));
 }
 
 export function comparePackedEnchant(a: PackedEnchant, b: PackedEnchant): number {
@@ -79,4 +127,23 @@ function assertNoDuplicatePackedEnchants(sorted: readonly PackedEnchant[]): void
             throw new Error(`Duplicate PackedEnchant ${String(sorted[i])} in plex choice list.`);
         }
     }
+}
+
+function greatestCommonDivisor(values: readonly number[]): number {
+    let gcd = values[0] ?? 1;
+    for (let i = 1; i < values.length; i++) {
+        gcd = gcdPair(gcd, values[i]!);
+    }
+    return gcd;
+}
+
+function gcdPair(a: number, b: number): number {
+    let left = Math.abs(a);
+    let right = Math.abs(b);
+    while (right !== 0) {
+        const next = left % right;
+        left = right;
+        right = next;
+    }
+    return left || 1;
 }

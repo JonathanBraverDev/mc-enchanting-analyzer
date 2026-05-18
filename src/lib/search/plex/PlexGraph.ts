@@ -4,9 +4,9 @@ import { RegistryKernel } from '#lib/search/registry/RegistryKernel.js';
 import type { PackedEnchant } from '#types/index.js';
 import { PRECISION, ProbUtils } from '#utils/index.js';
 import {
-    canonicalizePackedEnchantList,
-    comparePackedEnchantLists,
-    type CanonicalPackedEnchantList
+    canonicalizeWeightedChoice,
+    comparePlexWeightedChoices,
+    type PlexWeightedChoice
 } from '#lib/search/plex/PlexChoice.js';
 
 export type PlexNodeId = number & { readonly __brand: 'PlexNodeId' };
@@ -27,9 +27,8 @@ export interface PlexNode {
 }
 
 export interface PlexEdge {
-    readonly alternatives: CanonicalPackedEnchantList;
-    /** Per-alternative concrete weights, aligned with `alternatives`. */
-    readonly weights: readonly number[];
+    readonly choice: PlexWeightedChoice;
+    /** Sum of concrete entry weights before the choice's internal ratio is reduced. */
     readonly weight: number;
     readonly childExclusionMask: bigint;
     readonly childId: PlexNodeId;
@@ -195,17 +194,18 @@ export class PlexGraph {
 
         return Object.freeze([...groupsByChildExclusion.values()]
             .map(group => {
-                const alternatives = canonicalizePackedEnchantList([...group.weightsByAlternative.keys()]);
+                const choice = canonicalizeWeightedChoice(
+                    [...group.weightsByAlternative.entries()].map(([packedEnchant, weight]) => ({ packedEnchant, weight }))
+                );
                 const child = this.getOrCreateNode(group.childExclusionMask, childLevel, childCount);
                 return Object.freeze({
-                    alternatives,
-                    weights: Object.freeze(alternatives.map(alternative => group.weightsByAlternative.get(alternative)!)),
+                    choice,
                     weight: group.weight,
                     childExclusionMask: group.childExclusionMask,
                     childId: child.id
                 });
             })
-            .sort((a, b) => comparePackedEnchantLists(a.alternatives, b.alternatives)));
+            .sort((a, b) => comparePlexWeightedChoices(a.choice, b.choice)));
     }
 
     private createExpansion(
