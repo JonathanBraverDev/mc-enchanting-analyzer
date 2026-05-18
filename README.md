@@ -39,6 +39,7 @@ This tool uses the V7 shared checkpoint search engine. It searches a globally we
 For implementation details, see:
 - `ARCHITECTURE.md` for the engine, worker, and checkpoint flow.
 - `MASS_HANDLING.md` for probability conservation and accounting.
+- `docs/v7-shared-search-engine.md` for the deeper V7 search design and current optimization notes.
 
 ---
 Created by **Jonathan Braver**

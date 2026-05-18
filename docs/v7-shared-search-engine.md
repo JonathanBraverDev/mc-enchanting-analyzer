@@ -1,55 +1,52 @@
-# V7 Shared Search Engine Design
+# V7 Shared Search Engine Deep Dive
 
 ## Common Description
 
-This document is the working design checkpoint for the V7 engine rewrite. V7 is allowed to break the V6 engine, worker protocol, registry runtime shape, and tests in order to replace the modified-level search model with shared weighted search over reusable lazy graphs.
+This document is the canonical deep-dive reference for the current V7 shared search engine. It explains the non-naive design: V7 searches one globally weighted frontier across reusable lazy graphs instead of running independent modified-level searches and aggregating afterward.
+
+The document also records experimental ideas and optimization notes, but current behavior is called out separately from future work.
 
 ## Table of Contents
 
 - [Purpose / Scope](#purpose--scope)
-- [Decisions Locked In](#decisions-locked-in)
+- [Current Invariants](#current-invariants)
 - [Problem Statement](#problem-statement)
-- [Current Implementation Checkpoint](#current-implementation-checkpoint)
+- [Current Implementation](#current-implementation)
 - [Validation Findings](#validation-findings)
 - [Limit and Threshold Semantics](#limit-and-threshold-semantics)
-- [Target Architecture](#target-architecture)
+- [Current Architecture](#current-architecture)
 - [Search Identity](#search-identity)
 - [Mass Accounting](#mass-accounting)
 - [Caching Model](#caching-model)
 - [Worker Model](#worker-model)
-- [Deferred Optimization Investigations](#deferred-optimization-investigations)
+- [Remainder and Equivalence Rules](#remainder-and-equivalence-rules)
+- [Optimization Layers](#optimization-layers)
+- [Experimental / Future Work](#experimental--future-work)
 - [Testing Strategy](#testing-strategy)
-- [Commit Plan](#commit-plan)
+- [Maintenance Notes](#maintenance-notes)
 - [References / Related Docs](#references--related-docs)
 - [Owner / Maintainer](#owner--maintainer)
 - [Last Updated](#last-updated)
 
 ## Purpose / Scope
 
-V7 replaces the current “N independent modified-level searches, then aggregate” design with a shared lazy search DAG and weighted probability flow. The rewrite may harvest useful V6 parts, but preserving V6 code structure is not a goal.
+V7 is the current engine path. It replaces the naive “N independent modified-level searches, then aggregate” model with a shared lazy graph model and weighted probability flow. The purpose of this document is to explain the current behavior deeply enough that future optimization work can preserve correctness rather than accidentally reintroducing V6 assumptions.
 
-Out of scope for the first pass:
+This file is not a release plan. It may contain experimental/future-work sections, but those sections are explicitly labeled.
 
-- Exact snapshot parity with V6.
-- Preserving current internal engine tests.
-- Preserving the current worker protocol internally.
-- Full UI redesign beyond adapters needed to consume V7 output.
+## Current Invariants
 
-## Decisions Locked In
-
-- Branch name: `rewrite/v7-shared-search-engine`.
-- Base: current `main` / `v6.1.0`.
-- V7 can break public/internal APIs if the result quality is better.
+- V7 is the upgrade path and source of truth for current search behavior.
 - Existing V6-era snapshots are reference fixtures, not exact behavioral oracles.
 - Canonical golden snapshots are V7 exhaustive searches: `exhaustive: true`, full result limits, and no checkpoint threshold/iteration budget unless the test is explicitly about budget/refinement behavior.
-- Modern book cases may still exceed practical runtime/heap budgets; keep those fixtures out of the golden suite until V7 can bottom them out, rather than treating a budgeted result as canonical.
+- Modern book exhaustive cases may still exceed practical runtime/heap budgets; product and regression flows use bounded checkpoints or mass-targeted snapshots where appropriate.
 - Book cases may need higher absolute limits for near-complete resolution, but V7 resolves more useful mass under the same total node budget.
 - The V7 iteration counter is global and should not be compared to V6's per-modified-level iteration counter as if they were the same budget.
-- Intermittent commits are mandatory; avoid one giant uncommitted rewrite.
+- Performance claims must be measured by wall-clock/runtime evidence, not iteration count alone.
 
 ## Problem Statement
 
-The current engine treats each modified level as its own search state:
+The naive/older engine model treated each modified level as its own search state:
 
 ```text
 modified level -> pool plan -> graph -> frontier -> result
@@ -57,46 +54,40 @@ modified level -> pool plan -> graph -> frontier -> result
 
 That loses important overlap. Adjacent modified levels often share the same eligible pool, and after level halving they frequently converge to the same future state. Searching them independently repeats structural work and delays probability mass merging until final aggregation.
 
-V7 should instead search the real shared state space:
+V7 searches the real shared state space:
 
 ```text
 weighted modified-level roots -> shared lazy search graph -> per-cell/accounted results
 ```
 
-## Current Implementation Checkpoint
+## Current Implementation
 
-Current branch state after the V7-only migration:
+Current implemented V7 behavior:
 
-- Branch: `rewrite/v7-shared-search-engine`.
-- Fallback design checkpoint tag: `v7-global-search-semantics-2026-05-10` at `20b65ba`.
-- Implemented V7 slices:
-  - `RegistryKernel` and `SearchPoolSignature` projection.
-  - Lazy `SearchGraph` structural graph.
-  - Single-cell weighted `SearchRun` with global frontier scheduling and mass conservation.
-  - Configurable zero probability floor so validation can dig through the tail.
-  - Historical V6/V7 comparison runs with matched-resolved mode; the temporary comparison scripts have now been removed from the live tree.
-  - `SearchExecutionService` boundary that returns a `SearchResult` backed by `SearchRunSnapshot`.
-  - Top and chart workers route both unclued and clue-conditioned requests through V7.
-  - Refinement thresholds tuned for global weighted frontier semantics instead of V6 local per-modified-level semantics.
-  - Edge-local split residue forwarding inside `SearchRun`, matching V6's cautious recovery model while avoiding order-dependent child allocation: fixed-point split residue stays in `rounding` until later mass reaches the same `(graph, node)` expansion and can recover it through the same outgoing edge.
-  - Pending-state projection: summary, clue conditioning, target analysis, clue advice, snapshots, and chart cells consume `SearchRunSnapshot.pendingEntries` directly.
-  - Async chunked checkpoint search so worker abort signals can be observed during long checkpoints.
-  - Search instrumentation under `EngineInstrumentation.search` for graph count, seeded levels, pending entries, largest pending mass, active residue count/mass, improvability, and search cache hit/miss counters.
-  - Structural `SearchGraph` cache plus XP-cell `SearchRun` cache: one-at-a-time chart worker calls can now resume the same XP run across refinement passes while sharing structural graphs across fresh runs.
-  - Explicit `exhaustive: true` mode for bottom-out searches: it forces threshold `0`, bypasses the normal iteration safety cap, remains abortable through async search, and is the canonical mode for golden snapshot generation. Product UI flows should still use checkpoint limits.
-  - Generalized expansion-blueprint reuse across rank-variant pools. `SearchPoolFamilySignature` groups pools that share base enchant/conflict/weight structure while differing by exact packed ranks; `SearchExpansionBlueprintCache` reuses eligible-entry scans across those families without changing exact graph edges or combo payloads.
-  - Suffix identities and pending suffix merging are fully implemented but experimental and off by default. `SearchGraph.getSuffixIdentity()` can identify non-root nodes with the same visible combo and future expansion, and `SearchRun` can canonicalize matching pending entries when `useSuffixMerging: true`; current profiling shows the identity/cache overhead can outweigh the lower iteration count, so product/default searches leave it disabled.
-- Direction change:
-  - V7 is now the upgrade path and source of truth.
-  - Treat V6 internals, telemetry shape, and snapshots as obsolete until re-evaluated.
-  - Keep the existing engine API semantics where they fit: `searchToCheckpoint` means advance one search to one checkpoint and return; `searchSequentialCheckpoints` means advance the same search through multiple checkpoints and report along the way.
-  - Do not introduce a separate V7 worker/request abstraction unless a concrete feature cannot be expressed through the existing checkpoint interfaces.
-  - Do not force native V7 results or telemetry into V6 output shapes unless a temporary bridge still requires it.
-- Not implemented yet:
-  - Serialized/cross-worker V7 search snapshots if live run caching proves insufficient.
-  - Additional shared-search regression tests as new edge cases are discovered.
-- Optional/post-release:
-  - Engine-owned chart batch scheduling. Current direction is that the chart worker owns matrix orchestration and repeatedly calls checkpoint APIs; V7 caching provides XP-cell resume underneath.
+- `RegistryKernel` and `SearchPoolSignature` projection.
+- Lazy `SearchGraph` structural graph.
+- Single-cell weighted `SearchRun` with global frontier scheduling and mass conservation.
+- Configurable zero probability floor so validation can dig through the tail.
+- Historical V6/V7 comparison runs with matched-resolved mode; the temporary comparison scripts have now been removed from the live tree.
+- `SearchExecutionService` boundary that returns a `SearchResult` backed by `SearchRunSnapshot`.
+- Top and chart workers route both unclued and clue-conditioned requests through V7.
+- Refinement thresholds tuned for global weighted frontier semantics instead of V6 local per-modified-level semantics.
+- Edge-local split residue forwarding inside `SearchRun`, matching V6's cautious recovery model while avoiding order-dependent child allocation: fixed-point split residue stays in `rounding` until later mass reaches the same `(graph, node)` expansion and can recover it through the same outgoing edge.
+- Pending-state projection: summary, clue conditioning, target analysis, clue advice, snapshots, and chart cells consume `SearchRunSnapshot.pendingEntries` directly.
+- Async chunked checkpoint search so worker abort signals can be observed during long checkpoints.
+- Search instrumentation under `EngineInstrumentation.search` for graph count, seeded levels, pending entries, largest pending mass, active residue count/mass, improvability, and search cache hit/miss counters.
+- Structural `SearchGraph` cache plus XP-cell `SearchRun` cache: one-at-a-time chart worker calls can now resume the same XP run across refinement passes while sharing structural graphs across fresh runs.
+- Explicit `exhaustive: true` mode for bottom-out searches: it forces threshold `0`, bypasses the normal iteration safety cap, remains abortable through async search, and is the canonical mode for golden snapshot generation. Product UI flows should still use checkpoint limits.
+- Generalized expansion-blueprint reuse across rank-variant pools. `SearchPoolFamilySignature` groups pools that share base enchant/conflict/weight structure while differing by exact packed ranks; `SearchExpansionBlueprintCache` reuses eligible-entry scans across those families without changing exact graph edges or combo payloads.
+- Suffix identities and pending suffix merging are fully implemented but experimental and off by default. `SearchGraph.getSuffixIdentity()` can identify non-root nodes with the same visible combo and future expansion, and `SearchRun` can canonicalize matching pending entries when `useSuffixMerging: true`; current profiling shows the identity/cache overhead can outweigh the lower iteration count, so product/default searches leave it disabled.
+
+Current boundaries and intentional non-goals:
+
+- Keep the existing engine API semantics where they fit: `searchToCheckpoint` advances one search to one checkpoint and returns; `searchSequentialCheckpoints` advances the same search through multiple checkpoints and reports along the way.
+- Do not introduce a separate V7 worker/request abstraction unless a concrete feature cannot be expressed through the existing checkpoint interfaces.
+- Do not force native V7 results or telemetry into V6 output shapes unless a temporary bridge still requires it.
+- Serialized/cross-worker V7 search snapshots are not implemented; live `SearchRun` caching is the current resume mechanism.
+- Engine-owned chart batch scheduling is not implemented; the chart worker owns matrix orchestration and V7 caching provides XP-cell resume underneath.
 
 ## Validation Findings
 
@@ -121,11 +112,11 @@ The book drift is explained by cutoff shape:
 - V6 applies thresholds and iteration limits inside each independent modified-level search.
 - V7 applies scheduling to globally weighted frontier mass.
 - Baseline book pending-node global mass spread:
-  - V6: about `70,797x`.
-  - V7: about `346x`.
+- V6: about `70,797x`.
+- V7: about `346x`.
 - Deep book pending-node global mass spread:
-  - V6: about `97,279x`.
-  - V7: about `642x`.
+- V6: about `97,279x`.
+- V7: about `642x`.
 
 This means V6 over-searches some low-probability modified levels while leaving larger unresolved chunks in high-probability levels. V7 leaves a more balanced global frontier.
 
@@ -146,7 +137,7 @@ This validates the intended V7 behavior: given a fixed budget, expand the highes
 
 ## Limit and Threshold Semantics
 
-V7 should intentionally change the meaning of limits from local modified-level controls to global request controls.
+V7 intentionally changes the meaning of limits from local modified-level controls to global request controls.
 
 Intended V7 semantics:
 
@@ -187,7 +178,7 @@ The V6 behavior is useful for compatibility diagnostics only. It should not defi
 - high-resolution convergence,
 - top-result sanity and broad probability distance, not exact V6 snapshot parity.
 
-## Target Architecture
+## Current Architecture
 
 ### RegistryKernel
 
@@ -280,7 +271,7 @@ Suffix identity is stricter than visible combo identity. A suffix can be shared 
 
 ## Mass Accounting
 
-V7 should keep the honest accounting principle, BigInt fixed-point units, and explicit buckets:
+V7 keeps the honest accounting principle, BigInt fixed-point units, and explicit buckets:
 
 - resolved
 - clue incompatible
@@ -307,7 +298,7 @@ seed each modified-level root with P(modifiedLevel)
 merge equivalent future mass during search
 ```
 
-The invariant should hold per output cell:
+The invariant holds per output cell:
 
 ```text
 resolved + clueIncompatible + pending + sieved + overflow + capped + rounding == PRECISION
@@ -383,9 +374,9 @@ searchSequentialCheckpoints(request)
   -> report each checkpoint while continuing the same run
 ```
 
-Top selected level should continue to use sequential checkpoints when it wants uninterrupted coarse → standard → deep progress. Chart sweep should stay worker-orchestrated: the chart worker loops refinement passes and XP levels, calls `searchToCheckpoint` for each cell, and relies on the XP-cell run cache so later refinement calls resume the same `SearchRun` instead of recomputing from scratch.
+Top selected level uses sequential checkpoints when it wants uninterrupted coarse → standard → deep progress. Chart sweep remains worker-orchestrated: the chart worker loops refinement passes and XP levels, calls `searchToCheckpoint` for each cell, and relies on the XP-cell run cache so later refinement calls resume the same `SearchRun` instead of recomputing from scratch.
 
-Current state: workers use the existing checkpoint-oriented protocol, but there is no engine selector and all top/chart searches route through V7. `SearchResult` contains `snapshot: SearchRunSnapshot`. Summary aggregation, clue conditioning, target analysis, clue advice, top snapshots, and chart cells consume `snapshot.pendingEntries` directly as globally weighted `(graph, node, mass, combo, count)` records. `SearchExecutionService` caches XP-cell `SearchRun`s, so repeated one-at-a-time calls for the same version/item/material/xp/clue can resume across refinement levels. New work should keep projection logic adapted to `SearchRun` / `SearchRunSnapshot` semantics rather than forcing shared search into old frontier/tracker shapes.
+Current state: workers use the existing checkpoint-oriented protocol, but there is no engine selector and all top/chart searches route through V7. `SearchResult` contains `snapshot: SearchRunSnapshot`. Summary aggregation, clue conditioning, target analysis, clue advice, top snapshots, and chart cells consume `snapshot.pendingEntries` directly as globally weighted `(graph, node, mass, combo, count)` records. `SearchExecutionService` caches XP-cell `SearchRun`s, so repeated one-at-a-time calls for the same version/item/material/xp/clue can resume across refinement levels. New work must keep projection logic adapted to `SearchRun` / `SearchRunSnapshot` semantics rather than forcing shared search into old frontier/tracker shapes.
 
 ## Remainder and Equivalence Rules
 
@@ -404,9 +395,19 @@ This keeps total bucket mass conserved without treating unrelated pre-equivalenc
 
 Suffix merging is a separate experimental optimization on top of these equivalence rules. When enabled, pending arrivals whose suffix identity matches an existing canonical pending target are redirected to that target before frontier insertion. This can reduce frontier pops/iterations and materialized structural expansions, but it also performs suffix identity construction and map lookups on pending pushes. Current exhaustive probes found that cost can dominate: for example, `1.7.2 book/book XP 30` reduced iterations substantially but increased wall-clock runtime, so suffix merging remains opt-in only.
 
-## Future Tuning Ideas — Post Initial Release
+## Optimization Layers
 
-These are intentionally not part of the initial V7 release scope. Keep the first release focused on correct V7 semantics, safe worker integration, and validation.
+Current optimization layers:
+
+- Exact structural graph reuse by `SearchPoolSignature`.
+- Generalized expansion-blueprint reuse by `SearchPoolFamilySignature`; enabled by default because exact edges and combos remain graph-local.
+- XP-cell `SearchRun` caching for refinement resume.
+- Edge-local residue forwarding for later recovery at the same source expansion.
+- Optional suffix merging by suffix identity; implemented but off by default because current profiling shows its canonicalization overhead can outweigh its lower iteration count.
+
+Avoid merging by visible combo alone; that collapses incompatible future state and reintroduces the same metadata mess V7 is designed to avoid.
+
+## Experimental / Future Work
 
 Possible later optimizations:
 
@@ -418,12 +419,9 @@ Possible later optimizations:
 - Bounded memoized suffix summaries for fully equivalent tail states, especially for book-heavy searches.
 - Delayed-scaling or factorized-mass experiments to reduce repeated integer division on already-weighted mass.
 - Book-specific result-tail optimization, including better handling of redistributed book outcomes and huge low-probability combo tails.
+- Abstract mutually exclusive choice edges that defer exact member materialization only when all grouped members have identical future behavior.
 
-Avoid merging by visible combo alone; that collapses incompatible future state and reintroduces the same metadata mess V7 is designed to avoid.
-
-## Deferred Optimization Investigations
-
-These are explicitly postponed until the V7-only path is stable. They are important, but they should not block the initial migration unless they reveal a conservation or correctness bug.
+These are not current behavior. They are active investigation areas for future performance, precision, or maintainability work, and they should not be treated as release promises.
 
 ### Weighted-split residue and book precision
 
@@ -472,43 +470,34 @@ Future work should investigate:
 - Treat historical V6-vs-V7 comparison output as reference material only; live tests should assert V7 semantics directly.
 - Add mass conservation tests from the first executable V7 slice.
 - Add targeted tests for:
-  - pool signature equivalence
-  - no unsafe merging across different pools
-  - book redistribution
-  - clue-conditioned pruning
-  - chart batch cells
-  - abort/resume behavior
+- pool signature equivalence
+- no unsafe merging across different pools
+- book redistribution
+- clue-conditioned pruning
+- chart batch cells
+- abort/resume behavior
 - Treat old engine-internal tests as disposable once their behavior is no longer relevant.
 - Add budgeted-search tests that prove V7 resolves more mass than V6 under the same total node budget.
 - Add monotonic coverage tests for increasing global iteration limits and decreasing global thresholds.
 
-## Commit Plan
+## Maintenance Notes
 
-Commit after each stable slice:
-
-1. V7 design checkpoint.
-2. RegistryKernel and SearchPoolSignature skeleton.
-3. SearchGraph structural graph skeleton.
-4. Single-cell weighted SearchRun with mass conservation.
-5. V6/V7 comparison harness.
-6. Matched-resolved and budgeted-resolution diagnostics.
-7. Projection/snapshot output.
-8. Direct weighted accounting hardening and compatibility adapters. ✅ first adapter checkpoint
-9. Worker adapter for top results. ✅ top path routed through V7
-10. Chart worker V7 routing. ✅ chart path routed through V7 per XP cell
-11. XP-cell run caching for chart-style refinement resume. ✅ live `SearchRun` cache
-12. Projection cleanup and obsolete-test pruning. ✅ shared-search projection path, obsolete search tests/scripts removed
-13. Optional later: engine-owned chart batch scheduling if profiling proves worker orchestration insufficient.
+- Keep this document current when search identity, checkpoint semantics, mass accounting, or caching behavior changes.
+- Keep `ARCHITECTURE.md` as the shorter map and link here for deep V7 reasoning.
+- Keep archived inventory docs clearly marked as non-canonical research snapshots; do not try to maintain them as function-by-function references.
+- Treat snapshot fixture updates as separate reviewable commits, especially for books.
 
 ## References / Related Docs
 
 - `ARCHITECTURE.md` — V7 architecture map.
-- `MASS_HANDLING.md` — current honest mass accounting design.
+- `MASS_HANDLING.md` — current V7 mass accounting and residue rules.
+- `docs/search-function-inventory.md` — archived rename research snapshot, not canonical current behavior.
+- `docs/function-behavior-inventory.md` — archived function-reading research snapshot, not canonical current behavior.
 - Existing snapshot fixtures under `tests/snapshots/`.
 
 ## Owner / Maintainer
 
-Jonathan Braver / V7 rewrite branch maintainers.
+Jonathan Braver / V7 engine maintainers.
 
 ## Last Updated
 
