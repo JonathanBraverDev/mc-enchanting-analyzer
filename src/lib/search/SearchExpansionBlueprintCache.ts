@@ -20,6 +20,11 @@ export interface SearchExpansionBlueprintLookup {
  * The cache deliberately stores exact-pool entry indexes, not child node IDs or
  * combo data. Each SearchGraph still materializes edges against its own exact
  * pool so rank/combo payloads and node identity remain graph-local.
+ *
+ * currentLevel and count are included in the cache key conservatively even
+ * though the current eligible-entry filter is mostly pool-family + selected-mask
+ * driven. That is safe for future level/count-sensitive expansion rules, but may
+ * leave some reuse on the table.
  */
 export class SearchExpansionBlueprintCache {
     private readonly cache = new Map<string, SearchExpansionBlueprint>();

@@ -358,7 +358,13 @@ export class SearchRun {
         });
     }
 
-    /** Measurement-only view of pending nodes that already share identical future identity. */
+    /**
+     * Measurement-only view of pending nodes that already share identical future identity.
+     *
+     * This warms suffix identities on the inspected graphs, so it can mutate
+     * graph-local suffix/blueprint diagnostic counters even though search state
+     * and result accounting are unchanged.
+     */
     public getFutureCollapseDiagnostics(): SearchRunFutureCollapseDiagnostics {
         const byIdentity = new Map<string, {
             pendingCount: number;

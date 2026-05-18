@@ -9,17 +9,15 @@ export interface ConflictComponentDiagnostic {
 export interface ConflictComponentInvariantDiagnostics {
     readonly componentCount: number;
     readonly largestComponentSize: number;
-    readonly duplicateMembershipEnchantIds: readonly number[];
     readonly components: readonly ConflictComponentDiagnostic[];
 }
 
 /**
  * Builds conflict-component diagnostics from the active entries in one search pool.
  *
- * This is measurement-only setup for plex search. Current registry rules
- * should make active conflict components disjoint; mutated registries can use the
- * duplicate-membership field as an invariant warning before enabling aggressive
- * choice-list assumptions.
+ * This is measurement-only setup for plex search. Connected components are
+ * disjoint by construction; this diagnostic describes component shape, not
+ * overlapping membership invariants.
  */
 export function analyzePoolConflictComponents(pool: SearchPool): ConflictComponentInvariantDiagnostics {
     return analyzeConflictComponents(pool.entries);
@@ -47,7 +45,6 @@ export function analyzeConflictComponents(
     }
 
     const visited = new Set<number>();
-    const membershipCounts = new Map<number, number>();
     const components: ConflictComponentDiagnostic[] = [];
 
     for (const id of [...adjacency.keys()].sort((a, b) => a - b)) {
@@ -59,7 +56,6 @@ export function analyzeConflictComponents(
         while (stack.length > 0) {
             const current = stack.pop()!;
             component.push(current);
-            membershipCounts.set(current, (membershipCounts.get(current) ?? 0) + 1);
 
             for (const next of adjacency.get(current) ?? []) {
                 if (visited.has(next)) continue;
@@ -77,15 +73,9 @@ export function analyzeConflictComponents(
         }));
     }
 
-    const duplicateMembershipEnchantIds = [...membershipCounts.entries()]
-        .filter(([, count]) => count > 1)
-        .map(([id]) => id)
-        .sort((a, b) => a - b);
-
     return Object.freeze({
         componentCount: components.length,
         largestComponentSize: components.reduce((largest, component) => Math.max(largest, component.enchantIds.length), 0),
-        duplicateMembershipEnchantIds: Object.freeze(duplicateMembershipEnchantIds),
         components: Object.freeze(components)
     });
 }

@@ -11,12 +11,15 @@ describe('plex conflict-component diagnostics', () => {
             const registry = RegistryFactory.build(version);
             const kernel = new RegistryKernel({ registry, item: 'sword', material: 'diamond' });
             const diagnostics = analyzePoolConflictComponents(kernel.getPool(30));
+            const seen = new Set<number>();
 
-            assert.deepStrictEqual(
-                diagnostics.duplicateMembershipEnchantIds,
-                [],
-                `expected no duplicate conflict-component membership for ${version}`
-            );
+            for (const component of diagnostics.components) {
+                assert.strictEqual(component.enchantIds.length, component.entryCount);
+                for (const enchantId of component.enchantIds) {
+                    assert.strictEqual(seen.has(enchantId), false, `duplicate component membership for ${registry.revIdMap[enchantId]}`);
+                    seen.add(enchantId);
+                }
+            }
         }
     });
 
