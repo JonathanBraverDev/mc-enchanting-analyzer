@@ -88,6 +88,24 @@ export interface SearchSuffixMergeDiagnostics {
     readonly avoidedPendingEntries: number;
 }
 
+export interface SearchRunFutureIdentityGroupDiagnostic {
+    readonly identity: string;
+    readonly pendingCount: number;
+    readonly totalMass: bigint;
+    readonly largestMass: bigint;
+    readonly graphIds: readonly number[];
+}
+
+export interface SearchRunFutureCollapseDiagnostics {
+    readonly eligiblePendingCount: number;
+    readonly identityGroupCount: number;
+    readonly collapsibleGroupCount: number;
+    readonly collapsiblePendingCount: number;
+    readonly collapsibleMass: bigint;
+    readonly largestGroupSize: number;
+    readonly groups: readonly SearchRunFutureIdentityGroupDiagnostic[];
+}
+
 export interface SearchRunGraphDiagnostics extends SearchGraphDiagnostics {
     readonly graphId: number;
 }
@@ -337,6 +355,59 @@ export class SearchRun {
             misses: this.suffixMergeMisses,
             mergedPendingMass: this.suffixMergedPendingMass,
             avoidedPendingEntries: this.suffixMergeHits
+        });
+    }
+
+    /** Measurement-only view of pending nodes that already share identical future identity. */
+    public getFutureCollapseDiagnostics(): SearchRunFutureCollapseDiagnostics {
+        const byIdentity = new Map<string, {
+            pendingCount: number;
+            totalMass: bigint;
+            largestMass: bigint;
+            graphIds: Set<number>;
+        }>();
+
+        this.frontier.forEach((graphId, nodeId, mass) => {
+            const identity = this.getGraphById(graphId).graph.getSuffixIdentity(nodeId);
+            if (!identity) return;
+
+            const key = String(identity);
+            let group = byIdentity.get(key);
+            if (!group) {
+                group = { pendingCount: 0, totalMass: 0n, largestMass: 0n, graphIds: new Set<number>() };
+                byIdentity.set(key, group);
+            }
+
+            group.pendingCount++;
+            group.totalMass += mass;
+            if (mass > group.largestMass) group.largestMass = mass;
+            group.graphIds.add(graphId);
+        });
+
+        const groups = [...byIdentity.entries()]
+            .map(([identity, group]) => Object.freeze({
+                identity,
+                pendingCount: group.pendingCount,
+                totalMass: group.totalMass,
+                largestMass: group.largestMass,
+                graphIds: Object.freeze([...group.graphIds].sort((a, b) => a - b))
+            }))
+            .sort((a, b) => {
+                const byCount = b.pendingCount - a.pendingCount;
+                if (byCount !== 0) return byCount;
+                if (a.totalMass === b.totalMass) return 0;
+                return a.totalMass < b.totalMass ? 1 : -1;
+            });
+        const collapsibleGroups = groups.filter(group => group.pendingCount > 1);
+
+        return Object.freeze({
+            eligiblePendingCount: groups.reduce((sum, group) => sum + group.pendingCount, 0),
+            identityGroupCount: groups.length,
+            collapsibleGroupCount: collapsibleGroups.length,
+            collapsiblePendingCount: collapsibleGroups.reduce((sum, group) => sum + group.pendingCount, 0),
+            collapsibleMass: collapsibleGroups.reduce((sum, group) => sum + group.totalMass, 0n),
+            largestGroupSize: groups.reduce((largest, group) => Math.max(largest, group.pendingCount), 0),
+            groups: Object.freeze(groups)
         });
     }
 
