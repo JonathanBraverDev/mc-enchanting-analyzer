@@ -2,10 +2,20 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { RegistryFactory, RegistryKernel } from '#lib/index.js';
-import { EMPTY_PLEX_PAYLOAD, PlexRun } from '#lib/search/plex/index.js';
+import { appendPlexPayloadEdge, EMPTY_PLEX_PAYLOAD, PlexRun } from '#lib/search/plex/index.js';
 import { PRECISION } from '#utils/index.js';
 
 const massUnits = (snapshot: ReturnType<PlexRun['snapshot']>) => snapshot.mass.units!;
+const activeMass = (snapshot: ReturnType<PlexRun['snapshot']>) => {
+    const units = massUnits(snapshot);
+    return BigInt(units.resolved)
+        + BigInt(units.clueIncompatible)
+        + BigInt(units.pending)
+        + BigInt(units.sieved)
+        + BigInt(units.overflow)
+        + BigInt(units.capped)
+        + BigInt(units.rounding);
+};
 
 describe('PlexRun', () => {
     it('seeds modified-level mass into empty-payload plex roots', () => {
@@ -22,10 +32,13 @@ describe('PlexRun', () => {
 
         assert.strictEqual(snapshot.pendingCount, Object.values(expectedDistribution).filter(mass => mass > 0n).length);
         assert.strictEqual(snapshot.seededLevelCount, snapshot.pendingCount);
+        assert.strictEqual(snapshot.iterations, 0);
+        assert.strictEqual(snapshot.lastExpandedMass, 0n);
         assert.strictEqual(snapshot.fullyResolved, false);
         assert.strictEqual(pendingMass, expectedPendingMass);
         assert.strictEqual(BigInt(massUnits(snapshot).pending), expectedPendingMass);
         assert.strictEqual(BigInt(massUnits(snapshot).rounding), PRECISION - expectedPendingMass);
+        assert.strictEqual(activeMass(snapshot), PRECISION);
         assert.ok(snapshot.pendingEntries.every(entry => entry.payload === EMPTY_PLEX_PAYLOAD));
         assert.ok(snapshot.pendingEntries.every(entry => entry.count === 0));
     });
@@ -45,6 +58,45 @@ describe('PlexRun', () => {
         assert.strictEqual(rootKeys.size, snapshot.pendingEntries.length, 'roots remain distinct by current level');
     });
 
+    it('expands one pending root by forwarding mass and appending payload edges', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
+        const run = new PlexRun(kernel);
+
+        run.seedXp(30);
+        const before = run.snapshot();
+        const current = before.pendingEntries.reduce((largest, entry) => entry.mass > largest.mass ? entry : largest, before.pendingEntries[0]!);
+        const graph = run.getGraph(current.graphId);
+        const expansion = graph.getExpansion(current.nodeId);
+        const totalWeight = BigInt(expansion.totalWeight);
+        const forwarded = expansion.edges.map(edge => ({
+            edge,
+            mass: (current.mass * BigInt(edge.weight)) / totalWeight
+        }));
+        const assigned = forwarded.reduce((sum, entry) => sum + entry.mass, 0n);
+        const expectedRemainder = current.mass - assigned;
+
+        assert.strictEqual(run.step(), true);
+        const after = run.snapshot();
+        const afterUnits = massUnits(after);
+        const expandedChildren = after.pendingEntries.filter(entry => entry.graphId === current.graphId && entry.count === 1);
+
+        assert.strictEqual(after.iterations, 1);
+        assert.strictEqual(after.lastExpandedMass, current.mass);
+        assert.strictEqual(BigInt(afterUnits.pending), BigInt(massUnits(before).pending) - current.mass + assigned);
+        assert.strictEqual(BigInt(afterUnits.rounding), BigInt(massUnits(before).rounding) + expectedRemainder);
+        assert.strictEqual(expandedChildren.reduce((sum, entry) => sum + entry.mass, 0n), assigned);
+        assert.strictEqual(activeMass(after), PRECISION);
+
+        for (const { edge, mass } of forwarded) {
+            if (mass === 0n) continue;
+            const child = expandedChildren.find(entry => entry.nodeId === edge.childId && entry.mass === mass);
+            assert.ok(child, 'forwarded child should remain pending with its split mass');
+            assert.deepStrictEqual(child!.payload, appendPlexPayloadEdge(current.payload, edge));
+        }
+        assert.ok(expandedChildren.some(entry => entry.payload.choices.length > 0), 'book root should append at least one grouped choice payload');
+    });
+
     it('exposes seeded plex graphs for diagnostics', () => {
         const registry = RegistryFactory.build('1.21.11');
         const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
@@ -57,6 +109,14 @@ describe('PlexRun', () => {
 
         assert.strictEqual(expansion.isRoot, true);
         assert.ok(expansion.edges.some(edge => edge.choice.alternatives.length > 1));
+    });
+
+    it('rejects stepping before seeding', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'sword', material: 'diamond' });
+        const run = new PlexRun(kernel);
+
+        assert.throws(() => run.step(), /must be seeded before stepping/);
     });
 
     it('rejects seeding twice', () => {
