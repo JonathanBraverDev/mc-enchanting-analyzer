@@ -85,7 +85,7 @@ describe('PlexRun', () => {
             mass: (current.mass * BigInt(edge.weight)) / totalWeight
         }));
         const assigned = forwarded.reduce((sum, entry) => sum + entry.mass, 0n);
-        const expectedRemainder = current.mass - assigned;
+        const expectedAccuracyLoss = current.mass - assigned;
 
         assert.strictEqual(run.step(), true);
         const after = run.snapshot();
@@ -95,7 +95,7 @@ describe('PlexRun', () => {
         assert.strictEqual(after.iterations, 1);
         assert.strictEqual(after.lastExpandedMass, current.mass);
         assert.strictEqual(BigInt(afterUnits.pending), BigInt(massUnits(before).pending) - current.mass + assigned);
-        assert.strictEqual(BigInt(afterUnits.rounding), BigInt(massUnits(before).rounding) + expectedRemainder);
+        assert.strictEqual(BigInt(afterUnits.rounding), BigInt(massUnits(before).rounding) + expectedAccuracyLoss);
         assert.strictEqual(expandedChildren.reduce((sum, entry) => sum + entry.mass, 0n), assigned);
         assert.strictEqual(activeMass(after), PRECISION);
 
@@ -151,7 +151,7 @@ describe('PlexRun', () => {
         ]);
         const projected = projectPlexResults(new Map([[getPlexPayloadKey(payload), { payload, mass: 10n }]]), registry.enchantToIndex);
 
-        assert.strictEqual(projected.remainder, 1n);
+        assert.strictEqual(projected.accuracyLoss, 1n);
         assert.strictEqual(projected.results.get(ComboUtils.pack([fixed, left], registry.enchantToIndex)), 6n);
         assert.strictEqual(projected.results.get(ComboUtils.pack([fixed, right], registry.enchantToIndex)), 3n);
     });
@@ -168,7 +168,7 @@ describe('PlexRun', () => {
         const resolvedMass = BigInt(massUnits(run.snapshot()).resolved);
 
         assert.ok(projected.results.size > 0);
-        assert.strictEqual(projectedMass + projected.remainder, resolvedMass);
+        assert.strictEqual(projectedMass + projected.accuracyLoss, resolvedMass);
     });
 
     it('compares projected plex rows with concrete SearchRun rows for a tiny exhaustive case', () => {
@@ -189,7 +189,7 @@ describe('PlexRun', () => {
             [...concreteSnapshot.results.keys()].sort((a, b) => a - b)
         );
         assert.strictEqual(bigintSum(concreteSnapshot.results.values()), BigInt(concreteSnapshot.mass.units!.resolved));
-        assert.strictEqual(bigintSum(projected.results.values()) + projected.remainder, BigInt(plexSnapshot.mass.units!.resolved));
+        assert.strictEqual(bigintSum(projected.results.values()) + projected.accuracyLoss, BigInt(plexSnapshot.mass.units!.resolved));
     });
 
     it('records resolved payload mass by canonical payload key', () => {
