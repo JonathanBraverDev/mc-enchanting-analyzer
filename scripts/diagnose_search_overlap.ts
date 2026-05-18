@@ -98,6 +98,16 @@ interface GeneralizedPoolFamilyReport {
     }>;
 }
 
+interface SuffixMergingReport {
+    enabled: boolean;
+    canonicalEntryCount: number;
+    hits: number;
+    misses: number;
+    mergedPendingMass: number;
+    mergedPendingMassUnits: string;
+    avoidedPendingEntries: number;
+}
+
 export interface SearchOverlapReport {
     metadata: SearchOverlapOptions & {
         generatedAt: string;
@@ -128,6 +138,9 @@ export interface SearchOverlapReport {
         blueprintCandidateChecks: number;
         blueprintSavedCandidateChecks: number;
         blueprintSavingsRatio: number;
+        suffixMergeHits: number;
+        suffixMergeMisses: number;
+        suffixAvoidedPendingEntries: number;
         exactTemplateSavingsRatio: number;
         generalizedTemplateSavingsRatio: number;
     };
@@ -159,6 +172,7 @@ export interface SearchOverlapReport {
         savedCandidateChecks: number;
         savedRatio: number;
     };
+    suffixMerging: SuffixMergingReport;
     generalizedPoolFamilies: GeneralizedPoolFamilyReport[];
 }
 
@@ -284,6 +298,7 @@ export async function generateSearchOverlapReport(options: SearchOverlapOptions)
     const graphNodeCount = graphDiagnostics.reduce((sum, graph) => sum + graph.nodeCount, 0);
     const graphExpansionCount = graphDiagnostics.reduce((sum, graph) => sum + graph.expansionCount, 0);
     const blueprintMetrics = summarizeBlueprintMetrics(graphDiagnostics);
+    const suffixMerging = summarizeSuffixMerging(snapshot.suffixMerging);
 
     return {
         metadata: {
@@ -316,6 +331,9 @@ export async function generateSearchOverlapReport(options: SearchOverlapOptions)
             blueprintCandidateChecks: blueprintMetrics.blueprintCandidateChecks,
             blueprintSavedCandidateChecks: blueprintMetrics.savedCandidateChecks,
             blueprintSavingsRatio: blueprintMetrics.savedRatio,
+            suffixMergeHits: suffixMerging.hits,
+            suffixMergeMisses: suffixMerging.misses,
+            suffixAvoidedPendingEntries: suffixMerging.avoidedPendingEntries,
             exactTemplateSavingsRatio: exactTemplateSavings.netSavedRatio,
             generalizedTemplateSavingsRatio: generalizedTemplateSavings.netSavedRatio
         },
@@ -343,6 +361,7 @@ export async function generateSearchOverlapReport(options: SearchOverlapOptions)
             generalized: generalizedTemplateSavings
         },
         blueprints: blueprintMetrics,
+        suffixMerging,
         generalizedPoolFamilies: generalizedFamilies
     };
 }
@@ -362,6 +381,7 @@ export function formatSearchOverlapSummary(report: SearchOverlapReport): string 
     lines.push(`  Unique pools=${report.summary.uniquePools}, tail continue signatures=${report.summary.uniqueTailContinueSignatures}, pool+tail=${report.summary.uniquePoolTailContinueGroups}`);
     lines.push(`  Candidate checks=${report.summary.currentCandidateChecks}, exact template savings=${formatSignedPercent(report.summary.exactTemplateSavingsRatio)}, generalized template estimate=${formatSignedPercent(report.summary.generalizedTemplateSavingsRatio)}`);
     lines.push(`  Blueprint checks=${report.blueprints.blueprintCandidateChecks}/${report.blueprints.baselineCandidateChecks}, hits=${report.blueprints.hits}, misses=${report.blueprints.misses}, actual savings=${formatSignedPercent(report.blueprints.savedRatio)}`);
+    lines.push(`  Suffix merges=${report.suffixMerging.hits}/${report.suffixMerging.misses}, canonical=${report.suffixMerging.canonicalEntryCount}, avoided=${report.suffixMerging.avoidedPendingEntries}, mergedMass=${formatPercent(report.suffixMerging.mergedPendingMass)}`);
     lines.push('');
     appendTopGroups(lines, 'Top pool groups by distribution mass', report.groups.pools);
     appendTopGroups(lines, 'Top tail-continue groups by distribution mass', report.groups.tailContinue);
@@ -399,6 +419,25 @@ function summarizeBlueprintMetrics(graphs: readonly { blueprints: {
         savedRatio: metrics.baselineCandidateChecks === 0
             ? 0
             : metrics.savedCandidateChecks / metrics.baselineCandidateChecks
+    };
+}
+
+function summarizeSuffixMerging(metrics: {
+    enabled: boolean;
+    canonicalEntryCount: number;
+    hits: number;
+    misses: number;
+    mergedPendingMass: bigint;
+    avoidedPendingEntries: number;
+}): SuffixMergingReport {
+    return {
+        enabled: metrics.enabled,
+        canonicalEntryCount: metrics.canonicalEntryCount,
+        hits: metrics.hits,
+        misses: metrics.misses,
+        mergedPendingMass: ProbUtils.toNumber(metrics.mergedPendingMass),
+        mergedPendingMassUnits: metrics.mergedPendingMass.toString(),
+        avoidedPendingEntries: metrics.avoidedPendingEntries
     };
 }
 
