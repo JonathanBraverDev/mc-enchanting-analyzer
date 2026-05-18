@@ -1,9 +1,10 @@
 import type { PackedCombo, PackedEnchant } from '#types/index.js';
 import { ComboUtils } from '#utils/index.js';
 import {
-    comparePackedEnchantLists,
     canonicalizePackedEnchantList,
-    type CanonicalPackedEnchantList
+    comparePlexWeightedChoices,
+    getPlexChoicePackedEnchants,
+    type PlexWeightedChoice
 } from '#lib/search/plex/PlexChoice.js';
 import {
     createPlexCombo,
@@ -14,8 +15,8 @@ import type { PlexEdge } from '#lib/search/plex/PlexGraph.js';
 
 export interface PlexPayload {
     readonly combo: PlexCombo;
-    /** Per-choice concrete weights, aligned with `combo.choices`. */
-    readonly weights: readonly (readonly number[])[];
+    /** Weighted choices aligned with `combo.choices`; ratios are reduced per choice. */
+    readonly choices: readonly PlexWeightedChoice[];
 }
 
 export interface PlexComboFactor {
@@ -24,63 +25,48 @@ export interface PlexComboFactor {
     readonly denominator: bigint;
 }
 
-interface WeightedChoice {
-    readonly alternatives: CanonicalPackedEnchantList;
-    readonly weights: readonly number[];
-}
-
 export const EMPTY_PLEX_PAYLOAD: PlexPayload = Object.freeze({
     combo: EMPTY_PLEX_COMBO,
-    weights: Object.freeze([])
+    choices: Object.freeze([])
 });
 
 export function createPlexPayload(
     fixed: readonly PackedEnchant[] = [],
-    choices: readonly (readonly PackedEnchant[])[] = [],
-    weights: readonly (readonly number[])[] = []
+    choices: readonly PlexWeightedChoice[] = []
 ): PlexPayload {
-    const weightedChoices = canonicalizeWeightedChoices(choices, weights);
+    const canonicalChoices = canonicalizeWeightedChoices(choices);
     return Object.freeze({
-        combo: createPlexCombo(fixed, weightedChoices.map(choice => choice.alternatives)),
-        weights: Object.freeze(weightedChoices.map(choice => choice.weights))
+        combo: createPlexCombo(fixed, canonicalChoices.map(getPlexChoicePackedEnchants)),
+        choices: canonicalChoices
     });
 }
 
 export function appendPlexPayloadEdge(
     payload: PlexPayload,
-    edge: Pick<PlexEdge, 'alternatives' | 'weights'>
+    edge: Pick<PlexEdge, 'choice'>
 ): PlexPayload {
-    if (edge.alternatives.length !== edge.weights.length) {
-        throw new Error('Plex edge alternatives and weights must have the same length.');
-    }
-    if (edge.alternatives.length === 0) {
-        throw new Error('Cannot append an empty plex edge.');
+    const alternatives = getPlexChoicePackedEnchants(edge.choice);
+
+    if (alternatives.length === 1) {
+        return createPlexPayload([...payload.combo.fixed, alternatives[0]!], payload.choices);
     }
 
-    if (edge.alternatives.length === 1) {
-        return createPlexPayload([...payload.combo.fixed, edge.alternatives[0]!], payload.combo.choices, payload.weights);
-    }
-
-    return createPlexPayload(
-        payload.combo.fixed,
-        [...payload.combo.choices, edge.alternatives],
-        [...payload.weights, edge.weights]
-    );
+    return createPlexPayload(payload.combo.fixed, [...payload.choices, edge.choice]);
 }
 
 export function materializePlexPayloadFactors(
     payload: PlexPayload,
     enchantToIndex: Map<number, number>
 ): readonly PlexComboFactor[] {
-    if (payload.combo.choices.length !== payload.weights.length) {
-        throw new Error('Plex payload choices and weights must have the same length.');
+    if (payload.combo.choices.length !== payload.choices.length) {
+        throw new Error('Plex payload combo choices and weighted choices must have the same length.');
     }
 
     const materialized: PlexComboFactor[] = [];
     const selected = [...payload.combo.fixed];
 
     function visit(choiceIndex: number, numerator: bigint, denominator: bigint): void {
-        if (choiceIndex >= payload.combo.choices.length) {
+        if (choiceIndex >= payload.choices.length) {
             materialized.push(Object.freeze({
                 combo: ComboUtils.pack(selected, enchantToIndex),
                 numerator,
@@ -89,22 +75,25 @@ export function materializePlexPayloadFactors(
             return;
         }
 
-        const choice = payload.combo.choices[choiceIndex]!;
-        const weights = payload.weights[choiceIndex]!;
-        if (choice.length !== weights.length) {
-            throw new Error('Plex payload choice alternatives and weights must have the same length.');
+        const choice = payload.choices[choiceIndex]!;
+        const packedEnchants = canonicalizePackedEnchantList(choice.alternatives.map(alternative => alternative.packedEnchant));
+        const comboChoice = payload.combo.choices[choiceIndex]!;
+        if (packedEnchants.length !== comboChoice.length) {
+            throw new Error('Plex payload weighted choice is not aligned with combo choice.');
+        }
+        for (let i = 0; i < packedEnchants.length; i++) {
+            if (packedEnchants[i] !== comboChoice[i]) {
+                throw new Error('Plex payload weighted choice is not aligned with combo choice.');
+            }
         }
 
-        const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
-        if (totalWeight <= 0) {
-            throw new Error('Plex payload choice weights must have positive total weight.');
-        }
-
-        for (let i = 0; i < choice.length; i++) {
-            const weight = weights[i]!;
-            if (weight <= 0) continue;
-            selected.push(choice[i]!);
-            visit(choiceIndex + 1, numerator * BigInt(weight), denominator * BigInt(totalWeight));
+        for (const alternative of choice.alternatives) {
+            selected.push(alternative.packedEnchant);
+            visit(
+                choiceIndex + 1,
+                numerator * BigInt(alternative.ratio),
+                denominator * BigInt(choice.totalRatio)
+            );
             selected.pop();
         }
     }
@@ -114,31 +103,7 @@ export function materializePlexPayloadFactors(
 }
 
 function canonicalizeWeightedChoices(
-    choices: readonly (readonly PackedEnchant[])[],
-    weights: readonly (readonly number[])[]
-): readonly WeightedChoice[] {
-    if (weights.length !== 0 && weights.length !== choices.length) {
-        throw new Error('Plex choice weights must be empty or match choice count.');
-    }
-
-    return Object.freeze(choices.map((choice, choiceIndex) => {
-        const rawWeights = weights[choiceIndex] ?? choice.map(() => 1);
-        if (choice.length !== rawWeights.length) {
-            throw new Error('Plex choice alternatives and weights must have the same length.');
-        }
-
-        const weightsByAlternative = new Map<PackedEnchant, number>();
-        for (let i = 0; i < choice.length; i++) {
-            const alternative = choice[i]!;
-            const weight = rawWeights[i]!;
-            if (weight <= 0) throw new Error('Plex choice weights must be positive.');
-            weightsByAlternative.set(alternative, (weightsByAlternative.get(alternative) ?? 0) + weight);
-        }
-
-        const alternatives = canonicalizePackedEnchantList([...weightsByAlternative.keys()]);
-        return Object.freeze({
-            alternatives,
-            weights: Object.freeze(alternatives.map(alternative => weightsByAlternative.get(alternative)!))
-        });
-    }).sort((a, b) => comparePackedEnchantLists(a.alternatives, b.alternatives)));
+    choices: readonly PlexWeightedChoice[]
+): readonly PlexWeightedChoice[] {
+    return Object.freeze([...choices].sort(comparePlexWeightedChoices));
 }

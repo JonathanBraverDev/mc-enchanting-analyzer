@@ -9,9 +9,14 @@ import {
     EMPTY_PLEX_PAYLOAD,
     materializePlexPayloadFactors
 } from '#lib/search/plex/PlexPayload.js';
+import { canonicalizeWeightedChoice } from '#lib/search/plex/PlexChoice.js';
 import { PlexGraph } from '#lib/search/plex/PlexGraph.js';
 
 const packed = (value: number): PackedEnchant => value as PackedEnchant;
+const choice = (entries: readonly (readonly [PackedEnchant, number])[]) => canonicalizeWeightedChoice(
+    entries.map(([packedEnchant, weight]) => ({ packedEnchant, weight }))
+);
+const ratios = (payloadChoice: ReturnType<typeof choice>) => payloadChoice.alternatives.map(alternative => alternative.ratio);
 
 describe('PlexPayload', () => {
     it('materializes the empty payload as one neutral factor', () => {
@@ -21,34 +26,39 @@ describe('PlexPayload', () => {
         assert.deepStrictEqual(factors, [{ combo: 0, numerator: 1n, denominator: 1n }]);
     });
 
-    it('keeps choice weights aligned with canonical choice ordering', () => {
+    it('keeps choice ratios aligned with canonical choice ordering', () => {
         const payload = createPlexPayload(
             [packed(7)],
-            [[packed(40), packed(30)], [packed(20), packed(10)]],
-            [[4, 3], [2, 1]]
+            [
+                choice([[packed(40), 4], [packed(30), 3]]),
+                choice([[packed(20), 2], [packed(10), 1]])
+            ]
         );
 
-        assert.deepStrictEqual(payload.combo.choices.map(choice => [...choice]), [[packed(10), packed(20)], [packed(30), packed(40)]]);
-        assert.deepStrictEqual(payload.weights.map(weights => [...weights]), [[1, 2], [3, 4]]);
+        assert.deepStrictEqual(payload.combo.choices.map(comboChoice => [...comboChoice]), [[packed(10), packed(20)], [packed(30), packed(40)]]);
+        assert.deepStrictEqual(payload.choices.map(ratios), [[1, 2], [3, 4]]);
     });
 
     it('appends singleton edges as fixed picks and grouped edges as weighted choices', () => {
-        const single = appendPlexPayloadEdge(EMPTY_PLEX_PAYLOAD, { alternatives: [packed(10)], weights: [5] });
-        const grouped = appendPlexPayloadEdge(single, { alternatives: [packed(30), packed(20)], weights: [3, 2] });
+        const single = appendPlexPayloadEdge(EMPTY_PLEX_PAYLOAD, { choice: choice([[packed(10), 5]]) });
+        const grouped = appendPlexPayloadEdge(single, { choice: choice([[packed(30), 3], [packed(20), 2]]) });
 
         assert.deepStrictEqual([...grouped.combo.fixed], [packed(10)]);
-        assert.deepStrictEqual(grouped.combo.choices.map(choice => [...choice]), [[packed(20), packed(30)]]);
-        assert.deepStrictEqual(grouped.weights.map(weights => [...weights]), [[2, 3]]);
+        assert.deepStrictEqual(grouped.combo.choices.map(comboChoice => [...comboChoice]), [[packed(20), packed(30)]]);
+        assert.deepStrictEqual(grouped.choices.map(ratios), [[2, 3]]);
     });
 
-    it('materializes weighted choice products as exact factors', () => {
+    it('materializes weighted choice products as exact reduced factors', () => {
         const registry = RegistryFactory.build('1.21.11');
         const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
         const entries = kernel.getPool(30).entries.map(entry => entry.packedEnchant);
         const fixed = entries[0]!;
         const left = [entries[1]!, entries[2]!];
         const right = [entries[3]!, entries[4]!];
-        const payload = createPlexPayload([fixed], [right, left], [[7, 11], [2, 3]]);
+        const payload = createPlexPayload([fixed], [
+            choice([[right[0]!, 14], [right[1]!, 22]]),
+            choice([[left[0]!, 2], [left[1]!, 3]])
+        ]);
         const factors = materializePlexPayloadFactors(payload, registry.enchantToIndex);
 
         assert.deepStrictEqual(factors, [
@@ -59,34 +69,31 @@ describe('PlexPayload', () => {
         ]);
     });
 
-    it('preserves real PlexGraph grouped edge weights for future mass splitting', () => {
+    it('preserves real PlexGraph grouped edge ratios for future mass splitting', () => {
         const registry = RegistryFactory.build('1.21.11');
-        const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
+        const kernel = new RegistryKernel({ registry, item: 'sword', material: 'diamond' });
         const graph = new PlexGraph(kernel, kernel.getPool(30));
         const expansion = graph.getExpansion(graph.getRootNode(30).id);
-        const groupedEdge = expansion.edges.find(edge => edge.alternatives.length >= 6);
+        const groupedEdge = expansion.edges.find(edge => edge.choice.alternatives.length === 3);
         assert.ok(groupedEdge, 'fixture should expose a grouped damage edge');
 
         const payload = appendPlexPayloadEdge(EMPTY_PLEX_PAYLOAD, groupedEdge!);
         const factors = materializePlexPayloadFactors(payload, registry.enchantToIndex);
-        const totalWeight = groupedEdge!.weights.reduce((sum, weight) => sum + weight, 0);
 
-        assert.deepStrictEqual(payload.weights, [groupedEdge!.weights]);
-        assert.strictEqual(factors.length, groupedEdge!.alternatives.length);
+        assert.deepStrictEqual(payload.choices, [groupedEdge!.choice]);
+        assert.deepStrictEqual(ratios(groupedEdge!.choice), [2, 1, 1]);
+        assert.strictEqual(factors.length, groupedEdge!.choice.alternatives.length);
         assert.deepStrictEqual(
             factors.map(factor => factor.denominator),
-            groupedEdge!.weights.map(() => BigInt(totalWeight))
+            [4n, 4n, 4n]
         );
         assert.deepStrictEqual(
             factors.map(factor => factor.numerator),
-            groupedEdge!.weights.map(weight => BigInt(weight))
+            [2n, 1n, 1n]
         );
     });
 
-    it('rejects mismatched edge alternatives and weights', () => {
-        assert.throws(
-            () => appendPlexPayloadEdge(EMPTY_PLEX_PAYLOAD, { alternatives: [packed(1), packed(2)], weights: [1] }),
-            /same length/
-        );
+    it('rejects empty weighted choices', () => {
+        assert.throws(() => canonicalizeWeightedChoice([]), /empty plex weighted choice/);
     });
 });

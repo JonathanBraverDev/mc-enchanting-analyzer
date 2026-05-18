@@ -13,8 +13,12 @@ import {
     samePlexCombo
 } from '#lib/search/plex/PlexCombo.js';
 import { PlexGraph } from '#lib/search/plex/PlexGraph.js';
+import { canonicalizeWeightedChoice, getPlexChoicePackedEnchants } from '#lib/search/plex/PlexChoice.js';
 
 const packed = (value: number): PackedEnchant => value as PackedEnchant;
+const choice = (alternatives: readonly PackedEnchant[]) => canonicalizeWeightedChoice(
+    alternatives.map(packedEnchant => ({ packedEnchant, weight: 1 }))
+);
 
 describe('PlexCombo', () => {
     it('represents the empty concrete combo', () => {
@@ -45,8 +49,8 @@ describe('PlexCombo', () => {
     });
 
     it('appends singleton edges as fixed picks and grouped edges as choices', () => {
-        const single = appendPlexEdge(EMPTY_PLEX_COMBO, { alternatives: [packed(10)] });
-        const grouped = appendPlexEdge(single, { alternatives: [packed(20), packed(30)] });
+        const single = appendPlexEdge(EMPTY_PLEX_COMBO, { choice: choice([packed(10)]) });
+        const grouped = appendPlexEdge(single, { choice: choice([packed(20), packed(30)]) });
 
         assert.strictEqual(isConcretePlexCombo(single), true);
         assert.strictEqual(isConcretePlexCombo(grouped), false);
@@ -78,21 +82,21 @@ describe('PlexCombo', () => {
         const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
         const graph = new PlexGraph(kernel, kernel.getPool(30));
         const expansion = graph.getExpansion(graph.getRootNode(30).id);
-        const groupedEdge = expansion.edges.find(edge => edge.alternatives.length >= 6);
+        const groupedEdge = expansion.edges.find(edge => edge.choice.alternatives.length >= 6);
         assert.ok(groupedEdge, 'fixture should expose a grouped damage edge');
 
         const combo = appendPlexEdge(EMPTY_PLEX_COMBO, groupedEdge!);
         const materialized = materializePlexCombo(combo, registry.enchantToIndex);
 
         assert.strictEqual(combo.choices.length, 1);
-        assert.strictEqual(materialized.length, groupedEdge!.alternatives.length);
+        assert.strictEqual(materialized.length, groupedEdge!.choice.alternatives.length);
         assert.deepStrictEqual(
             materialized,
-            groupedEdge!.alternatives.map(alternative => ComboUtils.pack([alternative], registry.enchantToIndex))
+            getPlexChoicePackedEnchants(groupedEdge!.choice).map(alternative => ComboUtils.pack([alternative], registry.enchantToIndex))
         );
     });
 
-    it('rejects empty edge alternatives', () => {
-        assert.throws(() => appendPlexEdge(EMPTY_PLEX_COMBO, { alternatives: [] }), /empty plex edge/);
+    it('rejects empty weighted choices', () => {
+        assert.throws(() => canonicalizeWeightedChoice([]), /empty plex weighted choice/);
     });
 });

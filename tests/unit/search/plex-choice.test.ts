@@ -4,6 +4,7 @@ import type { PackedEnchant } from '#types/index.js';
 import {
     canonicalizeChoiceSet,
     canonicalizePackedEnchantList,
+    canonicalizeWeightedChoice,
     comparePackedEnchantLists,
     sameChoiceSet,
     samePackedEnchantList
@@ -47,6 +48,24 @@ describe('plex choice helpers', () => {
 
         assert.ok(comparePackedEnchantLists(shorter, longer) < 0);
         assert.ok(comparePackedEnchantLists(differentSecond, longer) > 0);
+    });
+
+    it('canonicalizes weighted choices and reduces ratios', () => {
+        const weighted = canonicalizeWeightedChoice([
+            { packedEnchant: packed(30), weight: 5 },
+            { packedEnchant: packed(10), weight: 10 },
+            { packedEnchant: packed(20), weight: 5 }
+        ]);
+
+        assert.deepStrictEqual(
+            weighted.alternatives.map(alternative => alternative.packedEnchant),
+            [packed(10), packed(20), packed(30)]
+        );
+        assert.deepStrictEqual(
+            weighted.alternatives.map(alternative => alternative.ratio),
+            [2, 1, 1]
+        );
+        assert.strictEqual(weighted.totalRatio, 4);
     });
 
     it('rejects duplicate alternatives inside one choice list', () => {
