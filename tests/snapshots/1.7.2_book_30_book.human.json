@@ -42,7 +42,7 @@
     "Lure III": 0.007508884976
   },
   "any": {
-    "Sharpness": 0.128346108264,
+    "Sharpness": 0.128346108263,
     "Smite": 0.064173054132,
     "Bane of Arthropods": 0.064173054132,
     "Knockback": 0.073851835747,
@@ -118504,24 +118504,24 @@
   },
   "accuracy": 0.999994771205,
   "accounting": {
-    "resolved": 0.9999947712052117,
+    "resolved": 0.9999947712050942,
     "clueIncompatible": 0,
     "pending": 0,
     "sieved": 0,
-    "overflow": 0.000005228792583062032,
+    "overflow": 0.000005228792579230028,
     "capped": 0,
-    "rounding": 2.2052125750460227e-12,
-    "recoveredRounding": 1.0439010766916113e-12,
+    "rounding": 2.326646687811351e-12,
+    "recoveredRounding": 1.4159949254799464e-12,
     "recoveredSieved": 0,
     "units": {
-      "resolved": "1152915476216892398",
+      "resolved": "1152915476216756812",
       "clueIncompatible": "0",
       "pending": "0",
       "sieved": "0",
-      "overflow": "6028387412141",
+      "overflow": "6028387407723",
       "capped": "0",
-      "rounding": "2542437",
-      "recoveredRounding": "1203536",
+      "rounding": "2682441",
+      "recoveredRounding": "1632531",
       "recoveredSieved": "0"
     }
   }

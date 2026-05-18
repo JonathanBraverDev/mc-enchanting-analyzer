@@ -258,24 +258,24 @@
   },
   "accuracy": 1,
   "accounting": {
-    "resolved": 0.9999999999999993,
+    "resolved": 0.9999999999999992,
     "clueIncompatible": 0,
     "pending": 0,
     "sieved": 0,
     "overflow": 0,
     "capped": 0,
-    "rounding": 7.138387103644561e-16,
-    "recoveredRounding": 1.249000902703301e-16,
+    "rounding": 7.407269242420966e-16,
+    "recoveredRounding": 9.8879238130678e-17,
     "recoveredSieved": 0,
     "units": {
-      "resolved": "1152921504606846153",
+      "resolved": "1152921504606846122",
       "clueIncompatible": "0",
       "pending": "0",
       "sieved": "0",
       "overflow": "0",
       "capped": "0",
-      "rounding": "823",
-      "recoveredRounding": "144",
+      "rounding": "854",
+      "recoveredRounding": "114",
       "recoveredSieved": "0"
     }
   }

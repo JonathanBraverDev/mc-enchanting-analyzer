@@ -28,7 +28,7 @@ export function makeSearchSnapshot(options: {
         activeResidueMass: 0n,
         fullyResolved: pendingEntries.length === 0,
         suffixMerging: {
-            enabled: true,
+            enabled: false,
             canonicalEntryCount: 0,
             hits: 0,
             misses: 0,
