@@ -26,13 +26,13 @@ export interface PlexPendingEntry {
     readonly currentLevel: number;
 }
 
-export interface PlexResolvedPayload {
+export interface PlexResult {
     readonly payload: PlexPayload;
     readonly mass: bigint;
 }
 
 export interface PlexRunSnapshot {
-    readonly results: ReadonlyMap<PlexPayloadKey, PlexResolvedPayload>;
+    readonly results: ReadonlyMap<PlexPayloadKey, PlexResult>;
     readonly mass: MassAccountingBreakdown;
     readonly iterations: number;
     readonly lastExpandedMass: bigint;
@@ -65,7 +65,7 @@ interface PendingPlexWork {
  * are introduced.
  */
 export class PlexRun {
-    public readonly results = new Map<PlexPayloadKey, PlexResolvedPayload>();
+    public readonly results = new Map<PlexPayloadKey, PlexResult>();
     public readonly mass = new ProbabilityMassAccountant();
 
     private readonly distributionService: ModifiedLevelDistributionService;
