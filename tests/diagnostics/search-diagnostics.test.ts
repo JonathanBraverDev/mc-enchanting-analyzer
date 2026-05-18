@@ -44,6 +44,10 @@ describe('Search diagnostics scripts', () => {
         assert.ok(report.generalizedPoolFamilies.length > 0);
         assert.ok(report.blueprints.baselineCandidateChecks >= 0);
         assert.ok(report.blueprints.blueprintCandidateChecks >= 0);
+        assert.strictEqual(report.suffixMerging.enabled, true);
+        assert.ok(report.suffixMerging.canonicalEntryCount >= 0);
+        assert.ok(report.suffixMerging.hits >= 0);
+        assert.ok(report.suffixMerging.misses >= 0);
     });
 
     it('reports actual generalized blueprint reuse for modern book searches', async () => {
@@ -62,5 +66,8 @@ describe('Search diagnostics scripts', () => {
         assert.ok(report.blueprints.baselineCandidateChecks > 0);
         assert.ok(report.blueprints.blueprintCandidateChecks < report.blueprints.baselineCandidateChecks);
         assert.ok(report.summary.blueprintSavingsRatio > 0);
+        assert.ok(report.suffixMerging.hits > 0);
+        assert.ok(report.suffixMerging.avoidedPendingEntries > 0);
+        assert.ok(report.summary.suffixMergeHits > 0);
     });
 });
