@@ -44,7 +44,7 @@ describe('Search diagnostics scripts', () => {
         assert.ok(report.generalizedPoolFamilies.length > 0);
         assert.ok(report.blueprints.baselineCandidateChecks >= 0);
         assert.ok(report.blueprints.blueprintCandidateChecks >= 0);
-        assert.strictEqual(report.suffixMerging.enabled, true);
+        assert.strictEqual(report.suffixMerging.enabled, false);
         assert.ok(report.suffixMerging.canonicalEntryCount >= 0);
         assert.ok(report.suffixMerging.hits >= 0);
         assert.ok(report.suffixMerging.misses >= 0);
@@ -58,7 +58,8 @@ describe('Search diagnostics scripts', () => {
             xp: 30,
             threshold: 0,
             maxIterations: 10_000,
-            targetClassifiedMass: 0.5
+            targetClassifiedMass: 0.5,
+            useSuffixMerging: true
         });
 
         assert.ok(report.blueprints.hits > 0);

@@ -163,7 +163,7 @@ export class SearchRun {
         this.graphCache = options.graphCache;
         this.targetClueId = options.targetClueId;
         this.useExpansionBlueprints = options.useExpansionBlueprints ?? true;
-        this.useSuffixMerging = options.useSuffixMerging ?? true;
+        this.useSuffixMerging = options.useSuffixMerging ?? false;
     }
 
     /** Seeds the run with the modified-level distribution for one table XP value. */

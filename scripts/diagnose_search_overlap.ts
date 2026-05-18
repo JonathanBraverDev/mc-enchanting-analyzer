@@ -7,6 +7,7 @@
  *
  * Usage:
  *   npx tsx scripts/diagnose_search_overlap.ts --version 1.21.11 --item book --material book --xp 30
+ *   npx tsx scripts/diagnose_search_overlap.ts --version 1.21.11 --item sword --material diamond --xp 30 --suffix-merging
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -39,6 +40,7 @@ export interface SearchOverlapOptions {
     threshold: number;
     maxIterations: number;
     targetClassifiedMass?: number | undefined;
+    useSuffixMerging?: boolean | undefined;
 }
 
 export interface ContinueSignature {
@@ -246,7 +248,11 @@ export async function generateSearchOverlapReport(options: SearchOverlapOptions)
         });
     }
 
-    const run = new SearchRun(kernel, { distributionService, targetClueId });
+    const run = new SearchRun(kernel, {
+        distributionService,
+        targetClueId,
+        useSuffixMerging: options.useSuffixMerging ?? false
+    });
     run.seedXp(options.xp);
     const snapshot = run.searchToCheckpoint({
         threshold: options.threshold,
@@ -370,7 +376,7 @@ export function formatSearchOverlapSummary(report: SearchOverlapReport): string 
     const lines: string[] = [];
     lines.push(`V7 search overlap: ${report.metadata.version} ${report.metadata.item}/${report.metadata.material} xp=${report.metadata.xp}`);
     if (report.metadata.clue) lines.push(`Clue: ${report.metadata.clue}`);
-    lines.push(`Threshold=${report.metadata.threshold} limit=${report.metadata.maxIterations}${report.metadata.targetClassifiedMass ? ` targetClassified=${formatPercent(report.metadata.targetClassifiedMass)}` : ''}`);
+    lines.push(`Threshold=${report.metadata.threshold} limit=${report.metadata.maxIterations}${report.metadata.targetClassifiedMass ? ` targetClassified=${formatPercent(report.metadata.targetClassifiedMass)}` : ''} suffix=${report.suffixMerging.enabled ? 'on' : 'off'}`);
     lines.push(`Elapsed: ${report.metadata.elapsedMs}ms`);
     lines.push('');
     lines.push('Summary');
@@ -601,6 +607,7 @@ function parseCliOptions(args: string[]): SearchOverlapOptions & { stdoutJson: b
         threshold: Number(findArg('--threshold') ?? DEFAULT_THRESHOLD),
         maxIterations: Number.parseInt(findArg('--limit') ?? findArg('--max-iterations') ?? String(ENGINE_LIMITS.SEARCH_ITERATION_SAFETY_CAP), 10),
         targetClassifiedMass: parseOptionalNumber(findArg('--target-classified-mass') ?? findArg('--mass-target')),
+        useSuffixMerging: hasFlag('--suffix-merging'),
         stdoutJson: hasFlag('--stdout-json') || hasFlag('--json')
     };
 }
