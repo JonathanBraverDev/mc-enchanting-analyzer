@@ -19,6 +19,7 @@ const KNOWN_RELEASE_DOCS = new Set([
 ]);
 const REQUIRED_RELEASE_FILES = ['CHANGELOG.md', 'package.json', 'package-lock.json'];
 const ALLOWED_HEAD_FILES = new Set([...REQUIRED_RELEASE_FILES, ...KNOWN_RELEASE_DOCS]);
+const SNAPSHOT_PATH_PATTERN = /^tests\/snapshots\//;
 
 function fail(message) {
   console.error(`::error::${message}`);
@@ -44,6 +45,49 @@ function readRefFile(ref, file) {
 
 function readRefJson(ref, file) {
   return JSON.parse(readRefFile(ref, file));
+}
+
+
+function validateSnapshotCommitIsolation(baseRef, headRef) {
+  const commits = gitLines(['rev-list', '--reverse', `${baseRef}..${headRef}`]);
+  const violations = [];
+
+  for (const commit of commits) {
+    const changedFiles = gitLines(['diff-tree', '--no-commit-id', '--name-only', '-r', commit]);
+    const snapshotFiles = changedFiles.filter((file) => SNAPSHOT_PATH_PATTERN.test(file));
+    if (snapshotFiles.length === 0) continue;
+
+    const nonSnapshotFiles = changedFiles.filter((file) => !SNAPSHOT_PATH_PATTERN.test(file));
+    if (nonSnapshotFiles.length === 0) continue;
+
+    const subject = git(['show', '-s', '--format=%s', commit]);
+    violations.push({
+      short: commit.slice(0, 12),
+      subject,
+      snapshotFiles,
+      nonSnapshotFiles,
+    });
+  }
+
+  if (violations.length > 0) {
+    const details = violations.map((violation) => [
+      `${violation.short} ${violation.subject}`,
+      'Snapshot files:',
+      violation.snapshotFiles.map((file) => `  - ${file}`).join('\n'),
+      'Non-snapshot files:',
+      violation.nonSnapshotFiles.map((file) => `  - ${file}`).join('\n'),
+    ].join('\n')).join('\n\n');
+
+    fail([
+      'Snapshot updates must be isolated in their own commits.',
+      'Commits that touch tests/snapshots/** may not touch source, tests, docs, package metadata, or other files.',
+      'Split snapshot refreshes into a dedicated commit so large generated diffs do not hide code changes.',
+      '',
+      details,
+    ].join('\n'));
+  }
+
+  console.log(`Snapshot commit isolation passed for ${commits.length} commit(s) between ${baseRef} and ${headRef}.`);
 }
 
 function validateChangelogSections(bump, tag, entry) {
@@ -136,6 +180,8 @@ const latestTag = gitLines(['tag', '-l', 'v[0-9]*', '--sort=v:refname'])
   .filter((candidate) => /^v\d+\.\d+\.\d+$/.test(candidate))
   .at(-1);
 const bump = releaseBump(latestTag, tag);
+validateSnapshotCommitIsolation(baseRef, headRef);
+
 const changedFiles = gitLines(['diff', '--name-only', baseRef, headRef]);
 const changelogEntry = extractChangelogEntry(headChangelog, tag);
 
