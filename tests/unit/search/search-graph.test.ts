@@ -3,7 +3,7 @@ import assert from 'node:assert';
 import { RegistryFactory, RegistryKernel, SearchGraph } from '#lib/index.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import { SearchExpansionBlueprintCache } from '#lib/search/SearchExpansionBlueprintCache.js';
-import type { SearchGraphExpansion } from '#lib/search/SearchGraph.js';
+import type { SearchGraphExpansion, SearchGraphNodeId } from '#lib/search/SearchGraph.js';
 import type { SearchPool } from '#lib/search/index.js';
 
 describe('SearchGraph', () => {
@@ -101,6 +101,47 @@ describe('SearchGraph', () => {
         assert.ok(optimized.getDiagnostics().blueprints.hits > 0, 'second graph should reuse a family blueprint');
         assert.ok(optimized.getDiagnostics().blueprints.savedCandidateChecks > 0);
     });
+
+    it('does not assign suffix identities to roots', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
+        const graph = new SearchGraph(kernel, kernel.getPool(30));
+
+        assert.strictEqual(graph.getSuffixIdentity(graph.getRootNode(30).id), undefined);
+    });
+
+    it('keeps rank-variant suffixes distinct while the variant enchant remains eligible', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
+        const fixture = findRankVariantSuffixCase(kernel);
+        assert.ok(fixture, 'fixture should include a common pick that leaves a rank variant eligible');
+
+        const pickedA = createPickedNode(kernel, fixture!.pair.a, fixture!.nonConflictingPackedEnchant);
+        const pickedB = createPickedNode(kernel, fixture!.pair.b, fixture!.nonConflictingPackedEnchant);
+        const sizeA = pickedA.graph.size;
+        const sizeB = pickedB.graph.size;
+
+        assert.notStrictEqual(pickedA.graph.getSuffixIdentity(pickedA.child), pickedB.graph.getSuffixIdentity(pickedB.child));
+        assert.strictEqual(pickedA.graph.size, sizeA, 'suffix identity should not materialize child edges');
+        assert.strictEqual(pickedB.graph.size, sizeB, 'suffix identity should not materialize child edges');
+    });
+
+    it('shares suffix identity after a conflicting pick removes rank-variant future edges', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
+        const fixture = findRankVariantSuffixCase(kernel);
+        assert.ok(fixture, 'fixture should include a common conflicting pick that removes rank variants');
+
+        const sharedBlueprints = new SearchExpansionBlueprintCache();
+        const pickedA = createPickedNode(kernel, fixture!.pair.a, fixture!.conflictingPackedEnchant, sharedBlueprints);
+        const pickedB = createPickedNode(kernel, fixture!.pair.b, fixture!.conflictingPackedEnchant, sharedBlueprints);
+        const identityA = pickedA.graph.getSuffixIdentity(pickedA.child);
+        const identityB = pickedB.graph.getSuffixIdentity(pickedB.child);
+
+        assert.ok(identityA);
+        assert.strictEqual(identityA, identityB);
+        assert.ok(pickedB.graph.getDiagnostics().blueprints.hits > 0, 'second graph should reuse the family blueprint for suffix identity');
+    });
 });
 
 function expandFirstChild(graph: SearchGraph, level: number): SearchGraphExpansion {
@@ -154,4 +195,84 @@ function findRankVariantPoolPair(kernel: RegistryKernel): { a: SearchPool; b: Se
         if (pools.length >= 2) return { a: pools[0]!, b: pools[1]! };
     }
     return undefined;
+}
+
+interface RankVariantSuffixCase {
+    pair: { a: SearchPool; b: SearchPool };
+    nonConflictingPackedEnchant: number;
+    conflictingPackedEnchant: number;
+}
+
+function findRankVariantSuffixCase(kernel: RegistryKernel): RankVariantSuffixCase | undefined {
+    const pairs = findRankVariantPoolPairs(kernel);
+    for (const pair of pairs) {
+        for (let entryIndex = 0; entryIndex < pair.a.entries.length; entryIndex++) {
+            const variantA = pair.a.entries[entryIndex]!;
+            const variantB = pair.b.entries[entryIndex]!;
+            if (variantA.enchantId !== variantB.enchantId || variantA.packedEnchant === variantB.packedEnchant) continue;
+
+            const commonEntries = pair.a.entries.filter(entry => {
+                const matching = pair.b.entries.find(candidate => candidate.packedEnchant === entry.packedEnchant);
+                return matching
+                    && matching.comboIndex === entry.comboIndex
+                    && matching.weight === entry.weight
+                    && matching.conflictBitset === entry.conflictBitset;
+            });
+            const nonConflicting = commonEntries.find(entry => entry.enchantId !== variantA.enchantId && (variantA.conflictBitset & entry.idBit) === 0n);
+            const conflicting = commonEntries.find(entry => entry.enchantId !== variantA.enchantId && (variantA.conflictBitset & entry.idBit) !== 0n);
+            if (!nonConflicting || !conflicting) continue;
+
+            const nonConflictingA = createPickedNode(kernel, pair.a, nonConflicting.packedEnchant);
+            const nonConflictingB = createPickedNode(kernel, pair.b, nonConflicting.packedEnchant);
+            const conflictingA = createPickedNode(kernel, pair.a, conflicting.packedEnchant);
+            const conflictingB = createPickedNode(kernel, pair.b, conflicting.packedEnchant);
+            if (
+                nonConflictingA.graph.getSuffixIdentity(nonConflictingA.child) !== nonConflictingB.graph.getSuffixIdentity(nonConflictingB.child)
+                && conflictingA.graph.getSuffixIdentity(conflictingA.child) === conflictingB.graph.getSuffixIdentity(conflictingB.child)
+            ) {
+                return {
+                    pair,
+                    nonConflictingPackedEnchant: nonConflicting.packedEnchant,
+                    conflictingPackedEnchant: conflicting.packedEnchant
+                };
+            }
+        }
+    }
+    return undefined;
+}
+
+function findRankVariantPoolPairs(kernel: RegistryKernel): Array<{ a: SearchPool; b: SearchPool }> {
+    const byFamily = new Map<string, SearchPool[]>();
+    for (let level = 1; level <= 50; level++) {
+        const pool = kernel.getPool(level);
+        let family = byFamily.get(pool.familySignature);
+        if (!family) {
+            family = [];
+            byFamily.set(pool.familySignature, family);
+        }
+        if (!family.some(candidate => candidate.signature === pool.signature)) family.push(pool);
+    }
+
+    const pairs: Array<{ a: SearchPool; b: SearchPool }> = [];
+    for (const pools of byFamily.values()) {
+        for (let i = 0; i < pools.length; i++) {
+            for (let j = i + 1; j < pools.length; j++) {
+                pairs.push({ a: pools[i]!, b: pools[j]! });
+            }
+        }
+    }
+    return pairs;
+}
+
+function createPickedNode(
+    kernel: RegistryKernel,
+    pool: SearchPool,
+    packedEnchant: number,
+    blueprintCache?: SearchExpansionBlueprintCache
+): { graph: SearchGraph; child: SearchGraphNodeId } {
+    const graph = new SearchGraph(kernel, pool, { blueprintCache });
+    const root = graph.getRootNode(30);
+    const edge = graph.getExpansion(root.id).edges.find(candidate => candidate.entry.packedEnchant === packedEnchant);
+    assert.ok(edge, `fixture should expose packed enchant ${packedEnchant}`);
+    return { graph, child: edge.childId };
 }
