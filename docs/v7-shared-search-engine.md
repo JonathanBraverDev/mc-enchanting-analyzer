@@ -84,6 +84,8 @@ Current branch state after the V7-only migration:
   - Search instrumentation under `EngineInstrumentation.search` for graph count, seeded levels, pending entries, largest pending mass, active residue count/mass, improvability, and search cache hit/miss counters.
   - Structural `SearchGraph` cache plus XP-cell `SearchRun` cache: one-at-a-time chart worker calls can now resume the same XP run across refinement passes while sharing structural graphs across fresh runs.
   - Explicit `exhaustive: true` mode for bottom-out searches: it forces threshold `0`, bypasses the normal iteration safety cap, remains abortable through async search, and is the canonical mode for golden snapshot generation. Product UI flows should still use checkpoint limits.
+  - Generalized expansion-blueprint reuse across rank-variant pools. `SearchPoolFamilySignature` groups pools that share base enchant/conflict/weight structure while differing by exact packed ranks; `SearchExpansionBlueprintCache` reuses eligible-entry scans across those families without changing exact graph edges or combo payloads.
+  - Suffix identities and pending suffix merging are fully implemented but experimental and off by default. `SearchGraph.getSuffixIdentity()` can identify non-root nodes with the same visible combo and future expansion, and `SearchRun` can canonicalize matching pending entries when `useSuffixMerging: true`; current profiling shows the identity/cache overhead can outweigh the lower iteration count, so product/default searches leave it disabled.
 - Direction change:
   - V7 is now the upgrade path and source of truth.
   - Treat V6 internals, telemetry shape, and snapshots as obsolete until re-evaluated.
@@ -272,6 +274,10 @@ Pool signature must include enough data to make this safe:
 - book behavior
 - clue policy shape, when applicable
 
+`SearchPoolFamilySignature` is a weaker, blueprint-only identity for pools with the same base enchant IDs, weights, and conflict masks while exact ranks may differ. It is safe for reusable eligibility blueprints because each graph still materializes edges against its own exact `SearchPoolEntry` list; it is not a replacement for `SearchPoolSignature` when node identity, combo identity, or output payloads matter.
+
+Suffix identity is stricter than visible combo identity. A suffix can be shared only when the node is non-root, the visible combo/count/current level match, terminal behavior matches, and the future eligible edge set is equivalent. The current implementation uses suffix identity only when `useSuffixMerging: true`; default runs skip this canonicalization.
+
 ## Mass Accounting
 
 V7 should keep the honest accounting principle, BigInt fixed-point units, and explicit buckets:
@@ -337,6 +343,16 @@ SearchGraphKey -> SearchGraph
 
 Implemented as the structural graph cache. This stores structural work without probability mass: lazy node identity, node expansions, and pool-signature graph work. It is reusable across XP-cell runs when the version/item/book-mode/pool-signature/clue-mode are compatible.
 
+### SearchExpansionBlueprintCache
+
+```ts
+SearchPoolFamilySignature + selectedMask + currentLevel + count -> eligible entry indexes + totalWeight
+```
+
+Implemented as a reusable candidate-filter cache. It saves repeated full-pool scans for rank-variant pools that share the same structural eligibility behavior. The cached value contains entry indexes and total weight only; child node IDs, exact packed enchantments, and combos remain graph-local.
+
+Current diagnostics report blueprint hits/misses, baseline candidate checks, actual candidate checks, and saved checks. This optimization is enabled by default because it preserves exact expansion edges and has shown direct candidate-check savings without changing search state.
+
 ### SearchRunCache / SearchSnapshotCache
 
 ```ts
@@ -386,6 +402,8 @@ Integer split residue must be handled conservatively:
 
 This keeps total bucket mass conserved without treating unrelated pre-equivalence rounding residue as shared probability.
 
+Suffix merging is a separate experimental optimization on top of these equivalence rules. When enabled, pending arrivals whose suffix identity matches an existing canonical pending target are redirected to that target before frontier insertion. This can reduce frontier pops/iterations and materialized structural expansions, but it also performs suffix identity construction and map lookups on pending pushes. Current exhaustive probes found that cost can dominate: for example, `1.7.2 book/book XP 30` reduced iterations substantially but increased wall-clock runtime, so suffix merging remains opt-in only.
+
 ## Future Tuning Ideas — Post Initial Release
 
 These are intentionally not part of the initial V7 release scope. Keep the first release focused on correct V7 semantics, safe worker integration, and validation.
@@ -394,6 +412,7 @@ Possible later optimizations:
 
 - Cross-graph suffix equivalence once different initial pools reduce to the same future remaining edge set.
 - Shared expansion-blueprint caching across equivalent suffix states without merging result payload state.
+- Cheaper suffix identity/canonicalization if profiling shows a way to keep the iteration savings without the current per-pending overhead.
 - Batch expansion by shared structural state to amortize frontier and distribution overhead.
 - Program-local search quanta so hot graphs can run several local expansions before global arbitration.
 - Bounded memoized suffix summaries for fully equivalent tail states, especially for book-heavy searches.
@@ -493,4 +512,4 @@ Jonathan Braver / V7 rewrite branch maintainers.
 
 ## Last Updated
 
-2026-05-10
+2026-05-18
