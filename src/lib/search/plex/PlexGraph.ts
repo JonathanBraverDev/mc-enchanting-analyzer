@@ -33,6 +33,7 @@ export interface PlexEdge {
     readonly childId: PlexNodeId;
 }
 
+// TODO: Consider renaming this to PlexStopReason or a status object if the null-as-open sentinel starts leaking.
 export type PlexTerminalReason = 'max-enchants' | 'single-book' | 'no-eligible' | null;
 
 export interface PlexExpansion {
