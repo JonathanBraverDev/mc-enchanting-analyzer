@@ -17,6 +17,8 @@ export interface SearchPoolEntry {
     readonly comboIndex: number;
     readonly idBit: bigint;
     readonly conflictBitset: bigint;
+    /** Selectable-self plus conflicts: the future eligibility mask added by choosing this entry. */
+    readonly blocksBitset: bigint;
 }
 
 /** Immutable eligible-enchantment pool for one item at one modified level. */
@@ -121,6 +123,7 @@ export class RegistryKernel {
             throw new Error(`RegistryKernel supports enchant IDs 0-${BIGINT_CONSTANTS.ID_BIT_LOOKUP.length - 1}; pool contains ID ${enchantId}.`);
         }
 
+        const conflictBitset = this.registry.conflictBitsets[enchantId] ?? 0n;
         return Object.freeze({
             packedEnchant,
             enchantId,
@@ -128,7 +131,8 @@ export class RegistryKernel {
             weight,
             comboIndex,
             idBit,
-            conflictBitset: this.registry.conflictBitsets[enchantId] ?? 0n
+            conflictBitset,
+            blocksBitset: idBit | conflictBitset
         });
     }
 
