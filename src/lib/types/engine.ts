@@ -143,6 +143,18 @@ export interface SearchInstrumentation {
   runCacheHits?: number | undefined;
   /** Cumulative resumable SearchRun cache misses for this engine instance. */
   runCacheMisses?: number | undefined;
+  /** Whether run-local suffix canonicalization was enabled for this snapshot. */
+  suffixMergingEnabled?: boolean | undefined;
+  /** Number of canonical suffix entries recorded by this run. */
+  suffixMergeCanonicalEntryCount?: number | undefined;
+  /** Number of pending arrivals redirected to an equivalent canonical suffix node. */
+  suffixMergeHits?: number | undefined;
+  /** Number of suffix identities first registered as canonical nodes. */
+  suffixMergeMisses?: number | undefined;
+  /** Probability mass redirected to canonical suffix nodes. */
+  suffixMergedPendingMass?: number | undefined;
+  /** Estimated number of pending entries avoided by suffix canonicalization. */
+  suffixAvoidedPendingEntries?: number | undefined;
 }
 
 export interface ResolvedRegistry {
