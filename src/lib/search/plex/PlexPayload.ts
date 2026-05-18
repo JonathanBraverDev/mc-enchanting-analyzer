@@ -13,6 +13,8 @@ import {
 } from '#lib/search/plex/PlexCombo.js';
 import type { PlexEdge } from '#lib/search/plex/PlexGraph.js';
 
+export type PlexPayloadKey = string;
+
 export interface PlexPayload {
     readonly combo: PlexCombo;
     /** Weighted choices aligned with `combo.choices`; weights are original edge-local entry weights. */
@@ -52,6 +54,16 @@ export function appendPlexPayloadEdge(
     }
 
     return createPlexPayload(payload.combo.fixed, [...payload.choices, edge.choice]);
+}
+
+export function getPlexPayloadKey(payload: PlexPayload): PlexPayloadKey {
+    const fixed = payload.combo.fixed.map(packedEnchant => String(packedEnchant)).join(',');
+    const choices = payload.choices
+        .map(choice => choice.alternatives
+            .map(alternative => `${String(alternative.packedEnchant)}:${alternative.weight}`)
+            .join(','))
+        .join('/');
+    return `f=${fixed}|c=${choices}`;
 }
 
 export function materializePlexPayloadFactors(
