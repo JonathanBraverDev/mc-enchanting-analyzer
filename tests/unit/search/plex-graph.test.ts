@@ -82,6 +82,20 @@ describe('PlexGraph', () => {
         assert.strictEqual(child.count, 1);
     });
 
+    it('keeps plex edge alternatives item-local instead of using whole conflict groups', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'sword', material: 'diamond' });
+        const graph = new PlexGraph(kernel, kernel.getPool(30));
+        const expansion = graph.getExpansion(graph.getRootNode(30).id);
+        const damageEdge = expansion.edges.find(edge => edge.alternatives.length === 3);
+
+        assert.ok(damageEdge, 'sword fixture should expose only the sword-eligible damage choices');
+        const names = damageEdge!.alternatives.map(packed => registry.revIdMap[ComboUtils.getEnchantId(packed)]);
+        assert.deepStrictEqual(names, ['Sharpness', 'Smite', 'Bane of Arthropods']);
+        assert.deepStrictEqual(damageEdge!.weights, [10, 5, 5]);
+        assert.strictEqual(damageEdge!.weight, 20);
+    });
+
     it('expands non-root nodes by parent exclusion mask and halves continuation level', () => {
         const registry = RegistryFactory.build('1.21.11');
         const kernel = new RegistryKernel({ registry, item: 'sword', material: 'diamond' });
