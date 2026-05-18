@@ -2,12 +2,19 @@
 
 ## Common Description
 
-This document is the working rename-planning artifact for the shared-search rewrite. It maps the repo-wide request/data flow, defines the intended vocabulary layers, inventories the key functions in the registry/search/engine path, and records rename candidates for terms that drifted, became overloaded, or now dilute architectural boundaries.
+This document is an archived research snapshot from the V7 rename/vocabulary cleanup. It is useful for historical context and naming rationale, but it is **not** a canonical reference for current engine behavior.
 
-The main conclusion was that the former `SearchRegistryContext` should become **`RegistryKernel`**. That rename has landed. The object is not a generic context and not a search service. It is the request-scoped executable slice compiled from the resolved registry: it builds graph-ready modified-level pools and stable pool signatures so shared search graphs can safely reuse structure.
+Do not update this file for every code change. When current behavior matters, use `ARCHITECTURE.md`, `MASS_HANDLING.md`, and `docs/v7-shared-search-engine.md` instead.
+
+The main durable conclusion was that the former `SearchRegistryContext` should become **`RegistryKernel`**. That rename has landed. The object is not a generic context and not a search service. It is the request-scoped executable slice compiled from the resolved registry: it builds graph-ready modified-level pools and stable pool signatures so shared search graphs can safely reuse structure.
+
+## Status
+
+Archived research snapshot / non-canonical reference. Keep for rename history unless it becomes actively misleading.
 
 ## Table of Contents
 
+- [Status](#status)
 - [Research Metadata](#research-metadata)
 - [Executive Summary](#executive-summary)
 - [Repo-Wide Flow Graph](#repo-wide-flow-graph)

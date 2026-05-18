@@ -156,9 +156,10 @@ npx tsx scripts/profile_perf_cases.ts
 These scripts report result counts, active search time, post-processing time, and total engine time. `scripts/benchmark_engine.ts` remains available for simple cold/warm cache smoke checks.
 
 ### Optimizing the Search
-- Keep Minecraft rule logic in `SearchProcessor`, mass forwarding in `MassForwardingEngine`, and queue orchestration in `SearchController`.
-- Avoid object allocation in hot loops such as `processInitialNode`, `buildExpansionBlueprint`, and forwarding by node ID.
-- Prefer graph node IDs, packed combos, typed arrays, and precomputed pool metadata over repeated map/key reconstruction.
+- Keep Minecraft rule lookup in the registry/core layer, structural graph work in `SearchGraph`, and weighted probability movement in `SearchRun`.
+- Avoid object allocation in hot loops such as graph expansion, weighted fanout, frontier push/pop, and summary aggregation.
+- Prefer dense graph node IDs, packed combos, typed arrays, precomputed `SearchPoolEntry` metadata, and reusable expansion blueprints over repeated map/key reconstruction.
+- Measure wall-clock runtime, not only iteration counts. Suffix merging is the current example where fewer frontier pops can still be slower because canonicalization overhead dominates.
 
 ## Mass Conservation Invariants
 
@@ -199,7 +200,8 @@ The engine maintains a system of "buckets" to track every atom of probability:
 - `CHANGELOG.md`
 - `.github/workflows/release-check.yml`
 - `.github/workflows/release.yml`
-- `docs/search-function-inventory.md`
+- `docs/v7-shared-search-engine.md`
+- `docs/search-function-inventory.md` — archived rename research snapshot, not canonical current behavior.
 
 ## Owner / Maintainer
 
@@ -207,4 +209,4 @@ JonathanBraverDev maintains this project.
 
 ## Last Updated
 
-2026-05-13
+2026-05-18

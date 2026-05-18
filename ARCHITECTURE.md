@@ -1,6 +1,29 @@
 # Architecture Map - Minecraft Enchantment Analyzer (V7)
 
-Release-reviewed for v7.0.0: the public engine surface is `getStats(...)` for summarized probabilities plus checkpoint APIs for raw or streaming search results.
+## Common Description
+
+This document maps the current V7 engine, worker, registry, search, and reporting architecture for Minecraft Enchantment Analyzer. It is the high-level reference for how the system is wired; use `docs/v7-shared-search-engine.md` for the deeper explanation of why V7 works this way.
+
+Release-reviewed for v7.1.2: the public engine surface is `getStats(...)` for summarized probabilities plus checkpoint APIs for raw or streaming search results.
+
+## Table of Contents
+
+- [Entry Points](#entry-points)
+- [Module Dependency Graph](#module-dependency-graph)
+- [Checkpoint Search Flow](#checkpoint-search-flow)
+- [Public Engine Calls](#public-engine-calls)
+- [Registry Construction](#registry-construction)
+- [Registry Rule Model](#registry-rule-model)
+- [Search Components](#search-components)
+- [Checkpoint Aggregation](#checkpoint-aggregation)
+- [Reporting Aggregation](#reporting-aggregation)
+- [Shared Frontier Model](#shared-frontier-model)
+- [Worker Model](#worker-model)
+- [Caching Strategy](#caching-strategy)
+- [Release Documentation Rule](#release-documentation-rule)
+- [References / Related Docs](#references--related-docs)
+- [Owner / Maintainer](#owner--maintainer)
+- [Last Updated](#last-updated)
 
 ## Entry Points
 
@@ -100,9 +123,9 @@ Missing `groups` on an enchantable item rule means “all active table enchantme
 |---|---|
 | `EnchantEngine` | Validates requests, owns registry access, cache lookups, and public orchestration |
 | `SearchExecutionService` | Coordinates shared search runs, checkpoint aggregation, instrumentation, and cache reuse |
-| `SearchRun` | Runs the globally weighted best-first expansion loop until threshold, iteration, abort, or exhaustion |
+| `SearchRun` | Runs the globally weighted best-first expansion loop, mass accounting, residue forwarding, and optional suffix merging until checkpoint or exhaustion |
 | `SearchRunFrontier` | Stores pending graph node IDs and weighted probability mass in best-first order |
-| `SearchGraph` | Owns canonical node identity, optional split-mask node state, combo payloads, expansion blueprints, and forwarding residue |
+| `SearchGraph` | Owns canonical node identity, combo payloads, exact graph expansions, suffix identities, and graph-local expansion state |
 | `ProbabilityMassAccountant` | Records resolved, clue-incompatible, pending, sieved, capped, overflow, and rounding mass |
 | `ModifiedLevelDistributionService` | Computes the BigInt distribution of modified enchantment levels |
 | `SummaryAggregationService` | Scans resolved combos and pending frontiers once to derive shared any/rank/count/clue mass buckets |
@@ -147,12 +170,12 @@ The V7 search path separates graph node identity from weighted frontier priority
 
 - `SearchGraph` assigns each canonical `(enchant bitset << 8 | current level)` state a dense `nodeId`.
 - `RegistryKernel` groups modified levels by `SearchPoolSignature`, so levels with the same eligible enchant pool reuse the same structural graph.
-- `SearchGraph` stores canonical selected-enchant masks and packed combos on dense node IDs.
-- `SearchPoolEntry` precomputes rank, weight, availability, and conflict metadata for each eligible enchant, so expansion can reuse the same pool structure across levels that share a signature.
-- The graph stores the node payload once: split masks, level, packed combo, enchant count, optional expansion blueprint, and forwarding residue.
-- `SearchRunFrontier` stores only `nodeId` and pending weighted probability mass, using direct indexes for merge and heap-position lookups.
-- Expansion blueprints point to child node IDs, so cached-child checks are array lookups instead of BigInt heap/hash work.
-- `getMeta(nodeId)` remains available for compatibility and reporting; numeric nodes reconstruct the BigInt meta lazily only when a caller asks for it.
+- `SearchGraph` stores canonical selected-enchant masks, current levels, packed combos, and enchant counts on dense node IDs.
+- `SearchPoolEntry` precomputes rank, weight, availability, combo index, id bit, and conflict metadata for each eligible enchant.
+- `SearchExpansionBlueprintCache` can reuse eligible-entry scans across rank-variant pools through `SearchPoolFamilySignature`; exact child nodes and combo payloads remain graph-local.
+- `SearchRunFrontier` stores `graphId`, `nodeId`, and pending weighted probability mass, using direct merge/heap lookups for best-first scheduling.
+- Forwarding residue is tracked by exact source expansion and outgoing edge, so fixed-point leftovers can recover only when later mass reaches the same equivalence point.
+- Suffix identity and suffix merging are implemented but opt-in; default product searches do not canonicalize pending suffix nodes because current profiling shows the overhead can outweigh the iteration savings.
 
 This preserves best-first semantics while changing the scheduling scope: the highest-probability pending weighted node expands first across the whole XP search, not inside one modified level at a time. `meta` remains the canonical state identity. The scaling improvement comes from sharing graph identity and cache state across the weighted run instead of repeating independent per-modified-level searches.
 
@@ -176,9 +199,26 @@ The browser uses two dedicated workers:
 | distribution cache | Modified-level distributions by version/xp/enchantability |
 | pool cache | Eligible enchant pools by version/item/level; material is intentionally absent because it affects modified-level distribution, not per-level eligibility |
 | search run cache | Reusable shared search runs keyed by version/item/material/xp/clue/request signature |
+| expansion blueprint cache | Reusable eligible-entry scans keyed by pool-family signature, selected mask, current level, and enchant count |
 
 The registry rule model declares item/material compatibility together, but the engine cache keys still follow the computation they cache. Pool entries only depend on the fixed enchantable item pool at a modified level. Search run entries include material because material changes enchantability, which changes the modified-level distribution and therefore the weighted search state. Threshold-aware reads can reuse more precise cached state when it already satisfies the requested checkpoint.
+
+Expansion blueprint caching is enabled by default because it preserves exact graph edges while reducing repeated candidate checks. Suffix merging is implemented behind `useSuffixMerging` but remains off by default because lower iteration counts have not consistently translated into faster wall-clock runtime.
 
 ## Release Documentation Rule
 
 Major releases are expected to update this architecture map. Minor releases should update docs when behavior or workflows change. Patch releases are exempt unless the patch itself changes user-facing behavior or project process.
+
+## References / Related Docs
+
+- `README.md` — product overview and setup.
+- `MASS_HANDLING.md` — V7 probability accounting and residue rules.
+- `docs/v7-shared-search-engine.md` — deep V7 current-state design reference.
+
+## Owner / Maintainer
+
+Jonathan Braver / V7 engine maintainers.
+
+## Last Updated
+
+2026-05-18

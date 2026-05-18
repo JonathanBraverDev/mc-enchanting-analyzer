@@ -1,108 +1,209 @@
 # Mass Handling & Honest Accounting — Minecraft Enchantment Analyzer
 
-This document details the mathematical framework used by the Enchantment Engine to ensure 100% probability mass conservation and high-precision reporting.
+## Common Description
 
-## The "Honest Accounting" Principle
+This document is the current V7 probability-accounting reference for Minecraft Enchantment Analyzer. It explains how the shared search engine preserves every fixed-point unit of probability mass while searching a globally weighted frontier across modified levels.
 
-In most enchantment calculators, probability mass is "lost" due to early pruning or floating-point drift. This engine follows the principle of **Honest Accounting**: every single unit of probability mass introduced at the start of a search must be accounted for in one of seven terminal buckets. No mass is ever deleted; it is only re-categorized.
+## Table of Contents
 
----
+- [Purpose / Scope](#purpose--scope)
+- [Honest Accounting Principle](#honest-accounting-principle)
+- [Active Mass Buckets](#active-mass-buckets)
+- [Diagnostic Recovery Buckets](#diagnostic-recovery-buckets)
+- [Fixed-Point Probability Units](#fixed-point-probability-units)
+- [V7 Weighted Search Accounting](#v7-weighted-search-accounting)
+- [Remainder and Residue Handling](#remainder-and-residue-handling)
+- [Book Redistribution](#book-redistribution)
+- [Clue-Conditioned Searches](#clue-conditioned-searches)
+- [Reporting vs Accounting](#reporting-vs-accounting)
+- [Optimization Guardrails](#optimization-guardrails)
+- [Troubleshooting](#troubleshooting)
+- [References / Related Docs](#references--related-docs)
+- [Owner / Maintainer](#owner--maintainer)
+- [Last Updated](#last-updated)
 
-## The Seven Buckets of Mass
+## Purpose / Scope
 
-Every outcome of the enchantment simulation terminates in exactly one of these categories:
+This document covers engine-internal probability conservation for V7. It does not describe every Minecraft rule, UI projection, or chart rendering path.
 
-| Bucket | Purpose | UI Designation |
-|:---|:---|:---|
-| **Resolved** | Successful leaf node. The exact combination reached via game rules. | **Accuracy** |
-| **Clue Incompatible** | Paths proven unable to match an observed clue during clue-aware searches. | **Classified** |
-| **Pending** | Nodes remaining in the Priority Queue, unexplored due to threshold or iteration limits. | **Uncertainty** |
-| **Sieved** | Nodes intentionally discarded because their probability fell below the `SYSTEM_THRESHOLD_FLOOR` (1e-10). | **Pruned** |
-| **Overflow** | Outcomes that are mathematically possible but exceed the engine's technical limit (6 enchantments). | **Limit Loss** |
-| **Capped** | Outcomes lost because a resource limit was hit (e.g., `resultsLimit` or `MAX_QUEUE_SIZE`). | **Limit Loss** |
-| **Rounding** | Cumulative compensation for integer division remainders and fixed-point conversion. | **Rounding** |
+Use this file when changing:
 
-**Invariant**: `Resolved + Clue Incompatible + Pending + Sieved + Overflow + Capped + Rounding === 1.0` (precisely $2^{60}$).
+- `SearchRun` mass movement,
+- `SearchGraph` expansion semantics,
+- residue/remainder handling,
+- clue pruning,
+- book redistribution,
+- summary or snapshot interpretation of pending mass.
 
-For unconditioned searches, reported accuracy is resolved mass. For clue-conditioned searches, reported accuracy is classified mass: resolved result mass plus exact clue-incompatible mass. The clue-incompatible bucket is not result probability; it is mass the engine has fully classified as unable to contribute to the clue-conditioned result set.
+For broader architecture and search identity details, see `ARCHITECTURE.md` and `docs/v7-shared-search-engine.md`.
 
-`clue.knownSpace` is intentionally not an accounting bucket. It is a clue-conditioned reporting value computed during Bayesian post-processing from the displayed clue mass.
+## Honest Accounting Principle
 
----
+Every probability unit introduced into a search must remain accounted for until the checkpoint snapshot is reported. Mass may move between buckets, but it must not disappear.
 
-## Diagnostic Recovery Buckets (The Harvester's Impact)
+The active invariant is:
 
-These buckets are **non-additive**. They do not contribute to the 1.0 total mass. Instead, they track how much mass was "saved" by the Harvester logic:
+```text
+resolved
++ clueIncompatible
++ pending
++ sieved
++ overflow
++ capped
++ rounding
+== PRECISION
+```
 
-| Bucket | Purpose |
-|:---|:---|
-| **Recovered Rounding** | Mass that would have been lost to the `Rounding` bucket but was "promoted" back to probabilities by the residual accumulator. |
-| **Recovered Sieved** | Mass that was intended for the `Sieved` bucket (below individual threshold) but was successfully resolved because it was combined with other path mass. |
+`PRECISION` is `2^60` fixed-point units.
 
----
+Recovered diagnostic buckets are not part of this sum. They explain how much mass became assignable after carried residue combined with later arrivals, but they do not add new active mass.
 
-## Core Mathematical Infrastructure
+## Active Mass Buckets
 
-### 1. High-Precision Fixed-Point (BigInt)
-To avoid the binary-decimal drift of IEEE 754 floats, the engine uses `BigUint64Array` and `bigint` for all internal mass storage.
-- **Scale**: $2^{60}$ (`PRECISION`). This provides roughly 18 decimal places of accuracy, far exceeding typical double-precision requirements.
-- **Conversion**: Probabilities are converted to BigInt as early as possible (in `ProbUtils.toBigInt`) and returned to `number` only for final UI display.
-- **Scope**: BigInt is required for probability mass. Search graph identity uses the `number53` path for current vanilla registries, with a `bigint64` path for registries whose enchant IDs no longer fit the safe-number key range.
+| Bucket | Meaning | User-facing interpretation |
+| --- | --- | --- |
+| `resolved` | Search reached a terminal combo and assigned mass to exact output combinations. | Known result mass / accuracy for unconditioned searches. |
+| `clueIncompatible` | Search proved mass cannot contribute to the displayed clue-conditioned result set. | Classified non-result mass for clue searches. |
+| `pending` | Mass remains in the global frontier at the checkpoint. | Uncertainty / improvable mass. |
+| `sieved` | Mass was intentionally discarded by a probability floor. | Pruned mass. |
+| `overflow` | A path exceeded supported engine limits such as max enchant count. | Limit loss. |
+| `capped` | A safety/resource cap stopped further materialization. | Limit loss. |
+| `rounding` | Fixed-point division residue that is still active but not assignable to an exact branch yet. | Rounding uncertainty. |
 
-### 2. Banker's Rounding (Statistically Neutral)
-The engine implements **Banker's Rounding** (Round-to-Nearest-Even) for scaling operations.
-- **The Why**: Standard "round half up" introduces a positive bias over millions of operations. Banker's Rounding ensures that ties are rounded to the nearest even neighbor, neutralizing the cumulative drift across deep search trees.
-- **Implementation**: See `ProbUtils.roundDiv`.
+For unconditioned searches, reported accuracy usually means `resolved`. For clue-conditioned searches, reported accuracy is classified mass: `resolved + clueIncompatible`, because both buckets are no longer frontier uncertainty.
 
-### 3. Atomic Accounting (Remainder Capture)
-Whenever `prob` is divided among $N$ branches (e.g., distributing mass across enchantment weights), integer division inevitably produces a remainder.
-- **Traditional**: $5 / 2 = 2$ (remainder 1 lost).
-- **Honest**: $5 / 2 = 2$. The remainder `1` is explicitly added to the `Rounding` bucket of the current `ProbabilityMassAccountant`.
-- **Atomic**: All additions to the results map and buckets happen within the same transition block.
+## Diagnostic Recovery Buckets
 
-### Checkpoint Aggregation
+| Bucket | Meaning |
+| --- | --- |
+| `recoveredRounding` | Gross mass that became assignable because carried split residue combined with later mass at the same expansion. |
+| `recoveredSieved` | Historical/diagnostic concept for mass saved from pruning; not part of active conservation. |
 
-1.  **Modified Level Search**: `SearchService.searchModifiedLevel` returns a reusable `SearchState` with combo results, a node-ID frontier, a `SearchNodeGraph`, and a `SearchStateTracker`.
-2.  **Checkpoint Accumulation**: `SearchService.searchToCheckpoint` and `searchSequentialCheckpoints` scale each modified-level state by its probability `P(L)` and merge it into a checkpoint accumulator.
-    - Combo mass is merged into the checkpoint result map.
-    - `ProbabilityMassAccountant.addScaled` preserves bucket conservation while weighting each modified level.
-    - Frontier/graph pairs are retained with their scale so snapshot reporting can describe what remains unexplored.
-3.  **Summary/Snapshot Reporting**: `SummaryAggregationService` scans resolved combos and scaled frontiers once to derive public mass buckets; `SummaryService` and `SnapshotService` format those buckets into `CalculationStats` and UI/reporting snapshots.
+Diagnostic recovery buckets are non-additive. They answer “how much did the residue mechanism help?” rather than “where is the current probability mass?”
 
----
+## Fixed-Point Probability Units
 
-## Advanced Mechanism: Residual Mass Forwarding (The Harvester)
+V7 uses `bigint` probability units scaled to `PRECISION = 2^60`.
 
-When multiple paths reach the same state (duplicate nodes), the current engine utilizes the **Duplicate Harvester** to prevent "Remainder Fragmentation."
+Rules:
 
-### The Problem of Fragmentation
-If two paths reach a node with mass `5` separately, they both split (e.g., $5/2$), losing `1` unit of remainder each. Total lost: `2`.
-If they were processed together, the total mass would be `10`, and $10/2 = 5$ with **zero** remainder.
+- Convert external numeric probabilities to fixed-point units at boundaries.
+- Use integer arithmetic for internal mass movement.
+- Convert back to `number` only for presentation or diagnostics.
+- Treat integer division remainders as first-class mass, not disposable error.
 
-### The Solution: Harvesting
-1. **Canonical Node Graph**: Every unique `(enchant bitset << 8 | current level)` node is assigned a dense node ID by `SearchNodeGraph`.
-2. **Registry-Selected Identity**: `SearchPoolPlan` chooses `number53` for enchant IDs `0..44` and `bigint64` for IDs `45..63`. The `number53` path stores safe numeric keys plus `maskLo`, `maskHi`, and `level`; the `bigint64` path keeps canonical BigInt meta identity.
-3. **Expansion Cache**: Each graph node can cache an `ExpansionBlueprint` with its child node IDs and settlement metadata.
-4. **Residue Accumulation**: The graph stores forwarding residue alongside the node, separate from the structural blueprint.
-5. **Immediate Forwarding**: When a duplicate path arrives at a cached node, it does not need to re-enter the best-first frontier. `MassForwardingEngine` forwards its mass through the cached blueprint.
-6. **Residue Promotion**: The harvester adds incoming remainders to the node residue. When the accumulator exceeds the distribution divisor, it promotes the recovered units back into resolved outcomes.
+This avoids floating-point drift and keeps conservation tests exact.
 
-**This results in higher reported accuracy as the search deepens by increasing resolved mass, or classified mass in clue-conditioned searches.**
+## V7 Weighted Search Accounting
 
----
+V7 seeds a single `SearchRun` with the modified-level distribution for one XP cell:
 
-## Integration and Aggregation
+```text
+XP + enchantability -> modified level distribution
+modified level L with probability P(L) -> root mass P(L)
+```
 
-### SearchState
-`SearchState` maintains the bookkeeping for a single modified level.
-- `results` stores exact combo mass.
-- `queue` stores the remaining best-first frontier as node IDs plus probability mass.
-- `graph` resolves node IDs to identity state, packed combos, cached blueprints, and forwarding residue. In `number53` mode, BigInt meta is reconstructed lazily only for compatibility/reporting callers.
-- `tracker.mass` stores the bucketed probability accounting for that modified level.
+The run stores all pending work in one globally weighted frontier. Each frontier entry points to a structural `SearchGraph` node and carries weighted mass. The next expansion is chosen by weighted pending mass, not by a per-modified-level local budget.
 
-### SearchResult
-Because Minecraft enchanting uses a triangular distribution of modified levels, a checkpoint `SearchResult` combines many `SearchState` instances.
-- It calculates the probability $P(L)$ for each modified level.
-- It uses scaled mass accounting to weight each modified-level contribution.
-- It retains frontier/graph pairs so unresolved pending mass can still be summarized by combo.
-- The same atomic accounting applies here: the remainder of checkpoint weighting is captured into the aggregate `Rounding` bucket.
+This differs from the older naive model:
+
+```text
+old model: search each modified level separately, then scale results by P(L)
+V7 model: scale at root, merge equivalent future mass during search
+```
+
+The V7 model gives a more meaningful checkpoint frontier: the largest pending entries are globally largest contributors to remaining uncertainty.
+
+## Remainder and Residue Handling
+
+Weighted fanout uses integer division:
+
+```text
+childMass = floor((incomingMass * edgeWeight + oldEdgeResidue) / totalWeight)
+newEdgeResidue = (incomingMass * edgeWeight + oldEdgeResidue) % totalWeight
+```
+
+The engine carries residue per outgoing edge on the exact source expansion. If later mass reaches the same `(graph, node)` expansion, the old residue participates in the next split and may promote units back into child mass.
+
+Guardrails:
+
+- Do not eagerly assign leftover units to arbitrary child edges.
+- Do not use largest-remainder allocation unless the equivalence basis is proven.
+- Do not pool residue across different source expansions just because the visible combo matches.
+- Pooling is valid only after mass reaches the same full equivalence point, currently `(graph, node, edge)` for forwarding residue.
+
+This may leave tiny active `rounding` mass, but it preserves exact accounting without inventing probability.
+
+## Book Redistribution
+
+Modern enchanted books can generate multiple enchantments and then remove one selected enchantment. V7 handles this after a leaf combo resolves:
+
+1. Search resolves the generated multi-enchant book combo.
+2. `ComboUtils.removeAdditional` enumerates the possible post-removal combos.
+3. Mass is divided across those post-removal combos.
+4. Any local redistribution remainder is carried in `bookRedistributionResidues` keyed by the original leaf combo.
+
+Book redistribution is allowed to assign within that local resolved context because the original combo has already fully materialized. This is different from edge-split residue, where future branches may still have incompatible structure.
+
+## Clue-Conditioned Searches
+
+Displayed table clues are handled by search-time pruning plus reporting-time Bayesian projection.
+
+`ClueSearchPolicy` can prune a branch when the target clue has not already been selected and the candidate:
+
+- is the same enchantment at the wrong rank,
+- conflicts with the target clue enchantment,
+- or cannot lead to the target clue.
+
+Pruned mass goes to `clueIncompatible`. Resolved mass that settles without the displayed clue also becomes `clueIncompatible`.
+
+`clue.knownSpace` is not an accounting bucket. It is a reporting value derived later from the displayed clue mass, so it must not be added into the active conservation invariant.
+
+## Reporting vs Accounting
+
+Accounting tracks where probability mass lives. Reporting derives user-facing summaries from the current snapshot.
+
+Important separations:
+
+- `summaryLimit` and `comboLimit` control export size, not search work.
+- Target combo filters are projections over the snapshot, not separate search modes.
+- Chart cells and top results consume the same `SearchRunSnapshot` semantics.
+- Pending frontier entries are still meaningful data: summary, target, and clue advisor services may estimate aggregate probability from pending `(graph, node, combo, count, mass)` entries.
+
+## Optimization Guardrails
+
+Optimizations are welcome only when they preserve the active invariant and the semantic identity of future state.
+
+Current safe/default optimizations:
+
+- `SearchPoolSignature` structural graph reuse for exact pool-equivalent modified levels.
+- `SearchPoolFamilySignature` plus `SearchExpansionBlueprintCache` for reusable eligibility scans across rank-variant pools; exact edges and combos remain graph-local.
+- XP-cell `SearchRun` caching for refinement resume.
+
+Current experimental optimization:
+
+- Suffix merging is fully implemented but off by default. It canonicalizes equivalent pending suffix nodes when `useSuffixMerging: true`, but current profiling shows the per-pending identity/cache overhead can outweigh the reduced iteration count.
+
+Never merge by visible combo alone. Visible output can match while future eligible pools differ.
+
+## Troubleshooting
+
+- If conservation fails, inspect the active bucket sum first. Do not include recovered diagnostic buckets in the invariant.
+- If clue-conditioned accuracy looks too high, verify whether `clueIncompatible` is being correctly counted as classified mass rather than result mass.
+- If a performance optimization reduces iterations but slows runtime, profile the per-pending overhead. Suffix merging is the current example of this tradeoff.
+- If book results show unexpected tiny tail differences, inspect `bookRedistributionResidues` and active `rounding` before assuming mass loss.
+
+## References / Related Docs
+
+- `ARCHITECTURE.md` — engine and worker flow map.
+- `docs/v7-shared-search-engine.md` — deep V7 design/current behavior notes.
+- `src/lib/search/SearchRun.ts` — weighted mass movement and residue handling.
+- `src/lib/search/SearchGraph.ts` — structural node identity and expansion construction.
+
+## Owner / Maintainer
+
+Jonathan Braver / V7 engine maintainers.
+
+## Last Updated
+
+2026-05-18

@@ -2,10 +2,17 @@
 
 ## Common Description
 
-This document records behavior descriptions for the registry/search/engine functions based on reading function parameters and bodies, not current names. It is intended to support the rename/vocabulary cleanup by describing what each function actually does before choosing final names.
+This document is an archived research snapshot from the V7 rename/vocabulary cleanup. It records behavior descriptions that were useful for choosing names, but it is **not** a canonical or maintained reference for current engine behavior.
+
+Do not update this file for every code change. When current behavior matters, use `ARCHITECTURE.md`, `MASS_HANDLING.md`, and `docs/v7-shared-search-engine.md` instead.
+
+## Status
+
+Archived research snapshot / non-canonical reference. Keep for rename history unless it becomes actively misleading.
 
 ## Table of Contents
 
+- [Status](#status)
 - [Scope](#scope)
 - [Method](#method)
 - [Progress](#progress)
