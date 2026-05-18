@@ -17,6 +17,10 @@ export interface PlexRunOptions {
     readonly distributionService?: ModifiedLevelDistributionService | undefined;
 }
 
+export interface PlexRunAdvanceRequest {
+    readonly maxIterations: number;
+}
+
 export interface PlexPendingEntry {
     readonly graphId: number;
     readonly nodeId: PlexNodeId;
@@ -124,6 +128,17 @@ export class PlexRun {
         return true;
     }
 
+    public advance(request: PlexRunAdvanceRequest): PlexRunSnapshot {
+        this.validateMaxIterations(request.maxIterations);
+        if (!this.seeded) throw new Error('PlexRun must be seeded before advancing.');
+
+        for (let i = 0; i < request.maxIterations; i++) {
+            if (!this.step()) break;
+        }
+
+        return this.snapshot();
+    }
+
     public snapshot(): PlexRunSnapshot {
         return Object.freeze({
             results: new Map(this.results),
@@ -141,6 +156,12 @@ export class PlexRun {
 
     public getGraph(graphId: number): PlexGraph {
         return this.getGraphById(graphId).graph;
+    }
+
+    private validateMaxIterations(maxIterations: number): void {
+        if (!Number.isFinite(maxIterations) || !Number.isInteger(maxIterations) || maxIterations <= 0) {
+            throw new Error(`Invalid maxIterations: ${maxIterations}. Must be a positive integer.`);
+        }
     }
 
     private expand(current: PendingPlexWork): void {
