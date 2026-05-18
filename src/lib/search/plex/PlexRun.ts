@@ -40,7 +40,14 @@ export interface PlexResult {
 
 export interface ProjectedPlexResults {
     readonly results: ReadonlyMap<PackedCombo, bigint>;
-    readonly remainder: bigint;
+    /**
+     * Resolved plex mass that could not be assigned to concrete combo rows during projection.
+     *
+     * This is not a search-resolution bucket: the plex result was resolved. It is an
+     * accuracy loss in the concrete compatibility view caused by integer division
+     * while expanding factorized choices.
+     */
+    readonly accuracyLoss: bigint;
 }
 
 export interface PlexRunSnapshot {
@@ -73,7 +80,7 @@ export function projectPlexResults(
     enchantToIndex: Map<number, number>
 ): ProjectedPlexResults {
     const projected = new Map<PackedCombo, bigint>();
-    let remainder = 0n;
+    let accuracyLoss = 0n;
 
     for (const result of results.values()) {
         let assigned = 0n;
@@ -82,12 +89,13 @@ export function projectPlexResults(
             assigned += mass;
             projected.set(factor.combo, (projected.get(factor.combo) ?? 0n) + mass);
         }
-        remainder += result.mass - assigned;
+        // Projection loss reduces concrete-view accuracy, not internal resolved mass.
+        accuracyLoss += result.mass - assigned;
     }
 
     return Object.freeze({
         results: new Map(projected),
-        remainder
+        accuracyLoss
     });
 }
 
@@ -243,8 +251,8 @@ export class PlexRun {
             );
         }
 
-        const remainder = mass - assigned;
-        if (remainder > 0n) this.mass.record('rounding', remainder);
+        const accuracyLoss = mass - assigned;
+        if (accuracyLoss > 0n) this.mass.record('rounding', accuracyLoss);
     }
 
     private recordResolved(payload: PlexPayload, mass: bigint): void {
