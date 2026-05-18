@@ -7,11 +7,11 @@ import {
     comparePackedEnchantLists,
     sameChoiceSet,
     samePackedEnchantList
-} from '#lib/search/superposition/SuperpositionChoice.js';
+} from '#lib/search/plex/PlexChoice.js';
 
 const packed = (value: number): PackedEnchant => value as PackedEnchant;
 
-describe('superposition choice helpers', () => {
+describe('plex choice helpers', () => {
     it('canonicalizes one choice list by packed enchant value without mutating input', () => {
         const input = [packed(30), packed(10), packed(20)] as const;
         const canonical = canonicalizePackedEnchantList(input);

@@ -2,14 +2,14 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { RegistryFactory, RegistryKernel, SearchGraph } from '#lib/index.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
-import { SuperpositionSearchGraph } from '#lib/search/superposition/SuperpositionSearchGraph.js';
+import { PlexGraph } from '#lib/search/plex/PlexGraph.js';
 import { ComboUtils, PRECISION, ProbUtils } from '#utils/index.js';
 
-describe('SuperpositionSearchGraph', () => {
+describe('PlexGraph', () => {
     it('keys structural nodes by exclusion mask, current level, and count', () => {
         const registry = RegistryFactory.build('1.21.11');
         const kernel = new RegistryKernel({ registry, item: 'sword', material: 'diamond' });
-        const graph = new SuperpositionSearchGraph(kernel, kernel.getPool(30));
+        const graph = new PlexGraph(kernel, kernel.getPool(30));
 
         const first = graph.getOrCreateNode(1n, 15, 1);
         const duplicate = graph.getOrCreateNode(1n, 15, 1);
@@ -27,7 +27,7 @@ describe('SuperpositionSearchGraph', () => {
     it('keeps roots distinct per modified level while using empty exclusion state', () => {
         const registry = RegistryFactory.build('1.21.11');
         const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
-        const graph = new SuperpositionSearchGraph(kernel, kernel.getPool(30));
+        const graph = new PlexGraph(kernel, kernel.getPool(30));
 
         const low = graph.getRootNode(29);
         const high = graph.getRootNode(30);
@@ -44,23 +44,23 @@ describe('SuperpositionSearchGraph', () => {
         const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
         const pool = kernel.getPool(30);
         const concrete = new SearchGraph(kernel, pool);
-        const superposition = new SuperpositionSearchGraph(kernel, pool);
+        const plex = new PlexGraph(kernel, pool);
 
         const concreteRoot = concrete.getExpansion(concrete.getRootNode(30).id);
-        const aggregateRoot = superposition.getExpansion(superposition.getRootNode(30).id);
+        const aggregateRoot = plex.getExpansion(plex.getRootNode(30).id);
 
         assert.strictEqual(aggregateRoot.isRoot, true);
         assert.strictEqual(aggregateRoot.probContinue, PRECISION);
         assert.strictEqual(aggregateRoot.eligibleEntryCount, concreteRoot.edges.length);
         assert.strictEqual(aggregateRoot.totalWeight, concreteRoot.totalWeight);
         assert.ok(aggregateRoot.edges.length <= concreteRoot.edges.length);
-        assert.strictEqual(superposition.getExpansion(superposition.getRootNode(30).id), aggregateRoot, 'expansion should be cached');
+        assert.strictEqual(plex.getExpansion(plex.getRootNode(30).id), aggregateRoot, 'expansion should be cached');
     });
 
     it('collapses modern damage alternatives into one root edge by shared exclusion behavior', () => {
         const registry = RegistryFactory.build('1.21.11');
         const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
-        const graph = new SuperpositionSearchGraph(kernel, kernel.getPool(30));
+        const graph = new PlexGraph(kernel, kernel.getPool(30));
         const expansion = graph.getExpansion(graph.getRootNode(30).id);
         const damageEdge = expansion.edges.find(edge => edge.alternatives.length >= 6);
 
@@ -81,11 +81,11 @@ describe('SuperpositionSearchGraph', () => {
         const kernel = new RegistryKernel({ registry, item: 'sword', material: 'diamond' });
         const pool = kernel.getPool(30);
         const concrete = new SearchGraph(kernel, pool);
-        const superposition = new SuperpositionSearchGraph(kernel, pool);
+        const plex = new PlexGraph(kernel, pool);
 
-        const aggregateRoot = superposition.getExpansion(superposition.getRootNode(30).id);
+        const aggregateRoot = plex.getExpansion(plex.getRootNode(30).id);
         const singletonEdge = aggregateRoot.edges.find(edge => edge.alternatives.length === 1)!;
-        const aggregateExpansion = superposition.getExpansion(singletonEdge.childId);
+        const aggregateExpansion = plex.getExpansion(singletonEdge.childId);
 
         const concreteRoot = concrete.getExpansion(concrete.getRootNode(30).id);
         const matchingConcreteEdge = concreteRoot.edges.find(edge => edge.entry.packedEnchant === singletonEdge.alternatives[0]);
@@ -96,13 +96,13 @@ describe('SuperpositionSearchGraph', () => {
         assert.strictEqual(aggregateExpansion.eligibleEntryCount, concreteExpansion.edges.length);
         assert.strictEqual(aggregateExpansion.totalWeight, concreteExpansion.totalWeight);
         assert.ok(aggregateExpansion.edges.length <= concreteExpansion.edges.length);
-        assert.ok(aggregateExpansion.edges.every(edge => superposition.getNode(edge.childId).currentLevel === 15));
+        assert.ok(aggregateExpansion.edges.every(edge => plex.getNode(edge.childId).currentLevel === 15));
     });
 
     it('marks max-enchant and single-book nodes terminal', () => {
         const swordRegistry = RegistryFactory.build('1.21.11');
         const swordKernel = new RegistryKernel({ registry: swordRegistry, item: 'sword', material: 'diamond' });
-        const swordGraph = new SuperpositionSearchGraph(swordKernel, swordKernel.getPool(30));
+        const swordGraph = new PlexGraph(swordKernel, swordKernel.getPool(30));
         const maxNode = swordGraph.getOrCreateNode(0n, 1, ENGINE_LIMITS.MAX_ENCHANTS_PER_ITEM);
         const maxExpansion = swordGraph.getExpansion(maxNode.id);
 
@@ -111,7 +111,7 @@ describe('SuperpositionSearchGraph', () => {
 
         const bookRegistry = RegistryFactory.build('1.4.6');
         const bookKernel = new RegistryKernel({ registry: bookRegistry, item: 'book', material: 'book' });
-        const bookGraph = new SuperpositionSearchGraph(bookKernel, bookKernel.getPool(30));
+        const bookGraph = new PlexGraph(bookKernel, bookKernel.getPool(30));
         const bookNode = bookGraph.getOrCreateNode(1n, 30, 1);
         const bookExpansion = bookGraph.getExpansion(bookNode.id);
 

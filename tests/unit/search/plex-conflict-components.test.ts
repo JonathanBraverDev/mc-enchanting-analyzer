@@ -1,11 +1,11 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { RegistryFactory, RegistryKernel } from '#lib/index.js';
-import { analyzePoolConflictComponents } from '#lib/search/superposition/ConflictComponentDiagnostics.js';
+import { analyzePoolConflictComponents } from '#lib/search/plex/ConflictComponentDiagnostics.js';
 
 const BOUNDARY_VERSIONS = ['1.0', '1.13', '1.14', '1.14.3', '1.21'] as const;
 
-describe('superposition conflict-component diagnostics', () => {
+describe('plex conflict-component diagnostics', () => {
     it('reports disjoint active conflict components for registry boundary versions', () => {
         for (const version of BOUNDARY_VERSIONS) {
             const registry = RegistryFactory.build(version);

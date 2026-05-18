@@ -5,33 +5,33 @@ import {
     canonicalizePackedEnchantList,
     comparePackedEnchantLists,
     type CanonicalPackedEnchantList
-} from '#lib/search/superposition/SuperpositionChoice.js';
+} from '#lib/search/plex/PlexChoice.js';
 
-export interface SuperpositionChoiceGroupDiagnostic {
+export interface PlexGroupDiagnostic {
     readonly blocksBitset: bigint;
     readonly alternatives: CanonicalPackedEnchantList;
     readonly totalWeight: number;
 }
 
-export interface SuperpositionPotentialDiagnostics {
+export interface PlexPotentialDiagnostics {
     readonly eligibleEntryCount: number;
     readonly choiceGroupCount: number;
     readonly groupedEntryCount: number;
     readonly largestChoiceGroupSize: number;
-    readonly choiceGroups: readonly SuperpositionChoiceGroupDiagnostic[];
+    readonly choiceGroups: readonly PlexGroupDiagnostic[];
 }
 
-export function analyzePoolSuperpositionPotential(pool: SearchPool): SuperpositionPotentialDiagnostics {
-    return analyzeEntriesSuperpositionPotential(pool.entries);
+export function analyzePoolPlexPotential(pool: SearchPool): PlexPotentialDiagnostics {
+    return analyzeEntriesPlexPotential(pool.entries);
 }
 
-export function analyzeExpansionSuperpositionPotential(expansion: SearchGraphExpansion): SuperpositionPotentialDiagnostics {
-    return analyzeEntriesSuperpositionPotential(expansion.edges.map(edge => edge.entry));
+export function analyzeExpansionPlexPotential(expansion: SearchGraphExpansion): PlexPotentialDiagnostics {
+    return analyzeEntriesPlexPotential(expansion.edges.map(edge => edge.entry));
 }
 
-export function analyzeEntriesSuperpositionPotential(
+export function analyzeEntriesPlexPotential(
     entries: readonly SearchPoolEntry[]
-): SuperpositionPotentialDiagnostics {
+): PlexPotentialDiagnostics {
     const groupsByBlocks = new Map<string, { blocksBitset: bigint; alternatives: PackedEnchant[]; totalWeight: number }>();
 
     for (const entry of entries) {

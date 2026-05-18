@@ -429,9 +429,9 @@ These are not current behavior. They are active investigation areas for future p
 
 Conflict-group squash is the next candidate optimization after generalized expansion blueprints and suffix-sharing diagnostics. The goal is to share search work across mutually exclusive enchantment choices that produce the same future eligibility state, while delaying exact visible combination materialization until output/resolution time.
 
-Terminology note: the structural aggregate node is a **superposition node**. The broader implementation may still use `multiplex` in provisional code names, but the design meaning is that one structural node carries multiple unresolved concrete combo states in superposition.
+Terminology note: the structural aggregate node is a **plex node**. The broader implementation may still use `multiplex` in provisional code names, but the design meaning is that one structural node carries multiple unresolved concrete combo states in plex.
 
-The core structural idea is to key a superposition node by:
+The core structural idea is to key a plex node by:
 
 ```ts
 (exclusionMask, currentLevel, count)
@@ -507,12 +507,12 @@ type MultiplexAccountingState =
   | { mode: 'factorized'; /* exact aggregate factors, quantized at materialization */ };
 ```
 
-The superposition representation should be compatible with the existing concrete payload shape, but it should not force a big-bang redesign of the current concrete engine/cache. The strategic direction can still be for superposition to become the better internal engine model if the prototype proves itself. The safe path is staged: build an opt-in superposition path, prove degenerate parity, prove real-choice parity, benchmark, then decide whether the old concrete path becomes a compatibility/reference implementation rather than the primary internal model.
+The plex representation should be compatible with the existing concrete payload shape, but it should not force a big-bang redesign of the current concrete engine/cache. The strategic direction can still be for plex to become the better internal engine model if the prototype proves itself. The safe path is staged: build an opt-in plex path, prove degenerate parity, prove real-choice parity, benchmark, then decide whether the old concrete path becomes a compatibility/reference implementation rather than the primary internal model.
 
-A plain concrete combo can be represented as the degenerate case of a superposition expression inside the opt-in superposition path:
+A plain concrete combo can be represented as the degenerate case of a plex expression inside the opt-in plex path:
 
 ```ts
-// Equivalent in essence to today's concrete `PackedCombo` state inside superposition mode.
+// Equivalent in essence to today's concrete `PackedCombo` state inside plex mode.
 const concreteExpression: MultiplexComboExpression = {
   fixed: [unbreakingIII, lootingIII],
   choices: [],
@@ -520,54 +520,54 @@ const concreteExpression: MultiplexComboExpression = {
 };
 ```
 
-If all superposition-specific fields are empty/default (`choices.length === 0`, no choice DAG, no special factorized state), the expression should compare equal in essence to the corresponding concrete combo. That bridge is for the new opt-in path, not a requirement to wrap every existing `SearchRun` node. Incremental adoption should be:
+If all plex-specific fields are empty/default (`choices.length === 0`, no choice DAG, no special factorized state), the expression should compare equal in essence to the corresponding concrete combo. That bridge is for the new opt-in path, not a requirement to wrap every existing `SearchRun` node. Incremental adoption should be:
 
 - keep current concrete `SearchRun` and graph cache behavior intact by default while the new path is experimental;
-- add a separate superposition run/graph mode or run type with a distinct cache key;
-- use degenerate superposition payloads only inside that mode as a parity bridge;
+- add a separate plex run/graph mode or run type with a distinct cache key;
+- use degenerate plex payloads only inside that mode as a parity bridge;
 - materialization of a degenerate expression is just the original `PackedCombo`;
-- tests can assert that degenerate superposition mode is behaviorally identical to current `SearchRun` before enabling real choice groups;
-- if parity and benchmarks are strong, let the superposition path graduate into the default internal implementation while preserving the public API and snapshot contracts;
+- tests can assert that degenerate plex mode is behaviorally identical to current `SearchRun` before enabling real choice groups;
+- if parity and benchmarks are strong, let the plex path graduate into the default internal implementation while preserving the public API and snapshot contracts;
 - after it becomes default, keep the old concrete path as a reference/fallback for at least one release window, then deprecate/remove it only when diagnostics show it is no longer needed.
 
 Rollout policy should therefore be explicit:
 
-1. **Experimental opt-in**: superposition mode exists behind a flag/config path and is tested against the concrete engine.
-2. **Default internal engine**: after parity, residue diagnostics, and benchmarks are acceptable, superposition becomes the default implementation while public APIs remain stable.
+1. **Experimental opt-in**: plex mode exists behind a flag/config path and is tested against the concrete engine.
+2. **Default internal engine**: after parity, residue diagnostics, and benchmarks are acceptable, plex becomes the default implementation while public APIs remain stable.
 3. **Concrete fallback/reference**: the old concrete path remains available for debugging, regression comparison, and rollback.
-4. **Deprecation/removal**: remove the old path only after a release window with confidence that the superposition path covers the same behavior and operational needs.
+4. **Deprecation/removal**: remove the old path only after a release window with confidence that the plex path covers the same behavior and operational needs.
 
 Multiple independent choice groups may become a compressed product, but exactness must win over compression. If BigInt flooring or later branch choices create correlations between groups, the accounting state may need a small choice DAG or joint-distribution representation rather than independent marginal weights. Snapshot expansion is the compatibility boundary that can turn aggregate expressions back into concrete `PackedCombo` result rows.
 
 Mass ownership should stay inside the engine, not leak into the UI/projection layer. Aggregate combos are an internal IR, and the materializer that expands them into concrete `PackedCombo` rows is part of the engine contract. The reporting layer may request materialized rows, but it must not be responsible for choosing how probability mass or rounding residue is distributed.
 
-Resolved-result handling should preserve the superposition internally. Current `SearchRun` writes `PackedCombo -> mass` into `results` as soon as a node stops, but doing that eagerly for aggregate payloads would destroy much of the intended compression at exactly the point where book/product tails can explode. A superposition node that resolves should move from pending work into an internal resolved-superposition store, not immediately expand into every concrete combo.
+Resolved-result handling should preserve the plex internally. Current `SearchRun` writes `PackedCombo -> mass` into `results` as soon as a node stops, but doing that eagerly for aggregate payloads would destroy much of the intended compression at exactly the point where book/product tails can explode. A plex node that resolves should move from pending work into an internal resolved-plex store, not immediately expand into every concrete combo.
 
 So first-pass boundaries are:
 
-- pending frontier: may hold superposition payload buckets that still need search expansion;
-- resolved internal state: may hold superposition payloads that need no more search expansion but are not eagerly materialized;
+- pending frontier: may hold plex payload buckets that still need search expansion;
+- resolved internal state: may hold plex payloads that need no more search expansion but are not eagerly materialized;
 - public snapshot/projection: receives a resolved view materialized into normal `PackedCombo -> mass` rows when compatibility requires it;
 - snapshot materializer: emits views and applies engine-owned mass/accounting rules, but does not become the owner of probability decisions.
 
-This keeps resume/refinement safe as long as the cached run owns both pending and resolved superposition state. `SearchStateCache` currently resumes by keeping a live `SearchRun` object in memory, including frontier mass, resolved results, residue, and accounting. Public snapshots are materialized views, not the source used to reconstruct a run. Under the superposition model, refinement continues from the live internal state: pending superposition buckets keep expanding, and resolved superposition buckets remain available for later materialized views without redoing search. If future work adds serialized resume-from-snapshot, the persistence schema must include aggregate expressions, payload identities, resolved-superposition buckets, and residue/accounting state.
+This keeps resume/refinement safe as long as the cached run owns both pending and resolved plex state. `SearchStateCache` currently resumes by keeping a live `SearchRun` object in memory, including frontier mass, resolved results, residue, and accounting. Public snapshots are materialized views, not the source used to reconstruct a run. Under the plex model, refinement continues from the live internal state: pending plex buckets keep expanding, and resolved plex buckets remain available for later materialized views without redoing search. If future work adds serialized resume-from-snapshot, the persistence schema must include aggregate expressions, payload identities, resolved-plex buckets, and residue/accounting state.
 
-The compatibility rule becomes: keep the internal engine state compressed as long as possible, but make the public snapshot look like current `SearchRunSnapshot` unless an explicit diagnostic/experimental API asks for superposition rows.
+The compatibility rule becomes: keep the internal engine state compressed as long as possible, but make the public snapshot look like current `SearchRunSnapshot` unless an explicit diagnostic/experimental API asks for plex rows.
 
 API compatibility check:
 
-- `EnchantEngine.searchToCheckpoint`, `searchSequentialCheckpoints`, and `getStats` can be served by superposition as long as `SearchResult.combos`, `snapshot.results`, `snapshot.mass`, and public instrumentation keep their current meanings.
-- `SnapshotService`, `SummaryAggregationService`, `ClueAnalysisService`, `TargetAnalysisService`, and `TargetClueAdvisorService` currently consume concrete `PackedCombo` result maps and concrete `PendingFrontierEntry` rows. They either need a materialized pending/resolved view or explicit superposition-aware scanners. First pass should provide the materialized view and keep those services unchanged.
-- `pendingEntries` is the sharpest compatibility edge: today each row has one `combo`, `count`, and `mass`. A superposition bucket may represent many concrete combos. Public snapshots must either expand it into compatible concrete pending rows or expose superposition rows only through a separate experimental diagnostics field/API.
-- `SearchRun`, `SearchGraph`, `SearchStateCache`, and their diagnostics are exported from `#lib/search/index.js` and therefore are technically public even if mostly used internally. Do not silently replace their method contracts in a minor release. Add a separate superposition run/graph type or mode first; only deprecate the concrete exports after a release window.
-- Instrumentation fields such as `pendingEntryCount`, `queueSize`, `resultsSize`, and graph diagnostics need stable semantics. If we want structural superposition counts, expose them as additional diagnostics rather than changing existing fields to mean something else.
+- `EnchantEngine.searchToCheckpoint`, `searchSequentialCheckpoints`, and `getStats` can be served by plex as long as `SearchResult.combos`, `snapshot.results`, `snapshot.mass`, and public instrumentation keep their current meanings.
+- `SnapshotService`, `SummaryAggregationService`, `ClueAnalysisService`, `TargetAnalysisService`, and `TargetClueAdvisorService` currently consume concrete `PackedCombo` result maps and concrete `PendingFrontierEntry` rows. They either need a materialized pending/resolved view or explicit plex-aware scanners. First pass should provide the materialized view and keep those services unchanged.
+- `pendingEntries` is the sharpest compatibility edge: today each row has one `combo`, `count`, and `mass`. A plex bucket may represent many concrete combos. Public snapshots must either expand it into compatible concrete pending rows or expose plex rows only through a separate experimental diagnostics field/API.
+- `SearchRun`, `SearchGraph`, `SearchStateCache`, and their diagnostics are exported from `#lib/search/index.js` and therefore are technically public even if mostly used internally. Do not silently replace their method contracts in a minor release. Add a separate plex run/graph type or mode first; only deprecate the concrete exports after a release window.
+- Instrumentation fields such as `pendingEntryCount`, `queueSize`, `resultsSize`, and graph diagnostics need stable semantics. If we want structural plex counts, expose them as additional diagnostics rather than changing existing fields to mean something else.
 
-Versioning should distinguish the engine/library surface from the end-product surface. Replacing or breaking exported low-level search classes can be an engine/library major even when the user-facing product behavior is a minor change or a no-op. Conversely, if `EnchantEngine`, snapshots, UI views, and worker outputs keep the same contracts, the application can treat superposition as an internal implementation swap.
+Versioning should distinguish the engine/library surface from the end-product surface. Replacing or breaking exported low-level search classes can be an engine/library major even when the user-facing product behavior is a minor change or a no-op. Conversely, if `EnchantEngine`, snapshots, UI views, and worker outputs keep the same contracts, the application can treat plex as an internal implementation swap.
 
 Do not split the repo or maintain a separate engine version yet. The project currently ships as one package/version, so package semver still has to account for exported low-level APIs. Use one version and make the changelog explicit with subsections:
 
 - **User-facing / product behavior**: UI, worker output, public snapshots, visible result changes.
-- **Engine/search internals**: superposition implementation, cache/search architecture, diagnostics, performance.
+- **Engine/search internals**: plex implementation, cache/search architecture, diagnostics, performance.
 - **Low-level API compatibility**: call out breaking changes to exported `SearchRun`, `SearchGraph`, `SearchStateCache`, or search diagnostics separately from end-product behavior.
 
 If only internal implementation changes and supported public contracts remain compatible, this can be a minor. The package currently exposes only the root export (`.`), but `src/lib/index.ts` re-exports `./search/index.js`, which makes `SearchRun`, `SearchGraph`, and `SearchStateCache` reachable from the package root. Those are technically exported, but they should be classified explicitly before letting them dictate every release:
@@ -581,7 +581,7 @@ If only internal implementation changes and supported public contracts remain co
 
 If low-level search exports are not meant to be stable standalone SDK APIs, document them as advanced/internal-ish before changing them, then use deprecation/release notes instead of pretending they were never exported. If there is evidence of real external use, treat breaking them as a package major. Splitting versions or repos should wait until there is real external demand for independently consuming the engine package.
 
-The current intended API is therefore much smaller than the accidental root export surface. It is essentially the worker-facing engine API plus a convenience path for tests that want results without manually choosing progressive checkpoints. Superposition should target this surface first; low-level search classes can remain implementation details unless/until there is a deliberate standalone engine SDK.
+The current intended API is therefore much smaller than the accidental root export surface. It is essentially the worker-facing engine API plus a convenience path for tests that want results without manually choosing progressive checkpoints. Plex should target this surface first; low-level search classes can remain implementation details unless/until there is a deliberate standalone engine SDK.
 
 A suspiciously convenient but honest public API boundary for the V7 line:
 
@@ -597,9 +597,9 @@ engine.resetCaches();
 engine.getCacheMetrics();
 ```
 
-Those methods must keep returning product-compatible `SearchResult` / stats objects even if the internal search is concrete or superposition. `SearchResult.snapshot` should be treated as a compatibility view consumed by project code, not as a promise that the internal engine state is concrete. Its stable commitments are the fields workers/projection need: concrete `results`, materialized-compatible `pendingEntries`, mass/accounting totals, iteration/progress fields, and instrumentation inputs. Internal superposition rows should require an explicit experimental diagnostics path.
+Those methods must keep returning product-compatible `SearchResult` / stats objects even if the internal search is concrete or plex. `SearchResult.snapshot` should be treated as a compatibility view consumed by project code, not as a promise that the internal engine state is concrete. Its stable commitments are the fields workers/projection need: concrete `results`, materialized-compatible `pendingEntries`, mass/accounting totals, iteration/progress fields, and instrumentation inputs. Internal plex rows should require an explicit experimental diagnostics path.
 
-Snapshot projection is a separate boundary. `SnapshotService.create(...)` is currently used by workers as the app's projection adapter, but it is not exported from the package root and should not be promoted to standalone public SDK surface yet. For now, treat it as **app-internal but worker-stable**: superposition must keep it working through materialized snapshot views, but we should avoid promising its exact API to outside consumers until the projection/view contract is deliberately designed.
+Snapshot projection is a separate boundary. `SnapshotService.create(...)` is currently used by workers as the app's projection adapter, but it is not exported from the package root and should not be promoted to standalone public SDK surface yet. For now, treat it as **app-internal but worker-stable**: plex must keep it working through materialized snapshot views, but we should avoid promising its exact API to outside consumers until the projection/view contract is deliberately designed.
 
 API-boundary cleanup can still happen in the V7 line if it is mostly declarative and additive:
 
@@ -608,7 +608,7 @@ API-boundary cleanup can still happen in the V7 line if it is mostly declarative
 - add replacement public entry points if needed before removing anything;
 - keep root export removals, hard renames, or incompatible `SearchRun`/`SearchGraph` contract changes for a future V8-style major.
 
-So superposition itself does not force V8. V8 is the right label only if the release actually breaks package-level consumers of currently exported low-level search APIs. A V7 minor can prepare the boundary and ship opt-in superposition if supported public behavior remains compatible.
+So plex itself does not force V8. V8 is the right label only if the release actually breaks package-level consumers of currently exported low-level search APIs. A V7 minor can prepare the boundary and ship opt-in plex if supported public behavior remains compatible.
 
 This suggests a thin normalization layer between multiplex search and public snapshots:
 
@@ -742,11 +742,11 @@ First safe implementation slices:
 
 1. Add `blocksBitset` / exclusion-mask metadata to `SearchPoolEntry` and assert conflict symmetry or compute symmetric closure.
 2. Add measurement-only diagnostics that group pending nodes by prefix-independent future identity.
-3. Add canonical superposition choice-list helpers: sorted `PackedEnchant[]`, lexicographic choose-set ordering, direct equality, and optional diagnostics for conflict-component invariants.
-4. Add an opt-in `SuperpositionSearchGraph` / provisional `MultiplexSearchGraph` keyed by `(exclusionMask, currentLevel, count)` without touching the default concrete graph.
-5. Add an opt-in superposition run path with structural frontier buckets, payload sets, and resolved-superposition storage.
+3. Add canonical plex choice-list helpers: sorted `PackedEnchant[]`, lexicographic choose-set ordering, direct equality, and optional diagnostics for conflict-component invariants.
+4. Add an opt-in `PlexGraph` / provisional `MultiplexSearchGraph` keyed by `(exclusionMask, currentLevel, count)` without touching the default concrete graph.
+5. Add an opt-in plex run path with structural frontier buckets, payload sets, and resolved-plex storage.
 6. Emit materialized compatibility views for `SearchResult.snapshot.results`, `pendingEntries`, and worker-facing projection while keeping internal pending/resolved state compressed.
-7. Initially disable superposition mode when `targetClueId` is present, `useSuffixMerging` is true, or book random-removal handling would require unresolved aggregate redistribution.
+7. Initially disable plex mode when `targetClueId` is present, `useSuffixMerging` is true, or book random-removal handling would require unresolved aggregate redistribution.
 8. Prove degenerate concrete parity first, then real choice-group parity, then benchmark memory/time before considering default enablement.
 9. Keep public/default search behavior unchanged until exhaustive parity and benchmark evidence justify enabling it.
 
@@ -755,7 +755,7 @@ Implementation kickoff checklist:
 - Start with diagnostics and helpers, not the full engine swap.
 - Preserve the intended supported API: `getStats`, `searchToCheckpoint`, `searchSequentialCheckpoints`, read-only `engine.registry`, cache controls, and worker-compatible snapshots.
 - Treat `SearchRun` / `SearchGraph` exports as advanced/incidental until the API boundary is documented elsewhere.
-- Do not materialize resolved superposition eagerly; emit materialized views without destroying internal superposition state.
+- Do not materialize resolved plex eagerly; emit materialized views without destroying internal plex state.
 - Do not add cached `PackedCombo` choice-list keys in v1 unless profiling proves direct sorted-list equality is hot.
 - Keep one amended planning commit until implementation starts; implementation commits should be small and reviewable.
 

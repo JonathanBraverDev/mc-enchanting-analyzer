@@ -16,7 +16,7 @@ export interface ConflictComponentInvariantDiagnostics {
 /**
  * Builds conflict-component diagnostics from the active entries in one search pool.
  *
- * This is measurement-only setup for superposition search. Current registry rules
+ * This is measurement-only setup for plex search. Current registry rules
  * should make active conflict components disjoint; mutated registries can use the
  * duplicate-membership field as an invariant warning before enabling aggressive
  * choice-list assumptions.

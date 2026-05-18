@@ -7,11 +7,11 @@ import {
     canonicalizePackedEnchantList,
     comparePackedEnchantLists,
     type CanonicalPackedEnchantList
-} from '#lib/search/superposition/SuperpositionChoice.js';
+} from '#lib/search/plex/PlexChoice.js';
 
-export type SuperpositionSearchGraphNodeId = number & { readonly __brand: 'SuperpositionSearchGraphNodeId' };
+export type PlexNodeId = number & { readonly __brand: 'PlexNodeId' };
 
-export interface SuperpositionSearchGraphKey {
+export interface PlexKey {
     readonly version: string;
     readonly item: string;
     readonly poolSignature: SearchPoolSignature;
@@ -19,32 +19,32 @@ export interface SuperpositionSearchGraphKey {
     readonly clueMode: string | null;
 }
 
-export interface SuperpositionSearchGraphNode {
-    readonly id: SuperpositionSearchGraphNodeId;
+export interface PlexNode {
+    readonly id: PlexNodeId;
     readonly exclusionMask: bigint;
     readonly currentLevel: number;
     readonly count: number;
 }
 
-export interface SuperpositionSearchGraphEdge {
+export interface PlexEdge {
     readonly alternatives: CanonicalPackedEnchantList;
     readonly weight: number;
     readonly childExclusionMask: bigint;
-    readonly childId: SuperpositionSearchGraphNodeId;
+    readonly childId: PlexNodeId;
 }
 
-export type SuperpositionSearchGraphTerminalReason = 'max-enchants' | 'single-book' | 'no-eligible' | null;
+export type PlexTerminalReason = 'max-enchants' | 'single-book' | 'no-eligible' | null;
 
-export interface SuperpositionSearchGraphExpansion {
-    readonly nodeId: SuperpositionSearchGraphNodeId;
+export interface PlexExpansion {
+    readonly nodeId: PlexNodeId;
     readonly isRoot: boolean;
     readonly probContinue: bigint;
     /** Number of concrete eligible pool entries represented by this expansion. */
     readonly eligibleEntryCount: number;
-    /** Sum of concrete eligible entry weights, before any superposition edge compression. */
+    /** Sum of concrete eligible entry weights, before any plex edge compression. */
     readonly totalWeight: number;
-    readonly edges: readonly SuperpositionSearchGraphEdge[];
-    readonly terminalReason: SuperpositionSearchGraphTerminalReason;
+    readonly edges: readonly PlexEdge[];
+    readonly terminalReason: PlexTerminalReason;
 }
 
 interface PendingEdgeGroup {
@@ -54,9 +54,9 @@ interface PendingEdgeGroup {
 }
 
 /**
- * Opt-in structural graph skeleton for conflict-group superposition search.
+ * Opt-in structural graph skeleton for conflict-group plex search.
  *
- * Naming note: `Superposition*` is still provisional. The behavior this type owns
+ * Naming note: `Plex*` is still provisional. The behavior this type owns
  * is the aggregate structural node keyed by future exclusion state, not any public
  * product concept. Renaming this before it becomes default should be cheap.
  *
@@ -64,15 +64,15 @@ interface PendingEdgeGroup {
  * slices only establish the aggregate node identity seam so future commits can
  * add expansion and payload handling behind an explicit opt-in path.
  */
-export class SuperpositionSearchGraph {
-    public readonly key: SuperpositionSearchGraphKey;
+export class PlexGraph {
+    public readonly key: PlexKey;
     public readonly pool: SearchPool;
 
     private readonly exclusionMasks: bigint[] = [];
     private readonly currentLevels: number[] = [];
     private readonly counts: number[] = [];
-    private readonly nodeIndex = new Map<string, SuperpositionSearchGraphNodeId>();
-    private readonly expansionCache: Array<SuperpositionSearchGraphExpansion | undefined> = [];
+    private readonly nodeIndex = new Map<string, PlexNodeId>();
+    private readonly expansionCache: Array<PlexExpansion | undefined> = [];
 
     public constructor(
         private readonly kernel: RegistryKernel,
@@ -97,7 +97,7 @@ export class SuperpositionSearchGraph {
         return this.expansionCache.reduce((count, expansion) => count + (expansion === undefined ? 0 : 1), 0);
     }
 
-    public getRootNode(initialLevel: number): SuperpositionSearchGraphNode {
+    public getRootNode(initialLevel: number): PlexNode {
         return this.getOrCreateNode(0n, initialLevel, 0);
     }
 
@@ -105,12 +105,12 @@ export class SuperpositionSearchGraph {
         exclusionMask: bigint,
         currentLevel: number,
         count: number
-    ): SuperpositionSearchGraphNode {
+    ): PlexNode {
         const key = this.createNodeKey(exclusionMask, currentLevel, count);
         const existing = this.nodeIndex.get(key);
         if (existing !== undefined) return this.getNode(existing);
 
-        const id = this.counts.length as SuperpositionSearchGraphNodeId;
+        const id = this.counts.length as PlexNodeId;
         this.exclusionMasks.push(exclusionMask);
         this.currentLevels.push(currentLevel);
         this.counts.push(count);
@@ -119,7 +119,7 @@ export class SuperpositionSearchGraph {
         return this.getNode(id);
     }
 
-    public getNode(id: SuperpositionSearchGraphNodeId): SuperpositionSearchGraphNode {
+    public getNode(id: PlexNodeId): PlexNode {
         this.assertNode(id);
         return Object.freeze({
             id,
@@ -129,7 +129,7 @@ export class SuperpositionSearchGraph {
         });
     }
 
-    public getExpansion(nodeId: SuperpositionSearchGraphNodeId): SuperpositionSearchGraphExpansion {
+    public getExpansion(nodeId: PlexNodeId): PlexExpansion {
         this.assertNode(nodeId);
         const cached = this.expansionCache[nodeId];
         if (cached) return cached;
@@ -141,13 +141,13 @@ export class SuperpositionSearchGraph {
         return expansion;
     }
 
-    private buildRootExpansion(nodeId: SuperpositionSearchGraphNodeId): SuperpositionSearchGraphExpansion {
+    private buildRootExpansion(nodeId: PlexNodeId): PlexExpansion {
         const currentLevel = this.currentLevels[nodeId]!;
         const edges = this.buildGroupedEdges(this.pool.entries, currentLevel, 1, 0n);
         return this.createExpansion(nodeId, true, PRECISION, this.pool.entries.length, edges, edges.length === 0 ? 'no-eligible' : null);
     }
 
-    private buildSearchExpansion(nodeId: SuperpositionSearchGraphNodeId): SuperpositionSearchGraphExpansion {
+    private buildSearchExpansion(nodeId: PlexNodeId): PlexExpansion {
         const exclusionMask = this.exclusionMasks[nodeId]!;
         const currentLevel = this.currentLevels[nodeId]!;
         const count = this.counts[nodeId]!;
@@ -172,7 +172,7 @@ export class SuperpositionSearchGraph {
         childLevel: number,
         childCount: number,
         parentExclusionMask: bigint
-    ): readonly SuperpositionSearchGraphEdge[] {
+    ): readonly PlexEdge[] {
         const groupsByChildExclusion = new Map<string, PendingEdgeGroup>();
 
         for (const entry of entries) {
@@ -202,13 +202,13 @@ export class SuperpositionSearchGraph {
     }
 
     private createExpansion(
-        nodeId: SuperpositionSearchGraphNodeId,
+        nodeId: PlexNodeId,
         isRoot: boolean,
         probContinue: bigint,
         eligibleEntryCount: number,
-        edges: readonly SuperpositionSearchGraphEdge[],
-        terminalReason: SuperpositionSearchGraphTerminalReason
-    ): SuperpositionSearchGraphExpansion {
+        edges: readonly PlexEdge[],
+        terminalReason: PlexTerminalReason
+    ): PlexExpansion {
         return Object.freeze({
             nodeId,
             isRoot,
@@ -224,7 +224,7 @@ export class SuperpositionSearchGraph {
         return `${exclusionMask.toString(16)}|${currentLevel}|${count}`;
     }
 
-    private getTerminalReason(count: number): SuperpositionSearchGraphTerminalReason {
+    private getTerminalReason(count: number): PlexTerminalReason {
         if (this.kernel.item === 'book' && !this.kernel.multiEnchantBooks && count >= 1) {
             return 'single-book';
         }
@@ -234,13 +234,13 @@ export class SuperpositionSearchGraph {
         return null;
     }
 
-    private assertNode(id: SuperpositionSearchGraphNodeId): void {
+    private assertNode(id: PlexNodeId): void {
         if (id < 0 || id >= this.counts.length) {
-            throw new Error(`Unknown superposition search graph node ${id}`);
+            throw new Error(`Unknown plex graph node ${id}`);
         }
     }
 
-    private getBookMode(kernel: RegistryKernel): SuperpositionSearchGraphKey['bookMode'] {
+    private getBookMode(kernel: RegistryKernel): PlexKey['bookMode'] {
         if (kernel.item !== 'book') return 'item';
         return kernel.multiEnchantBooks ? 'multi-book' : 'single-book';
     }
