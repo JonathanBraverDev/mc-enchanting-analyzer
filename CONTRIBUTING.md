@@ -50,7 +50,7 @@ Release validation is split into separate checks so failures point at the right 
 
 - `Validate Release Format`: PR title, package versions, changelog entry, PR body, and SemVer jump.
 - `Validate Changelog SemVer Policy`: changelog sections that imply major/minor/patch scope, including PR comments when the proposed version should be promoted.
-- `Validate Release Branch`: final release metadata commit shape, current archive state, branch base, and linear unsquashed release history.
+- `Validate Release Branch`: final release metadata commit shape, current archive state, branch base, linear unsquashed release history, and snapshot commit isolation.
 
 A non-required `CI Change Advisory` check also reviews CI-sensitive file changes. It should be green when no CI-sensitive files changed, warn when CI validation logic changed, and fail red when workflow triggers, branch/path filters, permissions, job conditions, runner targets, checkout targets, or status-check names changed. A red advisory is not a merge blocker by itself; it is a reviewer signal that the PR may alter whether policy checks run at all.
 
@@ -133,6 +133,8 @@ npm test
 
 ### Regression Verification
 Before submitting any major engine refactor, run the snapshot regression suite to ensure zero unintended mathematical drift.
+
+Snapshot fixture updates must be isolated in their own commits. A commit that touches `tests/snapshots/**` may not touch source, tests, docs, package metadata, or other files. This keeps generated snapshot diffs reviewable instead of mixing large JSON churn with actual logic changes.
 
 ## Performance Profiling
 

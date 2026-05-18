@@ -127,3 +127,57 @@ describe('release PR body validation', () => {
     });
   });
 });
+
+describe('snapshot commit isolation validation', () => {
+  function git(cwd, args) {
+    return execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
+  }
+
+  function writeFixtureFile(root, file, content) {
+    const fullPath = path.join(root, file);
+    fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+    fs.writeFileSync(fullPath, content);
+  }
+
+  function createSnapshotCommitRepo() {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'snapshot-commit-check-'));
+    git(tmpDir, ['init', '-q']);
+    git(tmpDir, ['config', 'user.email', 'test@example.com']);
+    git(tmpDir, ['config', 'user.name', 'Test User']);
+
+    writeFixtureFile(tmpDir, 'README.md', '# fixture\n');
+    git(tmpDir, ['add', '.']);
+    git(tmpDir, ['commit', '-qm', 'initial']);
+    git(tmpDir, ['branch', 'base']);
+    return tmpDir;
+  }
+
+  it('accepts dedicated snapshot commits', () => {
+    const tmpDir = createSnapshotCommitRepo();
+    const scriptPath = path.resolve(__dirname, '../../scripts/validate-snapshot-commits.cjs');
+
+    writeFixtureFile(tmpDir, 'tests/snapshots/example.json', '{"ok":true}\n');
+    writeFixtureFile(tmpDir, 'tests/snapshots/example.human.json', '{"ok":"human"}\n');
+    git(tmpDir, ['add', '.']);
+    git(tmpDir, ['commit', '-qm', 'Update snapshots']);
+
+    assert.doesNotThrow(() => {
+      execFileSync(process.execPath, [scriptPath, 'base', 'HEAD'], { cwd: tmpDir });
+    });
+  });
+
+  it('rejects commits that mix snapshots with other files', () => {
+    const tmpDir = createSnapshotCommitRepo();
+    const scriptPath = path.resolve(__dirname, '../../scripts/validate-snapshot-commits.cjs');
+
+    writeFixtureFile(tmpDir, 'tests/snapshots/example.json', '{"ok":true}\n');
+    writeFixtureFile(tmpDir, 'src/lib/example.ts', 'export const fixture = true;\n');
+    git(tmpDir, ['add', '.']);
+    git(tmpDir, ['commit', '-qm', 'Mix code and snapshots']);
+
+    assert.throws(
+      () => execFileSync(process.execPath, [scriptPath, 'base', 'HEAD'], { cwd: tmpDir, stdio: 'pipe' }),
+      /Snapshot updates must be isolated/
+    );
+  });
+});
