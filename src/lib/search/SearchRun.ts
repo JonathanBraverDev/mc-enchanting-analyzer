@@ -7,6 +7,7 @@ import { PackedCombo } from '#types/index.js';
 import { AsyncUtils, ComboUtils, PRECISION, ProbUtils } from '#utils/index.js';
 import { RegistryKernel, SearchPool, SearchPoolSignature } from '#lib/search/registry/RegistryKernel.js';
 import { SearchGraph, SearchGraphDiagnostics, SearchGraphExpansion, SearchGraphNodeId } from '#lib/search/SearchGraph.js';
+import { SearchExpansionBlueprintCache } from '#lib/search/SearchExpansionBlueprintCache.js';
 
 /** Minimal cache surface a SearchRun needs for structural graph reuse. */
 export interface SearchGraphCache {
@@ -18,6 +19,8 @@ export interface SearchRunOptions {
     readonly distributionService?: ModifiedLevelDistributionService | undefined;
     readonly targetClueId?: number | undefined;
     readonly graphCache?: SearchGraphCache | undefined;
+    readonly useExpansionBlueprints?: boolean | undefined;
+    readonly useSuffixMerging?: boolean | undefined;
 }
 
 /**
@@ -73,6 +76,16 @@ export interface SearchRunSnapshot {
     readonly activeResidueCount: number;
     readonly activeResidueMass: bigint;
     readonly fullyResolved: boolean;
+    readonly suffixMerging: SearchSuffixMergeDiagnostics;
+}
+
+export interface SearchSuffixMergeDiagnostics {
+    readonly enabled: boolean;
+    readonly canonicalEntryCount: number;
+    readonly hits: number;
+    readonly misses: number;
+    readonly mergedPendingMass: bigint;
+    readonly avoidedPendingEntries: number;
 }
 
 export interface SearchRunGraphDiagnostics extends SearchGraphDiagnostics {
@@ -89,6 +102,11 @@ interface FrontierPopTarget {
     graphId: number;
     nodeId: SearchGraphNodeId;
     mass: bigint;
+}
+
+interface PendingTarget {
+    graphId: number;
+    nodeId: SearchGraphNodeId;
 }
 
 interface EdgeMassShare {
@@ -119,16 +137,23 @@ export class SearchRun {
 
     private readonly distributionService: ModifiedLevelDistributionService;
     private readonly graphCache: SearchGraphCache | undefined;
+    private readonly localBlueprintCache = new SearchExpansionBlueprintCache();
+    private readonly useExpansionBlueprints: boolean;
+    private readonly useSuffixMerging: boolean;
     private readonly graphsBySignature = new Map<SearchPoolSignature, GraphRecord>();
     private readonly graphs: GraphRecord[] = [];
     private readonly forwardingResidues: Array<Map<number, BigUint64Array> | undefined> = [];
     private readonly bookRedistributionResidues = new Map<PackedCombo, bigint>();
+    private readonly suffixCanonicalNodes = new Map<string, PendingTarget>();
     private readonly targetClueId: number | undefined;
     private readonly frontier = new SearchRunFrontier();
     private seeded = false;
     private _seededLevelCount = 0;
     private _iterations = 0;
     private _lastExpandedMass = 0n;
+    private suffixMergeHits = 0;
+    private suffixMergeMisses = 0;
+    private suffixMergedPendingMass = 0n;
 
     public constructor(
         private readonly kernel: RegistryKernel,
@@ -137,6 +162,8 @@ export class SearchRun {
         this.distributionService = options.distributionService ?? new ModifiedLevelDistributionService();
         this.graphCache = options.graphCache;
         this.targetClueId = options.targetClueId;
+        this.useExpansionBlueprints = options.useExpansionBlueprints ?? true;
+        this.useSuffixMerging = options.useSuffixMerging ?? false;
     }
 
     /** Seeds the run with the modified-level distribution for one table XP value. */
@@ -289,7 +316,8 @@ export class SearchRun {
             seededLevelCount: this._seededLevelCount,
             activeResidueCount: residue.count,
             activeResidueMass: residue.mass,
-            fullyResolved: this.frontier.size === 0
+            fullyResolved: this.frontier.size === 0,
+            suffixMerging: this.getSuffixMergeDiagnostics()
         });
     }
 
@@ -299,6 +327,17 @@ export class SearchRun {
             graphId: record.id,
             ...record.graph.getDiagnostics(includeNodes)
         })));
+    }
+
+    public getSuffixMergeDiagnostics(): SearchSuffixMergeDiagnostics {
+        return Object.freeze({
+            enabled: this.useSuffixMerging,
+            canonicalEntryCount: this.suffixCanonicalNodes.size,
+            hits: this.suffixMergeHits,
+            misses: this.suffixMergeMisses,
+            mergedPendingMass: this.suffixMergedPendingMass,
+            avoidedPendingEntries: this.suffixMergeHits
+        });
     }
 
     private expand(graphId: number, nodeId: SearchGraphNodeId, incomingMass: bigint, probabilityFloor: bigint): void {
@@ -572,8 +611,32 @@ export class SearchRun {
 
     private pushPending(graphId: number, nodeId: SearchGraphNodeId, mass: bigint): void {
         if (mass === 0n) return;
-        this.frontier.pushOrMerge(graphId, nodeId, mass);
+        const target = this.canonicalizePendingTarget(graphId, nodeId, mass);
+        this.frontier.pushOrMerge(target.graphId, target.nodeId, mass);
         this.mass.record('pending', mass);
+    }
+
+    private canonicalizePendingTarget(graphId: number, nodeId: SearchGraphNodeId, mass: bigint): PendingTarget {
+        if (!this.useSuffixMerging) return { graphId, nodeId };
+
+        const graph = this.getGraphById(graphId).graph;
+        const suffixIdentity = graph.getSuffixIdentity(nodeId);
+        if (!suffixIdentity) return { graphId, nodeId };
+
+        const key = String(suffixIdentity);
+        const existing = this.suffixCanonicalNodes.get(key);
+        if (existing) {
+            if (existing.graphId !== graphId || existing.nodeId !== nodeId) {
+                this.suffixMergeHits++;
+                this.suffixMergedPendingMass += mass;
+            }
+            return existing;
+        }
+
+        const target = { graphId, nodeId };
+        this.suffixCanonicalNodes.set(key, target);
+        this.suffixMergeMisses++;
+        return target;
     }
 
     private graphForPool(pool: SearchPool): GraphRecord {
@@ -586,7 +649,12 @@ export class SearchRun {
             : undefined;
         const record = Object.freeze({
             id: this.graphs.length,
-            graph: this.graphCache?.getOrCreateGraph(this.kernel, pool, null) ?? new SearchGraph(this.kernel, pool),
+            graph: this.graphCache && this.useExpansionBlueprints
+                ? this.graphCache.getOrCreateGraph(this.kernel, pool, null)
+                : new SearchGraph(this.kernel, pool, {
+                    blueprintCache: this.localBlueprintCache,
+                    useExpansionBlueprints: this.useExpansionBlueprints
+                }),
             cluePolicy
         });
         this.graphs.push(record);

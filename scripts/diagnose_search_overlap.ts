@@ -7,6 +7,7 @@
  *
  * Usage:
  *   npx tsx scripts/diagnose_search_overlap.ts --version 1.21.11 --item book --material book --xp 30
+ *   npx tsx scripts/diagnose_search_overlap.ts --version 1.21.11 --item sword --material diamond --xp 30 --suffix-merging
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -39,6 +40,7 @@ export interface SearchOverlapOptions {
     threshold: number;
     maxIterations: number;
     targetClassifiedMass?: number | undefined;
+    useSuffixMerging?: boolean | undefined;
 }
 
 export interface ContinueSignature {
@@ -98,6 +100,16 @@ interface GeneralizedPoolFamilyReport {
     }>;
 }
 
+interface SuffixMergingReport {
+    enabled: boolean;
+    canonicalEntryCount: number;
+    hits: number;
+    misses: number;
+    mergedPendingMass: number;
+    mergedPendingMassUnits: string;
+    avoidedPendingEntries: number;
+}
+
 export interface SearchOverlapReport {
     metadata: SearchOverlapOptions & {
         generatedAt: string;
@@ -123,6 +135,14 @@ export interface SearchOverlapReport {
         uniqueTailContinueSignatures: number;
         uniquePoolTailContinueGroups: number;
         currentCandidateChecks: number;
+        blueprintHits: number;
+        blueprintMisses: number;
+        blueprintCandidateChecks: number;
+        blueprintSavedCandidateChecks: number;
+        blueprintSavingsRatio: number;
+        suffixMergeHits: number;
+        suffixMergeMisses: number;
+        suffixAvoidedPendingEntries: number;
         exactTemplateSavingsRatio: number;
         generalizedTemplateSavingsRatio: number;
     };
@@ -146,6 +166,15 @@ export interface SearchOverlapReport {
         exact: TemplateSavingsReport;
         generalized: TemplateSavingsReport;
     };
+    blueprints: {
+        hits: number;
+        misses: number;
+        baselineCandidateChecks: number;
+        blueprintCandidateChecks: number;
+        savedCandidateChecks: number;
+        savedRatio: number;
+    };
+    suffixMerging: SuffixMergingReport;
     generalizedPoolFamilies: GeneralizedPoolFamilyReport[];
 }
 
@@ -219,7 +248,11 @@ export async function generateSearchOverlapReport(options: SearchOverlapOptions)
         });
     }
 
-    const run = new SearchRun(kernel, { distributionService, targetClueId });
+    const run = new SearchRun(kernel, {
+        distributionService,
+        targetClueId,
+        useSuffixMerging: options.useSuffixMerging ?? false
+    });
     run.seedXp(options.xp);
     const snapshot = run.searchToCheckpoint({
         threshold: options.threshold,
@@ -270,6 +303,8 @@ export async function generateSearchOverlapReport(options: SearchOverlapOptions)
     const generalizedTemplateSavings = summarizeTemplateSavings(currentCandidateChecks, generalizedTemplates);
     const graphNodeCount = graphDiagnostics.reduce((sum, graph) => sum + graph.nodeCount, 0);
     const graphExpansionCount = graphDiagnostics.reduce((sum, graph) => sum + graph.expansionCount, 0);
+    const blueprintMetrics = summarizeBlueprintMetrics(graphDiagnostics);
+    const suffixMerging = summarizeSuffixMerging(snapshot.suffixMerging);
 
     return {
         metadata: {
@@ -297,6 +332,14 @@ export async function generateSearchOverlapReport(options: SearchOverlapOptions)
             uniqueTailContinueSignatures: tailContinueGroups.size,
             uniquePoolTailContinueGroups: poolTailContinueGroups.size,
             currentCandidateChecks,
+            blueprintHits: blueprintMetrics.hits,
+            blueprintMisses: blueprintMetrics.misses,
+            blueprintCandidateChecks: blueprintMetrics.blueprintCandidateChecks,
+            blueprintSavedCandidateChecks: blueprintMetrics.savedCandidateChecks,
+            blueprintSavingsRatio: blueprintMetrics.savedRatio,
+            suffixMergeHits: suffixMerging.hits,
+            suffixMergeMisses: suffixMerging.misses,
+            suffixAvoidedPendingEntries: suffixMerging.avoidedPendingEntries,
             exactTemplateSavingsRatio: exactTemplateSavings.netSavedRatio,
             generalizedTemplateSavingsRatio: generalizedTemplateSavings.netSavedRatio
         },
@@ -323,6 +366,8 @@ export async function generateSearchOverlapReport(options: SearchOverlapOptions)
             exact: exactTemplateSavings,
             generalized: generalizedTemplateSavings
         },
+        blueprints: blueprintMetrics,
+        suffixMerging,
         generalizedPoolFamilies: generalizedFamilies
     };
 }
@@ -331,7 +376,7 @@ export function formatSearchOverlapSummary(report: SearchOverlapReport): string 
     const lines: string[] = [];
     lines.push(`V7 search overlap: ${report.metadata.version} ${report.metadata.item}/${report.metadata.material} xp=${report.metadata.xp}`);
     if (report.metadata.clue) lines.push(`Clue: ${report.metadata.clue}`);
-    lines.push(`Threshold=${report.metadata.threshold} limit=${report.metadata.maxIterations}${report.metadata.targetClassifiedMass ? ` targetClassified=${formatPercent(report.metadata.targetClassifiedMass)}` : ''}`);
+    lines.push(`Threshold=${report.metadata.threshold} limit=${report.metadata.maxIterations}${report.metadata.targetClassifiedMass ? ` targetClassified=${formatPercent(report.metadata.targetClassifiedMass)}` : ''} suffix=${report.suffixMerging.enabled ? 'on' : 'off'}`);
     lines.push(`Elapsed: ${report.metadata.elapsedMs}ms`);
     lines.push('');
     lines.push('Summary');
@@ -340,12 +385,66 @@ export function formatSearchOverlapSummary(report: SearchOverlapReport): string 
     lines.push(`  Classified=${formatPercent(report.summary.classifiedMass)} pending=${formatPercent(report.summary.pendingMass)} iterations=${report.summary.iterations}`);
     lines.push(`  Last expanded mass=${formatPercent(report.summary.lastExpandedMass)} largest pending=${formatPercent(report.summary.largestPendingMass)}`);
     lines.push(`  Unique pools=${report.summary.uniquePools}, tail continue signatures=${report.summary.uniqueTailContinueSignatures}, pool+tail=${report.summary.uniquePoolTailContinueGroups}`);
-    lines.push(`  Candidate checks=${report.summary.currentCandidateChecks}, exact template savings=${formatSignedPercent(report.summary.exactTemplateSavingsRatio)}, generalized template savings=${formatSignedPercent(report.summary.generalizedTemplateSavingsRatio)}`);
+    lines.push(`  Candidate checks=${report.summary.currentCandidateChecks}, exact template savings=${formatSignedPercent(report.summary.exactTemplateSavingsRatio)}, generalized template estimate=${formatSignedPercent(report.summary.generalizedTemplateSavingsRatio)}`);
+    lines.push(`  Blueprint checks=${report.blueprints.blueprintCandidateChecks}/${report.blueprints.baselineCandidateChecks}, hits=${report.blueprints.hits}, misses=${report.blueprints.misses}, actual savings=${formatSignedPercent(report.blueprints.savedRatio)}`);
+    lines.push(`  Suffix merges=${report.suffixMerging.hits}/${report.suffixMerging.misses}, canonical=${report.suffixMerging.canonicalEntryCount}, avoided=${report.suffixMerging.avoidedPendingEntries}, mergedMass=${formatPercent(report.suffixMerging.mergedPendingMass)}`);
     lines.push('');
     appendTopGroups(lines, 'Top pool groups by distribution mass', report.groups.pools);
     appendTopGroups(lines, 'Top tail-continue groups by distribution mass', report.groups.tailContinue);
     appendTopTemplateGroups(lines, 'Top generalized template savings', report.templateOverlap.generalized.topSavingsGroups);
     return lines.join('\n');
+}
+
+function summarizeBlueprintMetrics(graphs: readonly { blueprints: {
+    hits: number;
+    misses: number;
+    baselineCandidateChecks: number;
+    blueprintCandidateChecks: number;
+    savedCandidateChecks: number;
+} }[]): SearchOverlapReport['blueprints'] {
+    const metrics = graphs.reduce(
+        (sum, graph) => {
+            sum.hits += graph.blueprints.hits;
+            sum.misses += graph.blueprints.misses;
+            sum.baselineCandidateChecks += graph.blueprints.baselineCandidateChecks;
+            sum.blueprintCandidateChecks += graph.blueprints.blueprintCandidateChecks;
+            sum.savedCandidateChecks += graph.blueprints.savedCandidateChecks;
+            return sum;
+        },
+        {
+            hits: 0,
+            misses: 0,
+            baselineCandidateChecks: 0,
+            blueprintCandidateChecks: 0,
+            savedCandidateChecks: 0
+        }
+    );
+
+    return {
+        ...metrics,
+        savedRatio: metrics.baselineCandidateChecks === 0
+            ? 0
+            : metrics.savedCandidateChecks / metrics.baselineCandidateChecks
+    };
+}
+
+function summarizeSuffixMerging(metrics: {
+    enabled: boolean;
+    canonicalEntryCount: number;
+    hits: number;
+    misses: number;
+    mergedPendingMass: bigint;
+    avoidedPendingEntries: number;
+}): SuffixMergingReport {
+    return {
+        enabled: metrics.enabled,
+        canonicalEntryCount: metrics.canonicalEntryCount,
+        hits: metrics.hits,
+        misses: metrics.misses,
+        mergedPendingMass: ProbUtils.toNumber(metrics.mergedPendingMass),
+        mergedPendingMassUnits: metrics.mergedPendingMass.toString(),
+        avoidedPendingEntries: metrics.avoidedPendingEntries
+    };
 }
 
 function getContinueLevelPath(level: number, tail: boolean): number[] {
@@ -366,10 +465,7 @@ function buildGeneralizedPoolFamilies(
     const families = new Map<string, { pools: SearchPool[]; packedByEnchant: Map<number, Set<number>> }>();
 
     for (const pool of pools) {
-        const parts = pool.entries
-            .map(entry => `${entry.enchantId}:${entry.weight}:${entry.conflictBitset.toString(16)}`)
-            .sort();
-        const key = hashString(parts.join('|'));
+        const key = String(pool.familySignature);
         let family = families.get(key);
         if (!family) {
             family = { pools: [], packedByEnchant: new Map() };
@@ -511,6 +607,7 @@ function parseCliOptions(args: string[]): SearchOverlapOptions & { stdoutJson: b
         threshold: Number(findArg('--threshold') ?? DEFAULT_THRESHOLD),
         maxIterations: Number.parseInt(findArg('--limit') ?? findArg('--max-iterations') ?? String(ENGINE_LIMITS.SEARCH_ITERATION_SAFETY_CAP), 10),
         targetClassifiedMass: parseOptionalNumber(findArg('--target-classified-mass') ?? findArg('--mass-target')),
+        useSuffixMerging: hasFlag('--suffix-merging'),
         stdoutJson: hasFlag('--stdout-json') || hasFlag('--json')
     };
 }
@@ -547,15 +644,6 @@ function formatPercent(value: number): string {
 
 function formatSignedPercent(value: number): string {
     return `${value > 0 ? '+' : ''}${formatPercent(value)}`;
-}
-
-function hashString(input: string): string {
-    let hash = 0x811c9dc5;
-    for (let i = 0; i < input.length; i++) {
-        hash ^= input.charCodeAt(i);
-        hash = Math.imul(hash, 0x01000193) >>> 0;
-    }
-    return hash.toString(16).padStart(8, '0');
 }
 
 async function main(): Promise<void> {

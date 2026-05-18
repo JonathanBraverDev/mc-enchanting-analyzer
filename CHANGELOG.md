@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## v7.2.0 (2026-05-18)
+
+### Improved
+- **Generalized expansion blueprints**: Search graphs now reuse candidate-filter blueprints across rank-variant pools, reducing repeated eligible-entry scans while preserving exact graph edges and combo payloads.
+- **Experimental suffix sharing**: Search runs now expose suffix identities and opt-in pending suffix merging for equivalent future states, with diagnostics showing when the optimization helps or hurts runtime.
+
+### Developer Experience
+- **Search overlap diagnostics**: Overlap reports now include actual blueprint hit/miss counts, candidate-check savings, suffix merge counts, and merged pending mass.
+- **V7 architecture documentation**: Refreshed the architecture, mass-accounting, and V7 deep-dive docs to describe the current shared-search engine instead of the original rewrite plan.
+- **Snapshot commit isolation**: Release validation now rejects commits that mix generated snapshot fixture updates with source, test, documentation, or package changes.
+
 ## v7.1.2 (2026-05-13)
 
 ### Security

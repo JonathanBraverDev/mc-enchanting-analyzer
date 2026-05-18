@@ -157,10 +157,10 @@ describe('SearchRun', () => {
             ]
         };
 
-        const forward = new SearchRun(kernel);
+        const forward = new SearchRun(kernel, { useSuffixMerging: false });
         for (const mass of [1n, 4n, 1n, 4n]) (forward as any).forwardMass(0, 0, expansion, mass, 0, undefined);
 
-        const reverse = new SearchRun(kernel);
+        const reverse = new SearchRun(kernel, { useSuffixMerging: false });
         for (const mass of [4n, 1n, 4n, 1n]) (reverse as any).forwardMass(0, 0, expansion, mass, 0, undefined);
 
         assert.deepStrictEqual(diagnosticUnits(forward), diagnosticUnits(reverse));
@@ -182,6 +182,63 @@ describe('SearchRun', () => {
         for (const combo of snapshot.results.keys()) {
             assert.ok(policy.containsTargetClue(combo, registry.indexToEnchant));
         }
+    });
+
+    it('produces identical bounded book search state with generalized blueprints enabled', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
+        const optimized = new SearchRun(kernel, { useSuffixMerging: false });
+        const baseline = new SearchRun(kernel, { useExpansionBlueprints: false, useSuffixMerging: false });
+
+        optimized.seedXp(30);
+        baseline.seedXp(30);
+        const optimizedSnapshot = optimized.searchToCheckpoint({ threshold: 0n, maxIterations: 2_000 });
+        const baselineSnapshot = baseline.searchToCheckpoint({ threshold: 0n, maxIterations: 2_000 });
+
+        assert.deepStrictEqual(optimizedSnapshot.mass, baselineSnapshot.mass);
+        assert.deepStrictEqual([...optimizedSnapshot.results.entries()], [...baselineSnapshot.results.entries()]);
+        assert.strictEqual(optimizedSnapshot.pendingCount, baselineSnapshot.pendingCount);
+        assert.strictEqual(optimizedSnapshot.largestPendingMass, baselineSnapshot.largestPendingMass);
+        assert.strictEqual(optimizedSnapshot.iterations, baselineSnapshot.iterations);
+        assert.strictEqual(optimizedSnapshot.activeResidueMass, baselineSnapshot.activeResidueMass);
+
+        const blueprintHits = optimized.getGraphDiagnostics().reduce((sum, graph) => sum + graph.blueprints.hits, 0);
+        assert.ok(blueprintHits > 0, 'modern book search should reuse generalized blueprints');
+    });
+
+    it('preserves exhaustive search accounting with suffix merging enabled', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'mace', material: 'mace' });
+        const merged = new SearchRun(kernel, { useSuffixMerging: true });
+        const baseline = new SearchRun(kernel, { useSuffixMerging: false });
+
+        merged.seedXp(1);
+        baseline.seedXp(1);
+        const mergedSnapshot = merged.searchToCheckpoint({ exhaustive: true });
+        const baselineSnapshot = baseline.searchToCheckpoint({ exhaustive: true });
+
+        assert.deepStrictEqual(mergedSnapshot.mass, baselineSnapshot.mass);
+        assert.deepStrictEqual([...mergedSnapshot.results.entries()], [...baselineSnapshot.results.entries()]);
+        assert.strictEqual(mergedSnapshot.pendingCount, 0);
+        assert.strictEqual(baselineSnapshot.pendingCount, 0);
+        assert.strictEqual(totalMassUnits(mergedSnapshot), PRECISION);
+        assert.strictEqual(mergedSnapshot.suffixMerging.enabled, true);
+    });
+
+    it('records suffix merge hits for modern book searches while conserving mass', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
+        const run = new SearchRun(kernel, { useSuffixMerging: true });
+
+        run.seedXp(30);
+        const snapshot = run.searchToCheckpoint({ threshold: 0n, maxIterations: 10_000, targetClassifiedMass: 0.5 });
+
+        assert.ok(snapshot.suffixMerging.hits > 0, 'modern book search should share equivalent suffixes');
+        assert.ok(snapshot.suffixMerging.avoidedPendingEntries > 0);
+        assert.ok(snapshot.suffixMerging.mergedPendingMass > 0n);
+        assert.strictEqual(totalMassUnits(snapshot), PRECISION);
+        assert.ok(snapshot.activeResidueCount >= 0);
+        assert.ok(snapshot.activeResidueMass >= 0n);
     });
 
     it('can stop once a requested resolved-mass target is reached', () => {

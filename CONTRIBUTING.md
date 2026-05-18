@@ -50,7 +50,7 @@ Release validation is split into separate checks so failures point at the right 
 
 - `Validate Release Format`: PR title, package versions, changelog entry, PR body, and SemVer jump.
 - `Validate Changelog SemVer Policy`: changelog sections that imply major/minor/patch scope, including PR comments when the proposed version should be promoted.
-- `Validate Release Branch`: final release metadata commit shape, current archive state, branch base, and linear unsquashed release history.
+- `Validate Release Branch`: final release metadata commit shape, current archive state, branch base, linear unsquashed release history, and snapshot commit isolation.
 
 A non-required `CI Change Advisory` check also reviews CI-sensitive file changes. It should be green when no CI-sensitive files changed, warn when CI validation logic changed, and fail red when workflow triggers, branch/path filters, permissions, job conditions, runner targets, checkout targets, or status-check names changed. A red advisory is not a merge blocker by itself; it is a reviewer signal that the PR may alter whether policy checks run at all.
 
@@ -134,6 +134,8 @@ npm test
 ### Regression Verification
 Before submitting any major engine refactor, run the snapshot regression suite to ensure zero unintended mathematical drift.
 
+Snapshot fixture updates must be isolated in their own commits. A commit that touches `tests/snapshots/**` may not touch source, tests, docs, package metadata, or other files. This keeps generated snapshot diffs reviewable instead of mixing large JSON churn with actual logic changes.
+
 ## Performance Profiling
 
 Performance is critical for the "Standalone HTML" version. We use dedicated profiling scripts to track search time, post-processing time, and cache behavior.
@@ -156,9 +158,10 @@ npx tsx scripts/profile_perf_cases.ts
 These scripts report result counts, active search time, post-processing time, and total engine time. `scripts/benchmark_engine.ts` remains available for simple cold/warm cache smoke checks.
 
 ### Optimizing the Search
-- Keep Minecraft rule logic in `SearchProcessor`, mass forwarding in `MassForwardingEngine`, and queue orchestration in `SearchController`.
-- Avoid object allocation in hot loops such as `processInitialNode`, `buildExpansionBlueprint`, and forwarding by node ID.
-- Prefer graph node IDs, packed combos, typed arrays, and precomputed pool metadata over repeated map/key reconstruction.
+- Keep Minecraft rule lookup in the registry/core layer, structural graph work in `SearchGraph`, and weighted probability movement in `SearchRun`.
+- Avoid object allocation in hot loops such as graph expansion, weighted fanout, frontier push/pop, and summary aggregation.
+- Prefer dense graph node IDs, packed combos, typed arrays, precomputed `SearchPoolEntry` metadata, and reusable expansion blueprints over repeated map/key reconstruction.
+- Measure wall-clock runtime, not only iteration counts. Suffix merging is the current example where fewer frontier pops can still be slower because canonicalization overhead dominates.
 
 ## Mass Conservation Invariants
 
@@ -199,7 +202,8 @@ The engine maintains a system of "buckets" to track every atom of probability:
 - `CHANGELOG.md`
 - `.github/workflows/release-check.yml`
 - `.github/workflows/release.yml`
-- `docs/search-function-inventory.md`
+- `docs/v7-shared-search-engine.md`
+- `docs/search-function-inventory.md` — archived rename research snapshot, not canonical current behavior.
 
 ## Owner / Maintainer
 
@@ -207,4 +211,4 @@ JonathanBraverDev maintains this project.
 
 ## Last Updated
 
-2026-05-13
+2026-05-18
