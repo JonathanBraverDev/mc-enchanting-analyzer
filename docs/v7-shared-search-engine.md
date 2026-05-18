@@ -429,7 +429,7 @@ These are not current behavior. They are active investigation areas for future p
 
 Conflict-group squash is the next candidate optimization after generalized expansion blueprints and suffix-sharing diagnostics. The goal is to share search work across mutually exclusive enchantment choices that produce the same future eligibility state, while delaying exact visible combination materialization until output/resolution time.
 
-Terminology note: the structural aggregate node is a **plex node**. The broader implementation may still use `multiplex` in provisional code names, but the design meaning is that one structural node carries multiple unresolved concrete combo states in plex.
+Terminology note: the structural aggregate node is a **plex node**. The implementation now uses `Plex*` names for this aggregate structural path: one structural node can carry multiple unresolved concrete combo states in plex.
 
 The core structural idea is to key a plex node by:
 
@@ -449,7 +449,7 @@ For an entry, the exclusion mask would be:
 entry.blocksBitset = entry.idBit | entry.conflictBitset;
 ```
 
-Eligibility in multiplex mode becomes a single future-state check:
+Eligibility in plex mode becomes a single future-state check:
 
 ```ts
 (exclusionMask & entry.idBit) === 0n
@@ -463,7 +463,7 @@ nextLevel = Math.floor(currentLevel / 2);
 nextCount = count + 1;
 ```
 
-This must not be implemented by simply changing current `SearchGraph` node keys. Current nodes own one visible `combo`, while multiplex structural nodes may represent many visible combo prefixes.
+This must not be implemented by simply changing current `SearchGraph` node keys. Current nodes own one visible `combo`, while plex structural nodes may represent many visible combo prefixes.
 
 The preferred payload model is an aggregate combo expression, not immediate concrete combo generation. For example, a branch could internally represent:
 
@@ -486,13 +486,12 @@ The concrete member choice is still real probability mass, just delayed. At mate
 The aggregate expression still needs probability metadata. A plain unweighted set of alternatives is not enough because alternatives can have different edge weights, incoming masses, and BigInt split residues. A naive “combined edge now, split evenly at snapshot” would be wrong, and even “split by weight at snapshot” can change unit-level rounding unless residue state is preserved. Keep the semantic choice payload lean and keep accounting beside it:
 
 ```ts
-type MultiplexComboExpression = {
+type PlexCombo = {
   fixed: readonly PackedEnchant[];
-  choices: readonly MultiplexChoiceGroup[];
-  accounting: MultiplexAccountingState;
+  choices: readonly PlexChoiceGroup[];
 };
 
-type MultiplexChoiceGroup = {
+type PlexChoiceGroup = {
   blocksBitset: bigint;
   alternatives: readonly PackedEnchant[]; // canonical sorted exact edge-local alternatives
   key: ChoiceListKey; // PackedCombo fast path or sorted-list fallback
@@ -502,7 +501,7 @@ type ChoiceListKey =
   | { kind: 'packedCombo'; value: PackedCombo }
   | { kind: 'packedEnchantList'; value: readonly PackedEnchant[] };
 
-type MultiplexAccountingState =
+type PlexAccountingState =
   | { mode: 'concrete-equivalent'; /* per-choice/per-edge split and residue state */ }
   | { mode: 'factorized'; /* exact aggregate factors, quantized at materialization */ };
 ```
@@ -513,14 +512,13 @@ A plain concrete combo can be represented as the degenerate case of a plex expre
 
 ```ts
 // Equivalent in essence to today's concrete `PackedCombo` state inside plex mode.
-const concreteExpression: MultiplexComboExpression = {
+const concreteCombo: PlexCombo = {
   fixed: [unbreakingIII, lootingIII],
-  choices: [],
-  accounting: { mode: 'concrete-equivalent' }
+  choices: []
 };
 ```
 
-If all plex-specific fields are empty/default (`choices.length === 0`, no choice DAG, no special factorized state), the expression should compare equal in essence to the corresponding concrete combo. That bridge is for the new opt-in path, not a requirement to wrap every existing `SearchRun` node. Incremental adoption should be:
+If all plex-specific fields are empty/default (`choices.length === 0`, no choice DAG, and default concrete-equivalent accounting beside the combo), the expression should compare equal in essence to the corresponding concrete combo. That bridge is for the new opt-in path, not a requirement to wrap every existing `SearchRun` node. Incremental adoption should be:
 
 - keep current concrete `SearchRun` and graph cache behavior intact by default while the new path is experimental;
 - add a separate plex run/graph mode or run type with a distinct cache key;
@@ -610,10 +608,10 @@ API-boundary cleanup can still happen in the V7 line if it is mostly declarative
 
 So plex itself does not force V8. V8 is the right label only if the release actually breaks package-level consumers of currently exported low-level search APIs. A V7 minor can prepare the boundary and ship opt-in plex if supported public behavior remains compatible.
 
-This suggests a thin normalization layer between multiplex search and public snapshots:
+This suggests a thin normalization layer between plex search and public snapshots:
 
 ```text
-MultiplexSearchRun internal state
+PlexRun internal state
   -> EngineResultMaterializer / SnapshotNormalizer
   -> normal SearchRunSnapshot-compatible rows
   -> projection/UI/reporting
@@ -625,7 +623,7 @@ That layer's job is to “chew” the engine shorthand into the shape the rest o
 - apply engine-owned mass and residue rules;
 - preserve current snapshot/result contracts where possible;
 - keep aggregate-only diagnostics available for performance investigations;
-- prevent UI/projection code from learning multiplex-search internals.
+- prevent UI/projection code from learning plex internals.
 
 In other words, the engine may use nerdy shorthand internally, but it must hand the rest of the system ordinary engine results.
 
@@ -634,30 +632,30 @@ There are two possible accounting modes:
 1. **Concrete-equivalent accounting**: carry enough per-alternative numerator/residue state that expanding the aggregate produces the same fixed-point results as if every concrete edge had been searched separately. This should be the first correctness target because it gives parity against current `SearchRun`.
 2. **Factorized accounting**: carry exact aggregate weights and delay quantization until materialization. This may be mathematically cleaner and faster, but it changes where fixed-point rounding occurs. If used, the engine must expose that as an intentional accounting mode with its own invariants, not as an accidental projection detail.
 
-Initial multiplex search should use concrete-equivalent accounting unless benchmarks prove the overhead erases the structural win. Any rounding units introduced or recovered by aggregate expansion should be recorded in engine mass diagnostics, not blamed on snapshot generation.
+Initial plex search should use concrete-equivalent accounting unless benchmarks prove the overhead erases the structural win. Any rounding units introduced or recovered by aggregate expansion should be recorded in engine mass diagnostics, not blamed on snapshot generation.
 
-A safe implementation needs a separate opt-in multiplex graph/executor or an explicit mode where `SearchRun` owns these aggregate combo expressions per pending structural node.
+A safe implementation needs a separate opt-in plex graph/executor or an explicit mode where `SearchRun` owns these aggregate combo expressions per pending structural node.
 
-Multiplex must separate structural frontier state from visible combo payload state. The current frontier merges pending work by `(graphId, nodeId)` and stores one mass per structural node. That remains the right heap shape for sharing search work, but the multiplex node needs a payload bucket behind it:
+Plex must separate structural frontier state from visible combo payload state. The current frontier merges pending work by `(graphId, nodeId)` and stores one mass per structural node. That remains the right heap shape for sharing search work, but the plex node needs a payload bucket behind it:
 
 ```ts
-type MultiplexFrontierBucket = {
+type PlexFrontierBucket = {
   graphId: number;
-  nodeId: MultiplexSearchGraphNodeId;
+  nodeId: PlexNodeId;
   totalMass: bigint; // heap priority and stop-threshold input
-  payloads: MultiplexPayloadSet;
+  payloads: PlexPayloadSet;
 };
 
-type MultiplexPayload = {
-  expression: MultiplexComboExpression;
+type PlexPayload = {
+  combo: PlexCombo;
   mass: bigint;
-  accounting: MultiplexAccountingState;
+  accounting: PlexAccountingState;
 };
 ```
 
-Expanding a multiplex structural node should compute its eligible edges once, then apply the same expansion to every payload in the bucket. This preserves the structural win while keeping visible combo expressions separate for materialization. For concrete-equivalent accounting, forwarding residue probably cannot be pooled only by structural node, because that would mix rounding state across different visible combo expressions that current concrete search would keep separate. First-pass concrete-equivalent mode should key forwarding residue by `(graphId, nodeId, payload identity, edgeIndex)` or otherwise prove a coarser residue bucket is equivalent. Factorized accounting can revisit coarser aggregate residue later.
+Expanding a plex structural node should compute its eligible edges once, then apply the same expansion to every payload in the bucket. This preserves the structural win while keeping visible combo expressions separate for materialization. For concrete-equivalent accounting, forwarding residue probably cannot be pooled only by structural node, because that would mix rounding state across different visible combo expressions that current concrete search would keep separate. First-pass concrete-equivalent mode should key forwarding residue by `(graphId, nodeId, payload identity, edgeIndex)` or otherwise prove a coarser residue bucket is equivalent. Factorized accounting can revisit coarser aggregate residue later.
 
-This is memory-for-time in the abstract, but it may be memory-neutral or even memory-positive if implemented carefully. The current concrete search pays per concrete node/frontier entry for graph arrays, node IDs, expansion cache entries, frontier heap/storage slots, and residue arrays. Multiplex collapses many tiny structural nodes into fewer structural nodes with larger payload buckets. To avoid turning that into a payload-memory blowup:
+This is memory-for-time in the abstract, but it may be memory-neutral or even memory-positive if implemented carefully. The current concrete search pays per concrete node/frontier entry for graph arrays, node IDs, expansion cache entries, frontier heap/storage slots, and residue arrays. Plex collapses many tiny structural nodes into fewer structural nodes with larger payload buckets. To avoid turning that into a payload-memory blowup:
 
 - intern canonical choice lists / choose-set identities instead of copying the same alternatives everywhere;
 - merge identical payload expressions inside a bucket by expression identity plus accounting mode;
@@ -696,7 +694,7 @@ Unbreaking III + (Sharpness IV | Smite IV | Bane IV) + (Fortune III | Silk Touch
 
 can materialize as the matrix of all damage × tool-special alternatives, with each final combo receiving the product of the conditional weight shares for the choices that still need to be made.
 
-For current registry/search semantics, future dependence is represented by exclusion masks: selecting an enchantment only changes future eligibility by excluding itself and its conflicts. Therefore cross-list contamination should not occur if multiplex lists are built from exact edge-local alternatives with identical `blocksBitset` / exclusion behavior. If a member of one apparent list conflicts with only part of another apparent list, the masks will differ and the alternatives must not be split into independent multiplex lists; they either remain concrete or become part of a larger joint component.
+For current registry/search semantics, future dependence is represented by exclusion masks: selecting an enchantment only changes future eligibility by excluding itself and its conflicts. Therefore cross-list contamination should not occur if plex lists are built from exact edge-local alternatives with identical `blocksBitset` / exclusion behavior. If a member of one apparent list conflicts with only part of another apparent list, the masks will differ and the alternatives must not be split into independent plex lists; they either remain concrete or become part of a larger joint component.
 
 The set of pending choice groups also needs a canonical, order-insensitive identity. `[[protection type], [damage type]]` and `[[damage type], [protection type]]` are the same unresolved product if every inner choice list matches exactly. The simple canonical form should be:
 
@@ -708,7 +706,7 @@ Use the full lexicographic comparator for the outer choice lists. In practice th
 
 That makes equivalent pending products cheap to recognize regardless of traversal order, while still rejecting near-matches where one level/item edge has a different rank, missing alternative, or different weight denominator.
 
-The current combo utilities provide canonical `PackedCombo` equality for concrete chosen enchantments, but multiplex choice lists should have their own exact helper rather than abusing `PackedCombo` as a set key. `PackedCombo` is capped by concrete combo slots and uses dense combo indices; a choice list is a set of possible alternatives and may need different limits. Add a small utility such as:
+The current combo utilities provide canonical `PackedCombo` equality for concrete chosen enchantments, but plex choice lists should have their own exact helper rather than abusing `PackedCombo` as a set key. `PackedCombo` is capped by concrete combo slots and uses dense combo indices; a choice list is a set of possible alternatives and may need different limits. Add a small utility such as:
 
 ```ts
 function samePackedEnchantList(a: readonly PackedEnchant[], b: readonly PackedEnchant[]): boolean {
@@ -732,9 +730,9 @@ First-pass comparison strategy:
 
 Experimental option: cache `PackedCombo` or interned numeric list ids for map lookup / dedupe if benchmarks prove the extra memory and complexity are worth it. Do not let cached keys and list fallback become competing sort domains. Outer choose-set ordering should always be derived from the canonical `PackedEnchant[]` alternatives, or from a single interned list id created from those alternatives. The cached key may accelerate repeated equality/hash lookup after canonicalization, but it should not decide where the list sits relative to fallback lists. If memory pressure later motivates dropping the alternatives array for packed-key lists, the implementation still needs a representation-independent comparator/sort key generated from the same canonical alternatives before dropping them.
 
-That product model is safe while the groups are truly independent in the compressed state. If future mechanics ever add dependencies that are not expressible as conflicts/exclusion masks, or if rounding residue creates a correlation that must be preserved for concrete-equivalent accounting, the payload must represent a choice DAG / joint distribution instead of separate independent lists. The multiplex executor should therefore start with the product model for exact identical-exclusion groups and keep the representation capable of falling back to a DAG when independence is not proven.
+That product model is safe while the groups are truly independent in the compressed state. If future mechanics ever add dependencies that are not expressible as conflicts/exclusion masks, or if rounding residue creates a correlation that must be preserved for concrete-equivalent accounting, the payload must represent a choice DAG / joint distribution instead of separate independent lists. The plex executor should therefore start with the product model for exact identical-exclusion groups and keep the representation capable of falling back to a DAG when independence is not proven.
 
-For books, this could compress a large amount of structural work. A book can pass through several independent-looking conflict groups, such as damage type, armor protection type, fortune/silk-touch, trident loyalty/riptide/channeling, and crossbow multishot/piercing. The multiplex graph may shrink dramatically because the future state only sees the groups as excluded. The result materializer may still have to expand a large matrix of concrete combinations, so this can move complexity from search to materialization rather than delete it. That is still useful if product flows usually need bounded/top summaries or if materialization can be capped, streamed, or memoized separately.
+For books, this could compress a large amount of structural work. A book can pass through several independent-looking conflict groups, such as damage type, armor protection type, fortune/silk-touch, trident loyalty/riptide/channeling, and crossbow multishot/piercing. The plex graph may shrink dramatically because the future state only sees the groups as excluded. The result materializer may still have to expand a large matrix of concrete combinations, so this can move complexity from search to materialization rather than delete it. That is still useful if product flows usually need bounded/top summaries or if materialization can be capped, streamed, or memoized separately.
 
 Delayed division is promising for precision. If aggregate branches carry exact numerator/denominator factors and quantize only when concrete results are materialized, active edge-split residue may shrink because the engine avoids flooring every concrete branch at every intermediate step. That would be a deliberate factorized accounting mode, not current concrete-equivalent accounting. It needs explicit invariants and parity/near-parity comparisons because it changes where fixed-point rounding occurs.
 
@@ -743,7 +741,7 @@ First safe implementation slices:
 1. Add `blocksBitset` / exclusion-mask metadata to `SearchPoolEntry` and assert conflict symmetry or compute symmetric closure.
 2. Add measurement-only diagnostics that group pending nodes by prefix-independent future identity.
 3. Add canonical plex choice-list helpers: sorted `PackedEnchant[]`, lexicographic choose-set ordering, direct equality, and optional diagnostics for conflict-component invariants.
-4. Add an opt-in `PlexGraph` / provisional `MultiplexSearchGraph` keyed by `(exclusionMask, currentLevel, count)` without touching the default concrete graph.
+4. Add an opt-in `PlexGraph` keyed by `(exclusionMask, currentLevel, count)` without touching the default concrete graph.
 5. Add an opt-in plex run path with structural frontier buckets, payload sets, and resolved-plex storage.
 6. Emit materialized compatibility views for `SearchResult.snapshot.results`, `pendingEntries`, and worker-facing projection while keeping internal pending/resolved state compressed.
 7. Initially disable plex mode when `targetClueId` is present, `useSuffixMerging` is true, or book random-removal handling would require unresolved aggregate redistribution.
@@ -762,12 +760,12 @@ Implementation kickoff checklist:
 Correctness guardrails:
 
 - Clue mode depends on actual combo contents and target compatibility; disabled initially.
-- Book `removeAdditional` must run over actual materialized combos or over an aggregate expression with proven-equivalent expansion semantics, not over multiplex nodes alone.
+- Book `removeAdditional` must run over actual materialized combos or over an aggregate expression with proven-equivalent expansion semantics, not over plex nodes alone.
 - Weighted split residue may need to be keyed by aggregate-choice alternative plus structural edge; pooling residue too early can change exact unit allocation.
-- Existing suffix merging includes visible combo identity and should not be combined with multiplex mode until redesigned.
-- Public snapshots currently expose one combo per pending node; multiplex mode must either materialize compatible pending entries or keep aggregate-only state internal.
+- Existing suffix merging includes visible combo identity and should not be combined with plex mode until redesigned.
+- Public snapshots currently expose one combo per pending node; plex mode must either materialize compatible pending entries or keep aggregate-only state internal.
 
-Testing should start with non-book conflict-heavy cases such as sword, spear, mace, and armor protection groups. Compare multiplex opt-in against current exhaustive results for `mass`, expanded concrete `results`, pending mass, active residue, and conservation to `PRECISION` before treating wall-clock speedups as meaningful. Books should be tested separately because aggregate combo expansion, `removeAdditional`, and result-tail volume may dominate.
+Testing should start with non-book conflict-heavy cases such as sword, spear, mace, and armor protection groups. Compare plex opt-in against current exhaustive results for `mass`, expanded concrete `results`, pending mass, active residue, and conservation to `PRECISION` before treating wall-clock speedups as meaningful. Books should be tested separately because aggregate combo expansion, `removeAdditional`, and result-tail volume may dominate.
 
 ### Weighted-split residue and book precision
 
