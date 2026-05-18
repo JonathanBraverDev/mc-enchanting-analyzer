@@ -76,7 +76,7 @@ export function sameChoiceSet(
 function assertNoDuplicatePackedEnchants(sorted: readonly PackedEnchant[]): void {
     for (let i = 1; i < sorted.length; i++) {
         if (sorted[i - 1] === sorted[i]) {
-            throw new Error(`Duplicate PackedEnchant ${String(sorted[i])} in superposition choice list.`);
+            throw new Error(`Duplicate PackedEnchant ${String(sorted[i])} in plex choice list.`);
         }
     }
 }
