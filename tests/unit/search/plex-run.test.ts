@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { RegistryFactory, RegistryKernel } from '#lib/index.js';
-import { appendPlexPayloadEdge, EMPTY_PLEX_PAYLOAD, PlexRun } from '#lib/search/plex/index.js';
+import { appendPlexPayloadEdge, EMPTY_PLEX_PAYLOAD, getPlexPayloadKey, PlexRun } from '#lib/search/plex/index.js';
 import { PRECISION } from '#utils/index.js';
 
 const massUnits = (snapshot: ReturnType<PlexRun['snapshot']>) => snapshot.mass.units!;
@@ -32,6 +32,7 @@ describe('PlexRun', () => {
 
         assert.strictEqual(snapshot.pendingCount, Object.values(expectedDistribution).filter(mass => mass > 0n).length);
         assert.strictEqual(snapshot.seededLevelCount, snapshot.pendingCount);
+        assert.strictEqual(snapshot.results.size, 0);
         assert.strictEqual(snapshot.iterations, 0);
         assert.strictEqual(snapshot.lastExpandedMass, 0n);
         assert.strictEqual(snapshot.fullyResolved, false);
@@ -95,6 +96,28 @@ describe('PlexRun', () => {
             assert.deepStrictEqual(child!.payload, appendPlexPayloadEdge(current.payload, edge));
         }
         assert.ok(expandedChildren.some(entry => entry.payload.choices.length > 0), 'book root should append at least one grouped choice payload');
+    });
+
+    it('records resolved payload mass by canonical payload key', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
+        const run = new PlexRun(kernel);
+
+        run.seedXp(30);
+        for (let guard = 0; guard < 500 && run.results.size === 0; guard++) {
+            assert.strictEqual(run.step(), true);
+        }
+
+        const snapshot = run.snapshot();
+        const resolvedMass = [...snapshot.results.values()].reduce((sum, result) => sum + result.mass, 0n);
+
+        assert.ok(snapshot.results.size > 0, 'single-book search should resolve after stepping into child nodes');
+        assert.strictEqual(resolvedMass, BigInt(massUnits(snapshot).resolved));
+        assert.strictEqual(activeMass(snapshot), PRECISION);
+        for (const [key, result] of snapshot.results) {
+            assert.strictEqual(key, getPlexPayloadKey(result.payload));
+            assert.ok(result.payload.combo.fixed.length + result.payload.combo.choices.length > 0);
+        }
     });
 
     it('exposes seeded plex graphs for diagnostics', () => {

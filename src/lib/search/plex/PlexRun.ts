@@ -8,7 +8,9 @@ import { PlexGraph, type PlexNodeId } from '#lib/search/plex/PlexGraph.js';
 import {
     appendPlexPayloadEdge,
     EMPTY_PLEX_PAYLOAD,
-    type PlexPayload
+    getPlexPayloadKey,
+    type PlexPayload,
+    type PlexPayloadKey
 } from '#lib/search/plex/PlexPayload.js';
 
 export interface PlexRunOptions {
@@ -24,7 +26,13 @@ export interface PlexPendingEntry {
     readonly currentLevel: number;
 }
 
+export interface PlexResolvedPayload {
+    readonly payload: PlexPayload;
+    readonly mass: bigint;
+}
+
 export interface PlexRunSnapshot {
+    readonly results: ReadonlyMap<PlexPayloadKey, PlexResolvedPayload>;
     readonly mass: MassAccountingBreakdown;
     readonly iterations: number;
     readonly lastExpandedMass: bigint;
@@ -57,6 +65,7 @@ interface PendingPlexWork {
  * are introduced.
  */
 export class PlexRun {
+    public readonly results = new Map<PlexPayloadKey, PlexResolvedPayload>();
     public readonly mass = new ProbabilityMassAccountant();
 
     private readonly distributionService: ModifiedLevelDistributionService;
@@ -116,6 +125,7 @@ export class PlexRun {
 
     public snapshot(): PlexRunSnapshot {
         return Object.freeze({
+            results: new Map(this.results),
             mass: this.mass.toPublic(),
             iterations: this._iterations,
             lastExpandedMass: this._lastExpandedMass,
@@ -143,7 +153,7 @@ export class PlexRun {
 
         const probStop = ProbUtils.scale(current.mass, PRECISION - expansion.probContinue);
         const probForward = current.mass - probStop;
-        this.recordResolved(probStop);
+        this.recordResolved(current.payload, probStop);
 
         if (probForward === 0n) return;
         if (expansion.terminalReason === 'max-enchants') {
@@ -159,7 +169,7 @@ export class PlexRun {
         const graph = this.getGraphById(current.graphId).graph;
         const expansion = graph.getExpansion(current.nodeId);
         if (expansion.totalWeight <= 0 || expansion.edges.length === 0) {
-            this.recordResolved(mass);
+            this.recordResolved(current.payload, mass);
             return;
         }
 
@@ -181,8 +191,15 @@ export class PlexRun {
         if (remainder > 0n) this.mass.record('rounding', remainder);
     }
 
-    private recordResolved(mass: bigint): void {
-        if (mass > 0n) this.mass.record('resolved', mass);
+    private recordResolved(payload: PlexPayload, mass: bigint): void {
+        if (mass === 0n) return;
+        const key = getPlexPayloadKey(payload);
+        const existing = this.results.get(key);
+        this.results.set(key, Object.freeze({
+            payload: existing?.payload ?? payload,
+            mass: (existing?.mass ?? 0n) + mass
+        }));
+        this.mass.record('resolved', mass);
     }
 
     private pushPending(graphId: number, nodeId: PlexNodeId, mass: bigint, payload: PlexPayload): void {
