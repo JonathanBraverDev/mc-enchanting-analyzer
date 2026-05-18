@@ -47,7 +47,11 @@ export interface ProjectedPlexResults {
      * accuracy loss in the concrete compatibility view caused by integer division
      * while expanding factorized choices.
      */
-    readonly accuracyLoss: bigint;
+    readonly projectionLoss: bigint;
+    /** Concrete-view accuracy mass after subtracting projection loss from resolved plex mass. */
+    readonly accuracyMass: bigint;
+    /** Mass accounting for consumers that summarize the projected concrete result view. */
+    readonly mass: MassAccountingBreakdown;
 }
 
 export interface PlexRunSnapshot {
@@ -77,12 +81,15 @@ interface PendingPlexWork {
 
 export function projectPlexResults(
     results: ReadonlyMap<PlexPayloadKey, PlexResult>,
-    enchantToIndex: Map<number, number>
+    enchantToIndex: Map<number, number>,
+    sourceMass?: MassAccountingBreakdown
 ): ProjectedPlexResults {
     const projected = new Map<PackedCombo, bigint>();
-    let accuracyLoss = 0n;
+    let projectionLoss = 0n;
+    let resolvedMass = 0n;
 
     for (const result of results.values()) {
+        resolvedMass += result.mass;
         let assigned = 0n;
         for (const factor of materializePlexPayloadFactors(result.payload, enchantToIndex)) {
             const mass = (result.mass * factor.numerator) / factor.denominator;
@@ -90,12 +97,53 @@ export function projectPlexResults(
             projected.set(factor.combo, (projected.get(factor.combo) ?? 0n) + mass);
         }
         // Projection loss reduces concrete-view accuracy, not internal resolved mass.
-        accuracyLoss += result.mass - assigned;
+        projectionLoss += result.mass - assigned;
     }
 
     return Object.freeze({
         results: new Map(projected),
-        accuracyLoss
+        projectionLoss,
+        accuracyMass: resolvedMass - projectionLoss,
+        mass: withPlexProjectionLoss(sourceMass ?? createProjectionMass(resolvedMass), projectionLoss)
+    });
+}
+
+function withPlexProjectionLoss(mass: MassAccountingBreakdown, projectionLoss: bigint): MassAccountingBreakdown {
+    const projectedMass: MassAccountingBreakdown = {
+        ...mass,
+        projectionLoss: ProbUtils.toNumber(projectionLoss)
+    };
+    if (mass.units) {
+        projectedMass.units = Object.freeze({
+            ...mass.units,
+            projectionLoss: projectionLoss.toString()
+        });
+    }
+    return Object.freeze(projectedMass);
+}
+
+function createProjectionMass(resolvedMass: bigint): MassAccountingBreakdown {
+    return Object.freeze({
+        resolved: ProbUtils.toNumber(resolvedMass),
+        clueIncompatible: 0,
+        pending: 0,
+        sieved: 0,
+        overflow: 0,
+        capped: 0,
+        rounding: 0,
+        recoveredRounding: 0,
+        recoveredSieved: 0,
+        units: Object.freeze({
+            resolved: resolvedMass.toString(),
+            clueIncompatible: '0',
+            pending: '0',
+            sieved: '0',
+            overflow: '0',
+            capped: '0',
+            rounding: '0',
+            recoveredRounding: '0',
+            recoveredSieved: '0'
+        })
     });
 }
 
@@ -178,7 +226,7 @@ export class PlexRun {
     }
 
     public projectResults(): ProjectedPlexResults {
-        return projectPlexResults(this.results, this.kernel.registry.enchantToIndex);
+        return projectPlexResults(this.results, this.kernel.registry.enchantToIndex, this.mass.toPublic());
     }
 
     public snapshot(): PlexRunSnapshot {
@@ -251,8 +299,8 @@ export class PlexRun {
             );
         }
 
-        const accuracyLoss = mass - assigned;
-        if (accuracyLoss > 0n) this.mass.record('rounding', accuracyLoss);
+        const roundingLoss = mass - assigned;
+        if (roundingLoss > 0n) this.mass.record('rounding', roundingLoss);
     }
 
     private recordResolved(payload: PlexPayload, mass: bigint): void {
