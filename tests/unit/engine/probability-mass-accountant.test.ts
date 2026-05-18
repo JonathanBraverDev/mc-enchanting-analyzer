@@ -10,6 +10,7 @@ describe('ProbabilityMassAccountant', () => {
         assert.strictEqual(bk.resolved, 0n);
         assert.strictEqual(bk.pending, 0n);
         assert.strictEqual(bk.rounding, 0n);
+        assert.strictEqual(bk.projectionLoss, 0n);
     });
 
     it('should record mass events', () => {
@@ -34,6 +35,7 @@ describe('ProbabilityMassAccountant', () => {
         tracker.record('sieved', 50n);
         // Diagnostics are not added to total.
         tracker.record('rounding', 10n);
+        tracker.record('projectionLoss', 7n);
         tracker.record('recoveredRounding', 25n);
 
         assert.strictEqual(tracker.getTotalMass(), 360n);
@@ -42,6 +44,9 @@ describe('ProbabilityMassAccountant', () => {
     it('should assert conservation', () => {
         const tracker = new ProbabilityMassAccountant();
         tracker.record('resolved', PRECISION);
+        assert.doesNotThrow(() => tracker.assertConservation());
+
+        tracker.record('projectionLoss', 1n);
         assert.doesNotThrow(() => tracker.assertConservation());
 
         tracker.record('rounding', 1n);

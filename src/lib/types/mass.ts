@@ -15,8 +15,10 @@ export interface MassAccountingBreakdown {
   overflow: number;
   /** Nodes discarded because they hit engine search/storage limits. */
   capped: number;
-  /** Cumulative mass lost to floating point precision or integer division. */
+  /** Cumulative mass lost to floating point precision or integer division during search. */
   rounding: number;
+  /** Resolved mass that could not be represented in the projected concrete result view. Subtracts from effective accuracy. */
+  projectionLoss?: number | undefined;
   /** Diagnostic: Gross mass made distributable only because carried residue combined with later input. (Non-additive.) */
   recoveredRounding: number;
   /** Diagnostic: Mass recovered from sieved branches via aggregation. (Non-additive) */
@@ -36,6 +38,7 @@ export interface MassBucketUnits {
     overflow: bigint;
     capped: bigint;
     rounding: bigint;
+    projectionLoss?: bigint | undefined;
     recoveredRounding: bigint;
     recoveredSieved: bigint;
 }

@@ -51,6 +51,7 @@ function makeMass(overrides: UnitOverrides = {}): MassAccountingBreakdown {
         overflow: overrides.overflow ?? 0n,
         capped: overrides.capped ?? 0n,
         rounding: overrides.rounding ?? 0n,
+        projectionLoss: overrides.projectionLoss ?? 0n,
         recoveredRounding: overrides.recoveredRounding ?? 0n,
         recoveredSieved: overrides.recoveredSieved ?? 0n
     };
@@ -63,6 +64,7 @@ function makeMass(overrides: UnitOverrides = {}): MassAccountingBreakdown {
         overflow: Number(unitsBig.overflow) / Number(PRECISION),
         capped: Number(unitsBig.capped) / Number(PRECISION),
         rounding: Number(unitsBig.rounding) / Number(PRECISION),
+        projectionLoss: Number(unitsBig.projectionLoss) / Number(PRECISION),
         recoveredRounding: Number(unitsBig.recoveredRounding) / Number(PRECISION),
         recoveredSieved: Number(unitsBig.recoveredSieved) / Number(PRECISION),
         units: Object.fromEntries(Object.entries(unitsBig).map(([key, value]) => [key, value.toString()])) as NonNullable<MassAccountingBreakdown['units']>

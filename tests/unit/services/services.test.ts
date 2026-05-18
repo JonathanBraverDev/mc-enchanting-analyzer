@@ -128,6 +128,20 @@ describe('SummaryService', () => {
         assert.ok(Math.abs(result.accounting.pending - 0.25) < 1e-12, `got ${result.accounting.pending}`);
     });
 
+    it('subtracts projection loss from reported accuracy without changing resolved mass', () => {
+        const snapshot = makeSearchSnapshot({
+            units: {
+                resolved: PRECISION,
+                projectionLoss: PRECISION / 4n
+            }
+        });
+        const result = SummaryService.summarize({ combos: new Map(), snapshot, indexToEnchant: [] });
+
+        assert.ok(Math.abs(result.accounting.resolved - 1.0) < 1e-12);
+        assert.ok(Math.abs((result.accounting.projectionLoss ?? 0) - 0.25) < 1e-12);
+        assert.ok(Math.abs(result.accuracy - 0.75) < 1e-12);
+    });
+
     it('converts anyMass, rankMass, and countMass from combos correctly', () => {
         const combos = new Map<PackedCombo, bigint>([[1 as PackedCombo, PRECISION]]);
         const snapshot = makeSearchSnapshot({ results: combos, units: { resolved: PRECISION } });
