@@ -483,28 +483,41 @@ When every member has the same future exclusion mask, the rest of the tree does 
 
 The concrete member choice is still real probability mass, just delayed. At materialization time the aggregate choice can expand according to the member alternatives, for example weighted by each member's original edge weight within the aggregate group. This is the intended load shift: reduce structural branching now, expand visible combinations later.
 
-The aggregate expression still needs probability metadata. A plain unweighted set of alternatives is not enough because alternatives can have different edge weights, incoming masses, and BigInt split residues. A naive “combined edge now, split evenly at snapshot” would be wrong, and even “split by weight at snapshot” can change unit-level rounding unless residue state is preserved. Keep the semantic choice payload lean and keep accounting beside it:
+The aggregate expression still needs probability metadata. A plain unweighted set of alternatives is not enough because alternatives can have different edge weights, incoming masses, and BigInt split residues. A naive “combined edge now, split evenly at snapshot” would be wrong, and even “split by weight at snapshot” can change unit-level rounding unless residue state is preserved. Current prototype naming intentionally keeps the layer cake explicit:
 
 ```ts
+// Structural future state only; not the combo/path that reached it.
+type PlexNode = {
+  exclusionMask: bigint;
+  currentLevel: number;
+  count: number;
+};
+
+// Unweighted accumulated combo expression, analogous to the old concrete node combo.
 type PlexCombo = {
   fixed: readonly PackedEnchant[];
-  choices: readonly PlexChoiceGroup[];
+  choices: readonly (readonly PackedEnchant[])[];
 };
 
-type PlexChoiceGroup = {
-  blocksBitset: bigint;
-  alternatives: readonly PackedEnchant[]; // canonical sorted exact edge-local alternatives
-  key: ChoiceListKey; // PackedCombo fast path or sorted-list fallback
+// Edge-local weighted choice metadata for one aggregate choice group.
+type PlexWeightedChoice = {
+  alternatives: readonly { packedEnchant: PackedEnchant; weight: number }[];
+  totalWeight: number;
 };
 
-type ChoiceListKey =
-  | { kind: 'packedCombo'; value: PackedCombo }
-  | { kind: 'packedEnchantList'; value: readonly PackedEnchant[] };
+// Weighted accumulated combo expression carried by pending and resolved plex state.
+type PlexPayload = {
+  combo: PlexCombo;
+  choices: readonly PlexWeightedChoice[]; // aligned with combo.choices
+};
 
-type PlexAccountingState =
-  | { mode: 'concrete-equivalent'; /* per-choice/per-edge split and residue state */ }
-  | { mode: 'factorized'; /* exact aggregate factors, quantized at materialization */ };
+type PlexResult = {
+  payload: PlexPayload;
+  mass: bigint;
+};
 ```
+
+This is deliberately more layered than ideal, but each layer has one job: structural reuse (`PlexNode`), unweighted expression identity/materialization (`PlexCombo`), edge-local weights (`PlexWeightedChoice`/`PlexPayload`), and resolved probability mass (`PlexResult`). If profiling or parity work later proves the alignment overhead is a real bug source, collapse the layers then; do not rename the current model piecemeal.
 
 The plex representation should be compatible with the existing concrete payload shape, but it should not force a big-bang redesign of the current concrete engine/cache. The strategic direction can still be for plex to become the better internal engine model if the prototype proves itself. The safe path is staged: build an opt-in plex path, prove degenerate parity, prove real-choice parity, benchmark, then decide whether the old concrete path becomes a compatibility/reference implementation rather than the primary internal model.
 
