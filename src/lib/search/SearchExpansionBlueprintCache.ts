@@ -1,5 +1,7 @@
 import type { SearchPool, SearchPoolFamilySignature } from '#lib/search/registry/RegistryKernel.js';
 
+export type SearchExpansionFutureSignature = string & { readonly __brand: 'SearchExpansionFutureSignature' };
+
 export interface SearchExpansionBlueprint {
     readonly eligibleEntryIndexes: readonly number[];
     readonly totalWeight: number;
@@ -7,6 +9,7 @@ export interface SearchExpansionBlueprint {
 
 export interface SearchExpansionBlueprintLookup {
     readonly blueprint: SearchExpansionBlueprint;
+    readonly futureSignature: SearchExpansionFutureSignature;
     readonly hit: boolean;
     readonly candidateChecks: number;
 }
@@ -30,7 +33,12 @@ export class SearchExpansionBlueprintCache {
         const key = this.createKey(pool.familySignature, selectedMask, currentLevel, count);
         const cached = this.cache.get(key);
         if (cached) {
-            return { blueprint: cached, hit: true, candidateChecks: 0 };
+            return {
+                blueprint: cached,
+                futureSignature: this.createFutureSignature(pool, cached),
+                hit: true,
+                candidateChecks: 0
+            };
         }
 
         const eligibleEntryIndexes: number[] = [];
@@ -48,7 +56,12 @@ export class SearchExpansionBlueprintCache {
             totalWeight
         });
         this.cache.set(key, blueprint);
-        return { blueprint, hit: false, candidateChecks: pool.entries.length };
+        return {
+            blueprint,
+            futureSignature: this.createFutureSignature(pool, blueprint),
+            hit: false,
+            candidateChecks: pool.entries.length
+        };
     }
 
     public clear(): void {
@@ -62,5 +75,21 @@ export class SearchExpansionBlueprintCache {
         count: number
     ): string {
         return `${familySignature}|${selectedMask.toString(16)}|${currentLevel}|${count}`;
+    }
+
+    private createFutureSignature(
+        pool: SearchPool,
+        blueprint: SearchExpansionBlueprint
+    ): SearchExpansionFutureSignature {
+        const parts = blueprint.eligibleEntryIndexes.map(entryIndex => {
+            const entry = pool.entries[entryIndex]!;
+            return [
+                entry.packedEnchant,
+                entry.comboIndex,
+                entry.weight,
+                entry.conflictBitset.toString(16)
+            ].join(':');
+        });
+        return `future:${blueprint.totalWeight}|${parts.join('|')}` as SearchExpansionFutureSignature;
     }
 }
