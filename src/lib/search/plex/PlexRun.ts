@@ -26,6 +26,7 @@ export interface PlexPendingEntry {
     readonly currentLevel: number;
 }
 
+/** Recorded probability mass for a stopped plex payload expression. */
 export interface PlexResult {
     readonly payload: PlexPayload;
     readonly mass: bigint;
@@ -61,8 +62,8 @@ interface PendingPlexWork {
  *
  * This intentionally does not replace `SearchRun`. The first slice only seeds
  * modified-level mass into plex structural graphs with explicit payloads so the
- * frontier shape can be tested before forwarding, residue, and result accounting
- * are introduced.
+ * frontier/result shape can be tested before concrete materialization and full
+ * residue parity are introduced.
  */
 export class PlexRun {
     public readonly results = new Map<PlexPayloadKey, PlexResult>();

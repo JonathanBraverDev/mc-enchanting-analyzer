@@ -10,6 +10,13 @@ import {
 } from '#lib/search/plex/PlexChoice.js';
 import type { PlexEdge } from '#lib/search/plex/PlexGraph.js';
 
+/**
+ * Unweighted accumulated combo expression for a plex path.
+ *
+ * This is the plex-mode analogue of the concrete combo carried by old
+ * `SearchGraph` nodes: fixed picks plus unresolved choice groups. It does not
+ * carry probabilities; edge-local weights live one layer up in `PlexPayload`.
+ */
 export interface PlexCombo {
     readonly fixed: CanonicalPackedEnchantList;
     readonly choices: CanonicalChoiceSet;

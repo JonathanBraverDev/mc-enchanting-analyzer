@@ -15,9 +15,16 @@ import type { PlexEdge } from '#lib/search/plex/PlexGraph.js';
 
 export type PlexPayloadKey = string;
 
+/**
+ * Weighted accumulated combo expression carried by the plex frontier/results.
+ *
+ * `combo` is the unweighted expression used for canonical ordering and concrete
+ * combo materialization. `choices` carries the matching edge-local weights needed
+ * to split/materialize aggregate choices. The arrays are intentionally separate
+ * but aligned: `combo.choices[i]` is the packed-enchant view of `choices[i]`.
+ */
 export interface PlexPayload {
     readonly combo: PlexCombo;
-    /** Weighted choices aligned with `combo.choices`; weights are original edge-local entry weights. */
     readonly choices: readonly PlexWeightedChoice[];
 }
 
