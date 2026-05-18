@@ -2,8 +2,16 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { RegistryFactory, RegistryKernel } from '#lib/index.js';
-import { appendPlexPayloadEdge, EMPTY_PLEX_PAYLOAD, getPlexPayloadKey, PlexRun } from '#lib/search/plex/index.js';
-import { PRECISION } from '#utils/index.js';
+import {
+    appendPlexPayloadEdge,
+    canonicalizeWeightedChoice,
+    createPlexPayload,
+    EMPTY_PLEX_PAYLOAD,
+    getPlexPayloadKey,
+    PlexRun,
+    projectPlexResults
+} from '#lib/search/plex/index.js';
+import { ComboUtils, PRECISION } from '#utils/index.js';
 
 const massUnits = (snapshot: ReturnType<PlexRun['snapshot']>) => snapshot.mass.units!;
 const activeMass = (snapshot: ReturnType<PlexRun['snapshot']>) => {
@@ -124,6 +132,41 @@ describe('PlexRun', () => {
         assert.strictEqual(snapshot.pendingCount, 0);
         assert.strictEqual(run.step(), false);
         assert.strictEqual(activeMass(snapshot), PRECISION);
+    });
+
+    it('projects factorized plex results into concrete combo rows', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
+        const entries = kernel.getPool(30).entries.map(entry => entry.packedEnchant);
+        const fixed = entries[0]!;
+        const left = entries[1]!;
+        const right = entries[2]!;
+        const payload = createPlexPayload([fixed], [
+            canonicalizeWeightedChoice([
+                { packedEnchant: left, weight: 2 },
+                { packedEnchant: right, weight: 1 }
+            ])
+        ]);
+        const projected = projectPlexResults(new Map([[getPlexPayloadKey(payload), { payload, mass: 10n }]]), registry.enchantToIndex);
+
+        assert.strictEqual(projected.remainder, 1n);
+        assert.strictEqual(projected.results.get(ComboUtils.pack([fixed, left], registry.enchantToIndex)), 6n);
+        assert.strictEqual(projected.results.get(ComboUtils.pack([fixed, right], registry.enchantToIndex)), 3n);
+    });
+
+    it('projects run results into a concrete compatibility view', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
+        const run = new PlexRun(kernel);
+
+        run.seedXp(30);
+        run.advance({ maxIterations: 100 });
+        const projected = run.projectResults();
+        const projectedMass = [...projected.results.values()].reduce((sum, mass) => sum + mass, 0n);
+        const resolvedMass = BigInt(massUnits(run.snapshot()).resolved);
+
+        assert.ok(projected.results.size > 0);
+        assert.strictEqual(projectedMass + projected.remainder, resolvedMass);
     });
 
     it('records resolved payload mass by canonical payload key', () => {

@@ -1,5 +1,6 @@
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { ProbabilityMassAccountant } from '#engine/search/ProbabilityMassAccountant.js';
+import type { PackedCombo } from '#types/index.js';
 import type { MassAccountingBreakdown } from '#types/mass.js';
 import { PRECISION, ProbUtils } from '#utils/index.js';
 import type { SearchPool, SearchPoolSignature } from '#lib/search/registry/RegistryKernel.js';
@@ -9,6 +10,7 @@ import {
     appendPlexPayloadEdge,
     EMPTY_PLEX_PAYLOAD,
     getPlexPayloadKey,
+    materializePlexPayloadFactors,
     type PlexPayload,
     type PlexPayloadKey
 } from '#lib/search/plex/PlexPayload.js';
@@ -36,6 +38,11 @@ export interface PlexResult {
     readonly mass: bigint;
 }
 
+export interface ProjectedPlexResults {
+    readonly results: ReadonlyMap<PackedCombo, bigint>;
+    readonly remainder: bigint;
+}
+
 export interface PlexRunSnapshot {
     readonly results: ReadonlyMap<PlexPayloadKey, PlexResult>;
     readonly mass: MassAccountingBreakdown;
@@ -59,6 +66,29 @@ interface PendingPlexWork {
     readonly nodeId: PlexNodeId;
     readonly mass: bigint;
     readonly payload: PlexPayload;
+}
+
+export function projectPlexResults(
+    results: ReadonlyMap<PlexPayloadKey, PlexResult>,
+    enchantToIndex: Map<number, number>
+): ProjectedPlexResults {
+    const projected = new Map<PackedCombo, bigint>();
+    let remainder = 0n;
+
+    for (const result of results.values()) {
+        let assigned = 0n;
+        for (const factor of materializePlexPayloadFactors(result.payload, enchantToIndex)) {
+            const mass = (result.mass * factor.numerator) / factor.denominator;
+            assigned += mass;
+            projected.set(factor.combo, (projected.get(factor.combo) ?? 0n) + mass);
+        }
+        remainder += result.mass - assigned;
+    }
+
+    return Object.freeze({
+        results: new Map(projected),
+        remainder
+    });
 }
 
 /**
@@ -137,6 +167,10 @@ export class PlexRun {
         }
 
         return this.snapshot();
+    }
+
+    public projectResults(): ProjectedPlexResults {
+        return projectPlexResults(this.results, this.kernel.registry.enchantToIndex);
     }
 
     public snapshot(): PlexRunSnapshot {
