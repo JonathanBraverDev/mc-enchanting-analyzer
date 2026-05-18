@@ -5,12 +5,12 @@ export type CanonicalChoiceSet = readonly CanonicalPackedEnchantList[];
 
 export interface PlexAlternative {
     readonly packedEnchant: PackedEnchant;
-    readonly ratio: number;
+    readonly weight: number;
 }
 
 export interface PlexWeightedChoice {
     readonly alternatives: readonly PlexAlternative[];
-    readonly totalRatio: number;
+    readonly totalWeight: number;
 }
 
 /**
@@ -62,15 +62,14 @@ export function canonicalizeWeightedChoice(
         );
     }
 
-    const gcd = greatestCommonDivisor([...weightsByAlternative.values()]);
     const packedEnchants = canonicalizePackedEnchantList([...weightsByAlternative.keys()]);
     const weightedAlternatives = packedEnchants.map(packedEnchant => Object.freeze({
         packedEnchant,
-        ratio: weightsByAlternative.get(packedEnchant)! / gcd
+        weight: weightsByAlternative.get(packedEnchant)!
     }));
     return Object.freeze({
         alternatives: Object.freeze(weightedAlternatives),
-        totalRatio: weightedAlternatives.reduce((sum, alternative) => sum + alternative.ratio, 0)
+        totalWeight: weightedAlternatives.reduce((sum, alternative) => sum + alternative.weight, 0)
     });
 }
 
@@ -127,23 +126,4 @@ function assertNoDuplicatePackedEnchants(sorted: readonly PackedEnchant[]): void
             throw new Error(`Duplicate PackedEnchant ${String(sorted[i])} in plex choice list.`);
         }
     }
-}
-
-function greatestCommonDivisor(values: readonly number[]): number {
-    let gcd = values[0] ?? 1;
-    for (let i = 1; i < values.length; i++) {
-        gcd = gcdPair(gcd, values[i]!);
-    }
-    return gcd;
-}
-
-function gcdPair(a: number, b: number): number {
-    let left = Math.abs(a);
-    let right = Math.abs(b);
-    while (right !== 0) {
-        const next = left % right;
-        left = right;
-        right = next;
-    }
-    return left || 1;
 }

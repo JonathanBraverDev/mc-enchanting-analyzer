@@ -15,7 +15,7 @@ import type { PlexEdge } from '#lib/search/plex/PlexGraph.js';
 
 export interface PlexPayload {
     readonly combo: PlexCombo;
-    /** Weighted choices aligned with `combo.choices`; ratios are reduced per choice. */
+    /** Weighted choices aligned with `combo.choices`; weights are original edge-local entry weights. */
     readonly choices: readonly PlexWeightedChoice[];
 }
 
@@ -91,8 +91,8 @@ export function materializePlexPayloadFactors(
             selected.push(alternative.packedEnchant);
             visit(
                 choiceIndex + 1,
-                numerator * BigInt(alternative.ratio),
-                denominator * BigInt(choice.totalRatio)
+                numerator * BigInt(alternative.weight),
+                denominator * BigInt(choice.totalWeight)
             );
             selected.pop();
         }

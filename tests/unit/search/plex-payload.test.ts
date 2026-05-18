@@ -16,7 +16,7 @@ const packed = (value: number): PackedEnchant => value as PackedEnchant;
 const choice = (entries: readonly (readonly [PackedEnchant, number])[]) => canonicalizeWeightedChoice(
     entries.map(([packedEnchant, weight]) => ({ packedEnchant, weight }))
 );
-const ratios = (payloadChoice: ReturnType<typeof choice>) => payloadChoice.alternatives.map(alternative => alternative.ratio);
+const weights = (payloadChoice: ReturnType<typeof choice>) => payloadChoice.alternatives.map(alternative => alternative.weight);
 
 describe('PlexPayload', () => {
     it('materializes the empty payload as one neutral factor', () => {
@@ -26,7 +26,7 @@ describe('PlexPayload', () => {
         assert.deepStrictEqual(factors, [{ combo: 0, numerator: 1n, denominator: 1n }]);
     });
 
-    it('keeps choice ratios aligned with canonical choice ordering', () => {
+    it('keeps choice weights aligned with canonical choice ordering', () => {
         const payload = createPlexPayload(
             [packed(7)],
             [
@@ -36,7 +36,7 @@ describe('PlexPayload', () => {
         );
 
         assert.deepStrictEqual(payload.combo.choices.map(comboChoice => [...comboChoice]), [[packed(10), packed(20)], [packed(30), packed(40)]]);
-        assert.deepStrictEqual(payload.choices.map(ratios), [[1, 2], [3, 4]]);
+        assert.deepStrictEqual(payload.choices.map(weights), [[1, 2], [3, 4]]);
     });
 
     it('appends singleton edges as fixed picks and grouped edges as weighted choices', () => {
@@ -45,10 +45,10 @@ describe('PlexPayload', () => {
 
         assert.deepStrictEqual([...grouped.combo.fixed], [packed(10)]);
         assert.deepStrictEqual(grouped.combo.choices.map(comboChoice => [...comboChoice]), [[packed(20), packed(30)]]);
-        assert.deepStrictEqual(grouped.choices.map(ratios), [[2, 3]]);
+        assert.deepStrictEqual(grouped.choices.map(weights), [[2, 3]]);
     });
 
-    it('materializes weighted choice products as exact reduced factors', () => {
+    it('materializes weighted choice products as exact factors', () => {
         const registry = RegistryFactory.build('1.21.11');
         const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
         const entries = kernel.getPool(30).entries.map(entry => entry.packedEnchant);
@@ -56,7 +56,7 @@ describe('PlexPayload', () => {
         const left = [entries[1]!, entries[2]!];
         const right = [entries[3]!, entries[4]!];
         const payload = createPlexPayload([fixed], [
-            choice([[right[0]!, 14], [right[1]!, 22]]),
+            choice([[right[0]!, 7], [right[1]!, 11]]),
             choice([[left[0]!, 2], [left[1]!, 3]])
         ]);
         const factors = materializePlexPayloadFactors(payload, registry.enchantToIndex);
@@ -69,7 +69,7 @@ describe('PlexPayload', () => {
         ]);
     });
 
-    it('preserves real PlexGraph grouped edge ratios for future mass splitting', () => {
+    it('preserves real PlexGraph grouped edge weights for future mass splitting', () => {
         const registry = RegistryFactory.build('1.21.11');
         const kernel = new RegistryKernel({ registry, item: 'sword', material: 'diamond' });
         const graph = new PlexGraph(kernel, kernel.getPool(30));
@@ -81,15 +81,15 @@ describe('PlexPayload', () => {
         const factors = materializePlexPayloadFactors(payload, registry.enchantToIndex);
 
         assert.deepStrictEqual(payload.choices, [groupedEdge!.choice]);
-        assert.deepStrictEqual(ratios(groupedEdge!.choice), [2, 1, 1]);
+        assert.deepStrictEqual(weights(groupedEdge!.choice), [10, 5, 5]);
         assert.strictEqual(factors.length, groupedEdge!.choice.alternatives.length);
         assert.deepStrictEqual(
             factors.map(factor => factor.denominator),
-            [4n, 4n, 4n]
+            [20n, 20n, 20n]
         );
         assert.deepStrictEqual(
             factors.map(factor => factor.numerator),
-            [2n, 1n, 1n]
+            [10n, 5n, 5n]
         );
     });
 

@@ -6,7 +6,7 @@ import { PlexGraph, type PlexEdge } from '#lib/search/plex/PlexGraph.js';
 import { ComboUtils, PRECISION, ProbUtils } from '#utils/index.js';
 
 const edgePackedEnchants = (edge: PlexEdge) => edge.choice.alternatives.map(alternative => alternative.packedEnchant);
-const edgeRatios = (edge: PlexEdge) => edge.choice.alternatives.map(alternative => alternative.ratio);
+const edgeWeights = (edge: PlexEdge) => edge.choice.alternatives.map(alternative => alternative.weight);
 
 describe('PlexGraph', () => {
     it('keys structural nodes by exclusion mask, current level, and count', () => {
@@ -58,8 +58,8 @@ describe('PlexGraph', () => {
         assert.strictEqual(aggregateRoot.totalWeight, concreteRoot.totalWeight);
         assert.ok(aggregateRoot.edges.length <= concreteRoot.edges.length);
         assert.ok(aggregateRoot.edges.every(edge => edge.choice.alternatives.length > 0));
-        assert.ok(aggregateRoot.edges.every(edge => edge.choice.totalRatio === edgeRatios(edge).reduce((sum, ratio) => sum + ratio, 0)));
-        assert.ok(aggregateRoot.edges.every(edge => edge.weight >= edge.choice.totalRatio));
+        assert.ok(aggregateRoot.edges.every(edge => edge.choice.totalWeight === edgeWeights(edge).reduce((sum, weight) => sum + weight, 0)));
+        assert.ok(aggregateRoot.edges.every(edge => edge.weight === edge.choice.totalWeight));
         assert.strictEqual(plex.getExpansion(plex.getRootNode(30).id), aggregateRoot, 'expansion should be cached');
     });
 
@@ -75,7 +75,7 @@ describe('PlexGraph', () => {
         for (const name of ['Sharpness', 'Smite', 'Bane of Arthropods', 'Impaling', 'Density', 'Breach']) {
             assert.ok(names.has(name), `expected damage edge to include ${name}`);
         }
-        assert.deepStrictEqual(edgeRatios(damageEdge), [10, 5, 5, 2, 5, 2]);
+        assert.deepStrictEqual(edgeWeights(damageEdge), [10, 5, 5, 2, 5, 2]);
 
         const child = graph.getNode(damageEdge.childId);
         assert.strictEqual(child.exclusionMask, damageEdge.childExclusionMask);
@@ -93,7 +93,7 @@ describe('PlexGraph', () => {
         assert.ok(damageEdge, 'sword fixture should expose only the sword-eligible damage choices');
         const names = edgePackedEnchants(damageEdge!).map(packed => registry.revIdMap[ComboUtils.getEnchantId(packed)]);
         assert.deepStrictEqual(names, ['Sharpness', 'Smite', 'Bane of Arthropods']);
-        assert.deepStrictEqual(edgeRatios(damageEdge!), [2, 1, 1]);
+        assert.deepStrictEqual(edgeWeights(damageEdge!), [10, 5, 5]);
         assert.strictEqual(damageEdge!.weight, 20);
     });
 
