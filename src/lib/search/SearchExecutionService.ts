@@ -152,7 +152,13 @@ export class SearchExecutionService {
                 graphCacheHits: cacheMetrics.graphs.hits,
                 graphCacheMisses: cacheMetrics.graphs.misses,
                 runCacheHits: cacheMetrics.runs.hits,
-                runCacheMisses: cacheMetrics.runs.misses
+                runCacheMisses: cacheMetrics.runs.misses,
+                suffixMergingEnabled: snapshot.suffixMerging.enabled,
+                suffixMergeCanonicalEntryCount: snapshot.suffixMerging.canonicalEntryCount,
+                suffixMergeHits: snapshot.suffixMerging.hits,
+                suffixMergeMisses: snapshot.suffixMerging.misses,
+                suffixMergedPendingMass: ProbUtils.toNumber(snapshot.suffixMerging.mergedPendingMass),
+                suffixAvoidedPendingEntries: snapshot.suffixMerging.avoidedPendingEntries
             };
         }
 
