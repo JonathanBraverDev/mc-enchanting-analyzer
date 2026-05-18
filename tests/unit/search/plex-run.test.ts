@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { RegistryFactory, RegistryKernel } from '#lib/index.js';
+import { SearchRun } from '#lib/search/SearchRun.js';
 import {
     appendPlexPayloadEdge,
     canonicalizeWeightedChoice,
@@ -14,6 +15,7 @@ import {
 import { ComboUtils, PRECISION } from '#utils/index.js';
 
 const massUnits = (snapshot: ReturnType<PlexRun['snapshot']>) => snapshot.mass.units!;
+const bigintSum = (values: Iterable<bigint>) => [...values].reduce((sum, value) => sum + value, 0n);
 const activeMass = (snapshot: ReturnType<PlexRun['snapshot']>) => {
     const units = massUnits(snapshot);
     return BigInt(units.resolved)
@@ -162,11 +164,32 @@ describe('PlexRun', () => {
         run.seedXp(30);
         run.advance({ maxIterations: 100 });
         const projected = run.projectResults();
-        const projectedMass = [...projected.results.values()].reduce((sum, mass) => sum + mass, 0n);
+        const projectedMass = bigintSum(projected.results.values());
         const resolvedMass = BigInt(massUnits(run.snapshot()).resolved);
 
         assert.ok(projected.results.size > 0);
         assert.strictEqual(projectedMass + projected.remainder, resolvedMass);
+    });
+
+    it('compares projected plex rows with concrete SearchRun rows for a tiny exhaustive case', () => {
+        const registry = RegistryFactory.build('1.4.6');
+        const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
+        const concrete = new SearchRun(kernel);
+        concrete.seedXp(30);
+        const concreteSnapshot = concrete.searchToCheckpoint({ exhaustive: true });
+        const plex = new PlexRun(kernel);
+        plex.seedXp(30);
+        const plexSnapshot = plex.advance({ maxIterations: 10_000 });
+        const projected = plex.projectResults();
+
+        assert.strictEqual(concreteSnapshot.fullyResolved, true);
+        assert.strictEqual(plexSnapshot.fullyResolved, true);
+        assert.deepStrictEqual(
+            [...projected.results.keys()].sort((a, b) => a - b),
+            [...concreteSnapshot.results.keys()].sort((a, b) => a - b)
+        );
+        assert.strictEqual(bigintSum(concreteSnapshot.results.values()), BigInt(concreteSnapshot.mass.units!.resolved));
+        assert.strictEqual(bigintSum(projected.results.values()) + projected.remainder, BigInt(plexSnapshot.mass.units!.resolved));
     });
 
     it('records resolved payload mass by canonical payload key', () => {
