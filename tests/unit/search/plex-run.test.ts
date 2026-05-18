@@ -98,6 +98,34 @@ describe('PlexRun', () => {
         assert.ok(expandedChildren.some(entry => entry.payload.choices.length > 0), 'book root should append at least one grouped choice payload');
     });
 
+    it('advances by a bounded number of iterations', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
+        const run = new PlexRun(kernel);
+
+        run.seedXp(30);
+        const before = run.snapshot();
+        const after = run.advance({ maxIterations: 3 });
+
+        assert.strictEqual(after.iterations, before.iterations + 3);
+        assert.ok(after.pendingCount > 0);
+        assert.strictEqual(activeMass(after), PRECISION);
+    });
+
+    it('stops bounded advancement when the plex frontier empties', () => {
+        const registry = RegistryFactory.build('1.4.6');
+        const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
+        const run = new PlexRun(kernel);
+
+        run.seedXp(30);
+        const snapshot = run.advance({ maxIterations: 10_000 });
+
+        assert.strictEqual(snapshot.fullyResolved, true);
+        assert.strictEqual(snapshot.pendingCount, 0);
+        assert.strictEqual(run.step(), false);
+        assert.strictEqual(activeMass(snapshot), PRECISION);
+    });
+
     it('records resolved payload mass by canonical payload key', () => {
         const registry = RegistryFactory.build('1.21.11');
         const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
@@ -132,6 +160,24 @@ describe('PlexRun', () => {
 
         assert.strictEqual(expansion.isRoot, true);
         assert.ok(expansion.edges.some(edge => edge.choice.alternatives.length > 1));
+    });
+
+    it('rejects advancing before seeding', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'sword', material: 'diamond' });
+        const run = new PlexRun(kernel);
+
+        assert.throws(() => run.advance({ maxIterations: 1 }), /must be seeded before advancing/);
+    });
+
+    it('rejects invalid advance iteration caps', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'sword', material: 'diamond' });
+        const run = new PlexRun(kernel);
+
+        run.seedXp(30);
+        assert.throws(() => run.advance({ maxIterations: 0 }), /Invalid maxIterations/);
+        assert.throws(() => run.advance({ maxIterations: 1.5 }), /Invalid maxIterations/);
     });
 
     it('rejects stepping before seeding', () => {
