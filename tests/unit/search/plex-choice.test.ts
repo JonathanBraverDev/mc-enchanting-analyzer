@@ -50,7 +50,7 @@ describe('plex choice helpers', () => {
         assert.ok(comparePackedEnchantLists(differentSecond, longer) > 0);
     });
 
-    it('canonicalizes weighted choices and reduces ratios', () => {
+    it('canonicalizes weighted choices without reducing weights', () => {
         const weighted = canonicalizeWeightedChoice([
             { packedEnchant: packed(30), weight: 5 },
             { packedEnchant: packed(10), weight: 10 },
@@ -62,10 +62,10 @@ describe('plex choice helpers', () => {
             [packed(10), packed(20), packed(30)]
         );
         assert.deepStrictEqual(
-            weighted.alternatives.map(alternative => alternative.ratio),
-            [2, 1, 1]
+            weighted.alternatives.map(alternative => alternative.weight),
+            [10, 5, 5]
         );
-        assert.strictEqual(weighted.totalRatio, 4);
+        assert.strictEqual(weighted.totalWeight, 20);
     });
 
     it('rejects duplicate alternatives inside one choice list', () => {
