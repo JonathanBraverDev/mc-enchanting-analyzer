@@ -132,8 +132,8 @@ describe('PlexRun', () => {
         assert.strictEqual(immediate.iterations, 0);
         assert.ok(immediate.pendingCount > 0);
 
-        const advanced = run.searchToCheckpoint({ targetResolvedMass: PRECISION / 20n, maxIterations: 10_000 });
-        assert.ok(BigInt(advanced.mass.units!.resolved) >= PRECISION / 20n);
+        const advanced = run.searchToCheckpoint({ targetClassifiedMass: PRECISION / 20n, maxIterations: 10_000 });
+        assert.ok(BigInt(advanced.mass.units!.resolved) + BigInt(advanced.mass.units!.overflow) + BigInt(advanced.mass.units!.sieved) >= PRECISION / 20n);
         assert.ok(advanced.pendingCount > 0);
         assert.strictEqual(activeMass(advanced), PRECISION);
     });

@@ -33,7 +33,6 @@ export interface PlexRunCheckpointRequest {
     readonly maxIterations?: number | undefined;
     readonly exhaustive?: boolean | undefined;
     readonly targetClassifiedMass?: number | bigint | undefined;
-    readonly targetResolvedMass?: number | bigint | undefined;
 }
 
 export interface PlexPendingEntry {
@@ -108,7 +107,6 @@ interface PlexAdvanceCriteria {
     readonly threshold: bigint;
     readonly maxIterations: number;
     readonly targetClassifiedMass?: bigint | undefined;
-    readonly targetResolvedMass?: bigint | undefined;
 }
 
 interface PlexProjectionOptions {
@@ -427,13 +425,8 @@ export class PlexRun {
         if (request.maxIterations !== undefined) this.validateMaxIterations(request.maxIterations);
         this.validateProbabilityInput(request.threshold, 'threshold', 'Threshold must be between 0 and 1.0.');
         this.validateProbabilityInput(request.targetClassifiedMass, 'targetClassifiedMass', 'Must be between 0 and 1.0.');
-        this.validateProbabilityInput(request.targetResolvedMass, 'targetResolvedMass', 'Must be between 0 and 1.0.');
-
         const targetClassifiedMass = request.targetClassifiedMass !== undefined
             ? ProbUtils.toBigInt(request.targetClassifiedMass)
-            : undefined;
-        const targetResolvedMass = request.targetResolvedMass !== undefined
-            ? ProbUtils.toBigInt(request.targetResolvedMass)
             : undefined;
         const threshold = request.exhaustive ? 0n : ProbUtils.toBigInt(request.threshold ?? 0n);
         const maxIterations = request.exhaustive
@@ -441,7 +434,6 @@ export class PlexRun {
             : request.maxIterations ?? Number.POSITIVE_INFINITY;
 
         const hasBoundedStopCondition = targetClassifiedMass !== undefined
-            || targetResolvedMass !== undefined
             || (request.threshold !== undefined && threshold > 0n)
             || request.maxIterations !== undefined;
         if (!request.exhaustive && !hasBoundedStopCondition) {
@@ -451,8 +443,7 @@ export class PlexRun {
         return {
             threshold,
             maxIterations,
-            targetClassifiedMass,
-            targetResolvedMass
+            targetClassifiedMass
         };
     }
 
@@ -469,7 +460,6 @@ export class PlexRun {
             if (this.frontier.size === 0) return;
             if (this._iterations >= criteria.maxIterations) return;
             if (criteria.targetClassifiedMass !== undefined && this.mass.getClassifiedMass() >= criteria.targetClassifiedMass) return;
-            if (criteria.targetResolvedMass !== undefined && this.mass.getResolvedMass() >= criteria.targetResolvedMass) return;
             if (this.frontier.peekMass() < criteria.threshold) return;
             if (!this.step()) return;
         }
