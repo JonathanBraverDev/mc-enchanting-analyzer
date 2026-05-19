@@ -15,10 +15,17 @@ interface PlexFrontierEntry extends PlexFrontierPopTarget {
     readonly payloadId: PlexPayloadId;
 }
 
-/** Max-heap frontier for pending Plex work, merging identical structural + payload states. */
+/**
+ * Max-heap frontier for pending Plex work.
+ *
+ * PlexGraph edges aggregate alternatives that reach the same future exclusion
+ * state, so the payload expression is expected to be functionally determined by
+ * `(graphId, nodeId)`. Keep that as a checked invariant rather than paying for a
+ * nested payload index on every heap move.
+ */
 export class PlexRunFrontier {
     private readonly heap: PlexFrontierEntry[] = [];
-    private readonly positionsByState = new Map<number, Map<PlexPayloadId, number>>();
+    private readonly positionsByState = new Map<number, number>();
 
     public get size(): number {
         return this.heap.length;
@@ -26,9 +33,14 @@ export class PlexRunFrontier {
 
     public pushOrMerge(graphId: number, nodeId: PlexNodeId, mass: bigint, payload: PlexPayload): void {
         const stateId = this.getStateId(graphId, nodeId);
-        const existingIndex = this.positionsByState.get(stateId)?.get(payload.id);
+        const existingIndex = this.positionsByState.get(stateId);
         if (existingIndex !== undefined) {
             const existing = this.heap[existingIndex]!;
+            if (existing.payloadId !== payload.id) {
+                throw new Error(
+                    `Plex frontier state ${graphId}:${String(nodeId)} received payload ${String(payload.id)} after payload ${String(existing.payloadId)}.`
+                );
+            }
             existing.mass += mass;
             this.bubbleUp(existingIndex);
             return;
@@ -36,7 +48,7 @@ export class PlexRunFrontier {
 
         const index = this.heap.length;
         this.heap.push({ graphId, nodeId, mass, payload, payloadId: payload.id });
-        this.setPosition(stateId, payload.id, index);
+        this.setPosition(stateId, index);
         this.bubbleUp(index);
     }
 
@@ -56,12 +68,12 @@ export class PlexRunFrontier {
         out.nodeId = root.nodeId;
         out.mass = root.mass;
         out.payload = root.payload;
-        this.deletePosition(this.getStateId(root.graphId, root.nodeId), root.payloadId);
+        this.deletePosition(this.getStateId(root.graphId, root.nodeId));
 
         const last = this.heap.pop();
         if (this.heap.length > 0 && last) {
             this.heap[0] = last;
-            this.setPosition(this.getStateId(last.graphId, last.nodeId), last.payloadId, 0);
+            this.setPosition(this.getStateId(last.graphId, last.nodeId), 0);
             this.sinkDown(0);
         }
 
@@ -80,7 +92,7 @@ export class PlexRunFrontier {
         }
 
         this.heap[current] = entry;
-        this.setPosition(this.getStateId(entry.graphId, entry.nodeId), entry.payloadId, current);
+        this.setPosition(this.getStateId(entry.graphId, entry.nodeId), current);
     }
 
     private sinkDown(index: number): void {
@@ -101,29 +113,21 @@ export class PlexRunFrontier {
         }
 
         this.heap[current] = entry;
-        this.setPosition(this.getStateId(entry.graphId, entry.nodeId), entry.payloadId, current);
+        this.setPosition(this.getStateId(entry.graphId, entry.nodeId), current);
     }
 
     private moveHeapEntry(from: number, to: number): void {
         const entry = this.heap[from]!;
         this.heap[to] = entry;
-        this.setPosition(this.getStateId(entry.graphId, entry.nodeId), entry.payloadId, to);
+        this.setPosition(this.getStateId(entry.graphId, entry.nodeId), to);
     }
 
-    private setPosition(stateId: number, payloadId: PlexPayloadId, index: number): void {
-        let positions = this.positionsByState.get(stateId);
-        if (!positions) {
-            positions = new Map<PlexPayloadId, number>();
-            this.positionsByState.set(stateId, positions);
-        }
-        positions.set(payloadId, index);
+    private setPosition(stateId: number, index: number): void {
+        this.positionsByState.set(stateId, index);
     }
 
-    private deletePosition(stateId: number, payloadId: PlexPayloadId): void {
-        const positions = this.positionsByState.get(stateId);
-        if (!positions) return;
-        positions.delete(payloadId);
-        if (positions.size === 0) this.positionsByState.delete(stateId);
+    private deletePosition(stateId: number): void {
+        this.positionsByState.delete(stateId);
     }
 
     private getStateId(graphId: number, nodeId: PlexNodeId): number {

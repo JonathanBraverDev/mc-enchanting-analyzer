@@ -432,7 +432,7 @@ Implementation status after v7.3.0: Plex is no longer only a design sketch or a 
 
 - aggregate payload choice groups built from same-future conflict alternatives;
 - weighted payload factors and reduced choice ratios;
-- heap-based best-first frontier advancement;
+- heap-based best-first frontier advancement indexed by `(graphId, nodeId)` with a checked payload-identity invariant;
 - resolved Plex payload storage without immediate concrete expansion;
 - materialized compatibility projection to `PackedCombo -> mass` rows;
 - book-removal projection;
@@ -443,6 +443,8 @@ Implementation status after v7.3.0: Plex is no longer only a design sketch or a 
 - cached live Plex runs for one-at-a-time refinement calls on the same request signature.
 
 Focused exhaustive checks after the v7.3.0 implementation showed matching concrete/projected result-key sets for sampled fully resolved item cases and `1.7.2` book XP 30. Iteration counts dropped substantially in those checks, especially `1.7.2` book XP 30 (`874,816` concrete iterations vs `254,024` Plex iterations), but wall-clock performance is not yet better overall because Plex iterations are heavier and full materialization still has a cost. Treat Plex as internally usable for refinement, diagnostics, and opt-in comparisons, not as the public/default engine path yet.
+
+Current frontier invariant: for the implemented Minecraft registry/search semantics, `(graphId, nodeId)` determines the pending `PlexPayload`. `graphId` is an exact `SearchPoolSignature`, not a loose family; inside that graph, `nodeId` is `(exclusionMask, currentLevel, count)`. `PlexGraph` groups all edge alternatives that produce the same `childExclusionMask` into one `PlexWeightedChoice`, so ambiguity about which concrete enchantment in that same-future group was selected is stored inside the payload expression before the graph child is reached. Measured checks across `1.7.2` / `1.21.11`, book/sword/pickaxe/helmet/bow, XP `1/15/30`, and exhaustive `1.7.2` book XP 30 found `maxPayloadsPerState = 1`. `PlexRunFrontier` therefore indexes pending heap positions by `(graphId, nodeId)` and asserts that any later arrival for the same state has the same payload id. If that assertion ever fails for future mechanics or custom registry topology, the frontier must fall back to full `(graphId, nodeId, payloadId)` identity for that mode rather than silently merging different payload expressions.
 
 Conflict-group squash is the next candidate optimization after generalized expansion blueprints and suffix-sharing diagnostics. The goal is to share search work across mutually exclusive enchantment choices that produce the same future eligibility state, while delaying exact visible combination materialization until output/resolution time.
 
@@ -666,24 +668,9 @@ Initial plex search should use concrete-equivalent accounting unless benchmarks 
 
 A safe implementation needs a separate opt-in plex graph/executor or an explicit mode where `SearchRun` owns these aggregate combo expressions per pending structural node.
 
-Plex must separate structural frontier state from visible combo payload state. The current frontier merges pending work by `(graphId, nodeId)` and stores one mass per structural node. That remains the right heap shape for sharing search work, but the plex node needs a payload bucket behind it:
+Plex must separate structural frontier state from visible combo payload state, but the implemented frontier can currently use a stronger invariant than the original bucket sketch assumed. The sketch expected one structural node to carry a set of payload buckets. Actual `PlexGraph` construction groups same-future alternatives into the edge payload before the child node is reached, and the graph id is tied to an exact pool signature. Under those rules, a pending `(graphId, nodeId)` has one payload expression; the frontier stores one heap entry for that state and treats a different incoming payload id as an invariant violation.
 
-```ts
-type PlexFrontierBucket = {
-  graphId: number;
-  nodeId: PlexNodeId;
-  totalMass: bigint; // heap priority and stop-threshold input
-  payloads: PlexPayloadSet;
-};
-
-type PlexPayload = {
-  combo: PlexCombo;
-  mass: bigint;
-  accounting: PlexAccountingState;
-};
-```
-
-Expanding a plex structural node should compute its eligible edges once, then apply the same expansion to every payload in the bucket. This preserves the structural win while keeping visible combo expressions separate for materialization. For concrete-equivalent accounting, forwarding residue probably cannot be pooled only by structural node, because that would mix rounding state across different visible combo expressions that current concrete search would keep separate. First-pass concrete-equivalent mode should key forwarding residue by `(graphId, nodeId, payload identity, edgeIndex)` or otherwise prove a coarser residue bucket is equivalent. Factorized accounting can revisit coarser aggregate residue later.
+For concrete-equivalent accounting, forwarding residue still needs enough identity to avoid mixing rounding state across distinct visible expressions if a future registry/mechanic breaks that one-payload-per-state invariant. Current implementation keeps the payload dimension on residue storage and can be simplified only after the same invariant is proven safe for residue lifecycle as well as pending heap positions. Factorized accounting can revisit coarser aggregate residue later.
 
 This is memory-for-time in the abstract, but it may be memory-neutral or even memory-positive if implemented carefully. The current concrete search pays per concrete node/frontier entry for graph arrays, node IDs, expansion cache entries, frontier heap/storage slots, and residue arrays. Plex collapses many tiny structural nodes into fewer structural nodes with larger payload buckets. To avoid turning that into a payload-memory blowup:
 
