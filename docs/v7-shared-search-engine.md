@@ -80,6 +80,7 @@ Current implemented V7 behavior:
 - Explicit `exhaustive: true` mode for bottom-out searches: it forces threshold `0`, bypasses the normal iteration safety cap, remains abortable through async search, and is the canonical mode for golden snapshot generation. Product UI flows should still use checkpoint limits.
 - Generalized expansion-blueprint reuse across rank-variant pools. `SearchPoolFamilySignature` groups pools that share base enchant/conflict/weight structure while differing by exact packed ranks; `SearchExpansionBlueprintCache` reuses eligible-entry scans across those families without changing exact graph edges or combo payloads.
 - Suffix identities and pending suffix merging are fully implemented but experimental and off by default. `SearchGraph.getSuffixIdentity()` can identify non-root nodes with the same visible combo and future expansion, and `SearchRun` can canonicalize matching pending entries when `useSuffixMerging: true`; current profiling shows the identity/cache overhead can outweigh the lower iteration count, so product/default searches leave it disabled.
+- Opt-in Plex search internals are available for experiments through `PlexRun` / `PlexGraph`. Plex compresses same-future conflict-group alternatives into aggregate payloads, keeps the default concrete `SearchRun` path unchanged, and emits materialized compatibility views for result/pending comparison.
 
 Current boundaries and intentional non-goals:
 
@@ -419,13 +420,27 @@ Possible later optimizations:
 - Bounded memoized suffix summaries for fully equivalent tail states, especially for book-heavy searches.
 - Delayed-scaling or factorized-mass experiments to reduce repeated integer division on already-weighted mass.
 - Book-specific result-tail optimization, including better handling of redistributed book outcomes and huge low-probability combo tails.
-- Abstract mutually exclusive choice edges that defer exact member materialization only when all grouped members have identical future behavior; see [Conflict-group squash](#conflict-group-squash).
+- Refine the opt-in Plex path into a faster default-internal candidate once profiling reduces per-iteration overhead and broader compatibility fixtures pass; see [Conflict-group squash](#conflict-group-squash).
 
 These are not current behavior. They are active investigation areas for future performance, precision, or maintainability work, and they should not be treated as release promises.
 
 ### Conflict-group squash
 
 > Planning note: this section was amended 40 times before implementation started. The 40th amend was adding this note.
+
+Implementation status as of v7.3.0: Plex is no longer only a design sketch. The branch ships an opt-in internal `PlexRun` / `PlexGraph` path for experiments and diagnostics while leaving the normal concrete `SearchRun` product path unchanged. Plex currently supports:
+
+- aggregate payload choice groups built from same-future conflict alternatives;
+- weighted payload factors and reduced choice ratios;
+- heap-based best-first frontier advancement;
+- resolved Plex payload storage without immediate concrete expansion;
+- materialized compatibility projection to `PackedCombo -> mass` rows;
+- book-removal projection;
+- clue projection, including seed/pool-level impossible-clue rejection and projection-scoped clue-incompatible alternatives;
+- split-residue harvesting and phase-scoped mass accounting;
+- bounded checkpoint requests with engine-native exit reasons.
+
+Focused exhaustive checks after the v7.3.0 implementation showed matching concrete/projected result-key sets for sampled fully resolved item cases and `1.7.2` book XP 30. Iteration counts dropped substantially in those checks, especially `1.7.2` book XP 30 (`874,816` concrete iterations vs `254,024` Plex iterations), but wall-clock performance is not yet better overall because Plex iterations are heavier and full materialization still has a cost. Treat Plex as internally usable for refinement, diagnostics, and opt-in comparisons, not as the public/default engine path yet.
 
 Conflict-group squash is the next candidate optimization after generalized expansion blueprints and suffix-sharing diagnostics. The goal is to share search work across mutually exclusive enchantment choices that produce the same future eligibility state, while delaying exact visible combination materialization until output/resolution time.
 
@@ -749,17 +764,17 @@ For books, this could compress a large amount of structural work. A book can pas
 
 Delayed division is promising for precision. If aggregate branches carry exact numerator/denominator factors and quantize only when concrete results are materialized, active edge-split residue may shrink because the engine avoids flooring every concrete branch at every intermediate step. Reduced ratios such as `10:5:5 -> 2:1:1`, or a stronger precomputed BigInt normalization scheme, may also reduce residue bookkeeping pressure. Treat that as future accuracy work, not the first plex payload/run model: store original edge-local weights for now, then optimize factor representation only after parity and residue measurements show it matters. Factorized accounting needs explicit invariants and parity/near-parity comparisons because it changes where fixed-point rounding occurs.
 
-First safe implementation slices:
+First safe implementation slices were completed through internal opt-in comparison support in v7.3.0:
 
-1. Add `blocksBitset` / exclusion-mask metadata to `SearchPoolEntry` and assert conflict symmetry or compute symmetric closure.
-2. Add measurement-only diagnostics that group pending nodes by prefix-independent future identity.
-3. Add canonical plex choice-list helpers: sorted `PackedEnchant[]`, lexicographic choose-set ordering, direct equality, and optional diagnostics for conflict-component invariants.
-4. Add an opt-in `PlexGraph` keyed by `(exclusionMask, currentLevel, count)` without touching the default concrete graph.
-5. Add an opt-in plex run path with structural frontier buckets, payload sets, and resolved-plex storage.
-6. Emit materialized compatibility views for `SearchResult.snapshot.results`, `pendingEntries`, and worker-facing projection while keeping internal pending/resolved state compressed.
-7. Initially disable plex mode when `targetClueId` is present, `useSuffixMerging` is true, or book random-removal handling would require unresolved aggregate redistribution.
-8. Prove degenerate concrete parity first, then real choice-group parity, then benchmark memory/time before considering default enablement.
-9. Keep public/default search behavior unchanged until exhaustive parity and benchmark evidence justify enabling it.
+1. `blocksBitset` / exclusion-mask metadata exists on `SearchPoolEntry`.
+2. Measurement diagnostics covered prefix-independent future-collapse potential before implementation.
+3. Canonical Plex choice-list helpers exist for sorted `PackedEnchant[]` alternatives and direct equality.
+4. `PlexGraph` is separate from the default concrete graph.
+5. `PlexRun` owns a structural frontier, payloads, resolved Plex storage, and heap scheduling.
+6. Plex can emit materialized compatibility views for resolved results and pending entries.
+7. Plex now handles book-removal projection and clue projection, but these remain internal/experimental rather than public/default behavior.
+8. Focused parity checks cover degenerate and real choice-group behavior; broader benchmark and compatibility coverage are still needed before default enablement.
+9. Public/default search behavior remains unchanged until exhaustive parity and benchmark evidence justify enabling Plex.
 
 Implementation kickoff checklist:
 
@@ -858,4 +873,4 @@ Jonathan Braver / V7 engine maintainers.
 
 ## Last Updated
 
-2026-05-18
+2026-05-19
