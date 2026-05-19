@@ -10,6 +10,12 @@ export interface PlexResidueStats {
     readonly mass: bigint;
 }
 
+interface PlexResidueState {
+    readonly graphId: number;
+    readonly nodeId: PlexNodeId;
+    readonly payloads: Map<PlexPayloadId, BigUint64Array>;
+}
+
 /**
  * Owns Plex pending-work logistics that are orthogonal to search semantics.
  *
@@ -19,7 +25,7 @@ export interface PlexResidueStats {
  */
 export class PlexWorkStore {
     private readonly frontier = new PlexRunFrontier();
-    private readonly forwardingResidues: Array<Map<number, Map<PlexPayloadId, BigUint64Array>> | undefined> = [];
+    private readonly forwardingResidues = new Map<number, PlexResidueState>();
 
     public constructor(private readonly payloads: PlexPayloadStore = new PlexPayloadStore()) {}
 
@@ -49,51 +55,54 @@ export class PlexWorkStore {
     }
 
     public getForwardingResidues(work: PlexWorkItem): BigUint64Array | undefined {
-        return this.forwardingResidues[work.graphId]?.get(work.nodeId)?.get(work.payload.id);
+        return this.forwardingResidues.get(this.getResidueStateId(work))?.payloads.get(work.payload.id);
     }
 
     public setForwardingResidues(work: PlexWorkItem, residues: BigUint64Array | undefined): void {
-        let graphResidues = this.forwardingResidues[work.graphId];
-        if (!graphResidues) {
+        const stateId = this.getResidueStateId(work);
+        let state = this.forwardingResidues.get(stateId);
+        if (!state) {
             if (!residues) return;
-            graphResidues = new Map<number, Map<PlexPayloadId, BigUint64Array>>();
-            this.forwardingResidues[work.graphId] = graphResidues;
-        }
-
-        let nodeResidues = graphResidues.get(work.nodeId);
-        if (!nodeResidues) {
-            if (!residues) return;
-            nodeResidues = new Map<PlexPayloadId, BigUint64Array>();
-            graphResidues.set(work.nodeId, nodeResidues);
+            state = {
+                graphId: work.graphId,
+                nodeId: work.nodeId,
+                payloads: new Map<PlexPayloadId, BigUint64Array>()
+            };
+            this.forwardingResidues.set(stateId, state);
         }
 
         if (residues) {
-            nodeResidues.set(work.payload.id, residues);
+            state.payloads.set(work.payload.id, residues);
         } else {
-            nodeResidues.delete(work.payload.id);
-            if (nodeResidues.size === 0) graphResidues.delete(work.nodeId);
+            state.payloads.delete(work.payload.id);
+            if (state.payloads.size === 0) this.forwardingResidues.delete(stateId);
         }
     }
 
     public getActiveResidueStats(getTotalWeight: (graphId: number, nodeId: PlexNodeId) => number): PlexResidueStats {
         let count = 0;
         let mass = 0n;
-        for (let graphId = 0; graphId < this.forwardingResidues.length; graphId++) {
-            const graphResidues = this.forwardingResidues[graphId];
-            if (!graphResidues) continue;
-            for (const [nodeId, nodeResidues] of graphResidues) {
-                let residueNumerator = 0n;
-                for (const residues of nodeResidues.values()) {
-                    for (const residue of residues) {
-                        if (residue === 0n) continue;
-                        count++;
-                        residueNumerator += residue;
-                    }
+        for (const state of this.forwardingResidues.values()) {
+            let residueNumerator = 0n;
+            for (const residues of state.payloads.values()) {
+                for (const residue of residues) {
+                    if (residue === 0n) continue;
+                    count++;
+                    residueNumerator += residue;
                 }
-                if (residueNumerator === 0n) continue;
-                mass += residueNumerator / BigInt(getTotalWeight(graphId, nodeId as PlexNodeId));
             }
+            if (residueNumerator === 0n) continue;
+            mass += residueNumerator / BigInt(getTotalWeight(state.graphId, state.nodeId));
         }
         return { count, mass };
     }
+
+    private getResidueStateId(work: PlexWorkItem): number {
+        return pairIntegers(work.graphId, work.nodeId);
+    }
+}
+
+function pairIntegers(left: number, right: number): number {
+    const sum = left + right;
+    return ((sum * (sum + 1)) / 2) + right;
 }
