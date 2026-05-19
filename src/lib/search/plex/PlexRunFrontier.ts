@@ -1,8 +1,7 @@
 import type { PlexNodeId } from '#lib/search/plex/PlexGraph.js';
 import {
-    getPlexPayloadKey,
     type PlexPayload,
-    type PlexPayloadKey
+    type PlexPayloadId
 } from '#lib/search/plex/PlexPayload.js';
 
 export interface PlexFrontierPopTarget {
@@ -13,21 +12,21 @@ export interface PlexFrontierPopTarget {
 }
 
 interface PlexFrontierEntry extends PlexFrontierPopTarget {
-    readonly key: PlexPayloadKey;
+    readonly payloadId: PlexPayloadId;
 }
 
 /** Max-heap frontier for pending Plex work, merging identical structural + payload states. */
 export class PlexRunFrontier {
     private readonly heap: PlexFrontierEntry[] = [];
-    private readonly positionsByKey = new Map<PlexPayloadKey, number>();
+    private readonly positionsByState = new Map<number, Map<PlexPayloadId, number>>();
 
     public get size(): number {
         return this.heap.length;
     }
 
     public pushOrMerge(graphId: number, nodeId: PlexNodeId, mass: bigint, payload: PlexPayload): void {
-        const key = this.getPendingKey(graphId, nodeId, payload);
-        const existingIndex = this.positionsByKey.get(key);
+        const stateId = this.getStateId(graphId, nodeId);
+        const existingIndex = this.positionsByState.get(stateId)?.get(payload.id);
         if (existingIndex !== undefined) {
             const existing = this.heap[existingIndex]!;
             existing.mass += mass;
@@ -36,8 +35,8 @@ export class PlexRunFrontier {
         }
 
         const index = this.heap.length;
-        this.heap.push({ graphId, nodeId, mass, payload, key });
-        this.positionsByKey.set(key, index);
+        this.heap.push({ graphId, nodeId, mass, payload, payloadId: payload.id });
+        this.setPosition(stateId, payload.id, index);
         this.bubbleUp(index);
     }
 
@@ -57,12 +56,12 @@ export class PlexRunFrontier {
         out.nodeId = root.nodeId;
         out.mass = root.mass;
         out.payload = root.payload;
-        this.positionsByKey.delete(root.key);
+        this.deletePosition(this.getStateId(root.graphId, root.nodeId), root.payloadId);
 
         const last = this.heap.pop();
         if (this.heap.length > 0 && last) {
             this.heap[0] = last;
-            this.positionsByKey.set(last.key, 0);
+            this.setPosition(this.getStateId(last.graphId, last.nodeId), last.payloadId, 0);
             this.sinkDown(0);
         }
 
@@ -81,7 +80,7 @@ export class PlexRunFrontier {
         }
 
         this.heap[current] = entry;
-        this.positionsByKey.set(entry.key, current);
+        this.setPosition(this.getStateId(entry.graphId, entry.nodeId), entry.payloadId, current);
     }
 
     private sinkDown(index: number): void {
@@ -102,16 +101,37 @@ export class PlexRunFrontier {
         }
 
         this.heap[current] = entry;
-        this.positionsByKey.set(entry.key, current);
+        this.setPosition(this.getStateId(entry.graphId, entry.nodeId), entry.payloadId, current);
     }
 
     private moveHeapEntry(from: number, to: number): void {
         const entry = this.heap[from]!;
         this.heap[to] = entry;
-        this.positionsByKey.set(entry.key, to);
+        this.setPosition(this.getStateId(entry.graphId, entry.nodeId), entry.payloadId, to);
     }
 
-    private getPendingKey(graphId: number, nodeId: PlexNodeId, payload: PlexPayload): PlexPayloadKey {
-        return `${graphId}:${nodeId}:${getPlexPayloadKey(payload)}`;
+    private setPosition(stateId: number, payloadId: PlexPayloadId, index: number): void {
+        let positions = this.positionsByState.get(stateId);
+        if (!positions) {
+            positions = new Map<PlexPayloadId, number>();
+            this.positionsByState.set(stateId, positions);
+        }
+        positions.set(payloadId, index);
     }
+
+    private deletePosition(stateId: number, payloadId: PlexPayloadId): void {
+        const positions = this.positionsByState.get(stateId);
+        if (!positions) return;
+        positions.delete(payloadId);
+        if (positions.size === 0) this.positionsByState.delete(stateId);
+    }
+
+    private getStateId(graphId: number, nodeId: PlexNodeId): number {
+        return pairIntegers(graphId, nodeId);
+    }
+}
+
+function pairIntegers(left: number, right: number): number {
+    const sum = left + right;
+    return ((sum * (sum + 1)) / 2) + right;
 }

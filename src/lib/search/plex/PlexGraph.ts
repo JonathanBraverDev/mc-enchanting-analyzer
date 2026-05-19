@@ -73,7 +73,7 @@ export class PlexGraph {
     private readonly exclusionMasks: bigint[] = [];
     private readonly currentLevels: number[] = [];
     private readonly counts: number[] = [];
-    private readonly nodeIndex = new Map<string, PlexNodeId>();
+    private readonly nodeIndex = new Map<bigint, Map<number, PlexNodeId>>();
     private readonly expansionCache: Array<PlexExpansion | undefined> = [];
 
     public constructor(
@@ -221,8 +221,9 @@ export class PlexGraph {
         currentLevel: number,
         count: number
     ): PlexNodeId {
-        const key = this.createNodeKey(exclusionMask, currentLevel, count);
-        const existing = this.nodeIndex.get(key);
+        const stateKey = this.createNodeStateKey(currentLevel, count);
+        let nodesByState = this.nodeIndex.get(exclusionMask);
+        const existing = nodesByState?.get(stateKey);
         if (existing !== undefined) return existing;
 
         const id = this.counts.length as PlexNodeId;
@@ -230,12 +231,16 @@ export class PlexGraph {
         this.currentLevels.push(currentLevel);
         this.counts.push(count);
         this.expansionCache.push(undefined);
-        this.nodeIndex.set(key, id);
+        if (!nodesByState) {
+            nodesByState = new Map<number, PlexNodeId>();
+            this.nodeIndex.set(exclusionMask, nodesByState);
+        }
+        nodesByState.set(stateKey, id);
         return id;
     }
 
-    private createNodeKey(exclusionMask: bigint, currentLevel: number, count: number): string {
-        return `${exclusionMask.toString(16)}|${currentLevel}|${count}`;
+    private createNodeStateKey(currentLevel: number, count: number): number {
+        return (currentLevel * (ENGINE_LIMITS.MAX_ENCHANTS_PER_ITEM + 1)) + count;
     }
 
     private getTerminalReason(count: number): PlexTerminalReason {

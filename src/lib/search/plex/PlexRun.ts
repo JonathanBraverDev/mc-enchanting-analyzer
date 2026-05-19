@@ -18,6 +18,7 @@ import {
     materializeBookFactors,
     materializePlexPayloadFactors,
     type PlexPayload,
+    type PlexPayloadId,
     type PlexPayloadKey
 } from '#lib/search/plex/PlexPayload.js';
 
@@ -354,7 +355,7 @@ export class PlexRun {
     private readonly distributionService: ModifiedLevelDistributionService;
     private readonly graphsBySignature = new Map<SearchPoolSignature, PlexGraphRecord>();
     private readonly graphs: PlexGraphRecord[] = [];
-    private readonly forwardingResidues: Array<Map<string, BigUint64Array> | undefined> = [];
+    private readonly forwardingResidues: Array<Map<number, Map<PlexPayloadId, BigUint64Array>> | undefined> = [];
     private readonly frontier = new PlexRunFrontier();
     private seeded = false;
     private _seededLevelCount = 0;
@@ -565,8 +566,7 @@ export class PlexRun {
         }
 
         const totalWeight = BigInt(expansion.totalWeight);
-        const residueKey = this.getForwardingResidueKey(current.nodeId, current.payload);
-        const oldResidues = this.getForwardingResidues(current.graphId, residueKey);
+        const oldResidues = this.getForwardingResidues(current.graphId, current.nodeId, current.payload.id);
         const oldResidueMass = this.calculateForwardingResidueMass(oldResidues, totalWeight);
         const nextResidues = new BigUint64Array(expansion.edges.length);
         let assigned = 0n;
@@ -595,31 +595,44 @@ export class PlexRun {
         }
 
         const newResidueMass = nextResidueNumerator / totalWeight;
-        this.setForwardingResidues(current.graphId, residueKey, hasResidue ? nextResidues : undefined);
+        this.setForwardingResidues(current.graphId, current.nodeId, current.payload.id, hasResidue ? nextResidues : undefined);
         this.recordResidueDelta(oldResidueMass, newResidueMass);
         this.recordResiduePromotion(assigned - standaloneAssigned);
     }
 
-    private getForwardingResidueKey(nodeId: PlexNodeId, payload: PlexPayload): string {
-        return `${nodeId}:${getPlexPayloadKey(payload)}`;
+    private getForwardingResidues(
+        graphId: number,
+        nodeId: PlexNodeId,
+        payloadId: PlexPayloadId
+    ): BigUint64Array | undefined {
+        return this.forwardingResidues[graphId]?.get(nodeId)?.get(payloadId);
     }
 
-    private getForwardingResidues(graphId: number, residueKey: string): BigUint64Array | undefined {
-        return this.forwardingResidues[graphId]?.get(residueKey);
-    }
-
-    private setForwardingResidues(graphId: number, residueKey: string, residues: BigUint64Array | undefined): void {
+    private setForwardingResidues(
+        graphId: number,
+        nodeId: PlexNodeId,
+        payloadId: PlexPayloadId,
+        residues: BigUint64Array | undefined
+    ): void {
         let graphResidues = this.forwardingResidues[graphId];
         if (!graphResidues) {
             if (!residues) return;
-            graphResidues = new Map<string, BigUint64Array>();
+            graphResidues = new Map<number, Map<PlexPayloadId, BigUint64Array>>();
             this.forwardingResidues[graphId] = graphResidues;
         }
 
+        let nodeResidues = graphResidues.get(nodeId);
+        if (!nodeResidues) {
+            if (!residues) return;
+            nodeResidues = new Map<PlexPayloadId, BigUint64Array>();
+            graphResidues.set(nodeId, nodeResidues);
+        }
+
         if (residues) {
-            graphResidues.set(residueKey, residues);
+            nodeResidues.set(payloadId, residues);
         } else {
-            graphResidues.delete(residueKey);
+            nodeResidues.delete(payloadId);
+            if (nodeResidues.size === 0) graphResidues.delete(nodeId);
         }
     }
 
@@ -652,16 +665,17 @@ export class PlexRun {
             const graphResidues = this.forwardingResidues[graphId];
             if (!graphResidues) continue;
             const graph = this.getGraphById(graphId).graph;
-            for (const [key, residues] of graphResidues) {
+            for (const [nodeId, nodeResidues] of graphResidues) {
                 let residueNumerator = 0n;
-                for (const residue of residues) {
-                    if (residue === 0n) continue;
-                    count++;
-                    residueNumerator += residue;
+                for (const residues of nodeResidues.values()) {
+                    for (const residue of residues) {
+                        if (residue === 0n) continue;
+                        count++;
+                        residueNumerator += residue;
+                    }
                 }
                 if (residueNumerator === 0n) continue;
-                const nodeId = Number(key.slice(0, key.indexOf(':'))) as PlexNodeId;
-                const expansion = graph.getExpansion(nodeId);
+                const expansion = graph.getExpansion(nodeId as PlexNodeId);
                 mass += residueNumerator / BigInt(expansion.totalWeight);
             }
         }

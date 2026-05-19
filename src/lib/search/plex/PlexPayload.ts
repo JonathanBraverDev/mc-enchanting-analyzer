@@ -15,6 +15,20 @@ import {
 import type { PlexEdge } from '#lib/search/plex/PlexGraph.js';
 
 export type PlexPayloadKey = string;
+export type PlexPayloadId = number & { readonly __brand: 'PlexPayloadId' };
+
+interface PayloadInternNode {
+    readonly fixedNext: Map<number, PayloadInternNode>;
+    readonly choiceNext: Map<number, PayloadInternNode>;
+    payload?: PlexPayload | undefined;
+}
+
+let nextPlexPayloadId = 1;
+const payloadInternRoot: PayloadInternNode = {
+    fixedNext: new Map<number, PayloadInternNode>(),
+    choiceNext: new Map<number, PayloadInternNode>()
+};
+const plexPayloadKeyCache = new WeakMap<PlexPayload, PlexPayloadKey>();
 
 /**
  * Weighted accumulated combo expression carried by the plex frontier/results.
@@ -25,14 +39,10 @@ export type PlexPayloadKey = string;
  * but aligned: `combo.choices[i]` is the packed-enchant view of `choices[i]`.
  */
 export interface PlexPayload {
+    /** Dense identity used by hot-path frontier/residue maps. */
+    readonly id: PlexPayloadId;
     readonly combo: PlexCombo;
     readonly choices: readonly PlexWeightedChoice[];
-    /** Cached fixed-pick portion of the canonical identity string. */
-    readonly fixedKey: string;
-    /** Cached weighted-choice portion of the canonical identity string. */
-    readonly choiceKey: string;
-    /** Cached canonical identity string used by frontier, residues, and result maps. */
-    readonly key: PlexPayloadKey;
 }
 
 export interface PlexComboFactor {
@@ -42,12 +52,12 @@ export interface PlexComboFactor {
 }
 
 export const EMPTY_PLEX_PAYLOAD: PlexPayload = Object.freeze({
+    id: 0 as PlexPayloadId,
     combo: EMPTY_PLEX_COMBO,
-    choices: Object.freeze([]),
-    fixedKey: '',
-    choiceKey: '',
-    key: 'f=|c='
+    choices: Object.freeze([])
 });
+payloadInternRoot.payload = EMPTY_PLEX_PAYLOAD;
+plexPayloadKeyCache.set(EMPTY_PLEX_PAYLOAD, 'f=|c=');
 
 export function createPlexPayload(
     fixed: readonly PackedEnchant[] = [],
@@ -66,42 +76,74 @@ export function appendPlexPayloadEdge(
 
     if (alternatives.length === 1) {
         const fixed = insertPackedEnchant(payload.combo.fixed, alternatives[0]!);
-        return createCanonicalPlexPayload(
-            fixed,
-            payload.choices,
-            createPackedEnchantListKey(fixed),
-            payload.choiceKey
-        );
+        return createCanonicalPlexPayload(fixed, payload.choices);
     }
 
     const choices = insertWeightedChoice(payload.choices, edge.choice);
-    return createCanonicalPlexPayload(
-        payload.combo.fixed,
-        choices,
-        payload.fixedKey,
-        createChoiceKey(choices)
-    );
+    return createCanonicalPlexPayload(payload.combo.fixed, choices);
 }
 
 export function getPlexPayloadKey(payload: PlexPayload): PlexPayloadKey {
-    return payload.key;
+    const cached = plexPayloadKeyCache.get(payload);
+    if (cached !== undefined) return cached;
+    const key = createPayloadKey(payload.combo.fixed, payload.choices);
+    plexPayloadKeyCache.set(payload, key);
+    return key;
 }
 
 function createCanonicalPlexPayload(
     fixed: CanonicalPackedEnchantList,
-    choices: readonly PlexWeightedChoice[],
-    fixedKey: string = createPackedEnchantListKey(fixed),
-    choiceKey: string = createChoiceKey(choices)
+    choices: readonly PlexWeightedChoice[]
 ): PlexPayload {
+    const internNode = getPlexPayloadInternNode(fixed, choices);
+    if (internNode.payload) return internNode.payload;
+
     const comboChoices = Object.freeze(choices.map(getPlexChoicePackedEnchants));
     const combo: PlexCombo = Object.freeze({ fixed, choices: comboChoices });
-    return Object.freeze({
+    const payload = Object.freeze({
+        id: nextPlexPayloadId++ as PlexPayloadId,
         combo,
-        choices,
-        fixedKey,
-        choiceKey,
-        key: `f=${fixedKey}|c=${choiceKey}`
+        choices
     });
+    internNode.payload = payload;
+    return payload;
+}
+
+function getPlexPayloadInternNode(
+    fixed: readonly PackedEnchant[],
+    choices: readonly PlexWeightedChoice[]
+): PayloadInternNode {
+    let node = payloadInternRoot;
+    for (const packedEnchant of fixed) {
+        node = getOrCreatePayloadInternNode(node.fixedNext, Number(packedEnchant));
+    }
+    for (const choice of choices) {
+        node = getOrCreatePayloadInternNode(node.choiceNext, choice.id);
+    }
+
+    return node;
+}
+
+function getOrCreatePayloadInternNode(
+    map: Map<number, PayloadInternNode>,
+    key: number
+): PayloadInternNode {
+    let node = map.get(key);
+    if (!node) {
+        node = {
+            fixedNext: new Map<number, PayloadInternNode>(),
+            choiceNext: new Map<number, PayloadInternNode>()
+        };
+        map.set(key, node);
+    }
+    return node;
+}
+
+function createPayloadKey(
+    fixed: readonly PackedEnchant[],
+    choices: readonly PlexWeightedChoice[]
+): PlexPayloadKey {
+    return `f=${createPackedEnchantListKey(fixed)}|c=${createChoiceKey(choices)}`;
 }
 
 function createPackedEnchantListKey(packedEnchants: readonly PackedEnchant[]): string {
