@@ -100,7 +100,7 @@ export class PlexGraph {
     }
 
     public getRootNode(initialLevel: number): PlexNode {
-        return this.getOrCreateNode(0n, initialLevel, 0);
+        return this.getNode(this.getOrCreateNodeId(0n, initialLevel, 0));
     }
 
     public getOrCreateNode(
@@ -108,17 +108,7 @@ export class PlexGraph {
         currentLevel: number,
         count: number
     ): PlexNode {
-        const key = this.createNodeKey(exclusionMask, currentLevel, count);
-        const existing = this.nodeIndex.get(key);
-        if (existing !== undefined) return this.getNode(existing);
-
-        const id = this.counts.length as PlexNodeId;
-        this.exclusionMasks.push(exclusionMask);
-        this.currentLevels.push(currentLevel);
-        this.counts.push(count);
-        this.expansionCache.push(undefined);
-        this.nodeIndex.set(key, id);
-        return this.getNode(id);
+        return this.getNode(this.getOrCreateNodeId(exclusionMask, currentLevel, count));
     }
 
     public getNode(id: PlexNodeId): PlexNode {
@@ -197,12 +187,11 @@ export class PlexGraph {
                 const choice = canonicalizeWeightedChoice(
                     [...group.weightsByAlternative.entries()].map(([packedEnchant, weight]) => ({ packedEnchant, weight }))
                 );
-                const child = this.getOrCreateNode(group.childExclusionMask, childLevel, childCount);
                 return Object.freeze({
                     choice,
                     weight: group.weight,
                     childExclusionMask: group.childExclusionMask,
-                    childId: child.id
+                    childId: this.getOrCreateNodeId(group.childExclusionMask, childLevel, childCount)
                 });
             })
             .sort((a, b) => comparePlexWeightedChoices(a.choice, b.choice)));
@@ -225,6 +214,24 @@ export class PlexGraph {
             edges,
             terminalReason
         });
+    }
+
+    private getOrCreateNodeId(
+        exclusionMask: bigint,
+        currentLevel: number,
+        count: number
+    ): PlexNodeId {
+        const key = this.createNodeKey(exclusionMask, currentLevel, count);
+        const existing = this.nodeIndex.get(key);
+        if (existing !== undefined) return existing;
+
+        const id = this.counts.length as PlexNodeId;
+        this.exclusionMasks.push(exclusionMask);
+        this.currentLevels.push(currentLevel);
+        this.counts.push(count);
+        this.expansionCache.push(undefined);
+        this.nodeIndex.set(key, id);
+        return id;
     }
 
     private createNodeKey(exclusionMask: bigint, currentLevel: number, count: number): string {
