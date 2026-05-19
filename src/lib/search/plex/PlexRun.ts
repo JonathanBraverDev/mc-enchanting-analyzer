@@ -1,6 +1,7 @@
+import { PACKING_CONSTANTS } from '#constants/engine.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { ProbabilityMassAccountant } from '#engine/search/ProbabilityMassAccountant.js';
-import type { PackedCombo } from '#types/index.js';
+import type { PackedCombo, PackedEnchant } from '#types/index.js';
 import type { MassAccountingBreakdown, MassAccountingPhases, ProjectionAccountingBreakdown } from '#types/mass.js';
 import { ComboUtils, PRECISION, ProbUtils } from '#utils/index.js';
 import type { PendingFrontierEntry } from '#lib/search/SearchRun.js';
@@ -222,18 +223,20 @@ function projectPlexPayloadMass(
     pendingSource?: PlexPendingEntry | undefined
 ): void {
     acc.source += sourceMass;
+    const clueSurvival = calculateClueSurvival(payload, options.targetClueId);
+    const clueEligibleMass = (sourceMass * clueSurvival.numerator) / clueSurvival.denominator;
+    acc.clueIncompatible += sourceMass - clueEligibleMass;
+    if (clueEligibleMass === 0n) return;
+
     let assigned = 0n;
     const factors = options.applyBookRemoval
         ? materializeBookFactors(payload, enchantToIndex)
         : materializePlexPayloadFactors(payload, enchantToIndex);
     for (const factor of factors) {
-        const mass = (sourceMass * factor.numerator) / factor.denominator;
+        const mass = (sourceMass * factor.numerator * clueSurvival.numerator) /
+            (factor.denominator * clueSurvival.denominator);
         assigned += mass;
         if (mass === 0n) continue;
-        if (options.targetClueId !== undefined && !containsTargetClue(factor.combo, options.targetClueId, options.indexToEnchant)) {
-            acc.clueIncompatible += mass;
-            continue;
-        }
         if (target === 'result') {
             acc.projectedResultMass += mass;
             acc.results.set(factor.combo, (acc.results.get(factor.combo) ?? 0n) + mass);
@@ -249,20 +252,42 @@ function projectPlexPayloadMass(
         }
     }
     // Projection loss reduces concrete-view accuracy, not internal engine mass.
-    acc.loss += sourceMass - assigned;
+    acc.loss += clueEligibleMass - assigned;
 }
 
-function containsTargetClue(
-    combo: PackedCombo,
-    targetClueId: number,
-    indexToEnchant: readonly number[] | undefined
-): boolean {
-    if (!indexToEnchant) throw new Error('Plex clue projection requires indexToEnchant.');
-    let found = false;
-    ComboUtils.forEachEnchant(combo, indexToEnchant as number[], enchant => {
-        if (enchant === targetClueId) found = true;
-    });
-    return found;
+function calculateClueSurvival(
+    payload: PlexPayload,
+    targetClueId: number | undefined
+): { numerator: bigint; denominator: bigint } {
+    if (targetClueId === undefined) return { numerator: 1n, denominator: 1n };
+    if (payload.combo.fixed.some(packedEnchant => matchesClueTarget(packedEnchant, targetClueId))) {
+        return { numerator: 1n, denominator: 1n };
+    }
+
+    for (const choice of payload.choices) {
+        let matchingWeight = 0;
+        for (const alternative of choice.alternatives) {
+            if (matchesClueTarget(alternative.packedEnchant, targetClueId)) {
+                matchingWeight += alternative.weight;
+            }
+        }
+        if (matchingWeight > 0) {
+            return {
+                numerator: BigInt(matchingWeight),
+                denominator: BigInt(choice.totalWeight)
+            };
+        }
+    }
+
+    return { numerator: 0n, denominator: 1n };
+}
+
+function matchesClueTarget(packedEnchant: PackedEnchant, targetClueId: number): boolean {
+    const targetEnchantId = targetClueId >> PACKING_CONSTANTS.ENCHANT_SHIFT;
+    const targetRank = targetClueId & PACKING_CONSTANTS.RANK_MASK;
+    const enchantId = packedEnchant >> PACKING_CONSTANTS.ENCHANT_SHIFT;
+    const rank = packedEnchant & PACKING_CONSTANTS.RANK_MASK;
+    return enchantId === targetEnchantId && rank >= targetRank;
 }
 
 function createProjectionAccounting(
@@ -356,6 +381,13 @@ export class PlexRun {
             if (rootMass === 0n) continue;
             const level = Number(levelText);
             const pool = this.kernel.getPool(level);
+            if (this.targetClueId !== undefined && !pool.entries.some(entry => matchesClueTarget(entry.packedEnchant, this.targetClueId!))) {
+                this.mass.record('clueIncompatible', rootMass);
+                seededMass += rootMass;
+                this._seededLevelCount++;
+                continue;
+            }
+
             const graph = this.graphForPool(pool);
             const root = graph.graph.getRootNode(level);
 
