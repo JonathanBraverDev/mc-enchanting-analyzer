@@ -2,7 +2,7 @@ import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedL
 import { ProbabilityMassAccountant } from '#engine/search/ProbabilityMassAccountant.js';
 import type { PackedCombo } from '#types/index.js';
 import type { MassAccountingBreakdown } from '#types/mass.js';
-import { PRECISION, ProbUtils } from '#utils/index.js';
+import { ComboUtils, PRECISION, ProbUtils } from '#utils/index.js';
 import type { SearchPool, SearchPoolSignature } from '#lib/search/registry/RegistryKernel.js';
 import { RegistryKernel } from '#lib/search/registry/RegistryKernel.js';
 import { PlexGraph, type PlexNodeId } from '#lib/search/plex/PlexGraph.js';
@@ -19,6 +19,7 @@ import {
 
 export interface PlexRunOptions {
     readonly distributionService?: ModifiedLevelDistributionService | undefined;
+    readonly targetClueId?: number | undefined;
 }
 
 export interface PlexRunAdvanceRequest {
@@ -80,10 +81,16 @@ export function projectPlexResults(
     results: ReadonlyMap<PlexPayloadKey, PlexResult>,
     enchantToIndex: Map<number, number>,
     sourceMass?: MassAccountingBreakdown,
-    options: { readonly applyBookRemoval?: boolean | undefined } = {}
+    options: {
+        readonly applyBookRemoval?: boolean | undefined;
+        readonly targetClueId?: number | undefined;
+        readonly indexToEnchant?: readonly number[] | undefined;
+    } = {}
 ): ProjectedPlexResults {
     const projected = new Map<PackedCombo, bigint>();
+    let projectedMass = 0n;
     let projectionLoss = 0n;
+    let clueIncompatible = 0n;
     let resolvedMass = 0n;
 
     for (const result of results.values()) {
@@ -95,30 +102,49 @@ export function projectPlexResults(
         for (const factor of factors) {
             const mass = (result.mass * factor.numerator) / factor.denominator;
             assigned += mass;
+            if (options.targetClueId !== undefined && !containsTargetClue(factor.combo, options.targetClueId, options.indexToEnchant)) {
+                clueIncompatible += mass;
+                continue;
+            }
+            projectedMass += mass;
             projected.set(factor.combo, (projected.get(factor.combo) ?? 0n) + mass);
         }
         // Projection loss reduces concrete-view accuracy, not internal resolved mass.
         projectionLoss += result.mass - assigned;
     }
 
-    const projectedMass = resolvedMass - projectionLoss;
     return Object.freeze({
         results: new Map(projected),
         projectionLoss,
         projectedMass,
-        mass: createProjectedMassAccounting(sourceMass ?? createProjectionMass(resolvedMass), projectedMass, projectionLoss)
+        mass: createProjectedMassAccounting(sourceMass ?? createProjectionMass(resolvedMass), projectedMass, projectionLoss, clueIncompatible)
     });
+}
+
+function containsTargetClue(
+    combo: PackedCombo,
+    targetClueId: number,
+    indexToEnchant: readonly number[] | undefined
+): boolean {
+    if (!indexToEnchant) throw new Error('Plex clue projection requires indexToEnchant.');
+    let found = false;
+    ComboUtils.forEachEnchant(combo, indexToEnchant as number[], enchant => {
+        if (enchant === targetClueId) found = true;
+    });
+    return found;
 }
 
 function createProjectedMassAccounting(
     sourceMass: MassAccountingBreakdown,
     projectedMass: bigint,
-    projectionLoss: bigint
+    projectionLoss: bigint,
+    projectedClueIncompatible: bigint
 ): MassAccountingBreakdown {
     const sourceUnits = getMassUnits(sourceMass);
+    const clueIncompatible = sourceUnits.clueIncompatible + projectedClueIncompatible;
     return Object.freeze({
         resolved: 0,
-        clueIncompatible: sourceMass.clueIncompatible,
+        clueIncompatible: ProbUtils.toNumber(clueIncompatible),
         projected: ProbUtils.toNumber(projectedMass),
         pending: sourceMass.pending,
         sieved: sourceMass.sieved,
@@ -130,7 +156,7 @@ function createProjectedMassAccounting(
         recoveredSieved: sourceMass.recoveredSieved,
         units: Object.freeze({
             resolved: '0',
-            clueIncompatible: sourceUnits.clueIncompatible.toString(),
+            clueIncompatible: clueIncompatible.toString(),
             projected: projectedMass.toString(),
             pending: sourceUnits.pending.toString(),
             sieved: sourceUnits.sieved.toString(),
@@ -214,12 +240,14 @@ export class PlexRun {
     private _seededLevelCount = 0;
     private _iterations = 0;
     private _lastExpandedMass = 0n;
+    private readonly targetClueId: number | undefined;
 
     public constructor(
         private readonly kernel: RegistryKernel,
         options: PlexRunOptions = {}
     ) {
         this.distributionService = options.distributionService ?? new ModifiedLevelDistributionService();
+        this.targetClueId = options.targetClueId;
     }
 
     public seedXp(xp: number): void {
@@ -274,7 +302,9 @@ export class PlexRun {
 
     public projectResults(): ProjectedPlexResults {
         return projectPlexResults(this.results, this.kernel.registry.enchantToIndex, this.mass.toPublic(), {
-            applyBookRemoval: this.kernel.item === 'book'
+            applyBookRemoval: this.kernel.item === 'book',
+            targetClueId: this.targetClueId,
+            indexToEnchant: this.kernel.registry.indexToEnchant
         });
     }
 
@@ -401,7 +431,7 @@ export class PlexRun {
 
         const record = Object.freeze({
             id: this.graphs.length,
-            graph: new PlexGraph(this.kernel, pool)
+            graph: new PlexGraph(this.kernel, pool, { clueMode: this.targetClueId === undefined ? null : `target:${this.targetClueId}` })
         });
         this.graphs.push(record);
         this.graphsBySignature.set(pool.signature, record);

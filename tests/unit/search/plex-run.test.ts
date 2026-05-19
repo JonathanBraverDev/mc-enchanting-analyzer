@@ -160,6 +160,33 @@ describe('PlexRun', () => {
         assert.strictEqual(projected.results.get(ComboUtils.pack([fixed, right], registry.enchantToIndex)), 3n);
     });
 
+    it('classifies clue-incompatible factors during projection without resolving groups early', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'sword', material: 'diamond' });
+        const entries = kernel.getPool(30).entries.map(entry => entry.packedEnchant);
+        const fixed = entries[0]!;
+        const target = entries[1]!;
+        const other = entries[2]!;
+        const payload = createPlexPayload([fixed], [
+            canonicalizeWeightedChoice([
+                { packedEnchant: target, weight: 2 },
+                { packedEnchant: other, weight: 1 }
+            ])
+        ]);
+        const projected = projectPlexResults(
+            new Map([[getPlexPayloadKey(payload), { payload, mass: 12n }]]),
+            registry.enchantToIndex,
+            undefined,
+            { targetClueId: target, indexToEnchant: registry.indexToEnchant }
+        );
+
+        assert.strictEqual(projected.projectionLoss, 0n);
+        assert.strictEqual(projected.projectedMass, 8n);
+        assert.strictEqual(projected.mass.units?.projected, '8');
+        assert.strictEqual(projected.mass.units?.clueIncompatible, '4');
+        assert.deepStrictEqual([...projected.results.keys()], [ComboUtils.pack([fixed, target], registry.enchantToIndex)]);
+    });
+
     it('applies book removal while projecting factorized plex results', () => {
         const registry = RegistryFactory.build('1.21.11');
         const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
@@ -226,6 +253,27 @@ describe('PlexRun', () => {
         assert.strictEqual(bigintSum(concreteSnapshot.results.values()), BigInt(concreteSnapshot.mass.units!.resolved));
         assert.strictEqual(bigintSum(projected.results.values()), projected.projectedMass);
         assert.strictEqual(projected.projectedMass + projected.projectionLoss, BigInt(plexSnapshot.mass.units!.resolved));
+    });
+
+    it('matches concrete clue-pruned result keys for a tiny exhaustive case', () => {
+        const registry = RegistryFactory.build('1.4.6');
+        const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
+        const targetClueId = kernel.getPool(30).entries[0]!.packedEnchant;
+        const concrete = new SearchRun(kernel, { targetClueId });
+        concrete.seedXp(30);
+        const concreteSnapshot = concrete.searchToCheckpoint({ exhaustive: true });
+        const plex = new PlexRun(kernel, { targetClueId });
+        plex.seedXp(30);
+        const plexSnapshot = plex.advance({ maxIterations: 10_000 });
+        const projected = plex.projectResults();
+
+        assert.strictEqual(concreteSnapshot.fullyResolved, true);
+        assert.strictEqual(plexSnapshot.fullyResolved, true);
+        assert.ok(projected.mass.clueIncompatible > 0);
+        assert.deepStrictEqual(
+            [...projected.results.keys()].sort((a, b) => a - b),
+            [...concreteSnapshot.results.keys()].sort((a, b) => a - b)
+        );
     });
 
     it('matches concrete multi-book result keys after book-removal projection', () => {
