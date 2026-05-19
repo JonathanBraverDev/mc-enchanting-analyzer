@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## v7.3.0 (2026-05-19)
+
+### Added
+- **Experimental Plex search path**: Added an opt-in internal Plex search implementation that compresses mutually exclusive choice groups into aggregate payloads and materializes concrete compatibility views for comparison and diagnostics.
+- **Plex checkpoint projection**: Added concrete result and pending projection for Plex checkpoints, including native book-removal projection, clue projection, phase-scoped projection accounting, split-residue diagnostics, and engine-native exit reasons.
+
+### Developer Experience
+- **Plex parity coverage**: Added targeted Plex tests for choice grouping, bounded advance, checkpoint projection, clue projection, split-residue harvesting, and concrete comparison fixtures. Focused exhaustive checks confirm matching concrete/projected result sets for sampled fully resolved item cases and `1.7.2` book XP 30.
+- **Search documentation refresh**: Updated the V7 search and mass-accounting docs to describe Plex as an internal experimental path rather than only a future design sketch.
+
 ## v7.2.0 (2026-05-18)
 
 ### Improved

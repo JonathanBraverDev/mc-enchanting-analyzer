@@ -126,6 +126,7 @@ Missing `groups` on an enchantable item rule means “all active table enchantme
 | `SearchRun` | Runs the globally weighted best-first expansion loop, mass accounting, residue forwarding, and optional suffix merging until checkpoint or exhaustion |
 | `SearchRunFrontier` | Stores pending graph node IDs and weighted probability mass in best-first order |
 | `SearchGraph` | Owns canonical node identity, combo payloads, exact graph expansions, suffix identities, and graph-local expansion state |
+| `PlexRun` / `PlexGraph` | Experimental internal path that compresses same-future conflict-group choices into aggregate payloads and materializes concrete compatibility views for diagnostics |
 | `ProbabilityMassAccountant` | Records resolved, clue-incompatible, pending, sieved, capped, overflow, and rounding mass |
 | `ModifiedLevelDistributionService` | Computes the BigInt distribution of modified enchantment levels |
 | `SummaryAggregationService` | Scans resolved combos and pending frontiers once to derive shared any/rank/count/clue mass buckets |
@@ -176,6 +177,7 @@ The V7 search path separates graph node identity from weighted frontier priority
 - `SearchRunFrontier` stores `graphId`, `nodeId`, and pending weighted probability mass, using direct merge/heap lookups for best-first scheduling.
 - Forwarding residue is tracked by exact source expansion and outgoing edge, so fixed-point leftovers can recover only when later mass reaches the same equivalence point.
 - Suffix identity and suffix merging are implemented but opt-in; default product searches do not canonicalize pending suffix nodes because current profiling shows the overhead can outweigh the iteration savings.
+- Plex search is implemented as a separate opt-in internal path. It keeps structural frontier state separate from visible payload choices, can project resolved and pending aggregate state back into concrete compatibility rows, and is not yet selected by `SearchExecutionService` for product/default requests.
 
 This preserves best-first semantics while changing the scheduling scope: the highest-probability pending weighted node expands first across the whole XP search, not inside one modified level at a time. `meta` remains the canonical state identity. The scaling improvement comes from sharing graph identity and cache state across the weighted run instead of repeating independent per-modified-level searches.
 
@@ -203,7 +205,7 @@ The browser uses two dedicated workers:
 
 The registry rule model declares item/material compatibility together, but the engine cache keys still follow the computation they cache. Pool entries only depend on the fixed enchantable item pool at a modified level. Search run entries include material because material changes enchantability, which changes the modified-level distribution and therefore the weighted search state. Threshold-aware reads can reuse more precise cached state when it already satisfies the requested checkpoint.
 
-Expansion blueprint caching is enabled by default because it preserves exact graph edges while reducing repeated candidate checks. Suffix merging is implemented behind `useSuffixMerging` but remains off by default because lower iteration counts have not consistently translated into faster wall-clock runtime.
+Expansion blueprint caching is enabled by default because it preserves exact graph edges while reducing repeated candidate checks. Suffix merging is implemented behind `useSuffixMerging` but remains off by default because lower iteration counts have not consistently translated into faster wall-clock runtime. Plex search is available for internal experiments, comparison tests, and refinement work, but remains outside the default cache/execution path until parity and wall-clock evidence justify enabling it.
 
 ## Release Documentation Rule
 
@@ -221,4 +223,4 @@ Jonathan Braver / V7 engine maintainers.
 
 ## Last Updated
 
-2026-05-18
+2026-05-19
