@@ -84,6 +84,8 @@ describe('RegistryKernel', () => {
             assert.ok(entry.weight > 0);
             assert.ok(entry.comboIndex > 0);
             assert.strictEqual(entry.idBit, 1n << BigInt(entry.enchantId));
+            assert.strictEqual(entry.blocksBitset, entry.idBit | entry.conflictBitset);
+            assert.notStrictEqual(entry.blocksBitset & entry.idBit, 0n);
         }
     });
 });

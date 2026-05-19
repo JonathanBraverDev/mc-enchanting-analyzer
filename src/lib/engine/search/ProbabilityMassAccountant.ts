@@ -67,7 +67,7 @@ export class ProbabilityMassAccountant {
      */
     public getTotalMass(): bigint {
         const d = this.data;
-        // recoveredRounding (7) and recoveredSieved (8) are diagnostic
+        // recoveredRounding (7) and recoveredSieved (8) are non-additive diagnostics.
         return d[0]! + d[1]! + d[2]! + d[3]! + d[4]! + d[5]! + d[6]!;
     }
 
@@ -148,7 +148,7 @@ export class ProbabilityMassAccountant {
      * Returns the mass discovered but not yet expanded.
      */
     public getUnexploredMass(): bigint {
-        return this.data[2]!;
+        return this.data[BUCKET_INDEX.pending]!;
     }
 
     /**

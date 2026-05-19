@@ -32,7 +32,7 @@ describe('ProbabilityMassAccountant', () => {
         tracker.record('resolved', 100n);
         tracker.record('pending', 200n);
         tracker.record('sieved', 50n);
-        // Diagnostics are not added to total.
+        // Recovered buckets are diagnostics and not added to engine-stage total.
         tracker.record('rounding', 10n);
         tracker.record('recoveredRounding', 25n);
 
@@ -42,6 +42,9 @@ describe('ProbabilityMassAccountant', () => {
     it('should assert conservation', () => {
         const tracker = new ProbabilityMassAccountant();
         tracker.record('resolved', PRECISION);
+        assert.doesNotThrow(() => tracker.assertConservation());
+
+        tracker.record('recoveredRounding', 1n);
         assert.doesNotThrow(() => tracker.assertConservation());
 
         tracker.record('rounding', 1n);

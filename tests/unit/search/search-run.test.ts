@@ -241,6 +241,22 @@ describe('SearchRun', () => {
         assert.ok(snapshot.activeResidueMass >= 0n);
     });
 
+    it('measures future-collapse potential without enabling suffix merging', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
+        const run = new SearchRun(kernel, { useSuffixMerging: false });
+
+        run.seedXp(30);
+        run.searchToCheckpoint({ threshold: 0n, maxIterations: 10_000, targetClassifiedMass: 0.5 });
+        const diagnostics = run.getFutureCollapseDiagnostics();
+
+        assert.ok(diagnostics.eligiblePendingCount > 0);
+        assert.ok(diagnostics.collapsibleGroupCount > 0);
+        assert.ok(diagnostics.collapsiblePendingCount > diagnostics.collapsibleGroupCount);
+        assert.ok(diagnostics.collapsibleMass > 0n);
+        assert.ok(diagnostics.largestGroupSize > 1);
+    });
+
     it('can stop once a requested resolved-mass target is reached', () => {
         const registry = RegistryFactory.build('1.21.11');
         const kernel = new RegistryKernel({ registry, item: 'sword', material: 'diamond' });

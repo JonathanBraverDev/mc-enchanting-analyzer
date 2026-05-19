@@ -128,6 +128,20 @@ describe('SummaryService', () => {
         assert.ok(Math.abs(result.accounting.pending - 0.25) < 1e-12, `got ${result.accounting.pending}`);
     });
 
+    it('reports engine classified mass as accuracy for engine accounting views', () => {
+        const snapshot = makeSearchSnapshot({
+            units: {
+                resolved: PRECISION * 3n / 4n,
+                clueIncompatible: PRECISION / 4n
+            }
+        });
+        const result = SummaryService.summarize({ combos: new Map(), snapshot, indexToEnchant: [] });
+
+        assert.ok(Math.abs(result.accounting.resolved - 0.75) < 1e-12);
+        assert.ok(Math.abs(result.accounting.clueIncompatible - 0.25) < 1e-12);
+        assert.ok(Math.abs(result.accuracy - 1.0) < 1e-12);
+    });
+
     it('converts anyMass, rankMass, and countMass from combos correctly', () => {
         const combos = new Map<PackedCombo, bigint>([[1 as PackedCombo, PRECISION]]);
         const snapshot = makeSearchSnapshot({ results: combos, units: { resolved: PRECISION } });
