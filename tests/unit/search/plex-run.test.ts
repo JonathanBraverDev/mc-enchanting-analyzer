@@ -152,7 +152,9 @@ describe('PlexRun', () => {
         const projected = projectPlexResults(new Map([[getPlexPayloadKey(payload), { payload, mass: 10n }]]), registry.enchantToIndex);
 
         assert.strictEqual(projected.projectionLoss, 1n);
-        assert.strictEqual(projected.accuracyMass, 9n);
+        assert.strictEqual(projected.projectedMass, 9n);
+        assert.strictEqual(projected.mass.units?.resolved, '0');
+        assert.strictEqual(projected.mass.units?.projected, '9');
         assert.strictEqual(projected.mass.units?.projectionLoss, '1');
         assert.strictEqual(projected.results.get(ComboUtils.pack([fixed, left], registry.enchantToIndex)), 6n);
         assert.strictEqual(projected.results.get(ComboUtils.pack([fixed, right], registry.enchantToIndex)), 3n);
@@ -170,7 +172,10 @@ describe('PlexRun', () => {
         const resolvedMass = BigInt(massUnits(run.snapshot()).resolved);
 
         assert.ok(projected.results.size > 0);
+        assert.strictEqual(projectedMass, projected.projectedMass);
         assert.strictEqual(projectedMass + projected.projectionLoss, resolvedMass);
+        assert.strictEqual(projected.mass.units?.resolved, '0');
+        assert.strictEqual(projected.mass.units?.projected, projected.projectedMass.toString());
         assert.strictEqual(projected.mass.units?.projectionLoss, projected.projectionLoss.toString());
     });
 
@@ -192,7 +197,8 @@ describe('PlexRun', () => {
             [...concreteSnapshot.results.keys()].sort((a, b) => a - b)
         );
         assert.strictEqual(bigintSum(concreteSnapshot.results.values()), BigInt(concreteSnapshot.mass.units!.resolved));
-        assert.strictEqual(bigintSum(projected.results.values()) + projected.projectionLoss, BigInt(plexSnapshot.mass.units!.resolved));
+        assert.strictEqual(bigintSum(projected.results.values()), projected.projectedMass);
+        assert.strictEqual(projected.projectedMass + projected.projectionLoss, BigInt(plexSnapshot.mass.units!.resolved));
     });
 
     it('records resolved payload mass by canonical payload key', () => {

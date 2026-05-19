@@ -128,16 +128,17 @@ describe('SummaryService', () => {
         assert.ok(Math.abs(result.accounting.pending - 0.25) < 1e-12, `got ${result.accounting.pending}`);
     });
 
-    it('subtracts projection loss from reported accuracy without changing resolved mass', () => {
+    it('reports projected mass as accuracy for projected accounting views', () => {
         const snapshot = makeSearchSnapshot({
             units: {
-                resolved: PRECISION,
+                projected: PRECISION * 3n / 4n,
                 projectionLoss: PRECISION / 4n
             }
         });
         const result = SummaryService.summarize({ combos: new Map(), snapshot, indexToEnchant: [] });
 
-        assert.ok(Math.abs(result.accounting.resolved - 1.0) < 1e-12);
+        assert.strictEqual(result.accounting.resolved, 0);
+        assert.ok(Math.abs((result.accounting.projected ?? 0) - 0.75) < 1e-12);
         assert.ok(Math.abs((result.accounting.projectionLoss ?? 0) - 0.25) < 1e-12);
         assert.ok(Math.abs(result.accuracy - 0.75) < 1e-12);
     });
