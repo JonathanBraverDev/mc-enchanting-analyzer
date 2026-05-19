@@ -51,16 +51,18 @@ describe('PlexRunFrontier', () => {
         assert.strictEqual(entry.payload, payload);
     });
 
-    it('keeps different payloads distinct even when graph and node match', () => {
+    it('rejects different payloads for the same graph and node', () => {
         const frontier = new PlexRunFrontier();
         const left = createPlexPayload([packed(1)]);
         const right = createPlexPayload([packed(2)]);
 
         frontier.pushOrMerge(0, 1 as PlexNodeId, 5n, left);
-        frontier.pushOrMerge(0, 1 as PlexNodeId, 7n, right);
 
-        assert.strictEqual(frontier.size, 2);
-        assert.strictEqual(pop(frontier).payload, right);
+        assert.throws(
+            () => frontier.pushOrMerge(0, 1 as PlexNodeId, 7n, right),
+            /received payload/
+        );
+        assert.strictEqual(frontier.size, 1);
         assert.strictEqual(pop(frontier).payload, left);
     });
 });
