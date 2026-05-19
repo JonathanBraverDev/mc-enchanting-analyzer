@@ -180,9 +180,10 @@ Current safe/default optimizations:
 - `SearchPoolFamilySignature` plus `SearchExpansionBlueprintCache` for reusable eligibility scans across rank-variant pools; exact edges and combos remain graph-local.
 - XP-cell `SearchRun` caching for refinement resume.
 
-Current experimental optimization:
+Current experimental optimizations:
 
 - Suffix merging is fully implemented but off by default. It canonicalizes equivalent pending suffix nodes when `useSuffixMerging: true`, but current profiling shows the per-pending identity/cache overhead can outweigh the reduced iteration count.
+- Plex search is available as an opt-in internal path. It separates engine search accounting from projection accounting: resolved Plex payload mass belongs to the engine phase, while concrete materialization loss and projection-scoped clue incompatibility belong to the projection phase. This keeps the raw engine invariant and the concrete compatibility-view invariant from being mixed together.
 
 Never merge by visible combo alone. Visible output can match while future eligible pools differ.
 
@@ -190,8 +191,8 @@ Never merge by visible combo alone. Visible output can match while future eligib
 
 - If conservation fails, inspect the active bucket sum first. Do not include recovered diagnostic buckets in the invariant.
 - If clue-conditioned accuracy looks too high, verify whether `clueIncompatible` is being correctly counted as classified mass rather than result mass.
-- If a performance optimization reduces iterations but slows runtime, profile the per-pending overhead. Suffix merging is the current example of this tradeoff.
-- If book results show unexpected tiny tail differences, inspect `bookRedistributionResidues` and active `rounding` before assuming mass loss.
+- If a performance optimization reduces iterations but slows runtime, profile the per-pending/per-payload overhead. Suffix merging and current Plex search timings are examples of this tradeoff.
+- If book results show unexpected tiny tail differences, inspect `bookRedistributionResidues`, active `rounding`, and Plex projection loss before assuming mass loss.
 
 ## References / Related Docs
 
@@ -206,4 +207,4 @@ Jonathan Braver / V7 engine maintainers.
 
 ## Last Updated
 
-2026-05-18
+2026-05-19
