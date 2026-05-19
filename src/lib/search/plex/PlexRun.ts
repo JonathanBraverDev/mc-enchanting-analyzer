@@ -11,6 +11,7 @@ import {
     appendPlexPayloadEdge,
     EMPTY_PLEX_PAYLOAD,
     getPlexPayloadKey,
+    materializePlexPayloadBookFactors,
     materializePlexPayloadFactors,
     type PlexPayload,
     type PlexPayloadKey
@@ -78,7 +79,8 @@ type PendingPlexWork = PlexFrontierPopTarget;
 export function projectPlexResults(
     results: ReadonlyMap<PlexPayloadKey, PlexResult>,
     enchantToIndex: Map<number, number>,
-    sourceMass?: MassAccountingBreakdown
+    sourceMass?: MassAccountingBreakdown,
+    options: { readonly applyBookRemoval?: boolean | undefined } = {}
 ): ProjectedPlexResults {
     const projected = new Map<PackedCombo, bigint>();
     let projectionLoss = 0n;
@@ -87,7 +89,10 @@ export function projectPlexResults(
     for (const result of results.values()) {
         resolvedMass += result.mass;
         let assigned = 0n;
-        for (const factor of materializePlexPayloadFactors(result.payload, enchantToIndex)) {
+        const factors = options.applyBookRemoval
+            ? materializePlexPayloadBookFactors(result.payload, enchantToIndex)
+            : materializePlexPayloadFactors(result.payload, enchantToIndex);
+        for (const factor of factors) {
             const mass = (result.mass * factor.numerator) / factor.denominator;
             assigned += mass;
             projected.set(factor.combo, (projected.get(factor.combo) ?? 0n) + mass);
@@ -268,7 +273,9 @@ export class PlexRun {
     }
 
     public projectResults(): ProjectedPlexResults {
-        return projectPlexResults(this.results, this.kernel.registry.enchantToIndex, this.mass.toPublic());
+        return projectPlexResults(this.results, this.kernel.registry.enchantToIndex, this.mass.toPublic(), {
+            applyBookRemoval: this.kernel.item === 'book'
+        });
     }
 
     public snapshot(): PlexRunSnapshot {
