@@ -1,5 +1,4 @@
 import type { PackedCombo, PackedEnchant } from '#types/index.js';
-import { ComboUtils } from '#utils/index.js';
 import {
     canonicalizePackedEnchantList,
     comparePackedEnchant,
@@ -13,6 +12,7 @@ import {
     type PlexCombo
 } from '#lib/search/plex/PlexCombo.js';
 import type { PlexEdge } from '#lib/search/plex/PlexGraph.js';
+import { PACKING_CONSTANTS } from '#constants/engine.js';
 
 export type PlexPayloadKey = string;
 export type PlexPayloadId = number & { readonly __brand: 'PlexPayloadId' };
@@ -220,7 +220,6 @@ export function forEachPlexPayloadFactor(
     enchantToIndex: Map<number, number>,
     visitor: PlexComboFactorVisitor
 ): void {
-    assertAlignedPayload(payload);
     visitPlexPayloadFactors(payload, enchantToIndex, visitor);
 }
 
@@ -248,7 +247,6 @@ export function forEachBookFactor(
     enchantToIndex: Map<number, number>,
     visitor: PlexComboFactorVisitor
 ): void {
-    assertAlignedPayload(payload);
     visitBookFactors(payload, enchantToIndex, visitor);
 }
 
@@ -295,33 +293,76 @@ function visitPlexPayloadFactors(
     removedChoiceIndex?: number,
     initialDenominator: bigint = 1n
 ): void {
-    const selected = payload.combo.fixed.filter((_, index) => index !== removedFixedIndex);
+    const initialCombo = createPackedComboState(payload.combo.fixed, enchantToIndex, removedFixedIndex);
 
-    function visit(choiceIndex: number, numerator: bigint, denominator: bigint): void {
+    function visit(
+        choiceIndex: number,
+        combo: PackedCombo,
+        count: number,
+        numerator: bigint,
+        denominator: bigint
+    ): void {
         if (choiceIndex >= payload.choices.length) {
-            visitor(ComboUtils.pack(selected, enchantToIndex), numerator, denominator);
+            visitor(combo, numerator, denominator);
             return;
         }
 
         if (choiceIndex === removedChoiceIndex) {
-            visit(choiceIndex + 1, numerator, denominator);
+            visit(choiceIndex + 1, combo, count, numerator, denominator);
             return;
         }
 
         const choice = payload.choices[choiceIndex]!;
         const choiceTotalWeight = BigInt(choice.totalWeight);
         for (const alternative of choice.alternatives) {
-            selected.push(alternative.packedEnchant);
+            const packedIndex = enchantToIndex.get(alternative.packedEnchant);
             visit(
                 choiceIndex + 1,
+                packedIndex === undefined ? combo : appendPackedComboIndex(combo, packedIndex, count),
+                packedIndex === undefined ? count : count + 1,
                 numerator * BigInt(alternative.weight),
                 denominator * choiceTotalWeight
             );
-            selected.pop();
         }
     }
 
-    visit(0, 1n, initialDenominator);
+    visit(0, initialCombo.combo, initialCombo.count, 1n, initialDenominator);
+}
+
+function createPackedComboState(
+    packedEnchants: readonly PackedEnchant[],
+    enchantToIndex: Map<number, number>,
+    removedIndex?: number
+): { combo: PackedCombo; count: number } {
+    const indices: number[] = [];
+    for (let index = 0; index < packedEnchants.length; index++) {
+        if (index === removedIndex) continue;
+        const packedIndex = enchantToIndex.get(packedEnchants[index]!);
+        if (packedIndex !== undefined) indices.push(packedIndex);
+    }
+    indices.sort((a, b) => b - a);
+
+    let combo = 0;
+    let multiplier = 1;
+    for (const packedIndex of indices) {
+        combo += packedIndex * multiplier;
+        multiplier *= PACKING_CONSTANTS.BYTE_BASIS;
+    }
+    return { combo: combo as PackedCombo, count: indices.length };
+}
+
+function appendPackedComboIndex(combo: PackedCombo, packedIndex: number, count: number): PackedCombo {
+    if (count === 0) return packedIndex as PackedCombo;
+
+    let insertMultiplier = 1;
+    for (let index = 0; index < count; index++, insertMultiplier *= PACKING_CONSTANTS.BYTE_BASIS) {
+        const current = Math.floor(combo / insertMultiplier) % PACKING_CONSTANTS.BYTE_BASIS;
+        if (packedIndex > current) break;
+    }
+
+    const lowerDigits = combo % insertMultiplier;
+    const shiftedDigits = (combo - lowerDigits) * PACKING_CONSTANTS.BYTE_BASIS;
+    return (lowerDigits + packedIndex * insertMultiplier + shiftedDigits) as PackedCombo;
 }
 
 function assertAlignedPayload(payload: PlexPayload): void {
