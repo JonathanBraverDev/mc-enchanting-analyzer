@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+### Added
+- **Plex execution switch**: Added an internal `searchBackend: 'plex'` selector so `SearchExecutionService` can route `searchToCheckpoint`, sequential checkpoints, and `getStats` through Plex while keeping concrete `SearchRun` as the default path.
+
+### Developer Experience
+- **Plex service coverage**: Added service-level tests for concrete default routing, explicit Plex routing, Plex run resumption across one-at-a-time checkpoint calls, and compatible Plex stats accounting.
+
 ## v7.3.0 (2026-05-19)
 
 ### Added
