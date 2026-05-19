@@ -2,12 +2,13 @@ import type { PackedCombo, PackedEnchant } from '#types/index.js';
 import { ComboUtils } from '#utils/index.js';
 import {
     canonicalizePackedEnchantList,
+    comparePackedEnchant,
     comparePlexWeightedChoices,
     getPlexChoicePackedEnchants,
+    type CanonicalPackedEnchantList,
     type PlexWeightedChoice
 } from '#lib/search/plex/PlexChoice.js';
 import {
-    createPlexCombo,
     EMPTY_PLEX_COMBO,
     type PlexCombo
 } from '#lib/search/plex/PlexCombo.js';
@@ -26,6 +27,12 @@ export type PlexPayloadKey = string;
 export interface PlexPayload {
     readonly combo: PlexCombo;
     readonly choices: readonly PlexWeightedChoice[];
+    /** Cached fixed-pick portion of the canonical identity string. */
+    readonly fixedKey: string;
+    /** Cached weighted-choice portion of the canonical identity string. */
+    readonly choiceKey: string;
+    /** Cached canonical identity string used by frontier, residues, and result maps. */
+    readonly key: PlexPayloadKey;
 }
 
 export interface PlexComboFactor {
@@ -36,18 +43,19 @@ export interface PlexComboFactor {
 
 export const EMPTY_PLEX_PAYLOAD: PlexPayload = Object.freeze({
     combo: EMPTY_PLEX_COMBO,
-    choices: Object.freeze([])
+    choices: Object.freeze([]),
+    fixedKey: '',
+    choiceKey: '',
+    key: 'f=|c='
 });
 
 export function createPlexPayload(
     fixed: readonly PackedEnchant[] = [],
     choices: readonly PlexWeightedChoice[] = []
 ): PlexPayload {
+    const canonicalFixed = canonicalizePackedEnchantList(fixed);
     const canonicalChoices = canonicalizeWeightedChoices(choices);
-    return Object.freeze({
-        combo: createPlexCombo(fixed, canonicalChoices.map(getPlexChoicePackedEnchants)),
-        choices: canonicalChoices
-    });
+    return createCanonicalPlexPayload(canonicalFixed, canonicalChoices);
 }
 
 export function appendPlexPayloadEdge(
@@ -57,20 +65,91 @@ export function appendPlexPayloadEdge(
     const alternatives = getPlexChoicePackedEnchants(edge.choice);
 
     if (alternatives.length === 1) {
-        return createPlexPayload([...payload.combo.fixed, alternatives[0]!], payload.choices);
+        const fixed = insertPackedEnchant(payload.combo.fixed, alternatives[0]!);
+        return createCanonicalPlexPayload(
+            fixed,
+            payload.choices,
+            createPackedEnchantListKey(fixed),
+            payload.choiceKey
+        );
     }
 
-    return createPlexPayload(payload.combo.fixed, [...payload.choices, edge.choice]);
+    const choices = insertWeightedChoice(payload.choices, edge.choice);
+    return createCanonicalPlexPayload(
+        payload.combo.fixed,
+        choices,
+        payload.fixedKey,
+        createChoiceKey(choices)
+    );
 }
 
 export function getPlexPayloadKey(payload: PlexPayload): PlexPayloadKey {
-    const fixed = payload.combo.fixed.map(packedEnchant => String(packedEnchant)).join(',');
-    const choices = payload.choices
-        .map(choice => choice.alternatives
-            .map(alternative => `${String(alternative.packedEnchant)}:${alternative.weight}`)
-            .join(','))
+    return payload.key;
+}
+
+function createCanonicalPlexPayload(
+    fixed: CanonicalPackedEnchantList,
+    choices: readonly PlexWeightedChoice[],
+    fixedKey: string = createPackedEnchantListKey(fixed),
+    choiceKey: string = createChoiceKey(choices)
+): PlexPayload {
+    const comboChoices = Object.freeze(choices.map(getPlexChoicePackedEnchants));
+    const combo: PlexCombo = Object.freeze({ fixed, choices: comboChoices });
+    return Object.freeze({
+        combo,
+        choices,
+        fixedKey,
+        choiceKey,
+        key: `f=${fixedKey}|c=${choiceKey}`
+    });
+}
+
+function createPackedEnchantListKey(packedEnchants: readonly PackedEnchant[]): string {
+    return packedEnchants.map(packedEnchant => String(packedEnchant)).join(',');
+}
+
+function createChoiceKey(choices: readonly PlexWeightedChoice[]): string {
+    return choices
+        .map(getPlexWeightedChoiceKey)
         .join('/');
-    return `f=${fixed}|c=${choices}`;
+}
+
+function getPlexWeightedChoiceKey(choice: PlexWeightedChoice): string {
+    if (choice.key !== undefined) return choice.key;
+    return choice.alternatives
+        .map(alternative => `${String(alternative.packedEnchant)}:${alternative.weight}`)
+        .join(',');
+}
+
+function insertPackedEnchant(
+    fixed: CanonicalPackedEnchantList,
+    packedEnchant: PackedEnchant
+): CanonicalPackedEnchantList {
+    const next: PackedEnchant[] = [];
+    let inserted = false;
+    for (const current of fixed) {
+        if (current === packedEnchant) {
+            throw new Error(`Duplicate PackedEnchant ${String(packedEnchant)} in plex choice list.`);
+        }
+        if (!inserted && comparePackedEnchant(packedEnchant, current) < 0) {
+            next.push(packedEnchant);
+            inserted = true;
+        }
+        next.push(current);
+    }
+    if (!inserted) next.push(packedEnchant);
+    return Object.freeze(next);
+}
+
+function insertWeightedChoice(
+    choices: readonly PlexWeightedChoice[],
+    choice: PlexWeightedChoice
+): readonly PlexWeightedChoice[] {
+    const next = choices.slice();
+    let index = 0;
+    while (index < next.length && comparePlexWeightedChoices(next[index]!, choice) <= 0) index++;
+    next.splice(index, 0, choice);
+    return Object.freeze(next);
 }
 
 export function materializePlexPayloadFactors(

@@ -11,6 +11,10 @@ export interface PlexAlternative {
 export interface PlexWeightedChoice {
     readonly alternatives: readonly PlexAlternative[];
     readonly totalWeight: number;
+    /** Cached canonical packed-enchant view for hot-path payload/key operations. */
+    readonly packedEnchants?: CanonicalPackedEnchantList | undefined;
+    /** Cached stable key including edge-local weights. */
+    readonly key?: string | undefined;
 }
 
 /**
@@ -69,11 +73,16 @@ export function canonicalizeWeightedChoice(
     }));
     return Object.freeze({
         alternatives: Object.freeze(weightedAlternatives),
-        totalWeight: weightedAlternatives.reduce((sum, alternative) => sum + alternative.weight, 0)
+        totalWeight: weightedAlternatives.reduce((sum, alternative) => sum + alternative.weight, 0),
+        packedEnchants,
+        key: weightedAlternatives
+            .map(alternative => `${String(alternative.packedEnchant)}:${alternative.weight}`)
+            .join(',')
     });
 }
 
 export function getPlexChoicePackedEnchants(choice: PlexWeightedChoice): CanonicalPackedEnchantList {
+    if (choice.packedEnchants) return choice.packedEnchants;
     return Object.freeze(choice.alternatives.map(alternative => alternative.packedEnchant));
 }
 

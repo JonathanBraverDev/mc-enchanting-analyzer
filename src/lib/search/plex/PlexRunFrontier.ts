@@ -30,19 +30,13 @@ export class PlexRunFrontier {
         const existingIndex = this.positionsByKey.get(key);
         if (existingIndex !== undefined) {
             const existing = this.heap[existingIndex]!;
-            this.heap[existingIndex] = Object.freeze({
-                graphId: existing.graphId,
-                nodeId: existing.nodeId,
-                mass: existing.mass + mass,
-                payload: existing.payload,
-                key: existing.key
-            });
+            existing.mass += mass;
             this.bubbleUp(existingIndex);
             return;
         }
 
         const index = this.heap.length;
-        this.heap.push(Object.freeze({ graphId, nodeId, mass, payload, key }));
+        this.heap.push({ graphId, nodeId, mass, payload, key });
         this.positionsByKey.set(key, index);
         this.bubbleUp(index);
     }
