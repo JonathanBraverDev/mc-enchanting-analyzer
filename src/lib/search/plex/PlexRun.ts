@@ -1,6 +1,7 @@
 import { PACKING_CONSTANTS } from '#constants/engine.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { ProbabilityMassAccountant } from '#engine/search/ProbabilityMassAccountant.js';
+import type { EngineExitReason } from '#types/engine.js';
 import type { PackedCombo, PackedEnchant } from '#types/index.js';
 import type { MassAccountingBreakdown, MassAccountingPhases, ProjectionAccountingBreakdown } from '#types/mass.js';
 import { ComboUtils, PRECISION, ProbUtils } from '#utils/index.js';
@@ -84,6 +85,7 @@ export interface ProjectedPlexCheckpoint {
     readonly activeResidueCount: number;
     readonly activeResidueMass: bigint;
     readonly fullyResolved: boolean;
+    readonly exitReason?: EngineExitReason | undefined;
 }
 
 export interface PlexRunSnapshot {
@@ -99,6 +101,7 @@ export interface PlexRunSnapshot {
     readonly activeResidueCount: number;
     readonly activeResidueMass: bigint;
     readonly fullyResolved: boolean;
+    readonly exitReason?: EngineExitReason | undefined;
 }
 
 interface PlexGraphRecord {
@@ -197,7 +200,8 @@ export function projectPlexCheckpoint(
         seededLevelCount: snapshot.seededLevelCount,
         activeResidueCount: snapshot.activeResidueCount,
         activeResidueMass: snapshot.activeResidueMass,
-        fullyResolved: snapshot.fullyResolved
+        fullyResolved: snapshot.fullyResolved,
+        exitReason: snapshot.exitReason
     });
 }
 
@@ -356,6 +360,7 @@ export class PlexRun {
     private _seededLevelCount = 0;
     private _iterations = 0;
     private _lastExpandedMass = 0n;
+    private _exitReason: EngineExitReason | undefined;
     private readonly targetClueId: number | undefined;
 
     public constructor(
@@ -405,6 +410,7 @@ export class PlexRun {
         const current = this.popLargestPending();
         if (!current) return false;
 
+        this._exitReason = undefined;
         this.mass.subtract('pending', current.mass);
         this._lastExpandedMass = current.mass;
         this.expand(current);
@@ -453,7 +459,8 @@ export class PlexRun {
             seededLevelCount: this._seededLevelCount,
             activeResidueCount: residue.count,
             activeResidueMass: residue.mass,
-            fullyResolved: this.frontier.size === 0
+            fullyResolved: this.frontier.size === 0,
+            exitReason: this.frontier.size === 0 ? 'empty' : this._exitReason
         });
     }
 
@@ -498,13 +505,26 @@ export class PlexRun {
     }
 
     private advanceUntilCheckpoint(criteria: PlexAdvanceCriteria): void {
+        this._exitReason = undefined;
         while (true) {
-            if (this.frontier.size === 0) return;
-            if (this._iterations >= criteria.maxIterations) return;
-            if (criteria.targetClassifiedMass !== undefined && this.mass.getClassifiedMass() >= criteria.targetClassifiedMass) return;
-            if (this.frontier.peekMass() < criteria.threshold) return;
-            if (!this.step()) return;
+            const exitReason = this.getExitReason(criteria);
+            if (exitReason !== undefined) {
+                this._exitReason = exitReason;
+                return;
+            }
+            if (!this.step()) {
+                this._exitReason = 'empty';
+                return;
+            }
         }
+    }
+
+    private getExitReason(criteria: PlexAdvanceCriteria): EngineExitReason | undefined {
+        if (this.frontier.size === 0) return 'empty';
+        if (criteria.targetClassifiedMass !== undefined && this.mass.getClassifiedMass() >= criteria.targetClassifiedMass) return 'mass';
+        if (this.frontier.peekMass() < criteria.threshold) return 'threshold';
+        if (this._iterations >= criteria.maxIterations) return 'iterations';
+        return undefined;
     }
 
     private validateMaxIterations(maxIterations: number): void {
