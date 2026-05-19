@@ -1,8 +1,9 @@
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
-import { SearchResult, SequentialCheckpointSearchContext, CheckpointSearchContext, EngineInstrumentation, SearchTiming, SearchBackend } from '#types/index.js';
+import { SearchResult, SequentialCheckpointSearchContext, CheckpointSearchContext, EngineInstrumentation, SearchTiming, SearchBackend, RegistryState, MutatedRegistryState } from '#types/index.js';
 import { RegistryKernel } from '#lib/search/registry/RegistryKernel.js';
 import { SearchRun, SearchRunSnapshot } from '#lib/search/SearchRun.js';
 import { PlexRun, ProjectedPlexCheckpoint } from '#lib/search/plex/PlexRun.js';
+import { checkPlexReducedKeyInvariant, type PlexReducedKeyInvariantResult } from '#lib/search/plex/PlexReducedKeyInvariant.js';
 import { SearchStateCache } from '#lib/search/SearchStateCache.js';
 import { PRECISION, ProbUtils } from '#utils/index.js';
 import type { MassAccountingBreakdown } from '#types/mass.js';
@@ -16,6 +17,7 @@ import type { MassAccountingBreakdown } from '#types/mass.js';
  */
 export class SearchExecutionService {
     private readonly plexRunCache = new Map<string, PlexRun>();
+    private readonly plexReducedKeyInvariantCache = new Map<string, PlexReducedKeyInvariantResult>();
     private plexRunCacheHits = 0;
     private plexRunCacheMisses = 0;
 
@@ -28,6 +30,7 @@ export class SearchExecutionService {
     public clearCache(): void {
         this.cache.clearAll();
         this.plexRunCache.clear();
+        this.plexReducedKeyInvariantCache.clear();
         this.plexRunCacheHits = 0;
         this.plexRunCacheMisses = 0;
     }
@@ -38,11 +41,12 @@ export class SearchExecutionService {
         if (this.getBackend(request) === 'plex') {
             this.throwIfAborted(request.signal);
             const run = this.getPlexRun(request);
-            const snapshot = run.searchToCheckpoint({
+            const snapshot = await run.searchToCheckpointAsync({
                 threshold: request.exhaustive ? 0n : request.threshold ?? 0n,
                 maxIterations: request.exhaustive ? undefined : request.maxIterations,
                 exhaustive: request.exhaustive,
-                targetClassifiedMass: request.exhaustive ? undefined : request.targetClassifiedMass
+                targetClassifiedMass: request.exhaustive ? undefined : request.targetClassifiedMass,
+                signal: request.signal
             });
             const projected = run.projectCheckpoint(snapshot);
             this.finishTiming(request.timing, timingStart, 0);
@@ -104,7 +108,7 @@ export class SearchExecutionService {
         return this.toSearchResult(emptySnapshot, 0, undefined, request.instrumentation, request.timing);
     }
 
-    private searchSequentialPlexCheckpoints(request: SequentialCheckpointSearchContext, timingStart: number): SearchResult {
+    private async searchSequentialPlexCheckpoints(request: SequentialCheckpointSearchContext, timingStart: number): Promise<SearchResult> {
         let recordedSearchMs = 0;
         this.throwIfAborted(request.signal);
         const run = this.getPlexRun(request);
@@ -116,11 +120,18 @@ export class SearchExecutionService {
             const checkpoint = request.checkpoints[checkpointIndex];
             if (!checkpoint) continue;
 
-            const snapshot = run.searchToCheckpoint({
-                threshold: checkpoint.threshold,
-                maxIterations: checkpoint.limit,
-                targetClassifiedMass: checkpoint.targetClassifiedMass
-            });
+            let snapshot;
+            try {
+                snapshot = await run.searchToCheckpointAsync({
+                    threshold: checkpoint.threshold,
+                    maxIterations: checkpoint.limit,
+                    targetClassifiedMass: checkpoint.targetClassifiedMass,
+                    signal: request.signal
+                });
+            } catch (error) {
+                if (request.signal?.aborted && lastResult) return lastResult;
+                throw error;
+            }
             const projected = run.projectCheckpoint(snapshot);
             recordedSearchMs = this.finishTiming(request.timing, timingStart, recordedSearchMs);
             lastResult = this.toPlexSearchResult(projected, checkpoint.threshold, checkpoint.targetClassifiedMass, request.instrumentation, request.timing);
@@ -145,6 +156,7 @@ export class SearchExecutionService {
     }
 
     private getPlexRun(request: CheckpointSearchContext): PlexRun {
+        this.assertPlexReducedKeyInvariant(request);
         const create = () => this.createPlexRun(request);
         if (request.useCache === false) return create();
 
@@ -181,6 +193,30 @@ export class SearchExecutionService {
         return run;
     }
 
+    private assertPlexReducedKeyInvariant(request: CheckpointSearchContext): void {
+        if (!isMutatedRegistry(request.registry)) return;
+
+        const key = this.createPlexInvariantCacheKey(request);
+        let result = this.plexReducedKeyInvariantCache.get(key);
+        if (!result) {
+            result = checkPlexReducedKeyInvariant({
+                kernel: this.createKernel(request),
+                xp: request.xp,
+                distributionService: this.distributionService,
+                maxConflicts: 1
+            });
+            this.plexReducedKeyInvariantCache.set(key, result);
+        }
+
+        if (result.ok) return;
+
+        const conflict = result.conflicts[0];
+        const state = conflict ? `${conflict.graphId}:${String(conflict.nodeId)}` : 'unknown';
+        throw new Error(
+            `Plex backend cannot run this mutated registry because multiple payload histories reach structural state ${state}. Use the concrete backend.`
+        );
+    }
+
     private createKernel(request: CheckpointSearchContext): RegistryKernel {
         return new RegistryKernel({
             registry: request.registry,
@@ -198,6 +234,17 @@ export class SearchExecutionService {
             xp: request.xp,
             targetClueId: request.targetClueId ?? null,
             backend: this.getBackend(request)
+        });
+    }
+
+    private createPlexInvariantCacheKey(request: CheckpointSearchContext): string {
+        return JSON.stringify({
+            schema: 1,
+            version: request.registry.version,
+            item: request.item,
+            material: request.material,
+            xp: request.xp,
+            mutations: isMutatedRegistry(request.registry) ? request.registry.mutations : null
         });
     }
 
@@ -413,4 +460,8 @@ export class SearchExecutionService {
         timing.totalMs = (timing.totalMs ?? 0) + delta;
         return elapsed;
     }
+}
+
+function isMutatedRegistry(registry: RegistryState): registry is MutatedRegistryState {
+    return 'source' in registry && registry.source === 'mutated';
 }
