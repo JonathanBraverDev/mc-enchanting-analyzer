@@ -7,6 +7,7 @@ import {
     appendPlexPayloadEdge,
     createPlexPayload,
     EMPTY_PLEX_PAYLOAD,
+    materializePlexPayloadBookFactors,
     materializePlexPayloadFactors
 } from '#lib/search/plex/PlexPayload.js';
 import { canonicalizeWeightedChoice } from '#lib/search/plex/PlexChoice.js';
@@ -66,6 +67,25 @@ describe('PlexPayload', () => {
             { combo: ComboUtils.pack([fixed, left[0]!, right[1]!], registry.enchantToIndex), numerator: 2n * 11n, denominator: 5n * 18n },
             { combo: ComboUtils.pack([fixed, left[1]!, right[0]!], registry.enchantToIndex), numerator: 3n * 7n, denominator: 5n * 18n },
             { combo: ComboUtils.pack([fixed, left[1]!, right[1]!], registry.enchantToIndex), numerator: 3n * 11n, denominator: 5n * 18n }
+        ]);
+    });
+
+    it('materializes book removal without resolving the removed choice slot', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
+        const entries = kernel.getPool(30).entries.map(entry => entry.packedEnchant);
+        const fixed = entries[0]!;
+        const left = entries[1]!;
+        const right = entries[2]!;
+        const payload = createPlexPayload([fixed], [
+            choice([[left, 2], [right, 1]])
+        ]);
+        const factors = materializePlexPayloadBookFactors(payload, registry.enchantToIndex);
+
+        assert.deepStrictEqual(factors, [
+            { combo: ComboUtils.pack([left], registry.enchantToIndex), numerator: 2n, denominator: 2n * 3n },
+            { combo: ComboUtils.pack([right], registry.enchantToIndex), numerator: 1n, denominator: 2n * 3n },
+            { combo: ComboUtils.pack([fixed], registry.enchantToIndex), numerator: 1n, denominator: 2n }
         ]);
     });
 

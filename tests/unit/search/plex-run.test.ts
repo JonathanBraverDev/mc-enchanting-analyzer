@@ -160,6 +160,33 @@ describe('PlexRun', () => {
         assert.strictEqual(projected.results.get(ComboUtils.pack([fixed, right], registry.enchantToIndex)), 3n);
     });
 
+    it('applies book removal while projecting factorized plex results', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
+        const entries = kernel.getPool(30).entries.map(entry => entry.packedEnchant);
+        const fixed = entries[0]!;
+        const left = entries[1]!;
+        const right = entries[2]!;
+        const payload = createPlexPayload([fixed], [
+            canonicalizeWeightedChoice([
+                { packedEnchant: left, weight: 2 },
+                { packedEnchant: right, weight: 1 }
+            ])
+        ]);
+        const projected = projectPlexResults(
+            new Map([[getPlexPayloadKey(payload), { payload, mass: 12n }]]),
+            registry.enchantToIndex,
+            undefined,
+            { applyBookRemoval: true }
+        );
+
+        assert.strictEqual(projected.projectionLoss, 0n);
+        assert.strictEqual(projected.projectedMass, 12n);
+        assert.strictEqual(projected.results.get(ComboUtils.pack([fixed], registry.enchantToIndex)), 6n);
+        assert.strictEqual(projected.results.get(ComboUtils.pack([left], registry.enchantToIndex)), 4n);
+        assert.strictEqual(projected.results.get(ComboUtils.pack([right], registry.enchantToIndex)), 2n);
+    });
+
     it('projects run results into a concrete compatibility view', () => {
         const registry = RegistryFactory.build('1.21.11');
         const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
@@ -197,6 +224,28 @@ describe('PlexRun', () => {
             [...concreteSnapshot.results.keys()].sort((a, b) => a - b)
         );
         assert.strictEqual(bigintSum(concreteSnapshot.results.values()), BigInt(concreteSnapshot.mass.units!.resolved));
+        assert.strictEqual(bigintSum(projected.results.values()), projected.projectedMass);
+        assert.strictEqual(projected.projectedMass + projected.projectionLoss, BigInt(plexSnapshot.mass.units!.resolved));
+    });
+
+    it('matches concrete multi-book result keys after book-removal projection', () => {
+        const registry = RegistryFactory.build('1.7.2');
+        const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
+        const concrete = new SearchRun(kernel);
+        concrete.seedXp(30);
+        const concreteSnapshot = concrete.searchToCheckpoint({ exhaustive: true });
+        const plex = new PlexRun(kernel);
+        plex.seedXp(30);
+        const plexSnapshot = plex.advance({ maxIterations: 2_000_000 });
+        const projected = plex.projectResults();
+
+        assert.strictEqual(concreteSnapshot.fullyResolved, true);
+        assert.strictEqual(plexSnapshot.fullyResolved, true);
+        assert.strictEqual(projected.results.size, concreteSnapshot.results.size);
+        assert.deepStrictEqual(
+            [...projected.results.keys()].sort((a, b) => a - b),
+            [...concreteSnapshot.results.keys()].sort((a, b) => a - b)
+        );
         assert.strictEqual(bigintSum(projected.results.values()), projected.projectedMass);
         assert.strictEqual(projected.projectedMass + projected.projectionLoss, BigInt(plexSnapshot.mass.units!.resolved));
     });

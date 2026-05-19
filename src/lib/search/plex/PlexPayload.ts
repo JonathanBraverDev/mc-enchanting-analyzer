@@ -77,12 +77,59 @@ export function materializePlexPayloadFactors(
     payload: PlexPayload,
     enchantToIndex: Map<number, number>
 ): readonly PlexComboFactor[] {
-    if (payload.combo.choices.length !== payload.choices.length) {
-        throw new Error('Plex payload combo choices and weighted choices must have the same length.');
-    }
+    assertAlignedPayload(payload);
+    return materializePlexPayloadWithRemovedChoice(payload, enchantToIndex);
+}
+
+/**
+ * Materializes the compatibility view for Minecraft's enchanted-book post-processing rule.
+ *
+ * If multiple enchantments were generated for a book, Minecraft removes one generated
+ * enchantment uniformly at random. A plex choice group represents exactly one generated
+ * enchantment slot, so removing that slot can happen before resolving its alternatives.
+ */
+export function materializePlexPayloadBookFactors(
+    payload: PlexPayload,
+    enchantToIndex: Map<number, number>
+): readonly PlexComboFactor[] {
+    assertAlignedPayload(payload);
+    const slotCount = payload.combo.fixed.length + payload.choices.length;
+    if (slotCount <= 1) return materializePlexPayloadWithRemovedChoice(payload, enchantToIndex);
 
     const materialized: PlexComboFactor[] = [];
-    const selected = [...payload.combo.fixed];
+
+    for (let fixedIndex = 0; fixedIndex < payload.combo.fixed.length; fixedIndex++) {
+        materialized.push(...materializePlexPayloadWithRemovedChoice(
+            payload,
+            enchantToIndex,
+            fixedIndex,
+            undefined,
+            BigInt(slotCount)
+        ));
+    }
+
+    for (let choiceIndex = 0; choiceIndex < payload.choices.length; choiceIndex++) {
+        materialized.push(...materializePlexPayloadWithRemovedChoice(
+            payload,
+            enchantToIndex,
+            undefined,
+            choiceIndex,
+            BigInt(slotCount)
+        ));
+    }
+
+    return Object.freeze(materialized);
+}
+
+function materializePlexPayloadWithRemovedChoice(
+    payload: PlexPayload,
+    enchantToIndex: Map<number, number>,
+    removedFixedIndex?: number,
+    removedChoiceIndex?: number,
+    initialDenominator: bigint = 1n
+): readonly PlexComboFactor[] {
+    const materialized: PlexComboFactor[] = [];
+    const selected = payload.combo.fixed.filter((_, index) => index !== removedFixedIndex);
 
     function visit(choiceIndex: number, numerator: bigint, denominator: bigint): void {
         if (choiceIndex >= payload.choices.length) {
@@ -94,18 +141,12 @@ export function materializePlexPayloadFactors(
             return;
         }
 
-        const choice = payload.choices[choiceIndex]!;
-        const packedEnchants = canonicalizePackedEnchantList(choice.alternatives.map(alternative => alternative.packedEnchant));
-        const comboChoice = payload.combo.choices[choiceIndex]!;
-        if (packedEnchants.length !== comboChoice.length) {
-            throw new Error('Plex payload weighted choice is not aligned with combo choice.');
-        }
-        for (let i = 0; i < packedEnchants.length; i++) {
-            if (packedEnchants[i] !== comboChoice[i]) {
-                throw new Error('Plex payload weighted choice is not aligned with combo choice.');
-            }
+        if (choiceIndex === removedChoiceIndex) {
+            visit(choiceIndex + 1, numerator, denominator);
+            return;
         }
 
+        const choice = payload.choices[choiceIndex]!;
         for (const alternative of choice.alternatives) {
             selected.push(alternative.packedEnchant);
             visit(
@@ -117,8 +158,28 @@ export function materializePlexPayloadFactors(
         }
     }
 
-    visit(0, 1n, 1n);
+    visit(0, 1n, initialDenominator);
     return Object.freeze(materialized);
+}
+
+function assertAlignedPayload(payload: PlexPayload): void {
+    if (payload.combo.choices.length !== payload.choices.length) {
+        throw new Error('Plex payload combo choices and weighted choices must have the same length.');
+    }
+
+    for (let choiceIndex = 0; choiceIndex < payload.choices.length; choiceIndex++) {
+        const choice = payload.choices[choiceIndex]!;
+        const packedEnchants = canonicalizePackedEnchantList(choice.alternatives.map(alternative => alternative.packedEnchant));
+        const comboChoice = payload.combo.choices[choiceIndex]!;
+        if (packedEnchants.length !== comboChoice.length) {
+            throw new Error('Plex payload weighted choice is not aligned with combo choice.');
+        }
+        for (let i = 0; i < packedEnchants.length; i++) {
+            if (packedEnchants[i] !== comboChoice[i]) {
+                throw new Error('Plex payload weighted choice is not aligned with combo choice.');
+            }
+        }
+    }
 }
 
 function canonicalizeWeightedChoices(
