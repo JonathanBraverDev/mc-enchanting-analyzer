@@ -12,10 +12,32 @@ import {
     PlexRun,
     projectPlexResults
 } from '#lib/search/plex/index.js';
+import type { PackedEnchant } from '#types/index.js';
 import { ComboUtils, PRECISION } from '#utils/index.js';
 
+const packed = (value: number) => value as PackedEnchant;
 const massUnits = (snapshot: ReturnType<PlexRun['snapshot']>) => snapshot.mass.units!;
 const bigintSum = (values: Iterable<bigint>) => [...values].reduce((sum, value) => sum + value, 0n);
+const plexDiagnosticUnits = (run: PlexRun) => {
+    const units = run.mass.getBucketUnits();
+    return {
+        pending: units.pending,
+        resolved: units.resolved,
+        rounding: units.rounding,
+        recoveredRounding: units.recoveredRounding
+    };
+};
+
+const searchDiagnosticUnits = (run: SearchRun) => {
+    const units = run.mass.getBucketUnits();
+    return {
+        pending: units.pending,
+        resolved: units.resolved,
+        rounding: units.rounding,
+        recoveredRounding: units.recoveredRounding
+    };
+};
+
 const activeMass = (snapshot: ReturnType<PlexRun['snapshot']>) => {
     const units = massUnits(snapshot);
     return BigInt(units.resolved)
@@ -46,6 +68,8 @@ describe('PlexRun', () => {
         assert.strictEqual(snapshot.iterations, 0);
         assert.strictEqual(snapshot.lastExpandedMass, 0n);
         assert.strictEqual(snapshot.fullyResolved, false);
+        assert.strictEqual(snapshot.activeResidueCount, 0);
+        assert.strictEqual(snapshot.activeResidueMass, 0n);
         assert.strictEqual(pendingMass, expectedPendingMass);
         assert.strictEqual(BigInt(massUnits(snapshot).pending), expectedPendingMass);
         assert.strictEqual(BigInt(massUnits(snapshot).rounding), PRECISION - expectedPendingMass);
@@ -186,6 +210,103 @@ describe('PlexRun', () => {
         assert.strictEqual(snapshot.pendingCount, 0);
         assert.strictEqual(run.step(), false);
         assert.strictEqual(activeMass(snapshot), PRECISION);
+    });
+
+    it('recovers carried split residue through later equivalent plex state arrivals', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'sword', material: 'diamond' });
+        const run = new PlexRun(kernel);
+
+        run.seedXp(30);
+        const snapshot = run.searchToCheckpoint({ exhaustive: true });
+
+        assert.strictEqual(snapshot.fullyResolved, true);
+        assert.ok(BigInt(snapshot.mass.units!.rounding) > 0n);
+        assert.ok(BigInt(snapshot.mass.units!.recoveredRounding) > 0n);
+        assert.ok(snapshot.activeResidueCount > 0);
+        assert.strictEqual(snapshot.activeResidueMass, BigInt(snapshot.mass.units!.rounding));
+        assert.strictEqual(activeMass(snapshot), PRECISION);
+    });
+
+    it('matches SearchRun recovered-rounding semantics for equivalent weighted fanout arrivals', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'sword', material: 'diamond' });
+        const expansion = {
+            nodeId: 0,
+            isRoot: false,
+            probContinue: PRECISION,
+            totalWeight: 6,
+            eligibleCount: 3,
+            eligibleEntryCount: 3,
+            terminalReason: null,
+            edges: [
+                { entry: { packedEnchant: 1 }, choice: canonicalizeWeightedChoice([{ packedEnchant: packed(1), weight: 1 }]), weight: 1, childId: 1, childExclusionMask: 0n },
+                { entry: { packedEnchant: 2 }, choice: canonicalizeWeightedChoice([{ packedEnchant: packed(2), weight: 2 }]), weight: 2, childId: 2, childExclusionMask: 0n },
+                { entry: { packedEnchant: 3 }, choice: canonicalizeWeightedChoice([{ packedEnchant: packed(3), weight: 3 }]), weight: 3, childId: 3, childExclusionMask: 0n }
+            ]
+        };
+
+        const search = new SearchRun(kernel, { useSuffixMerging: false });
+        (search as any).graphs.push({ id: 0, graph: { getExpansion: () => expansion } });
+        for (const mass of [1n, 4n, 1n, 4n]) {
+            (search as any).forwardMass(0, 0, expansion, mass, 0, undefined);
+        }
+
+        const plex = new PlexRun(kernel);
+        (plex as any).graphs.push({
+            id: 0,
+            graph: {
+                getExpansion: () => expansion,
+                getNode: (id: number) => ({ id, exclusionMask: 0n, currentLevel: 0, count: 1 })
+            }
+        });
+        for (const mass of [1n, 4n, 1n, 4n]) {
+            (plex as any).forwardOrResolve({ graphId: 0, nodeId: 0, mass, payload: EMPTY_PLEX_PAYLOAD }, mass);
+        }
+
+        assert.deepStrictEqual(plexDiagnosticUnits(plex), searchDiagnosticUnits(search));
+        assert.strictEqual(plex.snapshot().activeResidueMass, (search as any).getActiveResidueStats().mass);
+    });
+
+    it('keeps useful plex weighted-fanout residue diagnostics stable across chunk ordering', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'sword', material: 'diamond' });
+        const expansion = {
+            nodeId: 0,
+            isRoot: false,
+            probContinue: PRECISION,
+            totalWeight: 6,
+            eligibleEntryCount: 3,
+            terminalReason: null,
+            edges: [
+                { choice: canonicalizeWeightedChoice([{ packedEnchant: packed(1), weight: 1 }]), weight: 1, childId: 1, childExclusionMask: 0n },
+                { choice: canonicalizeWeightedChoice([{ packedEnchant: packed(2), weight: 2 }]), weight: 2, childId: 2, childExclusionMask: 0n },
+                { choice: canonicalizeWeightedChoice([{ packedEnchant: packed(3), weight: 3 }]), weight: 3, childId: 3, childExclusionMask: 0n }
+            ]
+        };
+        const makeRun = () => {
+            const run = new PlexRun(kernel);
+            (run as any).graphs.push({
+                id: 0,
+                graph: {
+                    getExpansion: () => expansion,
+                    getNode: (id: number) => ({ id, exclusionMask: 0n, currentLevel: 0, count: 1 })
+                }
+            });
+            return run;
+        };
+
+        const forward = makeRun();
+        for (const mass of [1n, 4n, 1n, 4n]) {
+            (forward as any).forwardOrResolve({ graphId: 0, nodeId: 0, mass, payload: EMPTY_PLEX_PAYLOAD }, mass);
+        }
+
+        const reverse = makeRun();
+        for (const mass of [4n, 1n, 4n, 1n]) {
+            (reverse as any).forwardOrResolve({ graphId: 0, nodeId: 0, mass, payload: EMPTY_PLEX_PAYLOAD }, mass);
+        }
+
+        assert.deepStrictEqual(plexDiagnosticUnits(forward), plexDiagnosticUnits(reverse));
     });
 
     it('projects factorized plex results into concrete combo rows', () => {
