@@ -46,6 +46,7 @@ function makeMass(overrides: UnitOverrides = {}): MassAccountingBreakdown {
     const unitsBig = {
         resolved: overrides.resolved ?? 0n,
         clueIncompatible: overrides.clueIncompatible ?? 0n,
+        projected: overrides.projected ?? 0n,
         pending: overrides.pending ?? 0n,
         sieved: overrides.sieved ?? 0n,
         overflow: overrides.overflow ?? 0n,
@@ -59,6 +60,7 @@ function makeMass(overrides: UnitOverrides = {}): MassAccountingBreakdown {
     return {
         resolved: Number(unitsBig.resolved) / Number(PRECISION),
         clueIncompatible: Number(unitsBig.clueIncompatible) / Number(PRECISION),
+        projected: Number(unitsBig.projected) / Number(PRECISION),
         pending: Number(unitsBig.pending) / Number(PRECISION),
         sieved: Number(unitsBig.sieved) / Number(PRECISION),
         overflow: Number(unitsBig.overflow) / Number(PRECISION),

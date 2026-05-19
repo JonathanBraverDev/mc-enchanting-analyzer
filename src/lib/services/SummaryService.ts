@@ -28,7 +28,7 @@ export class SummaryService {
             combos: {},
             shownClueDistribution: {},
             threshold,
-            accuracy: accounting.resolved + accounting.clueIncompatible - (accounting.projectionLoss ?? 0),
+            accuracy: (accounting.projected ?? accounting.resolved) + accounting.clueIncompatible,
             accounting
         };
 
@@ -108,7 +108,7 @@ export class SummaryService {
             count: {},
             combos: {},
             threshold: 0,
-            accuracy: accounting.resolved + accounting.clueIncompatible - (accounting.projectionLoss ?? 0),
+            accuracy: (accounting.projected ?? accounting.resolved) + accounting.clueIncompatible,
             accounting
         };
 

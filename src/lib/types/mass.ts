@@ -7,6 +7,8 @@ export interface MassAccountingBreakdown {
   resolved: number;
   /** Nodes proven incompatible with the observed clue during clue-aware searches. */
   clueIncompatible: number;
+  /** Projected compatibility-view mass represented by concrete result rows after projection. */
+  projected?: number | undefined;
   /** Nodes still in the queue (limited by threshold/iterations). Matches UI Uncertainty. */
   pending: number;
   /** Nodes that were discarded because they fell below the SYSTEM_THRESHOLD_FLOOR. */
@@ -17,7 +19,7 @@ export interface MassAccountingBreakdown {
   capped: number;
   /** Cumulative mass lost to floating point precision or integer division during search. */
   rounding: number;
-  /** Resolved mass that could not be represented in the projected concrete result view. Subtracts from effective accuracy. */
+  /** Mass that reached the projection stage but could not be represented in projected concrete result rows. */
   projectionLoss?: number | undefined;
   /** Diagnostic: Gross mass made distributable only because carried residue combined with later input. (Non-additive.) */
   recoveredRounding: number;
@@ -33,6 +35,7 @@ export interface MassAccountingBreakdown {
 export interface MassBucketUnits {
     resolved: bigint;
     clueIncompatible: bigint;
+    projected?: bigint | undefined;
     pending: bigint;
     sieved: bigint;
     overflow: bigint;
@@ -43,4 +46,4 @@ export interface MassBucketUnits {
     recoveredSieved: bigint;
 }
 
-export type MassBucketName = keyof MassBucketUnits;
+export type MassBucketName = Exclude<keyof MassBucketUnits, 'projected'>;

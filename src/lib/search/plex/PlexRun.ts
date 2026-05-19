@@ -49,8 +49,8 @@ export interface ProjectedPlexResults {
      * while expanding factorized choices.
      */
     readonly projectionLoss: bigint;
-    /** Concrete-view accuracy mass after subtracting projection loss from resolved plex mass. */
-    readonly accuracyMass: bigint;
+    /** Concrete-view projected mass after subtracting projection loss from resolved plex mass. */
+    readonly projectedMass: bigint;
     /** Mass accounting for consumers that summarize the projected concrete result view. */
     readonly mass: MassAccountingBreakdown;
 }
@@ -96,26 +96,47 @@ export function projectPlexResults(
         projectionLoss += result.mass - assigned;
     }
 
+    const projectedMass = resolvedMass - projectionLoss;
     return Object.freeze({
         results: new Map(projected),
         projectionLoss,
-        accuracyMass: resolvedMass - projectionLoss,
-        mass: withPlexProjectionLoss(sourceMass ?? createProjectionMass(resolvedMass), projectionLoss)
+        projectedMass,
+        mass: createProjectedMassAccounting(sourceMass ?? createProjectionMass(resolvedMass), projectedMass, projectionLoss)
     });
 }
 
-function withPlexProjectionLoss(mass: MassAccountingBreakdown, projectionLoss: bigint): MassAccountingBreakdown {
-    const projectedMass: MassAccountingBreakdown = {
-        ...mass,
-        projectionLoss: ProbUtils.toNumber(projectionLoss)
-    };
-    if (mass.units) {
-        projectedMass.units = Object.freeze({
-            ...mass.units,
-            projectionLoss: projectionLoss.toString()
-        });
-    }
-    return Object.freeze(projectedMass);
+function createProjectedMassAccounting(
+    sourceMass: MassAccountingBreakdown,
+    projectedMass: bigint,
+    projectionLoss: bigint
+): MassAccountingBreakdown {
+    const sourceUnits = getMassUnits(sourceMass);
+    return Object.freeze({
+        resolved: 0,
+        clueIncompatible: sourceMass.clueIncompatible,
+        projected: ProbUtils.toNumber(projectedMass),
+        pending: sourceMass.pending,
+        sieved: sourceMass.sieved,
+        overflow: sourceMass.overflow,
+        capped: sourceMass.capped,
+        rounding: sourceMass.rounding,
+        projectionLoss: ProbUtils.toNumber(projectionLoss),
+        recoveredRounding: sourceMass.recoveredRounding,
+        recoveredSieved: sourceMass.recoveredSieved,
+        units: Object.freeze({
+            resolved: '0',
+            clueIncompatible: sourceUnits.clueIncompatible.toString(),
+            projected: projectedMass.toString(),
+            pending: sourceUnits.pending.toString(),
+            sieved: sourceUnits.sieved.toString(),
+            overflow: sourceUnits.overflow.toString(),
+            capped: sourceUnits.capped.toString(),
+            rounding: sourceUnits.rounding.toString(),
+            projectionLoss: projectionLoss.toString(),
+            recoveredRounding: sourceUnits.recoveredRounding.toString(),
+            recoveredSieved: sourceUnits.recoveredSieved.toString()
+        })
+    });
 }
 
 function createProjectionMass(resolvedMass: bigint): MassAccountingBreakdown {
@@ -141,6 +162,31 @@ function createProjectionMass(resolvedMass: bigint): MassAccountingBreakdown {
             recoveredSieved: '0'
         })
     });
+}
+
+function getMassUnits(mass: MassAccountingBreakdown): {
+    resolved: bigint;
+    clueIncompatible: bigint;
+    pending: bigint;
+    sieved: bigint;
+    overflow: bigint;
+    capped: bigint;
+    rounding: bigint;
+    recoveredRounding: bigint;
+    recoveredSieved: bigint;
+} {
+    const units = mass.units;
+    return {
+        resolved: BigInt(units?.resolved ?? 0),
+        clueIncompatible: BigInt(units?.clueIncompatible ?? 0),
+        pending: BigInt(units?.pending ?? 0),
+        sieved: BigInt(units?.sieved ?? 0),
+        overflow: BigInt(units?.overflow ?? 0),
+        capped: BigInt(units?.capped ?? 0),
+        rounding: BigInt(units?.rounding ?? 0),
+        recoveredRounding: BigInt(units?.recoveredRounding ?? 0),
+        recoveredSieved: BigInt(units?.recoveredSieved ?? 0)
+    };
 }
 
 /**

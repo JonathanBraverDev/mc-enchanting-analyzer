@@ -33,7 +33,7 @@ describe('ProbabilityMassAccountant', () => {
         tracker.record('resolved', 100n);
         tracker.record('pending', 200n);
         tracker.record('sieved', 50n);
-        // Diagnostics are not added to total.
+        // Projection-loss and recovered buckets are diagnostics and not added to engine-stage total.
         tracker.record('rounding', 10n);
         tracker.record('projectionLoss', 7n);
         tracker.record('recoveredRounding', 25n);

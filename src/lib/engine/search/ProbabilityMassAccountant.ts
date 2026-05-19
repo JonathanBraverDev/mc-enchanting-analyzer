@@ -153,7 +153,7 @@ export class ProbabilityMassAccountant {
      * Returns the mass discovered but not yet expanded.
      */
     public getUnexploredMass(): bigint {
-        return this.data[2]!;
+        return this.data[BUCKET_INDEX.pending]!;
     }
 
     /**
