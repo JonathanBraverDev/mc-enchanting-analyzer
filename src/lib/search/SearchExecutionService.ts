@@ -4,6 +4,7 @@ import { RegistryKernel } from '#lib/search/registry/RegistryKernel.js';
 import { SearchRun, SearchRunSnapshot } from '#lib/search/SearchRun.js';
 import { PlexRun, ProjectedPlexCheckpoint } from '#lib/search/plex/PlexRun.js';
 import { checkPlexReducedKeyInvariant, type PlexReducedKeyInvariantResult } from '#lib/search/plex/PlexReducedKeyInvariant.js';
+import type { PlexFrontierIdentityMode } from '#lib/search/plex/PlexRunFrontier.js';
 import { SearchStateCache } from '#lib/search/SearchStateCache.js';
 import { PRECISION, ProbUtils } from '#utils/index.js';
 import type { MassAccountingBreakdown } from '#types/mass.js';
@@ -156,11 +157,11 @@ export class SearchExecutionService {
     }
 
     private getPlexRun(request: CheckpointSearchContext): PlexRun {
-        this.assertPlexReducedKeyInvariant(request);
-        const create = () => this.createPlexRun(request);
+        const frontierIdentityMode = this.getPlexFrontierIdentityMode(request);
+        const create = () => this.createPlexRun(request, frontierIdentityMode);
         if (request.useCache === false) return create();
 
-        const key = this.createRunCacheKey(request);
+        const key = this.createRunCacheKey(request, frontierIdentityMode);
         const cached = this.plexRunCache.get(key);
         if (cached) {
             this.plexRunCacheHits++;
@@ -184,17 +185,18 @@ export class SearchExecutionService {
         return run;
     }
 
-    private createPlexRun(request: CheckpointSearchContext): PlexRun {
+    private createPlexRun(request: CheckpointSearchContext, frontierIdentityMode: PlexFrontierIdentityMode): PlexRun {
         const run = new PlexRun(this.createKernel(request), {
             distributionService: this.distributionService,
-            targetClueId: request.targetClueId
+            targetClueId: request.targetClueId,
+            frontierIdentityMode
         });
         run.seedXp(request.xp);
         return run;
     }
 
-    private assertPlexReducedKeyInvariant(request: CheckpointSearchContext): void {
-        if (!isMutatedRegistry(request.registry)) return;
+    private getPlexFrontierIdentityMode(request: CheckpointSearchContext): PlexFrontierIdentityMode {
+        if (!isMutatedRegistry(request.registry)) return 'reduced';
 
         const key = this.createPlexInvariantCacheKey(request);
         let result = this.plexReducedKeyInvariantCache.get(key);
@@ -208,13 +210,7 @@ export class SearchExecutionService {
             this.plexReducedKeyInvariantCache.set(key, result);
         }
 
-        if (result.ok) return;
-
-        const conflict = result.conflicts[0];
-        const state = conflict ? `${conflict.graphId}:${String(conflict.nodeId)}` : 'unknown';
-        throw new Error(
-            `Plex backend cannot run this mutated registry because multiple payload histories reach structural state ${state}. Use the concrete backend.`
-        );
+        return result.ok ? 'reduced' : 'payload';
     }
 
     private createKernel(request: CheckpointSearchContext): RegistryKernel {
@@ -225,7 +221,7 @@ export class SearchExecutionService {
         });
     }
 
-    private createRunCacheKey(request: CheckpointSearchContext): string {
+    private createRunCacheKey(request: CheckpointSearchContext, plexFrontierIdentityMode?: PlexFrontierIdentityMode): string {
         return JSON.stringify({
             schema: 1,
             version: request.registry.version,
@@ -233,7 +229,8 @@ export class SearchExecutionService {
             material: request.material,
             xp: request.xp,
             targetClueId: request.targetClueId ?? null,
-            backend: this.getBackend(request)
+            backend: this.getBackend(request),
+            plexFrontierIdentityMode: plexFrontierIdentityMode ?? null
         });
     }
 

@@ -16,10 +16,12 @@ import {
     type PlexPayload,
     type PlexPayloadKey
 } from '#lib/search/plex/PlexPayload.js';
+import type { PlexFrontierIdentityMode } from '#lib/search/plex/PlexRunFrontier.js';
 
 export interface PlexRunOptions {
     readonly distributionService?: ModifiedLevelDistributionService | undefined;
     readonly targetClueId?: number | undefined;
+    readonly frontierIdentityMode?: PlexFrontierIdentityMode | undefined;
 }
 
 export interface PlexRunAdvanceRequest {
@@ -358,7 +360,7 @@ export class PlexRun {
     private readonly graphsBySignature = new Map<SearchPoolSignature, PlexGraphRecord>();
     private readonly graphs: PlexGraphRecord[] = [];
     private readonly payloads = new PlexPayloadStore();
-    private readonly work = new PlexWorkStore(this.payloads);
+    private readonly work: PlexWorkStore;
     private seeded = false;
     private _seededLevelCount = 0;
     private _iterations = 0;
@@ -372,6 +374,9 @@ export class PlexRun {
     ) {
         this.distributionService = options.distributionService ?? new ModifiedLevelDistributionService();
         this.targetClueId = options.targetClueId;
+        this.work = new PlexWorkStore(this.payloads, {
+            frontierIdentityMode: options.frontierIdentityMode
+        });
     }
 
     public seedXp(xp: number): void {
