@@ -23,6 +23,7 @@ import {
  */
 export class PlexPayloadStore {
     public readonly empty: PlexPayload = EMPTY_PLEX_PAYLOAD;
+    private readonly appendCache = new Map<number, Map<number, PlexPayload>>();
 
     public create(
         fixed: readonly PackedEnchant[] = [],
@@ -32,7 +33,19 @@ export class PlexPayloadStore {
     }
 
     public appendEdge(payload: PlexPayload, edge: Pick<PlexEdge, 'choice'>): PlexPayload {
-        return appendPlexPayloadEdge(payload, edge);
+        const payloadId = Number(payload.id);
+        const choiceId = Number(edge.choice.id);
+        let payloadTransitions = this.appendCache.get(payloadId);
+        const cached = payloadTransitions?.get(choiceId);
+        if (cached) return cached;
+
+        const next = appendPlexPayloadEdge(payload, edge);
+        if (!payloadTransitions) {
+            payloadTransitions = new Map<number, PlexPayload>();
+            this.appendCache.set(payloadId, payloadTransitions);
+        }
+        payloadTransitions.set(choiceId, next);
+        return next;
     }
 
     public key(payload: PlexPayload): PlexPayloadKey {
