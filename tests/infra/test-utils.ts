@@ -133,7 +133,7 @@ export const SnapshotUtils = {
         let hasMismatches = false;
         const lines: string[] = ['Category [accounting]:'];
 
-        const buckets = ['resolved', 'clueIncompatible', 'projected', 'pending', 'sieved', 'overflow', 'capped', 'rounding', 'projectionLoss', 'recoveredRounding', 'recoveredSieved'];
+        const buckets = ['resolved', 'clueIncompatible', 'pending', 'sieved', 'overflow', 'capped', 'rounding', 'recoveredRounding', 'recoveredSieved'];
         for (const bucket of buckets) {
             const aVal = actual[bucket] || 0;
             const eVal = expected[bucket] || 0;

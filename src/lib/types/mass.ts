@@ -7,8 +7,6 @@ export interface MassAccountingBreakdown {
   resolved: number;
   /** Nodes proven incompatible with the observed clue during clue-aware searches. */
   clueIncompatible: number;
-  /** Projected compatibility-view mass represented by concrete result rows after projection. */
-  projected?: number | undefined;
   /** Nodes still in the queue (limited by threshold/iterations). Matches UI Uncertainty. */
   pending: number;
   /** Nodes that were discarded because they fell below the SYSTEM_THRESHOLD_FLOOR. */
@@ -19,8 +17,6 @@ export interface MassAccountingBreakdown {
   capped: number;
   /** Cumulative mass lost to floating point precision or integer division during search. */
   rounding: number;
-  /** Mass that reached the projection stage but could not be represented in projected concrete result rows. */
-  projectionLoss?: number | undefined;
   /** Diagnostic: Gross mass made distributable only because carried residue combined with later input. (Non-additive.) */
   recoveredRounding: number;
   /** Diagnostic: Mass recovered from sieved branches via aggregation. (Non-additive) */
@@ -35,15 +31,47 @@ export interface MassAccountingBreakdown {
 export interface MassBucketUnits {
     resolved: bigint;
     clueIncompatible: bigint;
-    projected?: bigint | undefined;
     pending: bigint;
     sieved: bigint;
     overflow: bigint;
     capped: bigint;
     rounding: bigint;
-    projectionLoss?: bigint | undefined;
     recoveredRounding: bigint;
     recoveredSieved: bigint;
 }
 
-export type MassBucketName = Exclude<keyof MassBucketUnits, 'projected'>;
+export type MassBucketName = keyof MassBucketUnits;
+
+export interface MassAccountingPhases {
+    /** Engine/search-stage accounting. */
+    engine: MassAccountingBreakdown;
+    /** Optional projection/materialization-stage accounting. */
+    projection?: ProjectionAccountingBreakdown | undefined;
+}
+
+/**
+ * Projection-layer probability mass categories.
+ *
+ * These buckets describe compatibility-view materialization after search has produced
+ * engine results. They intentionally have a separate invariant from engine mass:
+ * `source = projected + clueIncompatible + loss`.
+ */
+export interface ProjectionAccountingBreakdown {
+    /** Mass entering this projection stage, usually engine resolved mass. */
+    source: number;
+    /** Mass emitted as projected concrete result rows. */
+    projected: number;
+    /** Projection-stage mass that cannot show the requested clue. */
+    clueIncompatible: number;
+    /** Projection-stage mass lost to integer materialization/reduction. */
+    loss: number;
+    /** Precise mass counts as strings to preserve BigInt precision in JSON. */
+    units?: ProjectionBucketUnits | undefined;
+}
+
+export interface ProjectionBucketUnits {
+    source: string;
+    projected: string;
+    clueIncompatible: string;
+    loss: string;
+}
