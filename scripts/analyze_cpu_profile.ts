@@ -186,6 +186,7 @@ function analyzeFile(file: string, options: CliOptions): void {
 
     console.log(`\n=== ${path.basename(file)} ===`);
     console.log(`samples=${filteredSamples.length} totalSelf=${formatMs(totalMicroseconds)}`);
+    printRuntimeSignals(filteredSamples, totalMicroseconds);
 
     console.log('\nPHASE TOTALS');
     for (const [phase, microseconds] of sortedEntries(phaseTotals)) {
@@ -285,6 +286,30 @@ function classifySample(sample: ProfileSample): string {
     }
 
     return 'shared/runtime/other';
+}
+
+function printRuntimeSignals(samples: readonly ProfileSample[], totalMicroseconds: number): void {
+    const garbageCollector = sumSelfTime(samples, '(garbage collector)');
+    const program = sumSelfTime(samples, '(program)');
+    const idle = sumSelfTime(samples, '(idle)');
+    const totalRuntime = garbageCollector + program + idle;
+
+    if (totalRuntime === 0) return;
+
+    console.log('runtimeSignals=' + [
+        `gc:${formatMs(garbageCollector)} ${formatPercent(garbageCollector, totalMicroseconds)}`,
+        `program:${formatMs(program)} ${formatPercent(program, totalMicroseconds)}`,
+        idle === 0 ? undefined : `idle:${formatMs(idle)} ${formatPercent(idle, totalMicroseconds)}`,
+        `total:${formatMs(totalRuntime)} ${formatPercent(totalRuntime, totalMicroseconds)}`
+    ].filter((part): part is string => part !== undefined).join(' | '));
+}
+
+function sumSelfTime(samples: readonly ProfileSample[], functionName: string): number {
+    let total = 0;
+    for (const sample of samples) {
+        if (sample.self.functionName === functionName) total += sample.microseconds;
+    }
+    return total;
 }
 
 function formatFrame(frame: FrameKey): string {
