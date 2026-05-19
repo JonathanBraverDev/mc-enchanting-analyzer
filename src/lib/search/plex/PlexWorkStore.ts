@@ -1,9 +1,13 @@
 import type { PlexNodeId, PlexEdge } from '#lib/search/plex/PlexGraph.js';
-import { PlexRunFrontier, type PlexFrontierPopTarget } from '#lib/search/plex/PlexRunFrontier.js';
+import { PlexRunFrontier, type PlexFrontierIdentityMode, type PlexFrontierPopTarget } from '#lib/search/plex/PlexRunFrontier.js';
 import { type PlexPayload, type PlexPayloadId } from '#lib/search/plex/PlexPayload.js';
 import { PlexPayloadStore } from '#lib/search/plex/PlexPayloadStore.js';
 
 export type PlexWorkItem = PlexFrontierPopTarget;
+
+export interface PlexWorkStoreOptions {
+    readonly frontierIdentityMode?: PlexFrontierIdentityMode | undefined;
+}
 
 export interface PlexResidueStats {
     readonly count: number;
@@ -24,10 +28,15 @@ interface PlexResidueState {
  * split residues keyed to the same graph/node/payload state as pending work.
  */
 export class PlexWorkStore {
-    private readonly frontier = new PlexRunFrontier();
+    private readonly frontier: PlexRunFrontier;
     private readonly forwardingResidues = new Map<number, PlexResidueState>();
 
-    public constructor(private readonly payloads: PlexPayloadStore = new PlexPayloadStore()) {}
+    public constructor(
+        private readonly payloads: PlexPayloadStore = new PlexPayloadStore(),
+        options: PlexWorkStoreOptions = {}
+    ) {
+        this.frontier = new PlexRunFrontier({ identityMode: options.frontierIdentityMode });
+    }
 
     public get size(): number {
         return this.frontier.size;

@@ -4,6 +4,17 @@ import {
     type PlexPayloadId
 } from '#lib/search/plex/PlexPayload.js';
 
+export type PlexFrontierIdentityMode = 'reduced' | 'payload';
+
+export interface PlexRunFrontierOptions {
+    /**
+     * Reduced mode merges by `(graphId, nodeId)` and requires payload identity to be
+     * implied by that structural state. Payload mode is the conservative fallback:
+     * it merges by `(graphId, nodeId, payloadId)` when a registry breaks that invariant.
+     */
+    readonly identityMode?: PlexFrontierIdentityMode | undefined;
+}
+
 export interface PlexFrontierPopTarget {
     graphId: number;
     nodeId: PlexNodeId;
@@ -129,22 +140,28 @@ class PlexFrontierPositionIndex {
 /**
  * Max-heap frontier for pending Plex work.
  *
- * PlexGraph edges aggregate alternatives that reach the same future exclusion
- * state, so the payload expression is expected to be functionally determined by
- * `(graphId, nodeId)`. Keep that as a checked invariant rather than paying for a
- * nested payload index on every heap move.
+ * The fast path merges by reduced structural state `(graphId, nodeId)` when a
+ * registry satisfies the Plex reduced-key invariant. Conservative fallback mode
+ * includes `payloadId` in the merge key so Plex can still run safely for mutated
+ * registries that violate that optimization.
  */
 export class PlexRunFrontier {
     private readonly heap: PlexFrontierEntry[] = [];
     private readonly positionsByState = new PlexFrontierPositionIndex();
+    private readonly positionsByPayloadState = new Map<string, number>();
+    private readonly identityMode: PlexFrontierIdentityMode;
+
+    public constructor(options: PlexRunFrontierOptions = {}) {
+        this.identityMode = options.identityMode ?? 'reduced';
+    }
 
     public get size(): number {
         return this.heap.length;
     }
 
     public pushOrMerge(graphId: number, nodeId: PlexNodeId, mass: bigint, payload: PlexPayload): void {
-        const stateId = this.getStateId(graphId, nodeId);
-        const existingIndex = this.positionsByState.get(stateId);
+        const positionKey = this.getPositionKey(graphId, nodeId, payload.id);
+        const existingIndex = this.getPosition(positionKey);
         if (existingIndex !== undefined) {
             const existing = this.heap[existingIndex]!;
             if (existing.payloadId !== payload.id) {
@@ -159,7 +176,7 @@ export class PlexRunFrontier {
 
         const index = this.heap.length;
         this.heap.push({ graphId, nodeId, mass, payload, payloadId: payload.id });
-        this.setPosition(stateId, index);
+        this.setPosition(positionKey, index);
         this.bubbleUp(index);
     }
 
@@ -179,12 +196,12 @@ export class PlexRunFrontier {
         out.nodeId = root.nodeId;
         out.mass = root.mass;
         out.payload = root.payload;
-        this.deletePosition(this.getStateId(root.graphId, root.nodeId));
+        this.deletePosition(this.getEntryPositionKey(root));
 
         const last = this.heap.pop();
         if (this.heap.length > 0 && last) {
             this.heap[0] = last;
-            this.setPosition(this.getStateId(last.graphId, last.nodeId), 0);
+            this.setPosition(this.getEntryPositionKey(last), 0);
             this.sinkDown(0);
         }
 
@@ -203,7 +220,7 @@ export class PlexRunFrontier {
         }
 
         this.heap[current] = entry;
-        this.setPosition(this.getStateId(entry.graphId, entry.nodeId), current);
+        this.setPosition(this.getEntryPositionKey(entry), current);
     }
 
     private sinkDown(index: number): void {
@@ -224,21 +241,46 @@ export class PlexRunFrontier {
         }
 
         this.heap[current] = entry;
-        this.setPosition(this.getStateId(entry.graphId, entry.nodeId), current);
+        this.setPosition(this.getEntryPositionKey(entry), current);
     }
 
     private moveHeapEntry(from: number, to: number): void {
         const entry = this.heap[from]!;
         this.heap[to] = entry;
-        this.setPosition(this.getStateId(entry.graphId, entry.nodeId), to);
+        this.setPosition(this.getEntryPositionKey(entry), to);
     }
 
-    private setPosition(stateId: number, index: number): void {
-        this.positionsByState.set(stateId, index);
+    private getPosition(key: number | string): number | undefined {
+        return typeof key === 'number'
+            ? this.positionsByState.get(key)
+            : this.positionsByPayloadState.get(key);
     }
 
-    private deletePosition(stateId: number): void {
-        this.positionsByState.delete(stateId);
+    private setPosition(key: number | string, index: number): void {
+        if (typeof key === 'number') {
+            this.positionsByState.set(key, index);
+        } else {
+            this.positionsByPayloadState.set(key, index);
+        }
+    }
+
+    private deletePosition(key: number | string): void {
+        if (typeof key === 'number') {
+            this.positionsByState.delete(key);
+        } else {
+            this.positionsByPayloadState.delete(key);
+        }
+    }
+
+    private getEntryPositionKey(entry: PlexFrontierEntry): number | string {
+        return this.getPositionKey(entry.graphId, entry.nodeId, entry.payloadId);
+    }
+
+    private getPositionKey(graphId: number, nodeId: PlexNodeId, payloadId: PlexPayloadId): number | string {
+        const stateId = this.getStateId(graphId, nodeId);
+        return this.identityMode === 'reduced'
+            ? stateId
+            : `${stateId}:${String(payloadId)}`;
     }
 
     private getStateId(graphId: number, nodeId: PlexNodeId): number {

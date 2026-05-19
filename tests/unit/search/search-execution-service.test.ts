@@ -148,7 +148,7 @@ describe('Search execution service', () => {
         assert.ok(Math.abs(accountingTotal(plex) - 1) < 1e-12);
     });
 
-    it('rejects Plex for mutated registries that break the reduced-key invariant', async () => {
+    it('falls back to payload-aware Plex frontier identity when a mutated registry breaks the reduced-key invariant', async () => {
         const registry = RegistryFactory.buildWithMutations('1.21.11', [
             { type: 'addConflictRule', rule: { enchants: ['Smite', 'Looting'], valid_from: '1.0' } },
             { type: 'addConflictRule', rule: { enchants: ['Looting', 'Unbreaking'], valid_from: '1.0' } },
@@ -156,17 +156,16 @@ describe('Search execution service', () => {
         ]);
         const engine = EngineFactory.create(registry);
 
-        await assert.rejects(
-            () => engine.searchToCheckpoint({
-                item: 'sword',
-                material: 'diamond',
-                xp: 30,
-                threshold: 0,
-                maxIterations: 100,
-                searchBackend: 'plex'
-            }),
-            /Plex backend cannot run this mutated registry because multiple payload histories reach structural state/
-        );
+        const result = await engine.searchToCheckpoint({
+            item: 'sword',
+            material: 'diamond',
+            xp: 30,
+            threshold: 0,
+            maxIterations: 100,
+            searchBackend: 'plex'
+        });
+
+        assert.ok(result.snapshot.mass.resolved + result.snapshot.mass.pending > 0);
     });
 
     it('allows Plex for mutated registries that satisfy the reduced-key invariant', async () => {
