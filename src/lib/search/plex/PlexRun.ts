@@ -229,27 +229,29 @@ function projectPlexPayloadMass(
     if (clueEligibleMass === 0n) return;
 
     let assigned = 0n;
-    const factors = options.applyBookRemoval
-        ? defaultPayloadStore.materializeBookFactors(payload, enchantToIndex)
-        : defaultPayloadStore.materializeFactors(payload, enchantToIndex);
-    for (const factor of factors) {
-        const mass = (sourceMass * factor.numerator * clueSurvival.numerator) /
-            (factor.denominator * clueSurvival.denominator);
+    const visitFactor = (combo: PackedCombo, numerator: bigint, denominator: bigint): void => {
+        const mass = (sourceMass * numerator * clueSurvival.numerator) /
+            (denominator * clueSurvival.denominator);
         assigned += mass;
-        if (mass === 0n) continue;
+        if (mass === 0n) return;
         if (target === 'result') {
             acc.projectedResultMass += mass;
-            acc.results.set(factor.combo, (acc.results.get(factor.combo) ?? 0n) + mass);
+            acc.results.set(combo, (acc.results.get(combo) ?? 0n) + mass);
         } else if (pendingSource) {
             acc.projectedPendingMass += mass;
             acc.pendingEntries.push(Object.freeze({
                 graphId: pendingSource.graphId,
                 nodeId: pendingSource.nodeId as unknown as SearchGraphNodeId,
                 mass,
-                combo: factor.combo,
-                count: ComboUtils.getCount(factor.combo)
+                combo,
+                count: ComboUtils.getCount(combo)
             }));
         }
+    };
+    if (options.applyBookRemoval) {
+        defaultPayloadStore.forEachBookFactor(payload, enchantToIndex, visitFactor);
+    } else {
+        defaultPayloadStore.forEachFactor(payload, enchantToIndex, visitFactor);
     }
     // Projection loss reduces concrete-view accuracy, not internal engine mass.
     acc.loss += clueEligibleMass - assigned;
