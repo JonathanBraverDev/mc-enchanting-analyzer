@@ -11,11 +11,8 @@ import type { SearchPool, SearchPoolSignature } from '#lib/search/registry/Regis
 import { RegistryKernel } from '#lib/search/registry/RegistryKernel.js';
 import { PlexGraph, type PlexNodeId } from '#lib/search/plex/PlexGraph.js';
 import { PlexWorkStore, type PlexWorkItem } from '#lib/search/plex/PlexWorkStore.js';
+import { PlexPayloadStore } from '#lib/search/plex/PlexPayloadStore.js';
 import {
-    EMPTY_PLEX_PAYLOAD,
-    getPlexPayloadKey,
-    materializeBookFactors,
-    materializePlexPayloadFactors,
     type PlexPayload,
     type PlexPayloadKey
 } from '#lib/search/plex/PlexPayload.js';
@@ -233,8 +230,8 @@ function projectPlexPayloadMass(
 
     let assigned = 0n;
     const factors = options.applyBookRemoval
-        ? materializeBookFactors(payload, enchantToIndex)
-        : materializePlexPayloadFactors(payload, enchantToIndex);
+        ? defaultPayloadStore.materializeBookFactors(payload, enchantToIndex)
+        : defaultPayloadStore.materializeFactors(payload, enchantToIndex);
     for (const factor of factors) {
         const mass = (sourceMass * factor.numerator * clueSurvival.numerator) /
             (factor.denominator * clueSurvival.denominator);
@@ -346,6 +343,8 @@ function createProjectionSourceMass(resolvedMass: bigint): MassAccountingBreakdo
  * frontier/result shape can be tested before concrete materialization and full
  * residue parity are introduced.
  */
+const defaultPayloadStore = new PlexPayloadStore();
+
 export class PlexRun {
     public readonly results = new Map<PlexPayloadKey, PlexResult>();
     public readonly mass = new ProbabilityMassAccountant();
@@ -353,7 +352,8 @@ export class PlexRun {
     private readonly distributionService: ModifiedLevelDistributionService;
     private readonly graphsBySignature = new Map<SearchPoolSignature, PlexGraphRecord>();
     private readonly graphs: PlexGraphRecord[] = [];
-    private readonly work = new PlexWorkStore();
+    private readonly payloads = new PlexPayloadStore();
+    private readonly work = new PlexWorkStore(this.payloads);
     private seeded = false;
     private _seededLevelCount = 0;
     private _iterations = 0;
@@ -394,7 +394,7 @@ export class PlexRun {
             const graph = this.graphForPool(pool);
             const root = graph.graph.getRootNode(level);
 
-            this.pushPending(graph.id, root.id, rootMass, EMPTY_PLEX_PAYLOAD);
+            this.pushPending(graph.id, root.id, rootMass, this.payloads.empty);
             seededMass += rootMass;
             this._seededLevelCount++;
         }
@@ -628,7 +628,7 @@ export class PlexRun {
 
     private recordResolved(payload: PlexPayload, mass: bigint): void {
         if (mass === 0n) return;
-        const key = getPlexPayloadKey(payload);
+        const key = this.payloads.key(payload);
         const existing = this.results.get(key);
         this.results.set(key, Object.freeze({
             payload: existing?.payload ?? payload,
@@ -648,7 +648,7 @@ export class PlexRun {
             graphId: 0,
             nodeId: 0 as PlexNodeId,
             mass: 0n,
-            payload: EMPTY_PLEX_PAYLOAD
+            payload: this.payloads.empty
         };
         return this.work.popLargest(current) ? current : undefined;
     }
