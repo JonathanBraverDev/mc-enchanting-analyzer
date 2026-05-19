@@ -88,7 +88,7 @@ export function materializePlexPayloadFactors(
  * enchantment uniformly at random. A plex choice group represents exactly one generated
  * enchantment slot, so removing that slot can happen before resolving its alternatives.
  */
-export function materializePlexPayloadBookFactors(
+export function materializeBookFactors(
     payload: PlexPayload,
     enchantToIndex: Map<number, number>
 ): readonly PlexComboFactor[] {
