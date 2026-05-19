@@ -26,7 +26,7 @@ import { material_values } from '#data/materials.js';
 import { constants } from '#data/cosmetics.js';
 import { VersionUtils } from '#utils/index.js';
 import { getRegistryVersionBoundaries } from '#core/version-resolution.js';
-import type { EnchantmentData } from '#types/index.js';
+import type { EnchantmentData, RegistryState } from '#types/index.js';
 
 const registryEnchantments: EnchantmentData["global_enchantments"] = global_enchantments;
 const registryVersions: EnchantmentData["versions"] = versions;
@@ -449,6 +449,42 @@ describe('Data integrity: conflict symmetry after RegistryFactory.build()', () =
     const engine = EngineFactory.createForVersion('1.21.11');
     const reg    = engine.registry;
 
+
+    it('keeps non-clique conflict components explicitly documented', () => {
+        const expected = [
+            '1.13: Channeling/Loyalty/Riptide missing Loyalty ↔ Channeling',
+            '1.14: Channeling/Loyalty/Riptide missing Loyalty ↔ Channeling',
+            '1.14.3: Channeling/Loyalty/Riptide missing Loyalty ↔ Channeling',
+            '1.16: Channeling/Loyalty/Riptide missing Loyalty ↔ Channeling',
+            '1.21: Channeling/Loyalty/Riptide missing Loyalty ↔ Channeling',
+            '1.21.9: Channeling/Loyalty/Riptide missing Loyalty ↔ Channeling',
+            '1.21.11: Channeling/Loyalty/Riptide missing Loyalty ↔ Channeling'
+        ];
+        const actual: string[] = [];
+
+        for (const version of supportedVersions) {
+            const registry = EngineFactory.createForVersion(version).registry;
+            for (const component of getActiveConflictComponents(registry)) {
+                const missingPairs: string[] = [];
+                for (let i = 0; i < component.length; i++) {
+                    for (let j = i + 1; j < component.length; j++) {
+                        const left = component[i]!;
+                        const right = component[j]!;
+                        if (!hasConflict(registry, left, right)) {
+                            missingPairs.push(`${registry.revIdMap[left]} ↔ ${registry.revIdMap[right]}`);
+                        }
+                    }
+                }
+                if (missingPairs.length > 0) {
+                    const names = component.map(id => registry.revIdMap[id]).sort().join('/');
+                    actual.push(`${version}: ${names} missing ${missingPairs.sort().join(', ')}`);
+                }
+            }
+        }
+
+        assert.deepStrictEqual(actual, expected);
+    });
+
     it('all conflict pairs are symmetric (exhaustive check)', () => {
         const allNames = reg.revIdMap;
         const asymmetric: string[] = [];
@@ -537,6 +573,34 @@ describe('Data integrity: conflict bitsets only include active version enchantme
         assert.ok(!hasConflict(v13, sharpnessId, densityId), '1.13 Sharpness should not conflict with future Density');
     });
 });
+
+function getActiveConflictComponents(registry: RegistryState): number[][] {
+    const components: number[][] = [];
+    const visited = new Set<number>();
+
+    for (let id = 0; id < registry.revIdMap.length; id++) {
+        if (visited.has(id)) continue;
+        const stack = [id];
+        const component: number[] = [];
+        visited.add(id);
+
+        while (stack.length > 0) {
+            const current = stack.pop()!;
+            component.push(current);
+
+            for (let other = 0; other < registry.revIdMap.length; other++) {
+                if (current === other || visited.has(other)) continue;
+                if (!hasConflict(registry, current, other)) continue;
+                visited.add(other);
+                stack.push(other);
+            }
+        }
+
+        if (component.length > 1) components.push(component.sort((a, b) => a - b));
+    }
+
+    return components;
+}
 
 // ── Material coverage ─────────────────────────────────────────────────────────
 
