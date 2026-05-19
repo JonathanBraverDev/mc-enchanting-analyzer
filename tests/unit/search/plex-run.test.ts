@@ -49,6 +49,16 @@ const activeMass = (snapshot: ReturnType<PlexRun['snapshot']>) => {
         + BigInt(units.rounding);
 };
 
+class SingleLevelDistributionService extends ModifiedLevelDistributionService {
+    public constructor(private readonly level: number) {
+        super();
+    }
+
+    public override getModifiedLevelDist(): { [level: number]: bigint } {
+        return { [this.level]: PRECISION };
+    }
+}
+
 describe('PlexRun', () => {
     it('seeds modified-level mass into empty-payload plex roots', () => {
         const registry = RegistryFactory.build('1.21.11');
@@ -91,6 +101,24 @@ describe('PlexRun', () => {
         assert.strictEqual(snapshot.graphCount, graphIds.size);
         assert.ok(snapshot.graphCount < snapshot.pendingCount, 'some modified levels should share equivalent pool graphs');
         assert.strictEqual(rootKeys.size, snapshot.pendingEntries.length, 'roots remain distinct by current level');
+    });
+
+    it('classifies modified levels without the target enchant-or-higher as engine clue-incompatible', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'sword', material: 'diamond' });
+        const targetClueId = kernel.getPool(30).entries
+            .find(entry => (entry.packedEnchant & 0xff) >= 2)!.packedEnchant;
+        const run = new PlexRun(kernel, {
+            targetClueId,
+            distributionService: new SingleLevelDistributionService(1)
+        });
+
+        run.seedXp(30);
+        const snapshot = run.snapshot();
+
+        assert.strictEqual(snapshot.pendingCount, 0);
+        assert.strictEqual(BigInt(snapshot.mass.units!.clueIncompatible), PRECISION);
+        assert.strictEqual(activeMass(snapshot), PRECISION);
     });
 
     it('expands one pending root by forwarding mass and appending payload edges', () => {
@@ -334,7 +362,7 @@ describe('PlexRun', () => {
         assert.strictEqual(projected.results.get(ComboUtils.pack([fixed, right], registry.enchantToIndex)), 3n);
     });
 
-    it('classifies clue-incompatible factors during projection without resolving groups early', () => {
+    it('scales clue projection by the target weight inside the latent choice', () => {
         const registry = RegistryFactory.build('1.21.11');
         const kernel = new RegistryKernel({ registry, item: 'sword', material: 'diamond' });
         const entries = kernel.getPool(30).entries.map(entry => entry.packedEnchant);
@@ -354,12 +382,36 @@ describe('PlexRun', () => {
             { targetClueId: target, indexToEnchant: registry.indexToEnchant }
         );
 
-        assert.strictEqual(projected.projectionLoss, 0n);
-        assert.strictEqual(projected.projectedMass, 8n);
-        assert.strictEqual(projected.mass.projection!.units?.projected, '8');
+        assert.strictEqual(projected.projectedMass, 7n);
+        assert.strictEqual(projected.projectionLoss, 1n);
+        assert.strictEqual(projected.mass.projection!.units?.projected, '7');
         assert.strictEqual(projected.mass.projection!.units?.source, '12');
         assert.strictEqual(projected.mass.projection!.units?.clueIncompatible, '4');
-        assert.deepStrictEqual([...projected.results.keys()], [ComboUtils.pack([fixed, target], registry.enchantToIndex)]);
+        assert.strictEqual(projected.results.get(ComboUtils.pack([fixed, target], registry.enchantToIndex)), 5n);
+        assert.strictEqual(projected.results.get(ComboUtils.pack([fixed, other], registry.enchantToIndex)), 2n);
+    });
+
+    it('treats target rank as a minimum while computing plex clue survival', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'sword', material: 'diamond' });
+        const entries = kernel.getPool(30).entries.map(entry => entry.packedEnchant);
+        const targetRankTwo = entries.find(entry => (entry & 0xff) >= 2)!;
+        const targetRankOne = (((targetRankTwo >> 8) << 8) | 1) as PackedEnchant;
+        const other = entries.find(entry => (entry >> 8) !== (targetRankTwo >> 8))!;
+        const payload = createPlexPayload([], [
+            canonicalizeWeightedChoice([
+                { packedEnchant: targetRankTwo, weight: 2 },
+                { packedEnchant: other, weight: 1 }
+            ])
+        ]);
+        const projected = projectPlexResults(
+            new Map([[getPlexPayloadKey(payload), { payload, mass: 12n }]]),
+            registry.enchantToIndex,
+            undefined,
+            { targetClueId: targetRankOne, indexToEnchant: registry.indexToEnchant }
+        );
+
+        assert.strictEqual(projected.mass.projection!.units?.clueIncompatible, '4');
     });
 
     it('applies book removal while projecting factorized plex results', () => {
@@ -448,24 +500,20 @@ describe('PlexRun', () => {
         assert.strictEqual(projected.projectedMass + BigInt(projected.mass.projection!.units!.clueIncompatible) + projected.projectionLoss, BigInt(plexSnapshot.mass.units!.resolved));
     });
 
-    it('matches concrete clue-pruned result keys for a tiny exhaustive case', () => {
+    it('projects clue-conditioned plex results as a survival-weighted compatibility view', () => {
         const registry = RegistryFactory.build('1.4.6');
         const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
         const targetClueId = kernel.getPool(30).entries[0]!.packedEnchant;
-        const concrete = new SearchRun(kernel, { targetClueId });
-        concrete.seedXp(30);
-        const concreteSnapshot = concrete.searchToCheckpoint({ exhaustive: true });
         const plex = new PlexRun(kernel, { targetClueId });
         plex.seedXp(30);
         const plexSnapshot = plex.advance({ maxIterations: 10_000 });
         const projected = plex.projectResults();
 
-        assert.strictEqual(concreteSnapshot.fullyResolved, true);
         assert.strictEqual(plexSnapshot.fullyResolved, true);
         assert.ok(projected.mass.projection!.clueIncompatible > 0);
-        assert.deepStrictEqual(
-            [...projected.results.keys()].sort((a, b) => a - b),
-            [...concreteSnapshot.results.keys()].sort((a, b) => a - b)
+        assert.strictEqual(
+            projected.projectedMass + BigInt(projected.mass.projection!.units!.clueIncompatible) + projected.projectionLoss,
+            BigInt(plexSnapshot.mass.units!.resolved)
         );
     });
 
