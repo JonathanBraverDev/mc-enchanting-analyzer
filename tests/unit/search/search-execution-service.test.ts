@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { EngineFactory } from '#engine/index.js';
+import { RegistryFactory } from '#core/factory.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import { getDefaultStatsCheckpoint, getSearchCheckpointForRefinement } from '#core/config.js';
 import { EnchantStats, EngineInstrumentation, SearchResult } from '#types/index.js';
@@ -115,6 +116,76 @@ describe('Search execution service', () => {
         assert.ok(Object.keys(stats.combos).length > 0);
         assert.ok(stats.accounting.pending > 0);
         assert.ok(Math.abs(accountingTotal(stats) - 1) < 1e-12);
+    });
+
+    it('does not expose the Plex empty payload as a public combo row', async () => {
+        const engine = EngineFactory.createForVersion('1.21.11');
+        engine.resetCaches();
+
+        const [concrete, plex] = await Promise.all([
+            engine.getStats({
+                item: 'mace',
+                material: 'mace',
+                xp: 1,
+                exhaustive: true,
+                summaryLimit: 100,
+                useCache: false
+            }),
+            engine.getStats({
+                item: 'mace',
+                material: 'mace',
+                xp: 1,
+                exhaustive: true,
+                summaryLimit: 100,
+                searchBackend: 'plex',
+                useCache: false
+            })
+        ]);
+
+        assert.strictEqual(concrete.combos['0'], undefined);
+        assert.strictEqual(plex.combos['0'], undefined);
+        assert.ok(plex.accounting.resolved > 0);
+        assert.ok(Math.abs(accountingTotal(plex) - 1) < 1e-12);
+    });
+
+    it('rejects Plex for mutated registries that break the reduced-key invariant', async () => {
+        const registry = RegistryFactory.buildWithMutations('1.21.11', [
+            { type: 'addConflictRule', rule: { enchants: ['Smite', 'Looting'], valid_from: '1.0' } },
+            { type: 'addConflictRule', rule: { enchants: ['Looting', 'Unbreaking'], valid_from: '1.0' } },
+            { type: 'addConflictRule', rule: { enchants: ['Unbreaking', 'Sharpness'], valid_from: '1.0' } }
+        ]);
+        const engine = EngineFactory.create(registry);
+
+        await assert.rejects(
+            () => engine.searchToCheckpoint({
+                item: 'sword',
+                material: 'diamond',
+                xp: 30,
+                threshold: 0,
+                maxIterations: 100,
+                searchBackend: 'plex'
+            }),
+            /Plex backend cannot run this mutated registry because multiple payload histories reach structural state/
+        );
+    });
+
+    it('allows Plex for mutated registries that satisfy the reduced-key invariant', async () => {
+        const registry = RegistryFactory.buildWithMutations('1.21.11', {
+            type: 'removeConflictRule',
+            selector: { enchants: ['Smite', 'Sharpness'], valid_from: '1.0' }
+        });
+        const engine = EngineFactory.create(registry);
+
+        const result = await engine.searchToCheckpoint({
+            item: 'sword',
+            material: 'diamond',
+            xp: 30,
+            threshold: 0,
+            maxIterations: 100,
+            searchBackend: 'plex'
+        });
+
+        assert.ok(result.snapshot.mass.resolved + result.snapshot.mass.pending > 0);
     });
 
     it('produces EnchantStats through the public stats API', async () => {
@@ -433,6 +504,26 @@ describe('Search execution service', () => {
                 maxIterations: 10_000,
                 signal: controller.signal
             }),
+            /Aborted/
+        );
+    });
+
+    it('aborts Plex checkpoint searches after yielding between chunks', async () => {
+        const engine = EngineFactory.createForVersion('1.7.2');
+        const controller = new AbortController();
+
+        const search = engine.searchToCheckpoint({
+            item: 'book',
+            material: 'book',
+            xp: 30,
+            exhaustive: true,
+            searchBackend: 'plex',
+            signal: controller.signal
+        });
+        setTimeout(() => controller.abort(), 0);
+
+        await assert.rejects(
+            () => search,
             /Aborted/
         );
     });

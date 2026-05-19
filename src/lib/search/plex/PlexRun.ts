@@ -1,10 +1,10 @@
-import { PACKING_CONSTANTS } from '#constants/engine.js';
+import { ENGINE_LIMITS, PACKING_CONSTANTS } from '#constants/engine.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { ProbabilityMassAccountant } from '#engine/search/ProbabilityMassAccountant.js';
 import type { EngineExitReason } from '#types/engine.js';
 import type { PackedCombo, PackedEnchant } from '#types/index.js';
 import type { MassAccountingBreakdown, MassAccountingPhases, ProjectionAccountingBreakdown } from '#types/mass.js';
-import { ComboUtils, PRECISION, ProbUtils } from '#utils/index.js';
+import { AsyncUtils, ComboUtils, PRECISION, ProbUtils } from '#utils/index.js';
 import type { PendingFrontierEntry } from '#lib/search/SearchRun.js';
 import type { SearchGraphNodeId } from '#lib/search/SearchGraph.js';
 import type { SearchPool, SearchPoolSignature } from '#lib/search/registry/RegistryKernel.js';
@@ -31,6 +31,8 @@ export interface PlexRunCheckpointRequest {
     readonly maxIterations?: number | undefined;
     readonly exhaustive?: boolean | undefined;
     readonly targetClassifiedMass?: number | bigint | undefined;
+    readonly signal?: AbortSignal | undefined;
+    readonly yieldEveryIterations?: number | undefined;
 }
 
 export interface PlexPendingEntry {
@@ -111,6 +113,7 @@ interface PlexAdvanceCriteria {
     readonly threshold: bigint;
     readonly maxIterations: number;
     readonly targetClassifiedMass?: bigint | undefined;
+    readonly signal?: AbortSignal | undefined;
 }
 
 interface PlexProjectionOptions {
@@ -236,7 +239,7 @@ function projectPlexPayloadMass(
         if (mass === 0n) return;
         if (target === 'result') {
             acc.projectedResultMass += mass;
-            acc.results.set(combo, (acc.results.get(combo) ?? 0n) + mass);
+            if (combo !== 0) acc.results.set(combo, (acc.results.get(combo) ?? 0n) + mass);
         } else if (pendingSource) {
             acc.projectedPendingMass += mass;
             acc.pendingEntries.push(Object.freeze({
@@ -429,6 +432,20 @@ export class PlexRun {
         return this.snapshot();
     }
 
+    public async searchToCheckpointAsync(request: PlexRunCheckpointRequest = {}): Promise<PlexRunSnapshot> {
+        const criteria = this.createAdvanceCriteria(request);
+        const chunkIterations = Math.max(
+            1,
+            request.yieldEveryIterations ?? ENGINE_LIMITS.ASYNC_SEARCH_CHUNK_ITERATIONS
+        );
+
+        while (!this.advanceUntilCheckpoint(criteria, chunkIterations)) {
+            await AsyncUtils.yield();
+        }
+
+        return this.snapshot();
+    }
+
     public projectResults(): ProjectedPlexResults {
         return projectPlexResults(this.results, this.kernel.registry.enchantToIndex, this.mass.toPublic(), {
             applyBookRemoval: this.kernel.item === 'book',
@@ -492,7 +509,8 @@ export class PlexRun {
         return {
             threshold,
             maxIterations,
-            targetClassifiedMass
+            targetClassifiedMass,
+            signal: request.signal
         };
     }
 
@@ -504,18 +522,23 @@ export class PlexRun {
         }
     }
 
-    private advanceUntilCheckpoint(criteria: PlexAdvanceCriteria): void {
+    private advanceUntilCheckpoint(criteria: PlexAdvanceCriteria, chunkIterations?: number): boolean {
         this._exitReason = undefined;
+        let advancedInChunk = 0;
+
         while (true) {
+            if (criteria.signal?.aborted) throw new Error('Aborted');
             const exitReason = this.getExitReason(criteria);
             if (exitReason !== undefined) {
                 this._exitReason = exitReason;
-                return;
+                return true;
             }
+            if (chunkIterations !== undefined && advancedInChunk >= chunkIterations) return false;
             if (!this.step()) {
                 this._exitReason = 'empty';
-                return;
+                return true;
             }
+            advancedInChunk++;
         }
     }
 
