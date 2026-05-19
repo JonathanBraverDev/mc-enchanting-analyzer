@@ -57,7 +57,7 @@ interface PendingEdgeGroup {
 }
 
 class PlexNodeIndex {
-    private static readonly INITIAL_CAPACITY = 1024;
+    private static readonly INITIAL_CAPACITY = 256;
     private static readonly MAX_LOAD_FACTOR = 0.7;
 
     private exclusionMasks: bigint[] = [];
