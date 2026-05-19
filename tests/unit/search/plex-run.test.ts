@@ -117,6 +117,7 @@ describe('PlexRun', () => {
         const snapshot = run.snapshot();
 
         assert.strictEqual(snapshot.pendingCount, 0);
+        assert.strictEqual(snapshot.exitReason, 'empty');
         assert.strictEqual(BigInt(snapshot.mass.units!.clueIncompatible), PRECISION);
         assert.strictEqual(activeMass(snapshot), PRECISION);
     });
@@ -170,6 +171,7 @@ describe('PlexRun', () => {
         const after = run.advance({ maxIterations: 3 });
 
         assert.strictEqual(after.iterations, before.iterations + 3);
+        assert.strictEqual(after.exitReason, 'iterations');
         assert.ok(after.pendingCount > 0);
         assert.strictEqual(activeMass(after), PRECISION);
     });
@@ -182,9 +184,12 @@ describe('PlexRun', () => {
         run.seedXp(30);
         const immediate = run.searchToCheckpoint({ threshold: 1 });
         assert.strictEqual(immediate.iterations, 0);
+        assert.strictEqual(immediate.exitReason, 'threshold');
+        assert.strictEqual(run.projectCheckpoint(immediate).exitReason, 'threshold');
         assert.ok(immediate.pendingCount > 0);
 
         const advanced = run.searchToCheckpoint({ targetClassifiedMass: PRECISION / 20n, maxIterations: 10_000 });
+        assert.strictEqual(advanced.exitReason, 'mass');
         assert.ok(BigInt(advanced.mass.units!.resolved) + BigInt(advanced.mass.units!.overflow) + BigInt(advanced.mass.units!.sieved) >= PRECISION / 20n);
         assert.ok(advanced.pendingCount > 0);
         assert.strictEqual(activeMass(advanced), PRECISION);
@@ -235,6 +240,7 @@ describe('PlexRun', () => {
         const snapshot = run.advance({ maxIterations: 10_000 });
 
         assert.strictEqual(snapshot.fullyResolved, true);
+        assert.strictEqual(snapshot.exitReason, 'empty');
         assert.strictEqual(snapshot.pendingCount, 0);
         assert.strictEqual(run.step(), false);
         assert.strictEqual(activeMass(snapshot), PRECISION);
@@ -249,6 +255,7 @@ describe('PlexRun', () => {
         const snapshot = run.searchToCheckpoint({ exhaustive: true });
 
         assert.strictEqual(snapshot.fullyResolved, true);
+        assert.strictEqual(snapshot.exitReason, 'empty');
         assert.ok(BigInt(snapshot.mass.units!.rounding) > 0n);
         assert.ok(BigInt(snapshot.mass.units!.recoveredRounding) > 0n);
         assert.ok(snapshot.activeResidueCount > 0);
