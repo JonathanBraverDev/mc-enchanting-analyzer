@@ -148,7 +148,7 @@ interface SearchResult {
 }
 ```
 
-`SearchExecutionService` searches or resumes a cached `SearchRun` for the request signature. The run seeds each modified level as weighted root mass, expands the highest-probability pending graph node globally, and snapshots the completed checkpoint state. The checkpoint result owns:
+`SearchExecutionService` searches or resumes the selected internal backend for the request signature. Concrete `SearchRun` remains the default and supported product path. Experimental callers can set `searchBackend: 'plex'` to run the same checkpoint service through a cached `PlexRun`, which projects its aggregate internal state back into the compatible checkpoint shape. The selected run seeds each modified level as weighted root mass, expands the highest-probability pending graph node globally, and snapshots the completed checkpoint state. The checkpoint result owns:
 
 - global combo mass
 - mass accounting buckets
@@ -177,7 +177,7 @@ The V7 search path separates graph node identity from weighted frontier priority
 - `SearchRunFrontier` stores `graphId`, `nodeId`, and pending weighted probability mass, using direct merge/heap lookups for best-first scheduling.
 - Forwarding residue is tracked by exact source expansion and outgoing edge, so fixed-point leftovers can recover only when later mass reaches the same equivalence point.
 - Suffix identity and suffix merging are implemented but opt-in; default product searches do not canonicalize pending suffix nodes because current profiling shows the overhead can outweigh the iteration savings.
-- Plex search is implemented as a separate opt-in internal path. It keeps structural frontier state separate from visible payload choices, can project resolved and pending aggregate state back into concrete compatibility rows, and is not yet selected by `SearchExecutionService` for product/default requests.
+- Plex search is implemented as an opt-in internal backend selected through `SearchExecutionService` with `searchBackend: 'plex'`. It keeps structural frontier state separate from visible payload choices, can project resolved and pending aggregate state back into concrete compatibility rows, and is still not selected for product/default requests.
 
 This preserves best-first semantics while changing the scheduling scope: the highest-probability pending weighted node expands first across the whole XP search, not inside one modified level at a time. `meta` remains the canonical state identity. The scaling improvement comes from sharing graph identity and cache state across the weighted run instead of repeating independent per-modified-level searches.
 
@@ -205,7 +205,7 @@ The browser uses two dedicated workers:
 
 The registry rule model declares item/material compatibility together, but the engine cache keys still follow the computation they cache. Pool entries only depend on the fixed enchantable item pool at a modified level. Search run entries include material because material changes enchantability, which changes the modified-level distribution and therefore the weighted search state. Threshold-aware reads can reuse more precise cached state when it already satisfies the requested checkpoint.
 
-Expansion blueprint caching is enabled by default because it preserves exact graph edges while reducing repeated candidate checks. Suffix merging is implemented behind `useSuffixMerging` but remains off by default because lower iteration counts have not consistently translated into faster wall-clock runtime. Plex search is available for internal experiments, comparison tests, and refinement work, but remains outside the default cache/execution path until parity and wall-clock evidence justify enabling it.
+Expansion blueprint caching is enabled by default because it preserves exact graph edges while reducing repeated candidate checks. Suffix merging is implemented behind `useSuffixMerging` but remains off by default because lower iteration counts have not consistently translated into faster wall-clock runtime. Plex search is available as an opt-in `SearchExecutionService` backend for internal experiments, comparison tests, and refinement work, but remains outside the default execution path until broader parity and wall-clock evidence justify enabling it.
 
 ## Release Documentation Rule
 

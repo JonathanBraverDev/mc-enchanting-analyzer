@@ -80,7 +80,7 @@ Current implemented V7 behavior:
 - Explicit `exhaustive: true` mode for bottom-out searches: it forces threshold `0`, bypasses the normal iteration safety cap, remains abortable through async search, and is the canonical mode for golden snapshot generation. Product UI flows should still use checkpoint limits.
 - Generalized expansion-blueprint reuse across rank-variant pools. `SearchPoolFamilySignature` groups pools that share base enchant/conflict/weight structure while differing by exact packed ranks; `SearchExpansionBlueprintCache` reuses eligible-entry scans across those families without changing exact graph edges or combo payloads.
 - Suffix identities and pending suffix merging are fully implemented but experimental and off by default. `SearchGraph.getSuffixIdentity()` can identify non-root nodes with the same visible combo and future expansion, and `SearchRun` can canonicalize matching pending entries when `useSuffixMerging: true`; current profiling shows the identity/cache overhead can outweigh the lower iteration count, so product/default searches leave it disabled.
-- Opt-in Plex search internals are available for experiments through `PlexRun` / `PlexGraph`. Plex compresses same-future conflict-group alternatives into aggregate payloads, keeps the default concrete `SearchRun` path unchanged, and emits materialized compatibility views for result/pending comparison.
+- Opt-in Plex search internals are available through `SearchExecutionService` with `searchBackend: 'plex'`, backed by `PlexRun` / `PlexGraph`. Plex compresses same-future conflict-group alternatives into aggregate payloads, keeps the default concrete `SearchRun` path unchanged, and emits materialized compatibility views for result/pending comparison.
 
 Current boundaries and intentional non-goals:
 
@@ -377,7 +377,7 @@ searchSequentialCheckpoints(request)
 
 Top selected level uses sequential checkpoints when it wants uninterrupted coarse → standard → deep progress. Chart sweep remains worker-orchestrated: the chart worker loops refinement passes and XP levels, calls `searchToCheckpoint` for each cell, and relies on the XP-cell run cache so later refinement calls resume the same `SearchRun` instead of recomputing from scratch.
 
-Current state: workers use the existing checkpoint-oriented protocol, but there is no engine selector and all top/chart searches route through V7. `SearchResult` contains `snapshot: SearchRunSnapshot`. Summary aggregation, clue conditioning, target analysis, clue advice, top snapshots, and chart cells consume `snapshot.pendingEntries` directly as globally weighted `(graph, node, mass, combo, count)` records. `SearchExecutionService` caches XP-cell `SearchRun`s, so repeated one-at-a-time calls for the same version/item/material/xp/clue can resume across refinement levels. New work must keep projection logic adapted to `SearchRun` / `SearchRunSnapshot` semantics rather than forcing shared search into old frontier/tracker shapes.
+Current state: workers use the existing checkpoint-oriented protocol and product/default searches still route through concrete V7 `SearchRun`. An internal `searchBackend: 'plex'` selector now lets diagnostics and experiments run the same `SearchExecutionService` APIs through `PlexRun`; the returned `SearchResult.snapshot` remains a concrete-compatible view. Summary aggregation, clue conditioning, target analysis, clue advice, top snapshots, and chart cells consume `snapshot.pendingEntries` directly as globally weighted `(graph, node, mass, combo, count)` records. `SearchExecutionService` caches XP-cell `SearchRun`s, and opt-in Plex requests cache live XP-cell `PlexRun`s, so repeated one-at-a-time calls for the same version/item/material/xp/clue/backend can resume across refinement levels. New work must keep projection logic adapted to the compatibility snapshot semantics rather than forcing shared search into old frontier/tracker shapes.
 
 ## Remainder and Equivalence Rules
 
@@ -420,7 +420,7 @@ Possible later optimizations:
 - Bounded memoized suffix summaries for fully equivalent tail states, especially for book-heavy searches.
 - Delayed-scaling or factorized-mass experiments to reduce repeated integer division on already-weighted mass.
 - Book-specific result-tail optimization, including better handling of redistributed book outcomes and huge low-probability combo tails.
-- Refine the opt-in Plex path into a faster default-internal candidate once profiling reduces per-iteration overhead and broader compatibility fixtures pass; see [Conflict-group squash](#conflict-group-squash).
+- Refine the opt-in Plex execution backend into a faster default-internal candidate once profiling reduces per-iteration overhead and broader compatibility fixtures pass; see [Conflict-group squash](#conflict-group-squash).
 
 These are not current behavior. They are active investigation areas for future performance, precision, or maintainability work, and they should not be treated as release promises.
 
@@ -428,7 +428,7 @@ These are not current behavior. They are active investigation areas for future p
 
 > Planning note: this section was amended 40 times before implementation started. The 40th amend was adding this note.
 
-Implementation status as of v7.3.0: Plex is no longer only a design sketch. The branch ships an opt-in internal `PlexRun` / `PlexGraph` path for experiments and diagnostics while leaving the normal concrete `SearchRun` product path unchanged. Plex currently supports:
+Implementation status after v7.3.0: Plex is no longer only a design sketch or a command-only diagnostic island. The branch ships an opt-in internal `searchBackend: 'plex'` selector in `SearchExecutionService`, backed by `PlexRun` / `PlexGraph`, while leaving the normal concrete `SearchRun` product path unchanged. Plex currently supports:
 
 - aggregate payload choice groups built from same-future conflict alternatives;
 - weighted payload factors and reduced choice ratios;
@@ -438,7 +438,9 @@ Implementation status as of v7.3.0: Plex is no longer only a design sketch. The 
 - book-removal projection;
 - clue projection, including seed/pool-level impossible-clue rejection and projection-scoped clue-incompatible alternatives;
 - split-residue harvesting and phase-scoped mass accounting;
-- bounded checkpoint requests with engine-native exit reasons.
+- bounded checkpoint requests with engine-native exit reasons;
+- `searchToCheckpoint`, `searchSequentialCheckpoints`, and `getStats` routing through `SearchExecutionService` when explicitly requested;
+- cached live Plex runs for one-at-a-time refinement calls on the same request signature.
 
 Focused exhaustive checks after the v7.3.0 implementation showed matching concrete/projected result-key sets for sampled fully resolved item cases and `1.7.2` book XP 30. Iteration counts dropped substantially in those checks, especially `1.7.2` book XP 30 (`874,816` concrete iterations vs `254,024` Plex iterations), but wall-clock performance is not yet better overall because Plex iterations are heavier and full materialization still has a cost. Treat Plex as internally usable for refinement, diagnostics, and opt-in comparisons, not as the public/default engine path yet.
 
@@ -773,8 +775,9 @@ First safe implementation slices were completed through internal opt-in comparis
 5. `PlexRun` owns a structural frontier, payloads, resolved Plex storage, and heap scheduling.
 6. Plex can emit materialized compatibility views for resolved results and pending entries.
 7. Plex now handles book-removal projection and clue projection, but these remain internal/experimental rather than public/default behavior.
-8. Focused parity checks cover degenerate and real choice-group behavior; broader benchmark and compatibility coverage are still needed before default enablement.
-9. Public/default search behavior remains unchanged until exhaustive parity and benchmark evidence justify enabling Plex.
+8. `SearchExecutionService` can select Plex with `searchBackend: 'plex'` and returns a concrete-compatible checkpoint/stats view.
+9. Focused parity checks cover degenerate and real choice-group behavior; broader benchmark and compatibility coverage are still needed before default enablement.
+10. Public/default search behavior remains unchanged until exhaustive parity and benchmark evidence justify enabling Plex.
 
 Implementation kickoff checklist:
 

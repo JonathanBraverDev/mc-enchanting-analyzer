@@ -3,14 +3,120 @@ import assert from 'node:assert';
 import { EngineFactory } from '#engine/index.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import { getDefaultStatsCheckpoint, getSearchCheckpointForRefinement } from '#core/config.js';
-import { EnchantStats, SearchResult } from '#types/index.js';
+import { EnchantStats, EngineInstrumentation, SearchResult } from '#types/index.js';
 
 function accountingTotal(stats: EnchantStats): number {
     const a = stats.accounting;
     return a.resolved + a.clueIncompatible + a.pending + a.sieved + a.overflow + a.capped + a.rounding;
 }
 
+function snapshotAccountingTotal(result: SearchResult): number {
+    const a = result.snapshot.mass;
+    return a.resolved + a.clueIncompatible + a.pending + a.sieved + a.overflow + a.capped + a.rounding;
+}
+
+function createInstrumentation(): EngineInstrumentation {
+    return {
+        poolCache: { hits: 0, misses: 0 },
+        distCache: { hits: 0, misses: 0 },
+        totalIterations: 0,
+        totalPrunedNodes: 0,
+        roundingErrorEvents: 0,
+        levelsProcessed: 0,
+        levelsFullyResolved: 0,
+        fullyResolved: false
+    };
+}
+
 describe('Search execution service', () => {
+    it('keeps the concrete SearchRun backend as the default execution path', async () => {
+        const engine = EngineFactory.createForVersion('1.21.11');
+        const instrumentation = createInstrumentation();
+
+        const result = await engine.searchToCheckpoint({
+            item: 'sword',
+            material: 'diamond',
+            xp: 30,
+            threshold: 0,
+            maxIterations: 1,
+            instrumentation
+        });
+
+        assert.strictEqual(result.instrumentation?.search?.backend, 'concrete');
+        assert.ok(result.snapshot.pendingEntries.length > 0);
+    });
+
+    it('routes checkpoint searches through Plex when explicitly requested', async () => {
+        const engine = EngineFactory.createForVersion('1.21.11');
+        const instrumentation = createInstrumentation();
+
+        const result = await engine.searchToCheckpoint({
+            item: 'book',
+            material: 'book',
+            xp: 30,
+            threshold: 0,
+            maxIterations: 1,
+            searchBackend: 'plex',
+            instrumentation
+        });
+
+        assert.strictEqual(result.instrumentation?.search?.backend, 'plex');
+        assert.strictEqual(result.instrumentation?.exitReason, 'iterations');
+        assert.ok(result.snapshot.pendingEntries.length > 0);
+        assert.ok(result.instrumentation.search.pendingEntryCount > (result.instrumentation.search.plexStructuralPendingEntryCount ?? 0));
+        assert.ok(Math.abs(snapshotAccountingTotal(result) - 1) < 1e-12);
+    });
+
+    it('resumes cached Plex runs across one-at-a-time checkpoint calls', async () => {
+        const engine = EngineFactory.createForVersion('1.21.11');
+        engine.resetCaches();
+
+        const first = await engine.searchToCheckpoint({
+            item: 'book',
+            material: 'book',
+            xp: 30,
+            threshold: 0,
+            maxIterations: 50,
+            searchBackend: 'plex',
+            instrumentation: createInstrumentation()
+        });
+        const resumed = await engine.searchToCheckpoint({
+            item: 'book',
+            material: 'book',
+            xp: 30,
+            threshold: 0,
+            maxIterations: 10,
+            searchBackend: 'plex',
+            instrumentation: createInstrumentation()
+        });
+
+        assert.strictEqual(first.instrumentation?.search?.backend, 'plex');
+        assert.strictEqual(first.instrumentation?.totalIterations, 50);
+        assert.strictEqual(resumed.instrumentation?.totalIterations, 50);
+        assert.ok((resumed.instrumentation?.search?.runCacheHits ?? 0) >= 1);
+    });
+
+    it('supports Plex through the public stats API while preserving compatible accounting', async () => {
+        const engine = EngineFactory.createForVersion('1.21.11');
+        engine.resetCaches();
+
+        const stats = await engine.getStats({
+            item: 'sword',
+            material: 'diamond',
+            xp: 30,
+            threshold: 0,
+            maxIterations: 250,
+            summaryLimit: 10,
+            searchBackend: 'plex',
+            instrumentation: createInstrumentation()
+        });
+
+        assert.strictEqual(stats.instrumentation?.search?.backend, 'plex');
+        assert.ok(Object.keys(stats.combos).length > 0);
+        assert.ok(stats.accounting.pending > 0);
+        assert.ok(Math.abs(accountingTotal(stats) - 1) < 1e-12);
+    });
+
     it('produces EnchantStats through the public stats API', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
         engine.resetCaches();
