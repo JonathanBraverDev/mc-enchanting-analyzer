@@ -11,7 +11,7 @@ import {
     appendPlexPayloadEdge,
     EMPTY_PLEX_PAYLOAD,
     getPlexPayloadKey,
-    materializePlexPayloadBookFactors,
+    materializeBookFactors,
     materializePlexPayloadFactors,
     type PlexPayload,
     type PlexPayloadKey
@@ -90,7 +90,7 @@ export function projectPlexResults(
         resolvedMass += result.mass;
         let assigned = 0n;
         const factors = options.applyBookRemoval
-            ? materializePlexPayloadBookFactors(result.payload, enchantToIndex)
+            ? materializeBookFactors(result.payload, enchantToIndex)
             : materializePlexPayloadFactors(result.payload, enchantToIndex);
         for (const factor of factors) {
             const mass = (result.mass * factor.numerator) / factor.denominator;

@@ -7,7 +7,7 @@ import {
     appendPlexPayloadEdge,
     createPlexPayload,
     EMPTY_PLEX_PAYLOAD,
-    materializePlexPayloadBookFactors,
+    materializeBookFactors,
     materializePlexPayloadFactors
 } from '#lib/search/plex/PlexPayload.js';
 import { canonicalizeWeightedChoice } from '#lib/search/plex/PlexChoice.js';
@@ -80,7 +80,7 @@ describe('PlexPayload', () => {
         const payload = createPlexPayload([fixed], [
             choice([[left, 2], [right, 1]])
         ]);
-        const factors = materializePlexPayloadBookFactors(payload, registry.enchantToIndex);
+        const factors = materializeBookFactors(payload, registry.enchantToIndex);
 
         assert.deepStrictEqual(factors, [
             { combo: ComboUtils.pack([left], registry.enchantToIndex), numerator: 2n, denominator: 2n * 3n },
