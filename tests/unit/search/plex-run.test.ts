@@ -122,6 +122,58 @@ describe('PlexRun', () => {
         assert.strictEqual(activeMass(after), PRECISION);
     });
 
+    it('supports checkpoint stop conditions without materializing projection', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
+        const run = new PlexRun(kernel);
+
+        run.seedXp(30);
+        const immediate = run.searchToCheckpoint({ threshold: 1 });
+        assert.strictEqual(immediate.iterations, 0);
+        assert.ok(immediate.pendingCount > 0);
+
+        const advanced = run.searchToCheckpoint({ targetResolvedMass: PRECISION / 20n, maxIterations: 10_000 });
+        assert.ok(BigInt(advanced.mass.units!.resolved) >= PRECISION / 20n);
+        assert.ok(advanced.pendingCount > 0);
+        assert.strictEqual(activeMass(advanced), PRECISION);
+    });
+
+    it('rejects checkpoints without a bounded stop condition', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
+        const run = new PlexRun(kernel);
+
+        run.seedXp(30);
+
+        assert.throws(
+            () => run.searchToCheckpoint(),
+            /PlexRun has no bounded stop condition/
+        );
+    });
+
+    it('projects checkpoint pending payloads into concrete pending entries', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
+        const run = new PlexRun(kernel);
+
+        run.seedXp(30);
+        run.step();
+        const snapshot = run.snapshot();
+        const checkpoint = run.projectCheckpoint(snapshot);
+        const projectedPendingMass = bigintSum(checkpoint.pendingEntries.map(entry => entry.mass));
+        const source = BigInt(checkpoint.mass.projection!.units!.source);
+
+        assert.strictEqual(checkpoint.iterations, snapshot.iterations);
+        assert.strictEqual(checkpoint.pendingCount, snapshot.pendingCount);
+        assert.strictEqual(checkpoint.results.size, 0);
+        assert.ok(checkpoint.pendingEntries.length > 0);
+        assert.strictEqual(projectedPendingMass, checkpoint.projectedPendingMass);
+        assert.strictEqual(checkpoint.projectedResultMass, 0n);
+        assert.strictEqual(projectedPendingMass + checkpoint.projectionLoss, source);
+        assert.strictEqual(checkpoint.mass.projection!.units!.projected, checkpoint.projectedMass.toString());
+        assert.ok(checkpoint.pendingEntries.every(entry => entry.count === ComboUtils.getCount(entry.combo)));
+    });
+
     it('stops bounded advancement when the plex frontier empties', () => {
         const registry = RegistryFactory.build('1.4.6');
         const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
@@ -234,6 +286,23 @@ describe('PlexRun', () => {
         assert.strictEqual(projected.mass.projection!.units?.source, resolvedMass.toString());
         assert.strictEqual(projected.mass.projection!.units?.projected, projected.projectedMass.toString());
         assert.strictEqual(projected.mass.projection!.units?.loss, projected.projectionLoss.toString());
+    });
+
+    it('matches result projection when a checkpoint is fully resolved', () => {
+        const registry = RegistryFactory.build('1.4.6');
+        const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
+        const run = new PlexRun(kernel);
+
+        run.seedXp(30);
+        const snapshot = run.searchToCheckpoint({ exhaustive: true });
+        const checkpoint = run.projectCheckpoint(snapshot);
+        const projected = run.projectResults();
+
+        assert.strictEqual(snapshot.fullyResolved, true);
+        assert.strictEqual(checkpoint.pendingEntries.length, 0);
+        assert.deepStrictEqual(checkpoint.results, projected.results);
+        assert.strictEqual(checkpoint.projectedMass, projected.projectedMass);
+        assert.strictEqual(checkpoint.projectionLoss, projected.projectionLoss);
     });
 
     it('compares projected plex rows with concrete SearchRun rows for a tiny exhaustive case', () => {
