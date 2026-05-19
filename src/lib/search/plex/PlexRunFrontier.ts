@@ -16,7 +16,7 @@ interface PlexFrontierEntry extends PlexFrontierPopTarget {
 }
 
 class PlexFrontierPositionIndex {
-    private static readonly INITIAL_CAPACITY = 4096;
+    private static readonly INITIAL_CAPACITY = 512;
     private static readonly MAX_LOAD_FACTOR = 0.65;
 
     private keys: Float64Array;
