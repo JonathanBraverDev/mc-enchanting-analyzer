@@ -47,6 +47,8 @@ export interface PlexComboFactor {
     readonly denominator: bigint;
 }
 
+export type PlexComboFactorVisitor = (combo: PackedCombo, numerator: bigint, denominator: bigint) => void;
+
 export const EMPTY_PLEX_PAYLOAD: PlexPayload = Object.freeze({
     id: 0 as PlexPayloadId,
     combo: EMPTY_PLEX_COMBO,
@@ -206,7 +208,20 @@ export function materializePlexPayloadFactors(
     enchantToIndex: Map<number, number>
 ): readonly PlexComboFactor[] {
     assertAlignedPayload(payload);
-    return materializePlexPayloadWithRemovedChoice(payload, enchantToIndex);
+    const materialized: PlexComboFactor[] = [];
+    visitPlexPayloadFactors(payload, enchantToIndex, (combo, numerator, denominator) => {
+        materialized.push(Object.freeze({ combo, numerator, denominator }));
+    });
+    return Object.freeze(materialized);
+}
+
+export function forEachPlexPayloadFactor(
+    payload: PlexPayload,
+    enchantToIndex: Map<number, number>,
+    visitor: PlexComboFactorVisitor
+): void {
+    assertAlignedPayload(payload);
+    visitPlexPayloadFactors(payload, enchantToIndex, visitor);
 }
 
 /**
@@ -221,51 +236,70 @@ export function materializeBookFactors(
     enchantToIndex: Map<number, number>
 ): readonly PlexComboFactor[] {
     assertAlignedPayload(payload);
-    const slotCount = payload.combo.fixed.length + payload.choices.length;
-    if (slotCount <= 1) return materializePlexPayloadWithRemovedChoice(payload, enchantToIndex);
-
     const materialized: PlexComboFactor[] = [];
-
-    for (let fixedIndex = 0; fixedIndex < payload.combo.fixed.length; fixedIndex++) {
-        materialized.push(...materializePlexPayloadWithRemovedChoice(
-            payload,
-            enchantToIndex,
-            fixedIndex,
-            undefined,
-            BigInt(slotCount)
-        ));
-    }
-
-    for (let choiceIndex = 0; choiceIndex < payload.choices.length; choiceIndex++) {
-        materialized.push(...materializePlexPayloadWithRemovedChoice(
-            payload,
-            enchantToIndex,
-            undefined,
-            choiceIndex,
-            BigInt(slotCount)
-        ));
-    }
-
+    visitBookFactors(payload, enchantToIndex, (combo, numerator, denominator) => {
+        materialized.push(Object.freeze({ combo, numerator, denominator }));
+    });
     return Object.freeze(materialized);
 }
 
-function materializePlexPayloadWithRemovedChoice(
+export function forEachBookFactor(
     payload: PlexPayload,
     enchantToIndex: Map<number, number>,
+    visitor: PlexComboFactorVisitor
+): void {
+    assertAlignedPayload(payload);
+    visitBookFactors(payload, enchantToIndex, visitor);
+}
+
+function visitBookFactors(
+    payload: PlexPayload,
+    enchantToIndex: Map<number, number>,
+    visitor: PlexComboFactorVisitor
+): void {
+    const slotCount = payload.combo.fixed.length + payload.choices.length;
+    if (slotCount <= 1) {
+        visitPlexPayloadFactors(payload, enchantToIndex, visitor);
+        return;
+    }
+
+    const slotCountBigInt = BigInt(slotCount);
+    for (let fixedIndex = 0; fixedIndex < payload.combo.fixed.length; fixedIndex++) {
+        visitPlexPayloadFactors(
+            payload,
+            enchantToIndex,
+            visitor,
+            fixedIndex,
+            undefined,
+            slotCountBigInt
+        );
+    }
+
+    for (let choiceIndex = 0; choiceIndex < payload.choices.length; choiceIndex++) {
+        visitPlexPayloadFactors(
+            payload,
+            enchantToIndex,
+            visitor,
+            undefined,
+            choiceIndex,
+            slotCountBigInt
+        );
+    }
+}
+
+function visitPlexPayloadFactors(
+    payload: PlexPayload,
+    enchantToIndex: Map<number, number>,
+    visitor: PlexComboFactorVisitor,
     removedFixedIndex?: number,
     removedChoiceIndex?: number,
     initialDenominator: bigint = 1n
-): readonly PlexComboFactor[] {
-    const materialized: PlexComboFactor[] = [];
+): void {
     const selected = payload.combo.fixed.filter((_, index) => index !== removedFixedIndex);
 
     function visit(choiceIndex: number, numerator: bigint, denominator: bigint): void {
         if (choiceIndex >= payload.choices.length) {
-            materialized.push(Object.freeze({
-                combo: ComboUtils.pack(selected, enchantToIndex),
-                numerator,
-                denominator
-            }));
+            visitor(ComboUtils.pack(selected, enchantToIndex), numerator, denominator);
             return;
         }
 
@@ -275,19 +309,19 @@ function materializePlexPayloadWithRemovedChoice(
         }
 
         const choice = payload.choices[choiceIndex]!;
+        const choiceTotalWeight = BigInt(choice.totalWeight);
         for (const alternative of choice.alternatives) {
             selected.push(alternative.packedEnchant);
             visit(
                 choiceIndex + 1,
                 numerator * BigInt(alternative.weight),
-                denominator * BigInt(choice.totalWeight)
+                denominator * choiceTotalWeight
             );
             selected.pop();
         }
     }
 
     visit(0, 1n, initialDenominator);
-    return Object.freeze(materialized);
 }
 
 function assertAlignedPayload(payload: PlexPayload): void {

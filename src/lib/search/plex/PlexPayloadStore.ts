@@ -6,9 +6,12 @@ import {
     createPlexPayload,
     EMPTY_PLEX_PAYLOAD,
     getPlexPayloadKey,
+    forEachBookFactor,
+    forEachPlexPayloadFactor,
     materializeBookFactors,
     materializePlexPayloadFactors,
     type PlexComboFactor,
+    type PlexComboFactorVisitor,
     type PlexPayload,
     type PlexPayloadKey
 } from '#lib/search/plex/PlexPayload.js';
@@ -59,10 +62,26 @@ export class PlexPayloadStore {
         return materializePlexPayloadFactors(payload, enchantToIndex);
     }
 
+    public forEachFactor(
+        payload: PlexPayload,
+        enchantToIndex: Map<number, number>,
+        visitor: PlexComboFactorVisitor
+    ): void {
+        forEachPlexPayloadFactor(payload, enchantToIndex, visitor);
+    }
+
     public materializeBookFactors(
         payload: PlexPayload,
         enchantToIndex: Map<number, number>
     ): readonly PlexComboFactor[] {
         return materializeBookFactors(payload, enchantToIndex);
+    }
+
+    public forEachBookFactor(
+        payload: PlexPayload,
+        enchantToIndex: Map<number, number>,
+        visitor: PlexComboFactorVisitor
+    ): void {
+        forEachBookFactor(payload, enchantToIndex, visitor);
     }
 }
