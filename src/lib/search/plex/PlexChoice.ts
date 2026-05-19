@@ -2,6 +2,15 @@ import type { PackedEnchant } from '#types/index.js';
 
 export type CanonicalPackedEnchantList = readonly PackedEnchant[];
 export type CanonicalChoiceSet = readonly CanonicalPackedEnchantList[];
+export type PlexChoiceId = number & { readonly __brand: 'PlexChoiceId' };
+
+interface ChoiceInternNode {
+    readonly next: Map<number, ChoiceInternNode>;
+    choice?: PlexWeightedChoice | undefined;
+}
+
+let nextPlexChoiceId = 1;
+const choiceInternRoot: ChoiceInternNode = { next: new Map<number, ChoiceInternNode>() };
 
 export interface PlexAlternative {
     readonly packedEnchant: PackedEnchant;
@@ -9,6 +18,8 @@ export interface PlexAlternative {
 }
 
 export interface PlexWeightedChoice {
+    /** Dense structural identity for hot payload intern maps. */
+    readonly id: PlexChoiceId;
     readonly alternatives: readonly PlexAlternative[];
     readonly totalWeight: number;
     /** Cached canonical packed-enchant view for hot-path payload/key operations. */
@@ -71,7 +82,23 @@ export function canonicalizeWeightedChoice(
         packedEnchant,
         weight: weightsByAlternative.get(packedEnchant)!
     }));
-    return Object.freeze({
+    return internPlexWeightedChoice(weightedAlternatives, packedEnchants);
+}
+
+function internPlexWeightedChoice(
+    weightedAlternatives: readonly PlexAlternative[],
+    packedEnchants: CanonicalPackedEnchantList
+): PlexWeightedChoice {
+    let node = choiceInternRoot;
+    for (const alternative of weightedAlternatives) {
+        node = getOrCreateChoiceInternNode(node, Number(alternative.packedEnchant));
+        node = getOrCreateChoiceInternNode(node, alternative.weight);
+    }
+
+    if (node.choice) return node.choice;
+
+    const choice = Object.freeze({
+        id: nextPlexChoiceId++ as PlexChoiceId,
         alternatives: Object.freeze(weightedAlternatives),
         totalWeight: weightedAlternatives.reduce((sum, alternative) => sum + alternative.weight, 0),
         packedEnchants,
@@ -79,6 +106,17 @@ export function canonicalizeWeightedChoice(
             .map(alternative => `${String(alternative.packedEnchant)}:${alternative.weight}`)
             .join(',')
     });
+    node.choice = choice;
+    return choice;
+}
+
+function getOrCreateChoiceInternNode(parent: ChoiceInternNode, key: number): ChoiceInternNode {
+    let node = parent.next.get(key);
+    if (!node) {
+        node = { next: new Map<number, ChoiceInternNode>() };
+        parent.next.set(key, node);
+    }
+    return node;
 }
 
 export function getPlexChoicePackedEnchants(choice: PlexWeightedChoice): CanonicalPackedEnchantList {
