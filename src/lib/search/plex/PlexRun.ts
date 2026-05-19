@@ -3,6 +3,8 @@ import { ProbabilityMassAccountant } from '#engine/search/ProbabilityMassAccount
 import type { PackedCombo } from '#types/index.js';
 import type { MassAccountingBreakdown, MassAccountingPhases, ProjectionAccountingBreakdown } from '#types/mass.js';
 import { ComboUtils, PRECISION, ProbUtils } from '#utils/index.js';
+import type { PendingFrontierEntry } from '#lib/search/SearchRun.js';
+import type { SearchGraphNodeId } from '#lib/search/SearchGraph.js';
 import type { SearchPool, SearchPoolSignature } from '#lib/search/registry/RegistryKernel.js';
 import { RegistryKernel } from '#lib/search/registry/RegistryKernel.js';
 import { PlexGraph, type PlexNodeId } from '#lib/search/plex/PlexGraph.js';
@@ -24,6 +26,14 @@ export interface PlexRunOptions {
 
 export interface PlexRunAdvanceRequest {
     readonly maxIterations: number;
+}
+
+export interface PlexRunCheckpointRequest {
+    readonly threshold?: number | bigint | undefined;
+    readonly maxIterations?: number | undefined;
+    readonly exhaustive?: boolean | undefined;
+    readonly targetClassifiedMass?: number | bigint | undefined;
+    readonly targetResolvedMass?: number | bigint | undefined;
 }
 
 export interface PlexPendingEntry {
@@ -57,6 +67,23 @@ export interface ProjectedPlexResults {
     readonly mass: MassAccountingPhases;
 }
 
+export interface ProjectedPlexCheckpoint {
+    readonly results: ReadonlyMap<PackedCombo, bigint>;
+    readonly pendingEntries: readonly PendingFrontierEntry[];
+    readonly projectionLoss: bigint;
+    readonly projectedMass: bigint;
+    readonly projectedResultMass: bigint;
+    readonly projectedPendingMass: bigint;
+    readonly mass: MassAccountingPhases;
+    readonly iterations: number;
+    readonly lastExpandedMass: bigint;
+    readonly pendingCount: number;
+    readonly largestPendingMass: bigint;
+    readonly graphCount: number;
+    readonly seededLevelCount: number;
+    readonly fullyResolved: boolean;
+}
+
 export interface PlexRunSnapshot {
     readonly results: ReadonlyMap<PlexPayloadKey, PlexResult>;
     readonly mass: MassAccountingBreakdown;
@@ -77,51 +104,148 @@ interface PlexGraphRecord {
 
 type PendingPlexWork = PlexFrontierPopTarget;
 
+interface PlexAdvanceCriteria {
+    readonly threshold: bigint;
+    readonly maxIterations: number;
+    readonly targetClassifiedMass?: bigint | undefined;
+    readonly targetResolvedMass?: bigint | undefined;
+}
+
+interface PlexProjectionOptions {
+    readonly applyBookRemoval?: boolean | undefined;
+    readonly targetClueId?: number | undefined;
+    readonly indexToEnchant?: readonly number[] | undefined;
+}
+
+interface PlexProjectionAccumulator {
+    readonly results: Map<PackedCombo, bigint>;
+    readonly pendingEntries: PendingFrontierEntry[];
+    projectedResultMass: bigint;
+    projectedPendingMass: bigint;
+    clueIncompatible: bigint;
+    loss: bigint;
+    source: bigint;
+}
+
 export function projectPlexResults(
     results: ReadonlyMap<PlexPayloadKey, PlexResult>,
     enchantToIndex: Map<number, number>,
     sourceMass?: MassAccountingBreakdown,
-    options: {
-        readonly applyBookRemoval?: boolean | undefined;
-        readonly targetClueId?: number | undefined;
-        readonly indexToEnchant?: readonly number[] | undefined;
-    } = {}
+    options: PlexProjectionOptions = {}
 ): ProjectedPlexResults {
-    const projected = new Map<PackedCombo, bigint>();
-    let projectedMass = 0n;
-    let projectionLoss = 0n;
-    let clueIncompatible = 0n;
-    let resolvedMass = 0n;
+    const acc = createProjectionAccumulator();
 
     for (const result of results.values()) {
-        resolvedMass += result.mass;
-        let assigned = 0n;
-        const factors = options.applyBookRemoval
-            ? materializeBookFactors(result.payload, enchantToIndex)
-            : materializePlexPayloadFactors(result.payload, enchantToIndex);
-        for (const factor of factors) {
-            const mass = (result.mass * factor.numerator) / factor.denominator;
-            assigned += mass;
-            if (options.targetClueId !== undefined && !containsTargetClue(factor.combo, options.targetClueId, options.indexToEnchant)) {
-                clueIncompatible += mass;
-                continue;
-            }
-            projectedMass += mass;
-            projected.set(factor.combo, (projected.get(factor.combo) ?? 0n) + mass);
-        }
-        // Projection loss reduces concrete-view accuracy, not internal resolved mass.
-        projectionLoss += result.mass - assigned;
+        projectPlexPayloadMass(acc, result.payload, result.mass, enchantToIndex, options, 'result');
     }
 
+    const projectedMass = acc.projectedResultMass;
+
     return Object.freeze({
-        results: new Map(projected),
-        projectionLoss,
+        results: new Map(acc.results),
+        projectionLoss: acc.loss,
         projectedMass,
         mass: Object.freeze({
-            engine: sourceMass ?? createProjectionSourceMass(resolvedMass),
-            projection: createProjectionAccounting(resolvedMass, projectedMass, clueIncompatible, projectionLoss)
+            engine: sourceMass ?? createProjectionSourceMass(acc.source),
+            projection: createProjectionAccounting(acc.source, projectedMass, acc.clueIncompatible, acc.loss)
         })
     });
+}
+
+export function projectPlexCheckpoint(
+    snapshot: PlexRunSnapshot,
+    enchantToIndex: Map<number, number>,
+    options: PlexProjectionOptions = {}
+): ProjectedPlexCheckpoint {
+    const acc = createProjectionAccumulator();
+
+    for (const result of snapshot.results.values()) {
+        projectPlexPayloadMass(acc, result.payload, result.mass, enchantToIndex, options, 'result');
+    }
+
+    for (const entry of snapshot.pendingEntries) {
+        // Pending entries are still live frontier state, not final book rows. Keep
+        // them pre-book-removal so downstream aggregate projections can apply the
+        // same pending-book approximation they use for concrete SearchRun entries.
+        projectPlexPayloadMass(acc, entry.payload, entry.mass, enchantToIndex, {
+            ...options,
+            applyBookRemoval: false
+        }, 'pending', entry);
+    }
+
+    const projectedMass = acc.projectedResultMass + acc.projectedPendingMass;
+
+    return Object.freeze({
+        results: new Map(acc.results),
+        pendingEntries: Object.freeze(acc.pendingEntries),
+        projectionLoss: acc.loss,
+        projectedMass,
+        projectedResultMass: acc.projectedResultMass,
+        projectedPendingMass: acc.projectedPendingMass,
+        mass: Object.freeze({
+            engine: snapshot.mass,
+            projection: createProjectionAccounting(acc.source, projectedMass, acc.clueIncompatible, acc.loss)
+        }),
+        iterations: snapshot.iterations,
+        lastExpandedMass: snapshot.lastExpandedMass,
+        pendingCount: snapshot.pendingCount,
+        largestPendingMass: snapshot.largestPendingMass,
+        graphCount: snapshot.graphCount,
+        seededLevelCount: snapshot.seededLevelCount,
+        fullyResolved: snapshot.fullyResolved
+    });
+}
+
+function createProjectionAccumulator(): PlexProjectionAccumulator {
+    return {
+        results: new Map<PackedCombo, bigint>(),
+        pendingEntries: [],
+        projectedResultMass: 0n,
+        projectedPendingMass: 0n,
+        clueIncompatible: 0n,
+        loss: 0n,
+        source: 0n
+    };
+}
+
+function projectPlexPayloadMass(
+    acc: PlexProjectionAccumulator,
+    payload: PlexPayload,
+    sourceMass: bigint,
+    enchantToIndex: Map<number, number>,
+    options: PlexProjectionOptions,
+    target: 'result' | 'pending',
+    pendingSource?: PlexPendingEntry | undefined
+): void {
+    acc.source += sourceMass;
+    let assigned = 0n;
+    const factors = options.applyBookRemoval
+        ? materializeBookFactors(payload, enchantToIndex)
+        : materializePlexPayloadFactors(payload, enchantToIndex);
+    for (const factor of factors) {
+        const mass = (sourceMass * factor.numerator) / factor.denominator;
+        assigned += mass;
+        if (mass === 0n) continue;
+        if (options.targetClueId !== undefined && !containsTargetClue(factor.combo, options.targetClueId, options.indexToEnchant)) {
+            acc.clueIncompatible += mass;
+            continue;
+        }
+        if (target === 'result') {
+            acc.projectedResultMass += mass;
+            acc.results.set(factor.combo, (acc.results.get(factor.combo) ?? 0n) + mass);
+        } else if (pendingSource) {
+            acc.projectedPendingMass += mass;
+            acc.pendingEntries.push(Object.freeze({
+                graphId: pendingSource.graphId,
+                nodeId: pendingSource.nodeId as unknown as SearchGraphNodeId,
+                mass,
+                combo: factor.combo,
+                count: ComboUtils.getCount(factor.combo)
+            }));
+        }
+    }
+    // Projection loss reduces concrete-view accuracy, not internal engine mass.
+    acc.loss += sourceMass - assigned;
 }
 
 function containsTargetClue(
@@ -252,18 +376,26 @@ export class PlexRun {
     }
 
     public advance(request: PlexRunAdvanceRequest): PlexRunSnapshot {
-        this.validateMaxIterations(request.maxIterations);
         if (!this.seeded) throw new Error('PlexRun must be seeded before advancing.');
+        return this.searchToCheckpoint({ maxIterations: this._iterations + request.maxIterations });
+    }
 
-        for (let i = 0; i < request.maxIterations; i++) {
-            if (!this.step()) break;
-        }
-
+    public searchToCheckpoint(request: PlexRunCheckpointRequest = {}): PlexRunSnapshot {
+        const criteria = this.createAdvanceCriteria(request);
+        this.advanceUntilCheckpoint(criteria);
         return this.snapshot();
     }
 
     public projectResults(): ProjectedPlexResults {
         return projectPlexResults(this.results, this.kernel.registry.enchantToIndex, this.mass.toPublic(), {
+            applyBookRemoval: this.kernel.item === 'book',
+            targetClueId: this.targetClueId,
+            indexToEnchant: this.kernel.registry.indexToEnchant
+        });
+    }
+
+    public projectCheckpoint(snapshot: PlexRunSnapshot = this.snapshot()): ProjectedPlexCheckpoint {
+        return projectPlexCheckpoint(snapshot, this.kernel.registry.enchantToIndex, {
             applyBookRemoval: this.kernel.item === 'book',
             targetClueId: this.targetClueId,
             indexToEnchant: this.kernel.registry.indexToEnchant
@@ -287,6 +419,60 @@ export class PlexRun {
 
     public getGraph(graphId: number): PlexGraph {
         return this.getGraphById(graphId).graph;
+    }
+
+    private createAdvanceCriteria(request: PlexRunCheckpointRequest): PlexAdvanceCriteria {
+        if (!this.seeded) throw new Error('PlexRun must be seeded before searching.');
+
+        if (request.maxIterations !== undefined) this.validateMaxIterations(request.maxIterations);
+        this.validateProbabilityInput(request.threshold, 'threshold', 'Threshold must be between 0 and 1.0.');
+        this.validateProbabilityInput(request.targetClassifiedMass, 'targetClassifiedMass', 'Must be between 0 and 1.0.');
+        this.validateProbabilityInput(request.targetResolvedMass, 'targetResolvedMass', 'Must be between 0 and 1.0.');
+
+        const targetClassifiedMass = request.targetClassifiedMass !== undefined
+            ? ProbUtils.toBigInt(request.targetClassifiedMass)
+            : undefined;
+        const targetResolvedMass = request.targetResolvedMass !== undefined
+            ? ProbUtils.toBigInt(request.targetResolvedMass)
+            : undefined;
+        const threshold = request.exhaustive ? 0n : ProbUtils.toBigInt(request.threshold ?? 0n);
+        const maxIterations = request.exhaustive
+            ? Number.POSITIVE_INFINITY
+            : request.maxIterations ?? Number.POSITIVE_INFINITY;
+
+        const hasBoundedStopCondition = targetClassifiedMass !== undefined
+            || targetResolvedMass !== undefined
+            || (request.threshold !== undefined && threshold > 0n)
+            || request.maxIterations !== undefined;
+        if (!request.exhaustive && !hasBoundedStopCondition) {
+            throw new Error('PlexRun has no bounded stop condition. Provide a positive threshold, a finite maxIterations, a mass target, or set exhaustive: true.');
+        }
+
+        return {
+            threshold,
+            maxIterations,
+            targetClassifiedMass,
+            targetResolvedMass
+        };
+    }
+
+    private validateProbabilityInput(value: number | bigint | undefined, label: string, requirement: string): void {
+        if (value === undefined) return;
+        const normalized = ProbUtils.toNumber(value);
+        if (!Number.isFinite(normalized) || normalized < 0 || normalized > 1.0) {
+            throw new Error(`Invalid ${label}: ${normalized}. ${requirement}`);
+        }
+    }
+
+    private advanceUntilCheckpoint(criteria: PlexAdvanceCriteria): void {
+        while (true) {
+            if (this.frontier.size === 0) return;
+            if (this._iterations >= criteria.maxIterations) return;
+            if (criteria.targetClassifiedMass !== undefined && this.mass.getClassifiedMass() >= criteria.targetClassifiedMass) return;
+            if (criteria.targetResolvedMass !== undefined && this.mass.getResolvedMass() >= criteria.targetResolvedMass) return;
+            if (this.frontier.peekMass() < criteria.threshold) return;
+            if (!this.step()) return;
+        }
     }
 
     private validateMaxIterations(maxIterations: number): void {
