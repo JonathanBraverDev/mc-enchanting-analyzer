@@ -4,9 +4,22 @@ import { RegistryFactory, RegistryKernel, SearchGraph } from '#lib/index.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import { PlexGraph, type PlexEdge } from '#lib/search/plex/PlexGraph.js';
 import { ComboUtils, PRECISION, ProbUtils } from '#utils/index.js';
+import type { RegistryState } from '#types/index.js';
 
 const edgePackedEnchants = (edge: PlexEdge) => edge.choice.alternatives.map(alternative => alternative.packedEnchant);
 const edgeWeights = (edge: PlexEdge) => edge.choice.alternatives.map(alternative => alternative.weight);
+const tridentConflictNames = ['Channeling', 'Loyalty', 'Riptide'];
+
+function edgeEnchantNames(registry: RegistryState, edge: PlexEdge): string[] {
+    return edgePackedEnchants(edge).map(packed => registry.revIdMap[ComboUtils.getEnchantId(packed)]!);
+}
+
+function tridentConflictNamesInEdges(registry: RegistryState, edges: readonly PlexEdge[]): string[] {
+    return edges
+        .flatMap(edge => edgeEnchantNames(registry, edge))
+        .filter(name => tridentConflictNames.includes(name))
+        .sort();
+}
 
 describe('PlexGraph', () => {
     it('keys structural nodes by exclusion mask, current level, and count', () => {
@@ -81,6 +94,47 @@ describe('PlexGraph', () => {
         assert.strictEqual(child.exclusionMask, damageEdge.childExclusionMask);
         assert.strictEqual(child.currentLevel, 30);
         assert.strictEqual(child.count, 1);
+    });
+
+    it('does not squash the non-clique trident conflict component into one choice', () => {
+        for (const { item, material } of [
+            { item: 'trident', material: 'trident' },
+            { item: 'book', material: 'book' }
+        ]) {
+            const registry = RegistryFactory.build('1.21.11');
+            const kernel = new RegistryKernel({ registry, item, material });
+            const graph = new PlexGraph(kernel, kernel.getPool(30));
+            const expansion = graph.getExpansion(graph.getRootNode(30).id);
+            const tridentEdges = expansion.edges.filter(edge =>
+                edgeEnchantNames(registry, edge).some(name => tridentConflictNames.includes(name))
+            );
+
+            const rootChoices = tridentEdges
+                .map(edge => edgeEnchantNames(registry, edge))
+                .sort((left, right) => left[0]!.localeCompare(right[0]!));
+
+            assert.deepStrictEqual(
+                rootChoices,
+                [['Channeling'], ['Loyalty'], ['Riptide']],
+                `${item} should keep the trident V-shaped conflict component as singleton choices`
+            );
+            assert.strictEqual(
+                new Set(tridentEdges.map(edge => edge.childExclusionMask)).size,
+                3,
+                `${item} trident choices should lead to three distinct future exclusion states`
+            );
+
+            const edgeByName = new Map(tridentEdges.map(edge => [edgeEnchantNames(registry, edge)[0]!, edge]));
+            const eligibleAfter = (name: string): string[] => {
+                const edge = edgeByName.get(name);
+                assert.ok(edge, `${item} should expose a root edge for ${name}`);
+                return tridentConflictNamesInEdges(registry, graph.getExpansion(edge.childId).edges);
+            };
+
+            assert.deepStrictEqual(eligibleAfter('Loyalty'), ['Channeling'], `${item}: Channeling remains eligible after Loyalty`);
+            assert.deepStrictEqual(eligibleAfter('Channeling'), ['Loyalty'], `${item}: Loyalty remains eligible after Channeling`);
+            assert.deepStrictEqual(eligibleAfter('Riptide'), [], `${item}: Riptide blocks both Loyalty and Channeling`);
+        }
     });
 
     it('keeps plex edge alternatives item-local instead of using whole conflict groups', () => {
