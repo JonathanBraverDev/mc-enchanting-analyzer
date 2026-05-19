@@ -153,9 +153,10 @@ describe('PlexRun', () => {
 
         assert.strictEqual(projected.projectionLoss, 1n);
         assert.strictEqual(projected.projectedMass, 9n);
-        assert.strictEqual(projected.mass.units?.resolved, '0');
-        assert.strictEqual(projected.mass.units?.projected, '9');
-        assert.strictEqual(projected.mass.units?.projectionLoss, '1');
+        assert.strictEqual(projected.mass.engine.units?.resolved, '10');
+        assert.strictEqual(projected.mass.projection!.units?.projected, '9');
+        assert.strictEqual(projected.mass.projection!.units?.source, '10');
+        assert.strictEqual(projected.mass.projection!.units?.loss, '1');
         assert.strictEqual(projected.results.get(ComboUtils.pack([fixed, left], registry.enchantToIndex)), 6n);
         assert.strictEqual(projected.results.get(ComboUtils.pack([fixed, right], registry.enchantToIndex)), 3n);
     });
@@ -182,8 +183,9 @@ describe('PlexRun', () => {
 
         assert.strictEqual(projected.projectionLoss, 0n);
         assert.strictEqual(projected.projectedMass, 8n);
-        assert.strictEqual(projected.mass.units?.projected, '8');
-        assert.strictEqual(projected.mass.units?.clueIncompatible, '4');
+        assert.strictEqual(projected.mass.projection!.units?.projected, '8');
+        assert.strictEqual(projected.mass.projection!.units?.source, '12');
+        assert.strictEqual(projected.mass.projection!.units?.clueIncompatible, '4');
         assert.deepStrictEqual([...projected.results.keys()], [ComboUtils.pack([fixed, target], registry.enchantToIndex)]);
     });
 
@@ -228,9 +230,10 @@ describe('PlexRun', () => {
         assert.ok(projected.results.size > 0);
         assert.strictEqual(projectedMass, projected.projectedMass);
         assert.strictEqual(projectedMass + projected.projectionLoss, resolvedMass);
-        assert.strictEqual(projected.mass.units?.resolved, '0');
-        assert.strictEqual(projected.mass.units?.projected, projected.projectedMass.toString());
-        assert.strictEqual(projected.mass.units?.projectionLoss, projected.projectionLoss.toString());
+        assert.strictEqual(projected.mass.engine.units?.resolved, resolvedMass.toString());
+        assert.strictEqual(projected.mass.projection!.units?.source, resolvedMass.toString());
+        assert.strictEqual(projected.mass.projection!.units?.projected, projected.projectedMass.toString());
+        assert.strictEqual(projected.mass.projection!.units?.loss, projected.projectionLoss.toString());
     });
 
     it('compares projected plex rows with concrete SearchRun rows for a tiny exhaustive case', () => {
@@ -252,7 +255,7 @@ describe('PlexRun', () => {
         );
         assert.strictEqual(bigintSum(concreteSnapshot.results.values()), BigInt(concreteSnapshot.mass.units!.resolved));
         assert.strictEqual(bigintSum(projected.results.values()), projected.projectedMass);
-        assert.strictEqual(projected.projectedMass + projected.projectionLoss, BigInt(plexSnapshot.mass.units!.resolved));
+        assert.strictEqual(projected.projectedMass + BigInt(projected.mass.projection!.units!.clueIncompatible) + projected.projectionLoss, BigInt(plexSnapshot.mass.units!.resolved));
     });
 
     it('matches concrete clue-pruned result keys for a tiny exhaustive case', () => {
@@ -269,7 +272,7 @@ describe('PlexRun', () => {
 
         assert.strictEqual(concreteSnapshot.fullyResolved, true);
         assert.strictEqual(plexSnapshot.fullyResolved, true);
-        assert.ok(projected.mass.clueIncompatible > 0);
+        assert.ok(projected.mass.projection!.clueIncompatible > 0);
         assert.deepStrictEqual(
             [...projected.results.keys()].sort((a, b) => a - b),
             [...concreteSnapshot.results.keys()].sort((a, b) => a - b)
@@ -295,7 +298,7 @@ describe('PlexRun', () => {
             [...concreteSnapshot.results.keys()].sort((a, b) => a - b)
         );
         assert.strictEqual(bigintSum(projected.results.values()), projected.projectedMass);
-        assert.strictEqual(projected.projectedMass + projected.projectionLoss, BigInt(plexSnapshot.mass.units!.resolved));
+        assert.strictEqual(projected.projectedMass + BigInt(projected.mass.projection!.units!.clueIncompatible) + projected.projectionLoss, BigInt(plexSnapshot.mass.units!.resolved));
     });
 
     it('records resolved payload mass by canonical payload key', () => {

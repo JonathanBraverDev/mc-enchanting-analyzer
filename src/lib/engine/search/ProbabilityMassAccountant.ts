@@ -12,11 +12,10 @@ const BUCKET_INDEX: Record<MassBucketName, number> = {
     overflow: 4,
     capped: 5,
     rounding: 6,
-    projectionLoss: 7,
-    recoveredRounding: 8,
-    recoveredSieved: 9
+    recoveredRounding: 7,
+    recoveredSieved: 8
 };
-const BUCKET_COUNT = 10;
+const BUCKET_COUNT = 9;
 
 /**
  * Encapsulated state tracker for probability mass units.
@@ -35,7 +34,6 @@ export class ProbabilityMassAccountant {
             this.data[BUCKET_INDEX.overflow] = initialMass.overflow;
             this.data[BUCKET_INDEX.capped] = initialMass.capped;
             this.data[BUCKET_INDEX.rounding] = initialMass.rounding;
-            this.data[BUCKET_INDEX.projectionLoss] = initialMass.projectionLoss ?? 0n;
             this.data[BUCKET_INDEX.recoveredRounding] = initialMass.recoveredRounding;
             this.data[BUCKET_INDEX.recoveredSieved] = initialMass.recoveredSieved;
         }
@@ -69,7 +67,7 @@ export class ProbabilityMassAccountant {
      */
     public getTotalMass(): bigint {
         const d = this.data;
-        // projectionLoss (7), recoveredRounding (8), and recoveredSieved (9) are non-additive diagnostics.
+        // recoveredRounding (7) and recoveredSieved (8) are non-additive diagnostics.
         return d[0]! + d[1]! + d[2]! + d[3]! + d[4]! + d[5]! + d[6]!;
     }
 
@@ -93,9 +91,8 @@ export class ProbabilityMassAccountant {
             overflow: d[4]!,
             capped: d[5]!,
             rounding: d[6]!,
-            projectionLoss: d[7]!,
-            recoveredRounding: d[8]!,
-            recoveredSieved: d[9]!
+            recoveredRounding: d[7]!,
+            recoveredSieved: d[8]!
         };
     }
 
@@ -109,9 +106,8 @@ export class ProbabilityMassAccountant {
             overflow: ProbUtils.toNumber(d[4]!),
             capped: ProbUtils.toNumber(d[5]!),
             rounding: ProbUtils.toNumber(d[6]!),
-            ...(d[7]! > 0n ? { projectionLoss: ProbUtils.toNumber(d[7]!) } : {}),
-            recoveredRounding: ProbUtils.toNumber(d[8]!),
-            recoveredSieved: ProbUtils.toNumber(d[9]!),
+            recoveredRounding: ProbUtils.toNumber(d[7]!),
+            recoveredSieved: ProbUtils.toNumber(d[8]!),
             units: {
                 resolved: d[0]!.toString(),
                 clueIncompatible: d[1]!.toString(),
@@ -120,9 +116,8 @@ export class ProbabilityMassAccountant {
                 overflow: d[4]!.toString(),
                 capped: d[5]!.toString(),
                 rounding: d[6]!.toString(),
-                ...(d[7]! > 0n ? { projectionLoss: d[7]!.toString() } : {}),
-                recoveredRounding: d[8]!.toString(),
-                recoveredSieved: d[9]!.toString()
+                recoveredRounding: d[7]!.toString(),
+                recoveredSieved: d[8]!.toString()
             }
         };
     }
