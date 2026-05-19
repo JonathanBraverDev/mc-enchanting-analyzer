@@ -1,10 +1,7 @@
 import type { PlexNodeId, PlexEdge } from '#lib/search/plex/PlexGraph.js';
 import { PlexRunFrontier, type PlexFrontierPopTarget } from '#lib/search/plex/PlexRunFrontier.js';
-import {
-    appendPlexPayloadEdge,
-    type PlexPayload,
-    type PlexPayloadId
-} from '#lib/search/plex/PlexPayload.js';
+import { type PlexPayload, type PlexPayloadId } from '#lib/search/plex/PlexPayload.js';
+import { PlexPayloadStore } from '#lib/search/plex/PlexPayloadStore.js';
 
 export type PlexWorkItem = PlexFrontierPopTarget;
 
@@ -23,6 +20,8 @@ export interface PlexResidueStats {
 export class PlexWorkStore {
     private readonly frontier = new PlexRunFrontier();
     private readonly forwardingResidues: Array<Map<number, Map<PlexPayloadId, BigUint64Array>> | undefined> = [];
+
+    public constructor(private readonly payloads: PlexPayloadStore = new PlexPayloadStore()) {}
 
     public get size(): number {
         return this.frontier.size;
@@ -46,7 +45,7 @@ export class PlexWorkStore {
     }
 
     public appendPayloadEdge(payload: PlexPayload, edge: Pick<PlexEdge, 'choice'>): PlexPayload {
-        return appendPlexPayloadEdge(payload, edge);
+        return this.payloads.appendEdge(payload, edge);
     }
 
     public getForwardingResidues(work: PlexWorkItem): BigUint64Array | undefined {
