@@ -6,6 +6,7 @@ import { PRECISION, ProbUtils } from '#utils/index.js';
 import type { SearchPool, SearchPoolSignature } from '#lib/search/registry/RegistryKernel.js';
 import { RegistryKernel } from '#lib/search/registry/RegistryKernel.js';
 import { PlexGraph, type PlexNodeId } from '#lib/search/plex/PlexGraph.js';
+import { PlexRunFrontier, type PlexFrontierPopTarget } from '#lib/search/plex/PlexRunFrontier.js';
 import {
     appendPlexPayloadEdge,
     EMPTY_PLEX_PAYLOAD,
@@ -72,12 +73,7 @@ interface PlexGraphRecord {
     readonly graph: PlexGraph;
 }
 
-interface PendingPlexWork {
-    readonly graphId: number;
-    readonly nodeId: PlexNodeId;
-    readonly mass: bigint;
-    readonly payload: PlexPayload;
-}
+type PendingPlexWork = PlexFrontierPopTarget;
 
 export function projectPlexResults(
     results: ReadonlyMap<PlexPayloadKey, PlexResult>,
@@ -162,7 +158,7 @@ export class PlexRun {
     private readonly distributionService: ModifiedLevelDistributionService;
     private readonly graphsBySignature = new Map<SearchPoolSignature, PlexGraphRecord>();
     private readonly graphs: PlexGraphRecord[] = [];
-    private readonly pending: PendingPlexWork[] = [];
+    private readonly frontier = new PlexRunFrontier();
     private seeded = false;
     private _seededLevelCount = 0;
     private _iterations = 0;
@@ -235,12 +231,12 @@ export class PlexRun {
             mass: this.mass.toPublic(),
             iterations: this._iterations,
             lastExpandedMass: this._lastExpandedMass,
-            pendingCount: this.pending.length,
-            largestPendingMass: this.pending.reduce((largest, entry) => entry.mass > largest ? entry.mass : largest, 0n),
+            pendingCount: this.frontier.size,
+            largestPendingMass: this.frontier.peekMass(),
             pendingEntries: Object.freeze(this.getPendingEntries()),
             graphCount: this.graphs.length,
             seededLevelCount: this._seededLevelCount,
-            fullyResolved: this.pending.length === 0
+            fullyResolved: this.frontier.size === 0
         });
     }
 
@@ -316,37 +312,34 @@ export class PlexRun {
 
     private pushPending(graphId: number, nodeId: PlexNodeId, mass: bigint, payload: PlexPayload): void {
         if (mass === 0n) return;
-        this.pending.push(Object.freeze({ graphId, nodeId, mass, payload }));
+        this.frontier.pushOrMerge(graphId, nodeId, mass, payload);
         this.mass.record('pending', mass);
     }
 
     private popLargestPending(): PendingPlexWork | undefined {
-        let bestIndex = -1;
-        let bestMass = 0n;
-        for (let i = 0; i < this.pending.length; i++) {
-            const mass = this.pending[i]!.mass;
-            if (bestIndex === -1 || mass > bestMass) {
-                bestIndex = i;
-                bestMass = mass;
-            }
-        }
-        if (bestIndex === -1) return undefined;
-        const [entry] = this.pending.splice(bestIndex, 1);
-        return entry;
+        const current: PendingPlexWork = {
+            graphId: 0,
+            nodeId: 0 as PlexNodeId,
+            mass: 0n,
+            payload: EMPTY_PLEX_PAYLOAD
+        };
+        return this.frontier.pop(current) ? current : undefined;
     }
 
     private getPendingEntries(): PlexPendingEntry[] {
-        return this.pending.map(entry => {
+        const entries: PlexPendingEntry[] = [];
+        this.frontier.forEach(entry => {
             const node = this.getGraphById(entry.graphId).graph.getNode(entry.nodeId);
-            return Object.freeze({
+            entries.push(Object.freeze({
                 graphId: entry.graphId,
                 nodeId: entry.nodeId,
                 mass: entry.mass,
                 payload: entry.payload,
                 count: node.count,
                 currentLevel: node.currentLevel
-            });
+            }));
         });
+        return entries;
     }
 
     private graphForPool(pool: SearchPool): PlexGraphRecord {
