@@ -18,16 +18,12 @@ export type PlexPayloadKey = string;
 export type PlexPayloadId = number & { readonly __brand: 'PlexPayloadId' };
 
 interface PayloadInternNode {
-    readonly fixedNext: Map<number, PayloadInternNode>;
-    readonly choiceNext: Map<number, PayloadInternNode>;
+    children?: Map<number, PayloadInternNode> | undefined;
     payload?: PlexPayload | undefined;
 }
 
 let nextPlexPayloadId = 1;
-const payloadInternRoot: PayloadInternNode = {
-    fixedNext: new Map<number, PayloadInternNode>(),
-    choiceNext: new Map<number, PayloadInternNode>()
-};
+const payloadInternRoot: PayloadInternNode = {};
 const plexPayloadKeyCache = new WeakMap<PlexPayload, PlexPayloadKey>();
 
 /**
@@ -115,28 +111,39 @@ function getPlexPayloadInternNode(
 ): PayloadInternNode {
     let node = payloadInternRoot;
     for (const packedEnchant of fixed) {
-        node = getOrCreatePayloadInternNode(node.fixedNext, Number(packedEnchant));
+        node = getOrCreatePayloadInternNode(node, createFixedPayloadInternKey(packedEnchant));
     }
     for (const choice of choices) {
-        node = getOrCreatePayloadInternNode(node.choiceNext, choice.id);
+        node = getOrCreatePayloadInternNode(node, createChoicePayloadInternKey(choice.id));
     }
 
     return node;
 }
 
 function getOrCreatePayloadInternNode(
-    map: Map<number, PayloadInternNode>,
+    parent: PayloadInternNode,
     key: number
 ): PayloadInternNode {
-    let node = map.get(key);
+    let children = parent.children;
+    if (!children) {
+        children = new Map<number, PayloadInternNode>();
+        parent.children = children;
+    }
+
+    let node = children.get(key);
     if (!node) {
-        node = {
-            fixedNext: new Map<number, PayloadInternNode>(),
-            choiceNext: new Map<number, PayloadInternNode>()
-        };
-        map.set(key, node);
+        node = {};
+        children.set(key, node);
     }
     return node;
+}
+
+function createFixedPayloadInternKey(packedEnchant: PackedEnchant): number {
+    return Number(packedEnchant) * 2;
+}
+
+function createChoicePayloadInternKey(choiceId: number): number {
+    return (choiceId * 2) + 1;
 }
 
 function createPayloadKey(
