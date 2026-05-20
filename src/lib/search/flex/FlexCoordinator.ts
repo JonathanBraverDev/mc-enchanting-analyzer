@@ -137,7 +137,7 @@ export class FlexCoordinator {
     private expand(current: FlexWorkItem): void {
         const expansion = this.getGraph(current.graphId).getExpansion(current.nodeId);
 
-        if (expansion.totalWeight <= 0 || expansion.edges.length === 0) {
+        if (expansion.node.count === 0 && (expansion.totalWeight <= 0 || expansion.edges.length === 0)) {
             this.recordResolved(expansion.node.programId, current.mass);
             return;
         }
@@ -149,6 +149,11 @@ export class FlexCoordinator {
         if (probForward === 0n) return;
         if (expansion.terminalReason === 'overflow') {
             this.mass.record('overflow', probForward);
+            return;
+        }
+
+        if (expansion.totalWeight <= 0 || expansion.edges.length === 0) {
+            this.recordResolved(expansion.node.programId, probForward);
             return;
         }
 
