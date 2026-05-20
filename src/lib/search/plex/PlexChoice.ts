@@ -1,4 +1,5 @@
 import type { PackedEnchant } from '#types/index.js';
+import { PLEX_INTERNING_CONSTANTS } from '#lib/search/plex/PlexConstants.js';
 
 export type CanonicalPackedEnchantList = readonly PackedEnchant[];
 export type CanonicalChoiceSet = readonly CanonicalPackedEnchantList[];
@@ -9,7 +10,7 @@ interface ChoiceInternNode {
     choice?: PlexWeightedChoice | undefined;
 }
 
-let nextPlexChoiceId = 1;
+let nextPlexChoiceId = PLEX_INTERNING_CONSTANTS.FIRST_CHOICE_ID;
 const choiceInternRoot: ChoiceInternNode = { next: new Map<number, ChoiceInternNode>() };
 
 export interface PlexAlternative {

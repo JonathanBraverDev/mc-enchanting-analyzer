@@ -3,6 +3,7 @@ import { PlexGraph, type PlexNodeId } from '#lib/search/plex/PlexGraph.js';
 import { PlexPayloadStore } from '#lib/search/plex/PlexPayloadStore.js';
 import type { PlexPayload, PlexPayloadKey } from '#lib/search/plex/PlexPayload.js';
 import { RegistryKernel, type SearchPool, type SearchPoolSignature } from '#lib/search/registry/RegistryKernel.js';
+import { PLEX_INVARIANT_LIMITS } from '#lib/search/plex/PlexConstants.js';
 
 export interface PlexReducedKeyInvariantRequest {
     readonly kernel: RegistryKernel;
@@ -53,7 +54,10 @@ export function checkPlexReducedKeyInvariant(request: PlexReducedKeyInvariantReq
     const payloadByState = new Map<string, PlexPayload>();
     const stack: PlexInvariantWorkItem[] = [];
     const conflicts: PlexReducedKeyInvariantConflict[] = [];
-    const maxConflicts = Math.max(1, request.maxConflicts ?? 10);
+    const maxConflicts = Math.max(
+        PLEX_INVARIANT_LIMITS.MIN_CONFLICTS,
+        request.maxConflicts ?? PLEX_INVARIANT_LIMITS.DEFAULT_MAX_CONFLICTS
+    );
     let transitionCount = 0;
 
     const distribution = distributionService.getModifiedLevelDist(

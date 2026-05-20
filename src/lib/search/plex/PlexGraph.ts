@@ -8,6 +8,7 @@ import {
     comparePlexWeightedChoices,
     type PlexWeightedChoice
 } from '#lib/search/plex/PlexChoice.js';
+import { PLEX_GRAPH_RULES, PLEX_HASH_CONSTANTS, PLEX_INDEX_LIMITS, PLEX_INDEX_SENTINELS } from '#lib/search/plex/PlexConstants.js';
 
 export type PlexNodeId = number & { readonly __brand: 'PlexNodeId' };
 
@@ -56,10 +57,9 @@ interface PendingEdgeGroup {
     weight: number;
 }
 
-class PlexNodeIndex {
-    private static readonly INITIAL_CAPACITY = 256;
-    private static readonly MAX_LOAD_FACTOR = 0.7;
+const PLEX_NODE_STATE_COUNT_STRIDE = ENGINE_LIMITS.MAX_ENCHANTS_PER_ITEM + 1;
 
+class PlexNodeIndex {
     private exclusionMasks: bigint[] = [];
     private stateKeys: Int32Array;
     private values: Int32Array;
@@ -68,22 +68,22 @@ class PlexNodeIndex {
     private resizeAt: number;
     private count = 0;
 
-    public constructor(capacity: number = PlexNodeIndex.INITIAL_CAPACITY) {
+    public constructor(capacity: number = PLEX_INDEX_LIMITS.GRAPH_INITIAL_CAPACITY) {
         const size = PlexNodeIndex.nextPowerOfTwo(capacity);
         this.stateKeys = new Int32Array(size);
         this.values = new Int32Array(size);
-        this.values.fill(-1);
+        this.values.fill(PLEX_INDEX_SENTINELS.MISSING_VALUE);
         this.used = new Uint8Array(size);
         this.mask = size - 1;
-        this.resizeAt = Math.floor(size * PlexNodeIndex.MAX_LOAD_FACTOR);
+        this.resizeAt = Math.floor(size * PLEX_INDEX_LIMITS.GRAPH_MAX_LOAD_FACTOR);
     }
 
     public get(exclusionMask: bigint, stateKey: number): PlexNodeId | undefined {
         let index = this.hash(exclusionMask, stateKey) & this.mask;
-        while (this.used[index] !== 0) {
+        while (this.used[index] !== PLEX_INDEX_SENTINELS.EMPTY_SLOT) {
             if (this.stateKeys[index] === stateKey && this.exclusionMasks[index] === exclusionMask) {
                 const value = this.values[index]!;
-                return value === -1 ? undefined : value as PlexNodeId;
+                return value === PLEX_INDEX_SENTINELS.MISSING_VALUE ? undefined : value as PlexNodeId;
             }
             index = (index + 1) & this.mask;
         }
@@ -97,7 +97,7 @@ class PlexNodeIndex {
 
     private insert(exclusionMask: bigint, stateKey: number, value: PlexNodeId): void {
         let index = this.hash(exclusionMask, stateKey) & this.mask;
-        while (this.used[index] !== 0) {
+        while (this.used[index] !== PLEX_INDEX_SENTINELS.EMPTY_SLOT) {
             if (this.stateKeys[index] === stateKey && this.exclusionMasks[index] === exclusionMask) {
                 this.values[index] = value;
                 return;
@@ -105,7 +105,7 @@ class PlexNodeIndex {
             index = (index + 1) & this.mask;
         }
 
-        this.used[index] = 1;
+        this.used[index] = PLEX_INDEX_SENTINELS.OCCUPIED_SLOT;
         this.exclusionMasks[index] = exclusionMask;
         this.stateKeys[index] = stateKey;
         this.values[index] = value;
@@ -117,31 +117,33 @@ class PlexNodeIndex {
         const oldStateKeys = this.stateKeys;
         const oldValues = this.values;
         const oldUsed = this.used;
-        const nextSize = oldStateKeys.length * 2;
+        const nextSize = oldStateKeys.length * PLEX_INDEX_LIMITS.GROWTH_FACTOR;
 
         this.exclusionMasks = [];
         this.stateKeys = new Int32Array(nextSize);
         this.values = new Int32Array(nextSize);
-        this.values.fill(-1);
+        this.values.fill(PLEX_INDEX_SENTINELS.MISSING_VALUE);
         this.used = new Uint8Array(nextSize);
         this.mask = nextSize - 1;
-        this.resizeAt = Math.floor(nextSize * PlexNodeIndex.MAX_LOAD_FACTOR);
+        this.resizeAt = Math.floor(nextSize * PLEX_INDEX_LIMITS.GRAPH_MAX_LOAD_FACTOR);
         this.count = 0;
 
         for (let i = 0; i < oldStateKeys.length; i++) {
-            if (oldUsed[i] !== 0) this.insert(oldMasks[i]!, oldStateKeys[i]!, oldValues[i]! as PlexNodeId);
+            if (oldUsed[i] !== PLEX_INDEX_SENTINELS.EMPTY_SLOT) this.insert(oldMasks[i]!, oldStateKeys[i]!, oldValues[i]! as PlexNodeId);
         }
     }
 
     private hash(exclusionMask: bigint, stateKey: number): number {
-        const low = Number(exclusionMask & 0xffffffffn) >>> 0;
-        const high = Number((exclusionMask >> 32n) & 0xffffffffn) >>> 0;
-        let h = (low ^ Math.imul(high, 0x9E3779B1) ^ Math.imul(stateKey, 0x85EBCA6B)) >>> 0;
-        h ^= h >>> 16;
-        h = Math.imul(h, 0x7FEB352D) >>> 0;
-        h ^= h >>> 15;
-        h = Math.imul(h, 0x846CA68B) >>> 0;
-        return (h ^ (h >>> 16)) >>> 0;
+        const low = Number(exclusionMask & PLEX_HASH_CONSTANTS.U32_MASK) >>> 0;
+        const high = Number((exclusionMask >> PLEX_HASH_CONSTANTS.U32_SHIFT) & PLEX_HASH_CONSTANTS.U32_MASK) >>> 0;
+        let h = (low
+            ^ Math.imul(high, PLEX_HASH_CONSTANTS.GOLDEN_RATIO_32)
+            ^ Math.imul(stateKey, PLEX_HASH_CONSTANTS.STATE_KEY_MULTIPLIER)) >>> 0;
+        h ^= h >>> PLEX_HASH_CONSTANTS.AVALANCHE_SHIFT_1;
+        h = Math.imul(h, PLEX_HASH_CONSTANTS.AVALANCHE_MULTIPLIER_1) >>> 0;
+        h ^= h >>> PLEX_HASH_CONSTANTS.AVALANCHE_SHIFT_2;
+        h = Math.imul(h, PLEX_HASH_CONSTANTS.AVALANCHE_MULTIPLIER_2) >>> 0;
+        return (h ^ (h >>> PLEX_HASH_CONSTANTS.AVALANCHE_SHIFT_1)) >>> 0;
     }
 
     private static nextPowerOfTwo(value: number): number {
@@ -196,7 +198,11 @@ export class PlexGraph {
     }
 
     public getRootNode(initialLevel: number): PlexNode {
-        return this.getNode(this.getOrCreateNodeId(0n, initialLevel, 0));
+        return this.getNode(this.getOrCreateNodeId(
+            PLEX_GRAPH_RULES.ROOT_EXCLUSION_MASK,
+            initialLevel,
+            PLEX_GRAPH_RULES.ROOT_COUNT
+        ));
     }
 
     public getOrCreateNode(
@@ -222,7 +228,7 @@ export class PlexGraph {
         const cached = this.expansionCache[nodeId];
         if (cached) return cached;
 
-        const expansion = this.counts[nodeId] === 0
+        const expansion = this.counts[nodeId] === PLEX_GRAPH_RULES.ROOT_COUNT
             ? this.buildRootExpansion(nodeId)
             : this.buildSearchExpansion(nodeId);
         this.expansionCache[nodeId] = expansion;
@@ -231,7 +237,12 @@ export class PlexGraph {
 
     private buildRootExpansion(nodeId: PlexNodeId): PlexExpansion {
         const currentLevel = this.currentLevels[nodeId]!;
-        const edges = this.buildGroupedEdges(this.pool.entries, currentLevel, 1, 0n);
+        const edges = this.buildGroupedEdges(
+            this.pool.entries,
+            currentLevel,
+            PLEX_GRAPH_RULES.FIRST_CHILD_COUNT,
+            PLEX_GRAPH_RULES.ROOT_EXCLUSION_MASK
+        );
         return this.createExpansion(nodeId, true, PRECISION, this.pool.entries.length, edges, edges.length === 0 ? 'no-eligible' : null);
     }
 
@@ -251,7 +262,12 @@ export class PlexGraph {
         }
 
         const eligible = this.pool.entries.filter(entry => (exclusionMask & entry.idBit) === 0n);
-        const edges = this.buildGroupedEdges(eligible, Math.floor(currentLevel / 2), count + 1, exclusionMask);
+        const edges = this.buildGroupedEdges(
+            eligible,
+            Math.floor(currentLevel / PLEX_GRAPH_RULES.NEXT_LEVEL_DIVISOR),
+            count + PLEX_GRAPH_RULES.FIRST_CHILD_COUNT,
+            exclusionMask
+        );
         return this.createExpansion(nodeId, false, probContinue, eligible.length, edges, edges.length === 0 ? 'no-eligible' : null);
     }
 
@@ -334,11 +350,11 @@ export class PlexGraph {
     }
 
     private createNodeStateKey(currentLevel: number, count: number): number {
-        return (currentLevel * (ENGINE_LIMITS.MAX_ENCHANTS_PER_ITEM + 1)) + count;
+        return (currentLevel * PLEX_NODE_STATE_COUNT_STRIDE) + count;
     }
 
     private getTerminalReason(count: number): PlexTerminalReason {
-        if (this.kernel.item === 'book' && !this.kernel.multiEnchantBooks && count >= 1) {
+        if (this.kernel.item === 'book' && !this.kernel.multiEnchantBooks && count >= PLEX_GRAPH_RULES.SINGLE_BOOK_ENCHANT_LIMIT) {
             return 'single-book';
         }
         if (count >= ENGINE_LIMITS.MAX_ENCHANTS_PER_ITEM) {
