@@ -2,8 +2,13 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { EngineFactory } from '#engine/index.js';
 import { RegistryFactory } from '#core/factory.js';
+import { getEligibleMaterials } from '#core/registry.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
+import { DATA } from '#data/index.js';
 import { getDefaultStatsCheckpoint, getSearchCheckpointForRefinement } from '#core/config.js';
+import { getRegistryVersionBoundaries } from '#core/version-resolution.js';
+import { SearchExecutionService } from '#lib/search/SearchExecutionService.js';
+import { PLEX_CACHE_LIMITS } from '#lib/search/plex/PlexConstants.js';
 import { EnchantStats, EngineInstrumentation, SearchResult } from '#types/index.js';
 
 function accountingTotal(stats: EnchantStats): number {
@@ -27,6 +32,17 @@ function createInstrumentation(): EngineInstrumentation {
         levelsFullyResolved: 0,
         fullyResolved: false
     };
+}
+
+interface PlexCacheFillCase {
+    readonly registry: ReturnType<typeof RegistryFactory.build>;
+    readonly item: string;
+    readonly material: string;
+    readonly xp: number;
+}
+
+interface SearchExecutionServiceInternals {
+    readonly plexRunCache: { readonly size: number };
 }
 
 describe('Search execution service', () => {
@@ -95,6 +111,29 @@ describe('Search execution service', () => {
         assert.strictEqual(first.instrumentation?.totalIterations, 50);
         assert.strictEqual(resumed.instrumentation?.totalIterations, 50);
         assert.ok((resumed.instrumentation?.search?.runCacheHits ?? 0) >= 1);
+    });
+
+    it('keeps Plex run cache bounded separately from the concrete SearchStateCache', async () => {
+        const service = new SearchExecutionService();
+        const cases = createPlexCacheFillCases(PLEX_CACHE_LIMITS.RUNS + 12);
+
+        assert.ok(cases.length > PLEX_CACHE_LIMITS.RUNS, 'fixture should exceed the Plex run cache capacity');
+        for (const testCase of cases) {
+            await service.searchToCheckpoint({
+                registry: testCase.registry,
+                item: testCase.item,
+                material: testCase.material,
+                xp: testCase.xp,
+                threshold: 0,
+                maxIterations: 1,
+                searchBackend: 'plex'
+            });
+        }
+
+        assert.ok(
+            getPlexRunCacheSize(service) <= PLEX_CACHE_LIMITS.RUNS,
+            'Plex run cache should evict old runs instead of growing without bound'
+        );
     });
 
     it('supports Plex through the public stats API while preserving compatible accounting', async () => {
@@ -641,3 +680,23 @@ describe('Search execution service', () => {
     });
 
 });
+
+function createPlexCacheFillCases(limit: number): PlexCacheFillCase[] {
+    const cases: PlexCacheFillCase[] = [];
+
+    for (const version of getRegistryVersionBoundaries(DATA)) {
+        const registry = RegistryFactory.build(version);
+        for (const item of Object.keys(registry.itemPool)) {
+            for (const material of getEligibleMaterials(registry, item)) {
+                cases.push({ registry, item, material, xp: 1 });
+                if (cases.length >= limit) return cases;
+            }
+        }
+    }
+
+    return cases;
+}
+
+function getPlexRunCacheSize(service: SearchExecutionService): number {
+    return (service as unknown as SearchExecutionServiceInternals).plexRunCache.size;
+}

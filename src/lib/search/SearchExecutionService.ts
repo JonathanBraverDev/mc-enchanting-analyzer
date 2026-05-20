@@ -5,8 +5,10 @@ import { SearchRun, SearchRunSnapshot } from '#lib/search/SearchRun.js';
 import { PlexRun, ProjectedPlexCheckpoint } from '#lib/search/plex/PlexRun.js';
 import { checkPlexReducedKeyInvariant, type PlexReducedKeyInvariantResult } from '#lib/search/plex/PlexReducedKeyInvariant.js';
 import type { PlexFrontierIdentityMode } from '#lib/search/plex/PlexRunFrontier.js';
+import { PLEX_CACHE_LIMITS, PLEX_INVARIANT_LIMITS } from '#lib/search/plex/PlexConstants.js';
 import { SearchStateCache } from '#lib/search/SearchStateCache.js';
 import { PRECISION, ProbUtils } from '#utils/index.js';
+import { LRUCache } from '#utils/collections/LRUCache.js';
 import type { MassAccountingBreakdown } from '#types/mass.js';
 
 /**
@@ -17,8 +19,8 @@ import type { MassAccountingBreakdown } from '#types/mass.js';
  * summary and UI projection.
  */
 export class SearchExecutionService {
-    private readonly plexRunCache = new Map<string, PlexRun>();
-    private readonly plexReducedKeyInvariantCache = new Map<string, PlexReducedKeyInvariantResult>();
+    private readonly plexRunCache = new LRUCache<string, PlexRun>(PLEX_CACHE_LIMITS.RUNS);
+    private readonly plexReducedKeyInvariantCache = new LRUCache<string, PlexReducedKeyInvariantResult>(PLEX_CACHE_LIMITS.REDUCED_KEY_INVARIANTS);
     private plexRunCacheHits = 0;
     private plexRunCacheMisses = 0;
 
@@ -205,7 +207,7 @@ export class SearchExecutionService {
                 kernel: this.createKernel(request),
                 xp: request.xp,
                 distributionService: this.distributionService,
-                maxConflicts: 1
+                maxConflicts: PLEX_INVARIANT_LIMITS.SERVICE_CONFLICT_SAMPLE_SIZE
             });
             this.plexReducedKeyInvariantCache.set(key, result);
         }
