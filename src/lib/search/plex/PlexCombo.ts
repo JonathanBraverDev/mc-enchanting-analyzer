@@ -9,6 +9,7 @@ import {
     type CanonicalPackedEnchantList
 } from '#lib/search/plex/PlexChoice.js';
 import type { PlexEdge } from '#lib/search/plex/PlexGraph.js';
+import { PLEX_CHOICE_RULES } from '#lib/search/plex/PlexConstants.js';
 
 /**
  * Unweighted accumulated combo expression for a plex path.
@@ -40,7 +41,7 @@ export function createPlexCombo(
 export function appendPlexEdge(combo: PlexCombo, edge: Pick<PlexEdge, 'choice'>): PlexCombo {
     const alternatives = getPlexChoicePackedEnchants(edge.choice);
 
-    if (alternatives.length === 1) {
+    if (alternatives.length === PLEX_CHOICE_RULES.FIXED_ALTERNATIVE_COUNT) {
         return createPlexCombo([...combo.fixed, alternatives[0]!], combo.choices);
     }
 

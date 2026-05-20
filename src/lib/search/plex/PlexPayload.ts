@@ -13,6 +13,7 @@ import {
 } from '#lib/search/plex/PlexCombo.js';
 import type { PlexEdge } from '#lib/search/plex/PlexGraph.js';
 import { PACKING_CONSTANTS } from '#constants/engine.js';
+import { PLEX_BOOK_RULES, PLEX_CHOICE_RULES, PLEX_INTERNING_CONSTANTS } from '#lib/search/plex/PlexConstants.js';
 
 export type PlexPayloadKey = string;
 export type PlexPayloadId = number & { readonly __brand: 'PlexPayloadId' };
@@ -22,7 +23,7 @@ interface PayloadInternNode {
     payload?: PlexPayload | undefined;
 }
 
-let nextPlexPayloadId = 1;
+let nextPlexPayloadId = PLEX_INTERNING_CONSTANTS.FIRST_PAYLOAD_ID;
 const payloadInternRoot: PayloadInternNode = {};
 const plexPayloadKeyCache = new WeakMap<PlexPayload, PlexPayloadKey>();
 
@@ -50,12 +51,12 @@ export interface PlexComboFactor {
 export type PlexComboFactorVisitor = (combo: PackedCombo, numerator: bigint, denominator: bigint) => void;
 
 export const EMPTY_PLEX_PAYLOAD: PlexPayload = Object.freeze({
-    id: 0 as PlexPayloadId,
+    id: PLEX_INTERNING_CONSTANTS.EMPTY_PAYLOAD_ID as PlexPayloadId,
     combo: EMPTY_PLEX_COMBO,
     choices: Object.freeze([])
 });
 payloadInternRoot.payload = EMPTY_PLEX_PAYLOAD;
-plexPayloadKeyCache.set(EMPTY_PLEX_PAYLOAD, 'f=|c=');
+plexPayloadKeyCache.set(EMPTY_PLEX_PAYLOAD, PLEX_INTERNING_CONSTANTS.EMPTY_PAYLOAD_KEY);
 
 export function createPlexPayload(
     fixed: readonly PackedEnchant[] = [],
@@ -72,7 +73,7 @@ export function appendPlexPayloadEdge(
 ): PlexPayload {
     const alternatives = getPlexChoicePackedEnchants(edge.choice);
 
-    if (alternatives.length === 1) {
+    if (alternatives.length === PLEX_CHOICE_RULES.FIXED_ALTERNATIVE_COUNT) {
         const fixed = insertPackedEnchant(payload.combo.fixed, alternatives[0]!);
         return createCanonicalPlexPayload(fixed, payload.choices);
     }
@@ -141,11 +142,12 @@ function getOrCreatePayloadInternNode(
 }
 
 function createFixedPayloadInternKey(packedEnchant: PackedEnchant): number {
-    return Number(packedEnchant) * 2;
+    return Number(packedEnchant) * PLEX_INTERNING_CONSTANTS.PAYLOAD_KEY_STRIDE;
 }
 
 function createChoicePayloadInternKey(choiceId: number): number {
-    return (choiceId * 2) + 1;
+    return (choiceId * PLEX_INTERNING_CONSTANTS.PAYLOAD_KEY_STRIDE)
+        + PLEX_INTERNING_CONSTANTS.PAYLOAD_CHOICE_KEY_OFFSET;
 }
 
 function createPayloadKey(
@@ -256,7 +258,7 @@ function visitBookFactors(
     visitor: PlexComboFactorVisitor
 ): void {
     const slotCount = payload.combo.fixed.length + payload.choices.length;
-    if (slotCount <= 1) {
+    if (slotCount < PLEX_BOOK_RULES.MIN_REMOVAL_SLOT_COUNT) {
         visitPlexPayloadFactors(payload, enchantToIndex, visitor);
         return;
     }
