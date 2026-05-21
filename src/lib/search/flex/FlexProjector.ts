@@ -10,13 +10,13 @@ import type {
 } from '#lib/search/flex/FlexTypes.js';
 import { FlexProgramStore } from '#lib/search/flex/FlexProgramStore.js';
 
-interface FlexProjectionFactor {
-    readonly combo: PackedCombo;
-    readonly count: number;
-    readonly numerator: bigint;
-    readonly denominator: bigint;
-    readonly matchesTargetClue: boolean;
-}
+type FlexProjectionFactorVisitor = (
+    combo: PackedCombo,
+    count: number,
+    numerator: bigint,
+    denominator: bigint,
+    matchesTargetClue: boolean
+) => void;
 
 export interface FlexProjectionOptions {
     readonly applyBookRemoval?: boolean | undefined;
@@ -42,19 +42,19 @@ export class FlexProjector {
             sourceMass += mass;
 
             let assigned = 0n;
-            this.forEachResultProgramFactor(program, (factor) => {
-                const share = (mass * factor.numerator) / factor.denominator;
+            this.forEachResultProgramFactor(program, (combo, _count, numerator, denominator, matchesTargetClue) => {
+                const share = (mass * numerator) / denominator;
                 assigned += share;
                 if (share === 0n) return;
 
-                if (!this.isClueCompatible(factor)) {
+                if (!this.isClueCompatible(matchesTargetClue)) {
                     clueIncompatible += share;
                     return;
                 }
 
                 projectedMass += share;
-                if (factor.combo !== 0) {
-                    projected.set(factor.combo, (projected.get(factor.combo) ?? 0n) + share);
+                if (combo !== 0) {
+                    projected.set(combo, (projected.get(combo) ?? 0n) + share);
                 }
             });
             projectionLoss += mass - assigned;
@@ -85,12 +85,12 @@ export class FlexProjector {
             sourceMass += entry.mass;
 
             let assigned = 0n;
-            this.visitProgramFactors(program, (factor) => {
-                const share = (entry.mass * factor.numerator) / factor.denominator;
+            this.visitProgramFactors(program, (combo, count, numerator, denominator, matchesTargetClue) => {
+                const share = (entry.mass * numerator) / denominator;
                 assigned += share;
                 if (share === 0n) return;
 
-                if (!this.isPendingClueCompatible(factor.matchesTargetClue, entry.targetClueReachable)) {
+                if (!this.isPendingClueCompatible(matchesTargetClue, entry.targetClueReachable)) {
                     clueIncompatible += share;
                     return;
                 }
@@ -100,8 +100,8 @@ export class FlexProjector {
                     graphId: entry.graphId,
                     nodeId: entry.nodeId,
                     mass: share,
-                    combo: factor.combo,
-                    count: factor.count
+                    combo,
+                    count
                 }));
             });
             projectionLoss += entry.mass - assigned;
@@ -118,7 +118,7 @@ export class FlexProjector {
 
     private forEachResultProgramFactor(
         program: FlexProgram,
-        visitor: (factor: FlexProjectionFactor) => void
+        visitor: FlexProjectionFactorVisitor
     ): void {
         if (this.options.applyBookRemoval && program.length >= 2) {
             const slotDenominator = BigInt(program.length);
@@ -131,8 +131,8 @@ export class FlexProjector {
         this.visitProgramFactors(program, visitor);
     }
 
-    private isClueCompatible(factor: FlexProjectionFactor): boolean {
-        return this.options.targetClueId === undefined || factor.matchesTargetClue;
+    private isClueCompatible(matchesTargetClue: boolean): boolean {
+        return this.options.targetClueId === undefined || matchesTargetClue;
     }
 
     private isPendingClueCompatible(matchesTargetClue: boolean, targetClueReachable: boolean | undefined): boolean {
@@ -141,7 +141,7 @@ export class FlexProjector {
 
     private visitProgramFactors(
         program: FlexProgram,
-        visitor: (factor: FlexProjectionFactor) => void,
+        visitor: FlexProjectionFactorVisitor,
         removedEmissionIndex?: number,
         initialDenominator: bigint = 1n
     ): void {
@@ -154,7 +154,7 @@ export class FlexProjector {
             matchesTargetClue: boolean
         ): void => {
             if (emissionIndex >= program.length) {
-                visitor(Object.freeze({ combo, count, numerator, denominator, matchesTargetClue }));
+                visitor(combo, count, numerator, denominator, matchesTargetClue);
                 return;
             }
 
