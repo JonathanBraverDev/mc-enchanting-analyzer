@@ -9,3 +9,4 @@ export * from './RegistryFlexGraph.js';
 export * from './RegistryFlexSearchRun.js';
 export * from './GroupedFlexGraph.js';
 export * from './GroupedFlexSearchRun.js';
+export * from './FlexReducedKeyInvariant.js';
