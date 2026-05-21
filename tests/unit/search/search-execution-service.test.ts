@@ -662,6 +662,27 @@ describe('Search execution service', () => {
         );
     });
 
+
+    it('aborts Flex checkpoint searches after yielding between chunks', async () => {
+        const engine = EngineFactory.createForVersion('1.7.2');
+        const controller = new AbortController();
+
+        const search = engine.searchToCheckpoint({
+            item: 'book',
+            material: 'book',
+            xp: 30,
+            exhaustive: true,
+            searchBackend: 'flex',
+            signal: controller.signal
+        });
+        setTimeout(() => controller.abort(), 0);
+
+        await assert.rejects(
+            () => search,
+            /Aborted/
+        );
+    });
+
     it('resumes XP-cell runs across one-at-a-time checkpoint calls', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
         engine.resetCaches();

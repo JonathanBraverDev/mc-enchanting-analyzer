@@ -68,6 +68,9 @@ export interface FlexCheckpointRequest {
      * set to 0 for concrete-V7 parity diagnostics that must not sieve tail nodes early.
      */
     readonly probabilityFloor?: number | bigint | undefined;
+    readonly signal?: AbortSignal | undefined;
+    /** Async search yield cadence. Used by worker-facing execution so abort messages can be observed. */
+    readonly yieldEveryIterations?: number | undefined;
 }
 
 export interface FlexPendingEntry {

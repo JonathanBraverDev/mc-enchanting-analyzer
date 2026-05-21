@@ -67,12 +67,13 @@ export class SearchExecutionService {
         if (this.getBackend(request) === 'flex') {
             this.throwIfAborted(request.signal);
             const run = this.getFlexRun(request);
-            const snapshot = run.searchToCheckpoint({
+            const snapshot = await run.searchToCheckpointAsync({
                 threshold: request.exhaustive ? 0n : request.threshold ?? 0n,
                 maxIterations: request.exhaustive ? undefined : request.maxIterations,
                 exhaustive: request.exhaustive,
                 targetClassifiedMass: request.exhaustive ? undefined : request.targetClassifiedMass,
-                probabilityFloor: request.probabilityFloor
+                probabilityFloor: request.probabilityFloor,
+                signal: request.signal
             });
             const projected = run.projectSnapshot(snapshot);
             this.finishTiming(request.timing, timingStart, 0);
@@ -188,12 +189,19 @@ export class SearchExecutionService {
             const checkpoint = request.checkpoints[checkpointIndex];
             if (!checkpoint) continue;
 
-            const snapshot = run.searchToCheckpoint({
-                threshold: checkpoint.threshold,
-                maxIterations: checkpoint.limit,
-                targetClassifiedMass: checkpoint.targetClassifiedMass,
-                probabilityFloor: request.probabilityFloor
-            });
+            let snapshot: FlexRunSnapshot;
+            try {
+                snapshot = await run.searchToCheckpointAsync({
+                    threshold: checkpoint.threshold,
+                    maxIterations: checkpoint.limit,
+                    targetClassifiedMass: checkpoint.targetClassifiedMass,
+                    probabilityFloor: request.probabilityFloor,
+                    signal: request.signal
+                });
+            } catch (error) {
+                if (request.signal?.aborted && lastResult) return lastResult;
+                throw error;
+            }
             const projected = run.projectSnapshot(snapshot);
             recordedSearchMs = this.finishTiming(request.timing, timingStart, recordedSearchMs);
             lastResult = this.toFlexSearchResult(projected, snapshot, checkpoint.threshold, checkpoint.targetClassifiedMass, request.instrumentation, request.timing);

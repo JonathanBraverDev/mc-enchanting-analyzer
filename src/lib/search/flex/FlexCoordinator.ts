@@ -1,7 +1,7 @@
 import { ProbabilityMassAccountant } from '#engine/search/ProbabilityMassAccountant.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import type { EngineExitReason } from '#types/index.js';
-import { PRECISION, ProbUtils } from '#utils/index.js';
+import { AsyncUtils, PRECISION, ProbUtils } from '#utils/index.js';
 import type {
     FlexCheckpointRequest,
     FlexExpansion,
@@ -19,6 +19,7 @@ interface FlexAdvanceCriteria {
     readonly maxIterations: number;
     readonly targetClassifiedMass: bigint | undefined;
     readonly probabilityFloor: bigint;
+    readonly signal?: AbortSignal | undefined;
 }
 
 interface FlexWorkItem {
@@ -59,6 +60,20 @@ export class FlexCoordinator {
     public searchToCheckpoint(request: FlexCheckpointRequest = {}): FlexRunSnapshot {
         const criteria = this.createAdvanceCriteria(request);
         this.advanceUntilCheckpoint(criteria);
+        return this.snapshot();
+    }
+
+    public async searchToCheckpointAsync(request: FlexCheckpointRequest = {}): Promise<FlexRunSnapshot> {
+        const criteria = this.createAdvanceCriteria(request);
+        const chunkIterations = Math.max(
+            1,
+            request.yieldEveryIterations ?? ENGINE_LIMITS.ASYNC_SEARCH_CHUNK_ITERATIONS
+        );
+
+        while (!this.advanceUntilCheckpoint(criteria, chunkIterations)) {
+            await AsyncUtils.yield();
+        }
+
         return this.snapshot();
     }
 
@@ -106,22 +121,26 @@ export class FlexCoordinator {
             throw new Error('FlexCoordinator has no bounded stop condition. Provide a positive threshold, a finite maxIterations, a mass target, or set exhaustive: true.');
         }
 
-        return { threshold, maxIterations, targetClassifiedMass, probabilityFloor };
+        return { threshold, maxIterations, targetClassifiedMass, probabilityFloor, signal: request.signal };
     }
 
-    private advanceUntilCheckpoint(criteria: FlexAdvanceCriteria): void {
+    private advanceUntilCheckpoint(criteria: FlexAdvanceCriteria, chunkIterations?: number): boolean {
         this._exitReason = undefined;
+        let advancedInChunk = 0;
 
         while (true) {
+            if (criteria.signal?.aborted) throw new Error('Aborted');
             const exitReason = this.getExitReason(criteria);
             if (exitReason !== undefined) {
                 this._exitReason = exitReason;
-                return;
+                return true;
             }
+            if (chunkIterations !== undefined && advancedInChunk >= chunkIterations) return false;
             if (!this.step(criteria)) {
                 this._exitReason = 'empty';
-                return;
+                return true;
             }
+            advancedInChunk++;
         }
     }
 

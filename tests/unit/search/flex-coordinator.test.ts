@@ -73,6 +73,41 @@ describe('FlexCoordinator', () => {
         assert.strictEqual(snapshot.lastExpandedMass, 75n);
     });
 
+    it('asynchronously advances through scheduler chunks to the same checkpoint', async () => {
+        const store = new FlexProgramStore();
+        const firstProgram = store.appendFixed(store.empty, packed(1));
+        const secondProgram = store.appendFixed(firstProgram, packed(2));
+        const graph = new TestFlexGraph();
+        graph.set(nodeId(0), Object.freeze({
+            node: store.createNode(nodeId(0), store.empty),
+            probContinue: PRECISION,
+            totalWeight: 1,
+            edges: Object.freeze([{ weight: 1, childId: nodeId(1) }]),
+            terminalReason: null
+        }));
+        graph.set(nodeId(1), Object.freeze({
+            node: store.createNode(nodeId(1), firstProgram),
+            probContinue: PRECISION,
+            totalWeight: 1,
+            edges: Object.freeze([{ weight: 1, childId: nodeId(2) }]),
+            terminalReason: null
+        }));
+        graph.set(nodeId(2), terminalExpansion(store, nodeId(2), secondProgram));
+
+        const run = new FlexCoordinator([graph]);
+        run.seedPending(0, nodeId(0), 100n);
+        const snapshot = await run.searchToCheckpointAsync({
+            maxIterations: 3,
+            yieldEveryIterations: 1,
+            probabilityFloor: 0n
+        });
+
+        assert.strictEqual(snapshot.exitReason, 'empty');
+        assert.strictEqual(snapshot.iterations, 3);
+        assert.strictEqual(snapshot.results.get(secondProgram), 100n);
+        assert.strictEqual(snapshot.pendingCount, 0);
+    });
+
     it('forwards edge residues with V7 rounding and recovered-rounding semantics', () => {
         const store = new FlexProgramStore();
         const graph = new TestFlexGraph();
