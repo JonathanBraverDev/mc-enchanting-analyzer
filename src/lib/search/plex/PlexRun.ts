@@ -1,29 +1,27 @@
-import { PACKING_CONSTANTS } from '#constants/engine.js';
+import { ENGINE_LIMITS, PACKING_CONSTANTS } from '#constants/engine.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { ProbabilityMassAccountant } from '#engine/search/ProbabilityMassAccountant.js';
 import type { EngineExitReason } from '#types/engine.js';
 import type { PackedCombo, PackedEnchant } from '#types/index.js';
 import type { MassAccountingBreakdown, MassAccountingPhases, ProjectionAccountingBreakdown } from '#types/mass.js';
-import { ComboUtils, PRECISION, ProbUtils } from '#utils/index.js';
+import { AsyncUtils, ComboUtils, PRECISION, ProbUtils } from '#utils/index.js';
 import type { PendingFrontierEntry } from '#lib/search/SearchRun.js';
 import type { SearchGraphNodeId } from '#lib/search/SearchGraph.js';
 import type { SearchPool, SearchPoolSignature } from '#lib/search/registry/RegistryKernel.js';
 import { RegistryKernel } from '#lib/search/registry/RegistryKernel.js';
 import { PlexGraph, type PlexNodeId } from '#lib/search/plex/PlexGraph.js';
-import { PlexRunFrontier, type PlexFrontierPopTarget } from '#lib/search/plex/PlexRunFrontier.js';
+import { PlexWorkStore, type PlexWorkItem } from '#lib/search/plex/PlexWorkStore.js';
+import { PlexPayloadStore } from '#lib/search/plex/PlexPayloadStore.js';
 import {
-    appendPlexPayloadEdge,
-    EMPTY_PLEX_PAYLOAD,
-    getPlexPayloadKey,
-    materializeBookFactors,
-    materializePlexPayloadFactors,
     type PlexPayload,
     type PlexPayloadKey
 } from '#lib/search/plex/PlexPayload.js';
+import type { PlexFrontierIdentityMode } from '#lib/search/plex/PlexRunFrontier.js';
 
 export interface PlexRunOptions {
     readonly distributionService?: ModifiedLevelDistributionService | undefined;
     readonly targetClueId?: number | undefined;
+    readonly frontierIdentityMode?: PlexFrontierIdentityMode | undefined;
 }
 
 export interface PlexRunAdvanceRequest {
@@ -35,6 +33,8 @@ export interface PlexRunCheckpointRequest {
     readonly maxIterations?: number | undefined;
     readonly exhaustive?: boolean | undefined;
     readonly targetClassifiedMass?: number | bigint | undefined;
+    readonly signal?: AbortSignal | undefined;
+    readonly yieldEveryIterations?: number | undefined;
 }
 
 export interface PlexPendingEntry {
@@ -109,12 +109,13 @@ interface PlexGraphRecord {
     readonly graph: PlexGraph;
 }
 
-type PendingPlexWork = PlexFrontierPopTarget;
+type PendingPlexWork = PlexWorkItem;
 
 interface PlexAdvanceCriteria {
     readonly threshold: bigint;
     readonly maxIterations: number;
     readonly targetClassifiedMass?: bigint | undefined;
+    readonly signal?: AbortSignal | undefined;
 }
 
 interface PlexProjectionOptions {
@@ -233,27 +234,29 @@ function projectPlexPayloadMass(
     if (clueEligibleMass === 0n) return;
 
     let assigned = 0n;
-    const factors = options.applyBookRemoval
-        ? materializeBookFactors(payload, enchantToIndex)
-        : materializePlexPayloadFactors(payload, enchantToIndex);
-    for (const factor of factors) {
-        const mass = (sourceMass * factor.numerator * clueSurvival.numerator) /
-            (factor.denominator * clueSurvival.denominator);
+    const visitFactor = (combo: PackedCombo, numerator: bigint, denominator: bigint): void => {
+        const mass = (sourceMass * numerator * clueSurvival.numerator) /
+            (denominator * clueSurvival.denominator);
         assigned += mass;
-        if (mass === 0n) continue;
+        if (mass === 0n) return;
         if (target === 'result') {
             acc.projectedResultMass += mass;
-            acc.results.set(factor.combo, (acc.results.get(factor.combo) ?? 0n) + mass);
+            if (combo !== 0) acc.results.set(combo, (acc.results.get(combo) ?? 0n) + mass);
         } else if (pendingSource) {
             acc.projectedPendingMass += mass;
             acc.pendingEntries.push(Object.freeze({
                 graphId: pendingSource.graphId,
                 nodeId: pendingSource.nodeId as unknown as SearchGraphNodeId,
                 mass,
-                combo: factor.combo,
-                count: ComboUtils.getCount(factor.combo)
+                combo,
+                count: ComboUtils.getCount(combo)
             }));
         }
+    };
+    if (options.applyBookRemoval) {
+        defaultPayloadStore.forEachBookFactor(payload, enchantToIndex, visitFactor);
+    } else {
+        defaultPayloadStore.forEachFactor(payload, enchantToIndex, visitFactor);
     }
     // Projection loss reduces concrete-view accuracy, not internal engine mass.
     acc.loss += clueEligibleMass - assigned;
@@ -347,6 +350,8 @@ function createProjectionSourceMass(resolvedMass: bigint): MassAccountingBreakdo
  * frontier/result shape can be tested before concrete materialization and full
  * residue parity are introduced.
  */
+const defaultPayloadStore = new PlexPayloadStore();
+
 export class PlexRun {
     public readonly results = new Map<PlexPayloadKey, PlexResult>();
     public readonly mass = new ProbabilityMassAccountant();
@@ -354,8 +359,8 @@ export class PlexRun {
     private readonly distributionService: ModifiedLevelDistributionService;
     private readonly graphsBySignature = new Map<SearchPoolSignature, PlexGraphRecord>();
     private readonly graphs: PlexGraphRecord[] = [];
-    private readonly forwardingResidues: Array<Map<string, BigUint64Array> | undefined> = [];
-    private readonly frontier = new PlexRunFrontier();
+    private readonly payloads = new PlexPayloadStore();
+    private readonly work: PlexWorkStore;
     private seeded = false;
     private _seededLevelCount = 0;
     private _iterations = 0;
@@ -369,6 +374,9 @@ export class PlexRun {
     ) {
         this.distributionService = options.distributionService ?? new ModifiedLevelDistributionService();
         this.targetClueId = options.targetClueId;
+        this.work = new PlexWorkStore(this.payloads, {
+            frontierIdentityMode: options.frontierIdentityMode
+        });
     }
 
     public seedXp(xp: number): void {
@@ -396,7 +404,7 @@ export class PlexRun {
             const graph = this.graphForPool(pool);
             const root = graph.graph.getRootNode(level);
 
-            this.pushPending(graph.id, root.id, rootMass, EMPTY_PLEX_PAYLOAD);
+            this.pushPending(graph.id, root.id, rootMass, this.payloads.empty);
             seededMass += rootMass;
             this._seededLevelCount++;
         }
@@ -429,6 +437,20 @@ export class PlexRun {
         return this.snapshot();
     }
 
+    public async searchToCheckpointAsync(request: PlexRunCheckpointRequest = {}): Promise<PlexRunSnapshot> {
+        const criteria = this.createAdvanceCriteria(request);
+        const chunkIterations = Math.max(
+            1,
+            request.yieldEveryIterations ?? ENGINE_LIMITS.ASYNC_SEARCH_CHUNK_ITERATIONS
+        );
+
+        while (!this.advanceUntilCheckpoint(criteria, chunkIterations)) {
+            await AsyncUtils.yield();
+        }
+
+        return this.snapshot();
+    }
+
     public projectResults(): ProjectedPlexResults {
         return projectPlexResults(this.results, this.kernel.registry.enchantToIndex, this.mass.toPublic(), {
             applyBookRemoval: this.kernel.item === 'book',
@@ -452,15 +474,15 @@ export class PlexRun {
             mass: this.mass.toPublic(),
             iterations: this._iterations,
             lastExpandedMass: this._lastExpandedMass,
-            pendingCount: this.frontier.size,
-            largestPendingMass: this.frontier.peekMass(),
+            pendingCount: this.work.size,
+            largestPendingMass: this.work.peekMass(),
             pendingEntries: Object.freeze(this.getPendingEntries()),
             graphCount: this.graphs.length,
             seededLevelCount: this._seededLevelCount,
             activeResidueCount: residue.count,
             activeResidueMass: residue.mass,
-            fullyResolved: this.frontier.size === 0,
-            exitReason: this.frontier.size === 0 ? 'empty' : this._exitReason
+            fullyResolved: this.work.size === 0,
+            exitReason: this.work.size === 0 ? 'empty' : this._exitReason
         });
     }
 
@@ -492,7 +514,8 @@ export class PlexRun {
         return {
             threshold,
             maxIterations,
-            targetClassifiedMass
+            targetClassifiedMass,
+            signal: request.signal
         };
     }
 
@@ -504,25 +527,30 @@ export class PlexRun {
         }
     }
 
-    private advanceUntilCheckpoint(criteria: PlexAdvanceCriteria): void {
+    private advanceUntilCheckpoint(criteria: PlexAdvanceCriteria, chunkIterations?: number): boolean {
         this._exitReason = undefined;
+        let advancedInChunk = 0;
+
         while (true) {
+            if (criteria.signal?.aborted) throw new Error('Aborted');
             const exitReason = this.getExitReason(criteria);
             if (exitReason !== undefined) {
                 this._exitReason = exitReason;
-                return;
+                return true;
             }
+            if (chunkIterations !== undefined && advancedInChunk >= chunkIterations) return false;
             if (!this.step()) {
                 this._exitReason = 'empty';
-                return;
+                return true;
             }
+            advancedInChunk++;
         }
     }
 
     private getExitReason(criteria: PlexAdvanceCriteria): EngineExitReason | undefined {
-        if (this.frontier.size === 0) return 'empty';
+        if (this.work.size === 0) return 'empty';
         if (criteria.targetClassifiedMass !== undefined && this.mass.getClassifiedMass() >= criteria.targetClassifiedMass) return 'mass';
-        if (this.frontier.peekMass() < criteria.threshold) return 'threshold';
+        if (this.work.peekMass() < criteria.threshold) return 'threshold';
         if (this._iterations >= criteria.maxIterations) return 'iterations';
         return undefined;
     }
@@ -565,8 +593,7 @@ export class PlexRun {
         }
 
         const totalWeight = BigInt(expansion.totalWeight);
-        const residueKey = this.getForwardingResidueKey(current.nodeId, current.payload);
-        const oldResidues = this.getForwardingResidues(current.graphId, residueKey);
+        const oldResidues = this.work.getForwardingResidues(current);
         const oldResidueMass = this.calculateForwardingResidueMass(oldResidues, totalWeight);
         const nextResidues = new BigUint64Array(expansion.edges.length);
         let assigned = 0n;
@@ -590,37 +617,14 @@ export class PlexRun {
                 current.graphId,
                 edge.childId,
                 childMass,
-                appendPlexPayloadEdge(current.payload, edge)
+                this.work.appendPayloadEdge(current.payload, edge)
             );
         }
 
         const newResidueMass = nextResidueNumerator / totalWeight;
-        this.setForwardingResidues(current.graphId, residueKey, hasResidue ? nextResidues : undefined);
+        this.work.setForwardingResidues(current, hasResidue ? nextResidues : undefined);
         this.recordResidueDelta(oldResidueMass, newResidueMass);
         this.recordResiduePromotion(assigned - standaloneAssigned);
-    }
-
-    private getForwardingResidueKey(nodeId: PlexNodeId, payload: PlexPayload): string {
-        return `${nodeId}:${getPlexPayloadKey(payload)}`;
-    }
-
-    private getForwardingResidues(graphId: number, residueKey: string): BigUint64Array | undefined {
-        return this.forwardingResidues[graphId]?.get(residueKey);
-    }
-
-    private setForwardingResidues(graphId: number, residueKey: string, residues: BigUint64Array | undefined): void {
-        let graphResidues = this.forwardingResidues[graphId];
-        if (!graphResidues) {
-            if (!residues) return;
-            graphResidues = new Map<string, BigUint64Array>();
-            this.forwardingResidues[graphId] = graphResidues;
-        }
-
-        if (residues) {
-            graphResidues.set(residueKey, residues);
-        } else {
-            graphResidues.delete(residueKey);
-        }
     }
 
     private calculateForwardingResidueMass(residues: BigUint64Array | undefined, totalWeight: bigint): bigint {
@@ -646,31 +650,15 @@ export class PlexRun {
     }
 
     private getActiveResidueStats(): { count: number; mass: bigint } {
-        let count = 0;
-        let mass = 0n;
-        for (let graphId = 0; graphId < this.forwardingResidues.length; graphId++) {
-            const graphResidues = this.forwardingResidues[graphId];
-            if (!graphResidues) continue;
+        return this.work.getActiveResidueStats((graphId, nodeId) => {
             const graph = this.getGraphById(graphId).graph;
-            for (const [key, residues] of graphResidues) {
-                let residueNumerator = 0n;
-                for (const residue of residues) {
-                    if (residue === 0n) continue;
-                    count++;
-                    residueNumerator += residue;
-                }
-                if (residueNumerator === 0n) continue;
-                const nodeId = Number(key.slice(0, key.indexOf(':'))) as PlexNodeId;
-                const expansion = graph.getExpansion(nodeId);
-                mass += residueNumerator / BigInt(expansion.totalWeight);
-            }
-        }
-        return { count, mass };
+            return graph.getExpansion(nodeId).totalWeight;
+        });
     }
 
     private recordResolved(payload: PlexPayload, mass: bigint): void {
         if (mass === 0n) return;
-        const key = getPlexPayloadKey(payload);
+        const key = this.payloads.key(payload);
         const existing = this.results.get(key);
         this.results.set(key, Object.freeze({
             payload: existing?.payload ?? payload,
@@ -681,7 +669,7 @@ export class PlexRun {
 
     private pushPending(graphId: number, nodeId: PlexNodeId, mass: bigint, payload: PlexPayload): void {
         if (mass === 0n) return;
-        this.frontier.pushOrMerge(graphId, nodeId, mass, payload);
+        this.work.push(graphId, nodeId, mass, payload);
         this.mass.record('pending', mass);
     }
 
@@ -690,14 +678,14 @@ export class PlexRun {
             graphId: 0,
             nodeId: 0 as PlexNodeId,
             mass: 0n,
-            payload: EMPTY_PLEX_PAYLOAD
+            payload: this.payloads.empty
         };
-        return this.frontier.pop(current) ? current : undefined;
+        return this.work.popLargest(current) ? current : undefined;
     }
 
     private getPendingEntries(): PlexPendingEntry[] {
         const entries: PlexPendingEntry[] = [];
-        this.frontier.forEach(entry => {
+        this.work.forEachPending(entry => {
             const node = this.getGraphById(entry.graphId).graph.getNode(entry.nodeId);
             entries.push(Object.freeze({
                 graphId: entry.graphId,

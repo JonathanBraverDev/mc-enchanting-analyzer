@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+## v7.4.0 (2026-05-21)
+
+### Added
+- **Plex backend routing**: Added an internal `searchBackend: 'plex'` selector so `SearchExecutionService` can route `searchToCheckpoint`, sequential checkpoints, and `getStats` through Plex while keeping concrete `SearchRun` as the default path.
+- **Flex factorized backend**: Added `searchBackend: 'flex'` as the latest factorized-runtime iteration, with grouped fixed/choice programs, concrete-compatible projection, cached refinement resume, async checkpoint advancement, abort handling, and public stats/checkpoint routing when explicitly requested.
+- **Flex parity controls**: Added an internal `probabilityFloor` override so Flex parity diagnostics can disable the bounded-search floor without changing the product default.
+
+### Improved
+- **Plex backend hardening**: Bounded Plex service caches, added reduced-key invariant fallback for unsafe mutated registries, and tuned Plex frontier/payload/projection internals for comparison workloads.
+
+### Developer Experience
+- **Backend comparison coverage**: Added service-level tests for concrete default routing, explicit Plex/Flex routing, cached run resumption, compatible stats accounting, and Flex abort behavior.
+- **Flex validation probes**: Added Flex reduced-key invariant checks that accept representative vanilla shapes and reject an adversarial mutated-registry conflict graph, matching the Plex-style safety model before runtime fallback work.
+- **Factorized-runtime docs**: Promoted Flex as the active factorized-tree design path, while keeping Plex documented as the historical prototype and comparison backend.
+- **Profiling and parity tools**: Added/updated Plex parity harnesses and CPU profile phase-splitting utilities for backend comparison work.
+
 ## v7.3.0 (2026-05-19)
 
 ### Added

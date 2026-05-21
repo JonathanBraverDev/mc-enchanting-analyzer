@@ -1,6 +1,6 @@
 {
   "name": "mc-enchanting-analyzer",
-  "version": "7.3.0",
+  "version": "7.4.0",
   "devDependencies": {
     "@playwright/test": "^1.58.2",
     "@types/chart.js": "^2.9.41",
@@ -30,11 +30,13 @@
     "test:all": "npm run build && npm run lint && npm run test:release-policy && npm run test:engine && npm run test:ui",
     "test:engine": "node scripts/run-engine-tests.cjs",
     "test:engine:check": "node scripts/run-engine-tests.cjs --check",
+    "test:plex-parity": "node --test --import tsx tests/parity/plex-checkpoint-parity.ts",
     "test:snapshots": "NODE_OPTIONS=--max-old-space-size=8192 tsx --test tests/unit/engine/engine.snapshots.test.ts tests/unit/engine/engine-modern-book-snapshot.test.ts",
     "test:ui": "playwright test tests/ui/playwright",
     "benchmark": "tsx scripts/profile_snapshot.ts",
     "benchmark:cpu": "tsx --cpu-prof scripts/profile_snapshot.ts",
     "benchmark:compare": "tsx scripts/compare_profiles.ts",
+    "profile:split": "tsx scripts/analyze_cpu_profile.ts",
     "benchmark:clean": "node -e \"const fs = require('fs'); const files = fs.readdirSync('.').filter(f => f.endsWith('.cpuprofile')); console.log(`Cleaning ${files.length} root profiles...`); files.forEach(f => fs.unlinkSync(f));\"",
     "update-snapshots": "tsx scripts/update-snapshots.ts",
     "lint": "tsc --noEmit",

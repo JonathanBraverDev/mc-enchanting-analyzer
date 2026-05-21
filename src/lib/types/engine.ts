@@ -77,6 +77,9 @@ export interface SearchTiming {
 
 export type EngineExitReason = 'threshold' | 'iterations' | 'mass' | 'aborted' | 'empty' | 'exhausted';
 
+/** Internal search implementation selector. Defaults to the concrete V7 SearchRun path. */
+export type SearchBackend = 'concrete' | 'plex' | 'flex';
+
 export interface EngineInstrumentation {
   /** Eligible-pool registry cache metrics. */
   poolCache: CacheStats;
@@ -119,6 +122,8 @@ export interface EngineInstrumentation {
 }
 
 export interface SearchInstrumentation {
+  /** Search implementation that produced this checkpoint. */
+  backend?: SearchBackend | undefined;
   /** Number of structural search graphs currently used by the run. */
   graphCount: number;
   /** Number of modified levels seeded into the run. */
@@ -155,6 +160,18 @@ export interface SearchInstrumentation {
   suffixMergedPendingMass?: number | undefined;
   /** Estimated number of pending entries avoided by suffix canonicalization. */
   suffixAvoidedPendingEntries?: number | undefined;
+  /** Plex-only: structural pending buckets before compatibility projection expands payload factors. */
+  plexStructuralPendingEntryCount?: number | undefined;
+  /** Plex-only: concrete-view materialization loss recorded as compatibility rounding in public accounting. */
+  plexProjectionLoss?: number | undefined;
+  /** Plex-only: projection-stage mass classified as incompatible with the requested clue. */
+  plexProjectionClueIncompatible?: number | undefined;
+  /** Flex-only: structural pending buckets before compatibility projection expands program factors. */
+  flexStructuralPendingEntryCount?: number | undefined;
+  /** Flex-only: concrete-view materialization loss recorded as compatibility rounding in public accounting. */
+  flexProjectionLoss?: number | undefined;
+  /** Flex-only: projection-stage mass classified as incompatible with the requested clue. */
+  flexProjectionClueIncompatible?: number | undefined;
 }
 
 export interface ResolvedRegistry {
@@ -266,6 +283,11 @@ export interface SearchConfig {
      * that know the desired completion target; add `maxIterations` too when a work budget matters.
      */
     targetClassifiedMass?: number | bigint | undefined;
+    /**
+     * Internal/experimental forward-mass floor. Omit to use each backend's default; set to 0
+     * for parity diagnostics that compare Flex against concrete V7 without early tail sieving.
+     */
+    probabilityFloor?: number | bigint | undefined;
     signal?: AbortSignal | undefined;
     onProgress?: ((update: ProgressUpdate) => void) | undefined;
     /**
@@ -292,6 +314,12 @@ export interface SearchConfig {
     useCache?: boolean | undefined;
     instrumentation?: EngineInstrumentation | undefined;
     timing?: SearchTiming | undefined;
+    /**
+     * Internal/experimental search implementation selector.
+     * Omit for the supported/default concrete V7 SearchRun path. Use `plex` or `flex` only
+     * for diagnostics, parity checks, and staged engine-internal migration work.
+     */
+    searchBackend?: SearchBackend | undefined;
 }
 
 export interface ItemSelectionRequest {

@@ -1,16 +1,327 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { EngineFactory } from '#engine/index.js';
+import { RegistryFactory } from '#core/factory.js';
+import { getEligibleMaterials } from '#core/registry.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
+import { DATA } from '#data/index.js';
 import { getDefaultStatsCheckpoint, getSearchCheckpointForRefinement } from '#core/config.js';
-import { EnchantStats, SearchResult } from '#types/index.js';
+import { getRegistryVersionBoundaries } from '#core/version-resolution.js';
+import { SearchExecutionService } from '#lib/search/SearchExecutionService.js';
+import { PLEX_CACHE_LIMITS } from '#lib/search/plex/PlexConstants.js';
+import { FLEX_CACHE_LIMITS } from '#lib/search/flex/FlexConstants.js';
+import { EnchantStats, EngineInstrumentation, SearchResult } from '#types/index.js';
 
 function accountingTotal(stats: EnchantStats): number {
     const a = stats.accounting;
     return a.resolved + a.clueIncompatible + a.pending + a.sieved + a.overflow + a.capped + a.rounding;
 }
 
+function snapshotAccountingTotal(result: SearchResult): number {
+    const a = result.snapshot.mass;
+    return a.resolved + a.clueIncompatible + a.pending + a.sieved + a.overflow + a.capped + a.rounding;
+}
+
+function createInstrumentation(): EngineInstrumentation {
+    return {
+        poolCache: { hits: 0, misses: 0 },
+        distCache: { hits: 0, misses: 0 },
+        totalIterations: 0,
+        totalPrunedNodes: 0,
+        roundingErrorEvents: 0,
+        levelsProcessed: 0,
+        levelsFullyResolved: 0,
+        fullyResolved: false
+    };
+}
+
+interface PlexCacheFillCase {
+    readonly registry: ReturnType<typeof RegistryFactory.build>;
+    readonly item: string;
+    readonly material: string;
+    readonly xp: number;
+}
+
+interface SearchExecutionServiceInternals {
+    readonly plexRunCache: { readonly size: number };
+    readonly flexRunCache: { readonly size: number };
+}
+
 describe('Search execution service', () => {
+    it('keeps the concrete SearchRun backend as the default execution path', async () => {
+        const engine = EngineFactory.createForVersion('1.21.11');
+        const instrumentation = createInstrumentation();
+
+        const result = await engine.searchToCheckpoint({
+            item: 'sword',
+            material: 'diamond',
+            xp: 30,
+            threshold: 0,
+            maxIterations: 1,
+            instrumentation
+        });
+
+        assert.strictEqual(result.instrumentation?.search?.backend, 'concrete');
+        assert.ok(result.snapshot.pendingEntries.length > 0);
+    });
+
+    it('routes checkpoint searches through Plex when explicitly requested', async () => {
+        const engine = EngineFactory.createForVersion('1.21.11');
+        const instrumentation = createInstrumentation();
+
+        const result = await engine.searchToCheckpoint({
+            item: 'book',
+            material: 'book',
+            xp: 30,
+            threshold: 0,
+            maxIterations: 1,
+            searchBackend: 'plex',
+            instrumentation
+        });
+
+        assert.strictEqual(result.instrumentation?.search?.backend, 'plex');
+        assert.strictEqual(result.instrumentation?.exitReason, 'iterations');
+        assert.ok(result.snapshot.pendingEntries.length > 0);
+        assert.ok(result.instrumentation.search.pendingEntryCount > (result.instrumentation.search.plexStructuralPendingEntryCount ?? 0));
+        assert.ok(Math.abs(snapshotAccountingTotal(result) - 1) < 1e-12);
+    });
+
+    it('routes checkpoint searches through Flex when explicitly requested', async () => {
+        const engine = EngineFactory.createForVersion('1.21.11');
+        const instrumentation = createInstrumentation();
+
+        const result = await engine.searchToCheckpoint({
+            item: 'book',
+            material: 'book',
+            xp: 30,
+            threshold: 0,
+            maxIterations: 1,
+            searchBackend: 'flex',
+            instrumentation
+        });
+
+        assert.strictEqual(result.instrumentation?.search?.backend, 'flex');
+        assert.strictEqual(result.instrumentation?.exitReason, 'iterations');
+        assert.ok(result.snapshot.pendingEntries.length > 0);
+        assert.ok(result.instrumentation.search.pendingEntryCount > (result.instrumentation.search.flexStructuralPendingEntryCount ?? 0));
+        assert.ok(Math.abs(snapshotAccountingTotal(result) - 1) < 1e-12);
+    });
+
+    it('resumes cached Plex runs across one-at-a-time checkpoint calls', async () => {
+        const engine = EngineFactory.createForVersion('1.21.11');
+        engine.resetCaches();
+
+        const first = await engine.searchToCheckpoint({
+            item: 'book',
+            material: 'book',
+            xp: 30,
+            threshold: 0,
+            maxIterations: 50,
+            searchBackend: 'plex',
+            instrumentation: createInstrumentation()
+        });
+        const resumed = await engine.searchToCheckpoint({
+            item: 'book',
+            material: 'book',
+            xp: 30,
+            threshold: 0,
+            maxIterations: 10,
+            searchBackend: 'plex',
+            instrumentation: createInstrumentation()
+        });
+
+        assert.strictEqual(first.instrumentation?.search?.backend, 'plex');
+        assert.strictEqual(first.instrumentation?.totalIterations, 50);
+        assert.strictEqual(resumed.instrumentation?.totalIterations, 50);
+        assert.ok((resumed.instrumentation?.search?.runCacheHits ?? 0) >= 1);
+    });
+
+    it('resumes cached Flex runs across one-at-a-time checkpoint calls', async () => {
+        const engine = EngineFactory.createForVersion('1.21.11');
+        engine.resetCaches();
+
+        const first = await engine.searchToCheckpoint({
+            item: 'book',
+            material: 'book',
+            xp: 30,
+            threshold: 0,
+            maxIterations: 50,
+            searchBackend: 'flex',
+            instrumentation: createInstrumentation()
+        });
+        const resumed = await engine.searchToCheckpoint({
+            item: 'book',
+            material: 'book',
+            xp: 30,
+            threshold: 0,
+            maxIterations: 10,
+            searchBackend: 'flex',
+            instrumentation: createInstrumentation()
+        });
+
+        assert.strictEqual(first.instrumentation?.search?.backend, 'flex');
+        assert.strictEqual(first.instrumentation?.totalIterations, 50);
+        assert.strictEqual(resumed.instrumentation?.totalIterations, 50);
+        assert.ok((resumed.instrumentation?.search?.runCacheHits ?? 0) >= 1);
+    });
+
+    it('keeps Plex run cache bounded separately from the concrete SearchStateCache', async () => {
+        const service = new SearchExecutionService();
+        const cases = createPlexCacheFillCases(PLEX_CACHE_LIMITS.RUNS + 12);
+
+        assert.ok(cases.length > PLEX_CACHE_LIMITS.RUNS, 'fixture should exceed the Plex run cache capacity');
+        for (const testCase of cases) {
+            await service.searchToCheckpoint({
+                registry: testCase.registry,
+                item: testCase.item,
+                material: testCase.material,
+                xp: testCase.xp,
+                threshold: 0,
+                maxIterations: 1,
+                searchBackend: 'plex'
+            });
+        }
+
+        assert.ok(
+            getPlexRunCacheSize(service) <= PLEX_CACHE_LIMITS.RUNS,
+            'Plex run cache should evict old runs instead of growing without bound'
+        );
+    });
+
+    it('keeps Flex run cache bounded separately from the concrete SearchStateCache', async () => {
+        const service = new SearchExecutionService();
+        const cases = createPlexCacheFillCases(FLEX_CACHE_LIMITS.RUNS + 12);
+
+        assert.ok(cases.length > FLEX_CACHE_LIMITS.RUNS, 'fixture should exceed the Flex run cache capacity');
+        for (const testCase of cases) {
+            await service.searchToCheckpoint({
+                registry: testCase.registry,
+                item: testCase.item,
+                material: testCase.material,
+                xp: testCase.xp,
+                threshold: 0,
+                maxIterations: 1,
+                searchBackend: 'flex'
+            });
+        }
+
+        assert.ok(
+            getFlexRunCacheSize(service) <= FLEX_CACHE_LIMITS.RUNS,
+            'Flex run cache should evict old runs instead of growing without bound'
+        );
+    });
+
+    it('supports Plex through the public stats API while preserving compatible accounting', async () => {
+        const engine = EngineFactory.createForVersion('1.21.11');
+        engine.resetCaches();
+
+        const stats = await engine.getStats({
+            item: 'sword',
+            material: 'diamond',
+            xp: 30,
+            threshold: 0,
+            maxIterations: 250,
+            summaryLimit: 10,
+            searchBackend: 'plex',
+            instrumentation: createInstrumentation()
+        });
+
+        assert.strictEqual(stats.instrumentation?.search?.backend, 'plex');
+        assert.ok(Object.keys(stats.combos).length > 0);
+        assert.ok(stats.accounting.pending > 0);
+        assert.ok(Math.abs(accountingTotal(stats) - 1) < 1e-12);
+    });
+
+    it('supports Flex through the public stats API while preserving compatible accounting', async () => {
+        const engine = EngineFactory.createForVersion('1.21.11');
+        engine.resetCaches();
+
+        const stats = await engine.getStats({
+            item: 'sword',
+            material: 'diamond',
+            xp: 30,
+            threshold: 0,
+            maxIterations: 250,
+            summaryLimit: 10,
+            searchBackend: 'flex',
+            instrumentation: createInstrumentation()
+        });
+
+        assert.strictEqual(stats.instrumentation?.search?.backend, 'flex');
+        assert.ok(Object.keys(stats.combos).length > 0);
+        assert.ok(stats.accounting.pending > 0);
+        assert.ok(Math.abs(accountingTotal(stats) - 1) < 1e-12);
+    });
+
+    it('does not expose the Plex empty payload as a public combo row', async () => {
+        const engine = EngineFactory.createForVersion('1.21.11');
+        engine.resetCaches();
+
+        const [concrete, plex] = await Promise.all([
+            engine.getStats({
+                item: 'mace',
+                material: 'mace',
+                xp: 1,
+                exhaustive: true,
+                summaryLimit: 100,
+                useCache: false
+            }),
+            engine.getStats({
+                item: 'mace',
+                material: 'mace',
+                xp: 1,
+                exhaustive: true,
+                summaryLimit: 100,
+                searchBackend: 'plex',
+                useCache: false
+            })
+        ]);
+
+        assert.strictEqual(concrete.combos['0'], undefined);
+        assert.strictEqual(plex.combos['0'], undefined);
+        assert.ok(plex.accounting.resolved > 0);
+        assert.ok(Math.abs(accountingTotal(plex) - 1) < 1e-12);
+    });
+
+    it('falls back to payload-aware Plex frontier identity when a mutated registry breaks the reduced-key invariant', async () => {
+        const registry = RegistryFactory.buildWithMutations('1.21.11', [
+            { type: 'addConflictRule', rule: { enchants: ['Smite', 'Looting'], valid_from: '1.0' } },
+            { type: 'addConflictRule', rule: { enchants: ['Looting', 'Unbreaking'], valid_from: '1.0' } },
+            { type: 'addConflictRule', rule: { enchants: ['Unbreaking', 'Sharpness'], valid_from: '1.0' } }
+        ]);
+        const engine = EngineFactory.create(registry);
+
+        const result = await engine.searchToCheckpoint({
+            item: 'sword',
+            material: 'diamond',
+            xp: 30,
+            threshold: 0,
+            maxIterations: 100,
+            searchBackend: 'plex'
+        });
+
+        assert.ok(result.snapshot.mass.resolved + result.snapshot.mass.pending > 0);
+    });
+
+    it('allows Plex for mutated registries that satisfy the reduced-key invariant', async () => {
+        const registry = RegistryFactory.buildWithMutations('1.21.11', {
+            type: 'removeConflictRule',
+            selector: { enchants: ['Smite', 'Sharpness'], valid_from: '1.0' }
+        });
+        const engine = EngineFactory.create(registry);
+
+        const result = await engine.searchToCheckpoint({
+            item: 'sword',
+            material: 'diamond',
+            xp: 30,
+            threshold: 0,
+            maxIterations: 100,
+            searchBackend: 'plex'
+        });
+
+        assert.ok(result.snapshot.mass.resolved + result.snapshot.mass.pending > 0);
+    });
+
     it('produces EnchantStats through the public stats API', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
         engine.resetCaches();
@@ -331,6 +642,47 @@ describe('Search execution service', () => {
         );
     });
 
+    it('aborts Plex checkpoint searches after yielding between chunks', async () => {
+        const engine = EngineFactory.createForVersion('1.7.2');
+        const controller = new AbortController();
+
+        const search = engine.searchToCheckpoint({
+            item: 'book',
+            material: 'book',
+            xp: 30,
+            exhaustive: true,
+            searchBackend: 'plex',
+            signal: controller.signal
+        });
+        setTimeout(() => controller.abort(), 0);
+
+        await assert.rejects(
+            () => search,
+            /Aborted/
+        );
+    });
+
+
+    it('aborts Flex checkpoint searches after yielding between chunks', async () => {
+        const engine = EngineFactory.createForVersion('1.7.2');
+        const controller = new AbortController();
+
+        const search = engine.searchToCheckpoint({
+            item: 'book',
+            material: 'book',
+            xp: 30,
+            exhaustive: true,
+            searchBackend: 'flex',
+            signal: controller.signal
+        });
+        setTimeout(() => controller.abort(), 0);
+
+        await assert.rejects(
+            () => search,
+            /Aborted/
+        );
+    });
+
     it('resumes XP-cell runs across one-at-a-time checkpoint calls', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
         engine.resetCaches();
@@ -445,3 +797,27 @@ describe('Search execution service', () => {
     });
 
 });
+
+function createPlexCacheFillCases(limit: number): PlexCacheFillCase[] {
+    const cases: PlexCacheFillCase[] = [];
+
+    for (const version of getRegistryVersionBoundaries(DATA)) {
+        const registry = RegistryFactory.build(version);
+        for (const item of Object.keys(registry.itemPool)) {
+            for (const material of getEligibleMaterials(registry, item)) {
+                cases.push({ registry, item, material, xp: 1 });
+                if (cases.length >= limit) return cases;
+            }
+        }
+    }
+
+    return cases;
+}
+
+function getPlexRunCacheSize(service: SearchExecutionService): number {
+    return (service as unknown as SearchExecutionServiceInternals).plexRunCache.size;
+}
+
+function getFlexRunCacheSize(service: SearchExecutionService): number {
+    return (service as unknown as SearchExecutionServiceInternals).flexRunCache.size;
+}

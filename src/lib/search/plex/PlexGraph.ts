@@ -8,6 +8,7 @@ import {
     comparePlexWeightedChoices,
     type PlexWeightedChoice
 } from '#lib/search/plex/PlexChoice.js';
+import { PLEX_GRAPH_RULES, PLEX_HASH_CONSTANTS, PLEX_INDEX_LIMITS, PLEX_INDEX_SENTINELS } from '#lib/search/plex/PlexConstants.js';
 
 export type PlexNodeId = number & { readonly __brand: 'PlexNodeId' };
 
@@ -51,8 +52,105 @@ export interface PlexExpansion {
 
 interface PendingEdgeGroup {
     readonly childExclusionMask: bigint;
-    readonly weightsByAlternative: Map<PackedEnchant, number>;
+    readonly alternatives: PackedEnchant[];
+    readonly weights: number[];
     weight: number;
+}
+
+const PLEX_NODE_STATE_COUNT_STRIDE = ENGINE_LIMITS.MAX_ENCHANTS_PER_ITEM + 1;
+
+class PlexNodeIndex {
+    private exclusionMasks: bigint[] = [];
+    private stateKeys: Int32Array;
+    private values: Int32Array;
+    private used: Uint8Array;
+    private mask: number;
+    private resizeAt: number;
+    private count = 0;
+
+    public constructor(capacity: number = PLEX_INDEX_LIMITS.GRAPH_INITIAL_CAPACITY) {
+        const size = PlexNodeIndex.nextPowerOfTwo(capacity);
+        this.stateKeys = new Int32Array(size);
+        this.values = new Int32Array(size);
+        this.values.fill(PLEX_INDEX_SENTINELS.MISSING_VALUE);
+        this.used = new Uint8Array(size);
+        this.mask = size - 1;
+        this.resizeAt = Math.floor(size * PLEX_INDEX_LIMITS.GRAPH_MAX_LOAD_FACTOR);
+    }
+
+    public get(exclusionMask: bigint, stateKey: number): PlexNodeId | undefined {
+        let index = this.hash(exclusionMask, stateKey) & this.mask;
+        while (this.used[index] !== PLEX_INDEX_SENTINELS.EMPTY_SLOT) {
+            if (this.stateKeys[index] === stateKey && this.exclusionMasks[index] === exclusionMask) {
+                const value = this.values[index]!;
+                return value === PLEX_INDEX_SENTINELS.MISSING_VALUE ? undefined : value as PlexNodeId;
+            }
+            index = (index + 1) & this.mask;
+        }
+        return undefined;
+    }
+
+    public set(exclusionMask: bigint, stateKey: number, value: PlexNodeId): void {
+        if (this.count >= this.resizeAt) this.grow();
+        this.insert(exclusionMask, stateKey, value);
+    }
+
+    private insert(exclusionMask: bigint, stateKey: number, value: PlexNodeId): void {
+        let index = this.hash(exclusionMask, stateKey) & this.mask;
+        while (this.used[index] !== PLEX_INDEX_SENTINELS.EMPTY_SLOT) {
+            if (this.stateKeys[index] === stateKey && this.exclusionMasks[index] === exclusionMask) {
+                this.values[index] = value;
+                return;
+            }
+            index = (index + 1) & this.mask;
+        }
+
+        this.used[index] = PLEX_INDEX_SENTINELS.OCCUPIED_SLOT;
+        this.exclusionMasks[index] = exclusionMask;
+        this.stateKeys[index] = stateKey;
+        this.values[index] = value;
+        this.count++;
+    }
+
+    private grow(): void {
+        const oldMasks = this.exclusionMasks;
+        const oldStateKeys = this.stateKeys;
+        const oldValues = this.values;
+        const oldUsed = this.used;
+        const nextSize = oldStateKeys.length * PLEX_INDEX_LIMITS.GROWTH_FACTOR;
+
+        this.exclusionMasks = [];
+        this.stateKeys = new Int32Array(nextSize);
+        this.values = new Int32Array(nextSize);
+        this.values.fill(PLEX_INDEX_SENTINELS.MISSING_VALUE);
+        this.used = new Uint8Array(nextSize);
+        this.mask = nextSize - 1;
+        this.resizeAt = Math.floor(nextSize * PLEX_INDEX_LIMITS.GRAPH_MAX_LOAD_FACTOR);
+        this.count = 0;
+
+        for (let i = 0; i < oldStateKeys.length; i++) {
+            if (oldUsed[i] !== PLEX_INDEX_SENTINELS.EMPTY_SLOT) this.insert(oldMasks[i]!, oldStateKeys[i]!, oldValues[i]! as PlexNodeId);
+        }
+    }
+
+    private hash(exclusionMask: bigint, stateKey: number): number {
+        const low = Number(exclusionMask & PLEX_HASH_CONSTANTS.U32_MASK) >>> 0;
+        const high = Number((exclusionMask >> PLEX_HASH_CONSTANTS.U32_SHIFT) & PLEX_HASH_CONSTANTS.U32_MASK) >>> 0;
+        let h = (low
+            ^ Math.imul(high, PLEX_HASH_CONSTANTS.GOLDEN_RATIO_32)
+            ^ Math.imul(stateKey, PLEX_HASH_CONSTANTS.STATE_KEY_MULTIPLIER)) >>> 0;
+        h ^= h >>> PLEX_HASH_CONSTANTS.AVALANCHE_SHIFT_1;
+        h = Math.imul(h, PLEX_HASH_CONSTANTS.AVALANCHE_MULTIPLIER_1) >>> 0;
+        h ^= h >>> PLEX_HASH_CONSTANTS.AVALANCHE_SHIFT_2;
+        h = Math.imul(h, PLEX_HASH_CONSTANTS.AVALANCHE_MULTIPLIER_2) >>> 0;
+        return (h ^ (h >>> PLEX_HASH_CONSTANTS.AVALANCHE_SHIFT_1)) >>> 0;
+    }
+
+    private static nextPowerOfTwo(value: number): number {
+        let size = 1;
+        while (size < value) size <<= 1;
+        return size;
+    }
 }
 
 /**
@@ -73,7 +171,7 @@ export class PlexGraph {
     private readonly exclusionMasks: bigint[] = [];
     private readonly currentLevels: number[] = [];
     private readonly counts: number[] = [];
-    private readonly nodeIndex = new Map<string, PlexNodeId>();
+    private readonly nodeIndex = new PlexNodeIndex();
     private readonly expansionCache: Array<PlexExpansion | undefined> = [];
 
     public constructor(
@@ -100,7 +198,11 @@ export class PlexGraph {
     }
 
     public getRootNode(initialLevel: number): PlexNode {
-        return this.getOrCreateNode(0n, initialLevel, 0);
+        return this.getNode(this.getOrCreateNodeId(
+            PLEX_GRAPH_RULES.ROOT_EXCLUSION_MASK,
+            initialLevel,
+            PLEX_GRAPH_RULES.ROOT_COUNT
+        ));
     }
 
     public getOrCreateNode(
@@ -108,17 +210,7 @@ export class PlexGraph {
         currentLevel: number,
         count: number
     ): PlexNode {
-        const key = this.createNodeKey(exclusionMask, currentLevel, count);
-        const existing = this.nodeIndex.get(key);
-        if (existing !== undefined) return this.getNode(existing);
-
-        const id = this.counts.length as PlexNodeId;
-        this.exclusionMasks.push(exclusionMask);
-        this.currentLevels.push(currentLevel);
-        this.counts.push(count);
-        this.expansionCache.push(undefined);
-        this.nodeIndex.set(key, id);
-        return this.getNode(id);
+        return this.getNode(this.getOrCreateNodeId(exclusionMask, currentLevel, count));
     }
 
     public getNode(id: PlexNodeId): PlexNode {
@@ -136,7 +228,7 @@ export class PlexGraph {
         const cached = this.expansionCache[nodeId];
         if (cached) return cached;
 
-        const expansion = this.counts[nodeId] === 0
+        const expansion = this.counts[nodeId] === PLEX_GRAPH_RULES.ROOT_COUNT
             ? this.buildRootExpansion(nodeId)
             : this.buildSearchExpansion(nodeId);
         this.expansionCache[nodeId] = expansion;
@@ -145,7 +237,12 @@ export class PlexGraph {
 
     private buildRootExpansion(nodeId: PlexNodeId): PlexExpansion {
         const currentLevel = this.currentLevels[nodeId]!;
-        const edges = this.buildGroupedEdges(this.pool.entries, currentLevel, 1, 0n);
+        const edges = this.buildGroupedEdges(
+            this.pool.entries,
+            currentLevel,
+            PLEX_GRAPH_RULES.FIRST_CHILD_COUNT,
+            PLEX_GRAPH_RULES.ROOT_EXCLUSION_MASK
+        );
         return this.createExpansion(nodeId, true, PRECISION, this.pool.entries.length, edges, edges.length === 0 ? 'no-eligible' : null);
     }
 
@@ -165,7 +262,12 @@ export class PlexGraph {
         }
 
         const eligible = this.pool.entries.filter(entry => (exclusionMask & entry.idBit) === 0n);
-        const edges = this.buildGroupedEdges(eligible, Math.floor(currentLevel / 2), count + 1, exclusionMask);
+        const edges = this.buildGroupedEdges(
+            eligible,
+            Math.floor(currentLevel / PLEX_GRAPH_RULES.NEXT_LEVEL_DIVISOR),
+            count + PLEX_GRAPH_RULES.FIRST_CHILD_COUNT,
+            exclusionMask
+        );
         return this.createExpansion(nodeId, false, probContinue, eligible.length, edges, edges.length === 0 ? 'no-eligible' : null);
     }
 
@@ -175,34 +277,36 @@ export class PlexGraph {
         childCount: number,
         parentExclusionMask: bigint
     ): readonly PlexEdge[] {
-        const groupsByChildExclusion = new Map<string, PendingEdgeGroup>();
+        const groups: PendingEdgeGroup[] = [];
 
         for (const entry of entries) {
             const childExclusionMask = parentExclusionMask | entry.blocksBitset;
-            const key = childExclusionMask.toString(16);
-            let group = groupsByChildExclusion.get(key);
+            let group = groups.find(candidate => candidate.childExclusionMask === childExclusionMask);
             if (!group) {
-                group = { childExclusionMask, weightsByAlternative: new Map<PackedEnchant, number>(), weight: 0 };
-                groupsByChildExclusion.set(key, group);
+                group = { childExclusionMask, alternatives: [], weights: [], weight: 0 };
+                groups.push(group);
             }
-            group.weightsByAlternative.set(
-                entry.packedEnchant,
-                (group.weightsByAlternative.get(entry.packedEnchant) ?? 0) + entry.weight
-            );
+
+            const alternativeIndex = group.alternatives.indexOf(entry.packedEnchant);
+            if (alternativeIndex === -1) {
+                group.alternatives.push(entry.packedEnchant);
+                group.weights.push(entry.weight);
+            } else {
+                group.weights[alternativeIndex] = group.weights[alternativeIndex]! + entry.weight;
+            }
             group.weight += entry.weight;
         }
 
-        return Object.freeze([...groupsByChildExclusion.values()]
+        return Object.freeze(groups
             .map(group => {
                 const choice = canonicalizeWeightedChoice(
-                    [...group.weightsByAlternative.entries()].map(([packedEnchant, weight]) => ({ packedEnchant, weight }))
+                    group.alternatives.map((packedEnchant, index) => ({ packedEnchant, weight: group.weights[index]! }))
                 );
-                const child = this.getOrCreateNode(group.childExclusionMask, childLevel, childCount);
                 return Object.freeze({
                     choice,
                     weight: group.weight,
                     childExclusionMask: group.childExclusionMask,
-                    childId: child.id
+                    childId: this.getOrCreateNodeId(group.childExclusionMask, childLevel, childCount)
                 });
             })
             .sort((a, b) => comparePlexWeightedChoices(a.choice, b.choice)));
@@ -227,12 +331,30 @@ export class PlexGraph {
         });
     }
 
-    private createNodeKey(exclusionMask: bigint, currentLevel: number, count: number): string {
-        return `${exclusionMask.toString(16)}|${currentLevel}|${count}`;
+    private getOrCreateNodeId(
+        exclusionMask: bigint,
+        currentLevel: number,
+        count: number
+    ): PlexNodeId {
+        const stateKey = this.createNodeStateKey(currentLevel, count);
+        const existing = this.nodeIndex.get(exclusionMask, stateKey);
+        if (existing !== undefined) return existing;
+
+        const id = this.counts.length as PlexNodeId;
+        this.exclusionMasks.push(exclusionMask);
+        this.currentLevels.push(currentLevel);
+        this.counts.push(count);
+        this.expansionCache.push(undefined);
+        this.nodeIndex.set(exclusionMask, stateKey, id);
+        return id;
+    }
+
+    private createNodeStateKey(currentLevel: number, count: number): number {
+        return (currentLevel * PLEX_NODE_STATE_COUNT_STRIDE) + count;
     }
 
     private getTerminalReason(count: number): PlexTerminalReason {
-        if (this.kernel.item === 'book' && !this.kernel.multiEnchantBooks && count >= 1) {
+        if (this.kernel.item === 'book' && !this.kernel.multiEnchantBooks && count >= PLEX_GRAPH_RULES.SINGLE_BOOK_ENCHANT_LIMIT) {
             return 'single-book';
         }
         if (count >= ENGINE_LIMITS.MAX_ENCHANTS_PER_ITEM) {
