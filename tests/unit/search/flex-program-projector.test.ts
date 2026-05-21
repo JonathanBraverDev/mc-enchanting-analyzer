@@ -57,6 +57,21 @@ describe('FlexProgramStore', () => {
         assert.strictEqual(second.appendFixed(second.empty, sharpness), fixed);
     });
 
+    it('canonicalizes equivalent program emission order when requested', () => {
+        const store = new FlexProgramStore({ canonicalizeProgramOrder: true });
+        const sharpThenChoice = store.appendChoice(store.appendFixed(store.empty, sharpness), [
+            { packedEnchant: looting, weight: 1 },
+            { packedEnchant: unbreaking, weight: 3 }
+        ]);
+        const choiceThenSharp = store.appendFixed(store.appendChoice(store.empty, [
+            { packedEnchant: unbreaking, weight: 3 },
+            { packedEnchant: looting, weight: 1 }
+        ]), sharpness);
+
+        assert.strictEqual(sharpThenChoice, choiceThenSharp);
+        assert.deepStrictEqual(store.getProgram(sharpThenChoice).map(emission => emission.kind), ['fixed', 'choice']);
+    });
+
     it('classifies SolidNode and PlexNode variants from program contents', () => {
         const store = new FlexProgramStore();
         const solidProgram = store.appendFixed(store.empty, sharpness);

@@ -32,6 +32,10 @@ export interface GroupedFlexProjectedCheckpoint extends FlexProjectedResults {
 export interface GroupedFlexSearchRunOptions {
     readonly distributionService?: ModifiedLevelDistributionService | undefined;
     readonly targetClueId?: number | undefined;
+    /**
+     * Reduced mode merges by structural state; program mode conservatively keeps
+     * distinct program histories separate for registries that fail the reduced-key invariant.
+     */
     readonly stateIdentityMode?: FlexStateIdentityMode | undefined;
 }
 
@@ -42,7 +46,7 @@ export interface GroupedFlexSearchRunOptions {
  * explicit internal `searchBackend: 'flex'` requests while parity is being proven.
  */
 export class GroupedFlexSearchRun {
-    public readonly programs = new FlexProgramStore();
+    public readonly programs: FlexProgramStore;
 
     private readonly distributionService: ModifiedLevelDistributionService;
     private readonly graphsBySignature = new Map<SearchPoolSignature, GroupedFlexGraphRecord>();
@@ -60,6 +64,9 @@ export class GroupedFlexSearchRun {
         this.distributionService = options.distributionService ?? new ModifiedLevelDistributionService();
         this.targetClueId = options.targetClueId;
         this.stateIdentityMode = options.stateIdentityMode ?? 'reduced';
+        this.programs = new FlexProgramStore({
+            canonicalizeProgramOrder: this.stateIdentityMode === 'program'
+        });
         this.projector = new FlexProjector(this.programs, this.kernel.registry.enchantToIndex, {
             applyBookRemoval: this.kernel.item === 'book',
             targetClueId: this.targetClueId
