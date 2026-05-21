@@ -7,8 +7,9 @@ import {
     SearchRun,
     type PackedCombo
 } from '#lib/index.js';
+import { ENGINE_LIMITS } from '#constants/engine.js';
 import type { SearchRunSnapshot } from '#lib/search/SearchRun.js';
-import { ComboUtils, PRECISION } from '#utils/index.js';
+import { ComboUtils, PRECISION, ProbUtils } from '#utils/index.js';
 import type { RegistryState } from '#types/index.js';
 import {
     FlexProgramStore,
@@ -22,6 +23,8 @@ import {
 } from '#lib/search/flex/index.js';
 
 const MASS_TOLERANCE = 1_000n;
+const SYSTEM_FLOOR_UNITS = ProbUtils.toBigInt(ENGINE_LIMITS.SYSTEM_THRESHOLD_FLOOR);
+const FLOOR_MASS_TOLERANCE = SYSTEM_FLOOR_UNITS * 10n;
 
 interface GroupedGraphFixture {
     readonly registry: RegistryState;
@@ -177,11 +180,12 @@ describe('GroupedFlexSearchRun', () => {
         const targetClueId = findPoolEnchantByName(registry, kernel, 30, 'Sharpness');
         const concreteRun = new SearchRun(kernel, { targetClueId });
         const groupedRun = new GroupedFlexSearchRun(kernel, { targetClueId });
+        const request = { exhaustive: true } as const;
 
         concreteRun.seedXp(30);
         groupedRun.seedXp(30);
-        const concrete = concreteRun.searchToCheckpoint({ exhaustive: true });
-        const flex = groupedRun.searchToCheckpoint({ exhaustive: true });
+        const concrete = concreteRun.searchToCheckpoint(request);
+        const flex = groupedRun.searchToCheckpoint(request);
         const projected = groupedRun.projectSnapshot(flex);
 
         assert.strictEqual(concrete.fullyResolved, true);
@@ -208,6 +212,39 @@ describe('GroupedFlexSearchRun', () => {
         assert.strictEqual(projected.projectedMass + projected.projectionLoss, projected.sourceMass);
         assert.strictEqual(projected.results.has(0 as PackedCombo), false);
         assert.ok(hasPlexSourceProgram(run, flex), 'checkpoint should include at least one PlexNode source program');
+    });
+
+    it('applies probability-floor sieving with grouped PlexNode projection parity', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'sword', material: 'diamond' });
+        const concreteRun = new SearchRun(kernel);
+        const groupedRun = new GroupedFlexSearchRun(kernel);
+
+        concreteRun.seedXp(30);
+        groupedRun.seedXp(30);
+
+        const concrete = concreteRun.searchToCheckpoint({
+            threshold: 0n,
+            maxIterations: 100_000,
+            probabilityFloor: ENGINE_LIMITS.SYSTEM_THRESHOLD_FLOOR
+        });
+        const flex = groupedRun.searchToCheckpoint({
+            threshold: 0n,
+            maxIterations: 100_000
+        });
+        const projected = groupedRun.projectSnapshot(flex);
+
+        assert.strictEqual(concrete.fullyResolved, true);
+        assert.strictEqual(flex.fullyResolved, true);
+        assert.strictEqual(flex.pendingCount, 0);
+        assert.ok(BigInt(flex.mass.units!.sieved) > 0n);
+        assertBigintApproximatelyEqual(BigInt(flex.mass.units!.resolved), BigInt(concrete.mass.units!.resolved), 'resolved mass', FLOOR_MASS_TOLERANCE);
+        assertBigintApproximatelyEqual(BigInt(flex.mass.units!.sieved), BigInt(concrete.mass.units!.sieved), 'sieved mass', FLOOR_MASS_TOLERANCE);
+        assertBigintApproximatelyEqual(BigInt(flex.mass.units!.rounding), BigInt(concrete.mass.units!.rounding), 'rounding mass', FLOOR_MASS_TOLERANCE);
+        assertProjectedRowsApproximatelyEqual(projected.results, concrete.results, FLOOR_MASS_TOLERANCE);
+        assert.strictEqual(projected.projectedMass + projected.projectionLoss, BigInt(flex.mass.units!.resolved));
+        assert.strictEqual(projected.results.has(0 as PackedCombo), false);
+        assert.ok(hasPlexSourceProgram(groupedRun, flex), 'floor fixture should exercise PlexNode source programs');
     });
 });
 
@@ -354,7 +391,8 @@ function runConcreteAndGrouped(
 
 function assertProjectedRowsApproximatelyEqual(
     actual: ReadonlyMap<PackedCombo, bigint>,
-    expected: ReadonlyMap<PackedCombo, bigint>
+    expected: ReadonlyMap<PackedCombo, bigint>,
+    tolerance: bigint = MASS_TOLERANCE
 ): void {
     const keys = new Set<PackedCombo>([...actual.keys(), ...expected.keys()]);
     for (const key of [...keys].sort((left, right) => Number(left) - Number(right))) {
@@ -362,10 +400,20 @@ function assertProjectedRowsApproximatelyEqual(
         const expectedMass = expected.get(key) ?? 0n;
         const delta = actualMass > expectedMass ? actualMass - expectedMass : expectedMass - actualMass;
         assert.ok(
-            delta <= MASS_TOLERANCE,
+            delta <= tolerance,
             `combo ${String(key)} expected ${String(expectedMass)}, got ${String(actualMass)}, delta ${String(delta)}`
         );
     }
+}
+
+function assertBigintApproximatelyEqual(
+    actual: bigint,
+    expected: bigint,
+    label: string,
+    tolerance: bigint = MASS_TOLERANCE
+): void {
+    const delta = actual > expected ? actual - expected : expected - actual;
+    assert.ok(delta <= tolerance, `${label}: expected ${String(expected)}, got ${String(actual)}, delta ${String(delta)}`);
 }
 
 function comboContainsExactEnchant(combo: PackedCombo, targetClueId: number, indexToEnchant: number[]): boolean {

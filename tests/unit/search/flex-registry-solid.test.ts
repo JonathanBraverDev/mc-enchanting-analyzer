@@ -9,6 +9,7 @@ import {
     type SearchGraphExpansion,
     type SearchGraphNodeId
 } from '#lib/index.js';
+import { ENGINE_LIMITS } from '#constants/engine.js';
 import type { SearchRunSnapshot } from '#lib/search/SearchRun.js';
 import {
     FlexProgramStore,
@@ -132,6 +133,38 @@ describe('RegistryFlexSearchRun', () => {
 
     it('matches concrete bounded non-book checkpoint shape at XP 30', () => {
         assertBoundedCheckpointParity(30, 500);
+    });
+
+    it('matches concrete probability-floor sieving at XP 30', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'sword', material: 'diamond' });
+        const concreteRun = new SearchRun(kernel);
+        const flexRun = new RegistryFlexSearchRun(kernel);
+
+        concreteRun.seedXp(30);
+        flexRun.seedXp(30);
+
+        const concrete = concreteRun.searchToCheckpoint({
+            threshold: 0n,
+            maxIterations: 100_000,
+            probabilityFloor: ENGINE_LIMITS.SYSTEM_THRESHOLD_FLOOR
+        });
+        const flex = flexRun.searchToCheckpoint({
+            threshold: 0n,
+            maxIterations: 100_000
+        });
+        const projected = flexRun.projectSnapshot(flex);
+
+        assert.strictEqual(concrete.fullyResolved, true);
+        assert.strictEqual(flex.fullyResolved, true);
+        assert.strictEqual(flex.iterations, concrete.iterations);
+        assert.deepStrictEqual(flex.mass, concrete.mass);
+        assert.ok(BigInt(flex.mass.units!.sieved) > 0n);
+        assertMapsEqual(projected.results, concrete.results);
+        assert.strictEqual(projected.projectionLoss, 0n);
+        assert.strictEqual(projected.pendingEntries.length, 0);
+        assert.strictEqual(flex.pendingCount, concrete.pendingCount);
+        assert.strictEqual(flex.activeResidueMass, concrete.activeResidueMass);
     });
 });
 
