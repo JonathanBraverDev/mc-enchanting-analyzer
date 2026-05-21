@@ -283,6 +283,11 @@ export interface SearchConfig {
      * that know the desired completion target; add `maxIterations` too when a work budget matters.
      */
     targetClassifiedMass?: number | bigint | undefined;
+    /**
+     * Internal/experimental forward-mass floor. Omit to use each backend's default; set to 0
+     * for parity diagnostics that compare Flex against concrete V7 without early tail sieving.
+     */
+    probabilityFloor?: number | bigint | undefined;
     signal?: AbortSignal | undefined;
     onProgress?: ((update: ProgressUpdate) => void) | undefined;
     /**

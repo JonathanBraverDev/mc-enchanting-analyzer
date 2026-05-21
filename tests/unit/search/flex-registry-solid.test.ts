@@ -303,7 +303,7 @@ function runConcreteAndFlex(
 }
 
 function assertBoundedCheckpointParity(xp: number, maxIterations: number): void {
-    const { concrete, flex, projected } = runConcreteAndFlex(xp, { threshold: 0n, maxIterations });
+    const { concrete, flex, projected } = runConcreteAndFlex(xp, { threshold: 0n, maxIterations, probabilityFloor: 0n });
 
     assert.strictEqual(flex.exitReason, 'iterations');
     assert.strictEqual(flex.iterations, concrete.iterations);

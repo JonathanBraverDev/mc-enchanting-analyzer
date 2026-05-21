@@ -71,7 +71,8 @@ export class SearchExecutionService {
                 threshold: request.exhaustive ? 0n : request.threshold ?? 0n,
                 maxIterations: request.exhaustive ? undefined : request.maxIterations,
                 exhaustive: request.exhaustive,
-                targetClassifiedMass: request.exhaustive ? undefined : request.targetClassifiedMass
+                targetClassifiedMass: request.exhaustive ? undefined : request.targetClassifiedMass,
+                probabilityFloor: request.probabilityFloor
             });
             const projected = run.projectSnapshot(snapshot);
             this.finishTiming(request.timing, timingStart, 0);
@@ -84,6 +85,7 @@ export class SearchExecutionService {
             maxIterations: request.exhaustive ? undefined : request.maxIterations,
             exhaustive: request.exhaustive,
             targetClassifiedMass: request.exhaustive ? undefined : request.targetClassifiedMass,
+            probabilityFloor: request.probabilityFloor,
             signal: request.signal
         });
 
@@ -117,6 +119,7 @@ export class SearchExecutionService {
                     threshold: checkpoint.threshold,
                     maxIterations: checkpoint.limit,
                     targetClassifiedMass: checkpoint.targetClassifiedMass,
+                    probabilityFloor: request.probabilityFloor,
                     signal: request.signal
                 });
             } catch (error) {
@@ -188,7 +191,8 @@ export class SearchExecutionService {
             const snapshot = run.searchToCheckpoint({
                 threshold: checkpoint.threshold,
                 maxIterations: checkpoint.limit,
-                targetClassifiedMass: checkpoint.targetClassifiedMass
+                targetClassifiedMass: checkpoint.targetClassifiedMass,
+                probabilityFloor: request.probabilityFloor
             });
             const projected = run.projectSnapshot(snapshot);
             recordedSearchMs = this.finishTiming(request.timing, timingStart, recordedSearchMs);

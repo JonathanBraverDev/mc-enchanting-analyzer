@@ -63,6 +63,11 @@ export interface FlexCheckpointRequest {
     readonly maxIterations?: number | undefined;
     readonly exhaustive?: boolean | undefined;
     readonly targetClassifiedMass?: number | bigint | undefined;
+    /**
+     * Internal forward-mass floor. Omit to use Flex's default system floor for bounded searches;
+     * set to 0 for concrete-V7 parity diagnostics that must not sieve tail nodes early.
+     */
+    readonly probabilityFloor?: number | bigint | undefined;
 }
 
 export interface FlexPendingEntry {
