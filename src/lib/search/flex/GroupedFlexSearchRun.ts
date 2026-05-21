@@ -32,10 +32,10 @@ export interface GroupedFlexSearchRunOptions {
 }
 
 /**
- * Test-only Flex runner backed by grouped registry graphs.
+ * Flex runner backed by grouped registry graphs.
  *
- * This is the first PlexNode-capable Flex runner, intentionally kept out of
- * SearchExecutionService while behavior parity is still being proven.
+ * This is the first PlexNode-capable Flex runner. It remains selected only by
+ * explicit internal `searchBackend: 'flex'` requests while parity is being proven.
  */
 export class GroupedFlexSearchRun {
     public readonly programs = new FlexProgramStore();
@@ -86,6 +86,10 @@ export class GroupedFlexSearchRun {
 
     public searchToCheckpoint(request: FlexCheckpointRequest = {}): FlexRunSnapshot {
         return this.coordinator.searchToCheckpoint(request);
+    }
+
+    public searchToCheckpointAsync(request: FlexCheckpointRequest = {}): Promise<FlexRunSnapshot> {
+        return this.coordinator.searchToCheckpointAsync(request);
     }
 
     public snapshot(): FlexRunSnapshot {

@@ -89,6 +89,10 @@ export class SolidFlexSearchRun {
         return this.coordinator.searchToCheckpoint(request);
     }
 
+    public searchToCheckpointAsync(request: FlexCheckpointRequest = {}): Promise<FlexRunSnapshot> {
+        return this.coordinator.searchToCheckpointAsync(request);
+    }
+
     public snapshot(): FlexRunSnapshot {
         return this.coordinator.snapshot();
     }
