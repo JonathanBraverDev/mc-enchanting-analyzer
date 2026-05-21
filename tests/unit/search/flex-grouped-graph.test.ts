@@ -171,6 +171,31 @@ describe('GroupedFlexSearchRun', () => {
         assertExhaustiveProjectedParity('1.21.11', 'book', 'book', 1, true);
     });
 
+    it('projects exact clue-conditioned grouped results like concrete V7', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'sword', material: 'diamond' });
+        const targetClueId = findPoolEnchantByName(registry, kernel, 30, 'Sharpness');
+        const concreteRun = new SearchRun(kernel, { targetClueId });
+        const groupedRun = new GroupedFlexSearchRun(kernel, { targetClueId });
+
+        concreteRun.seedXp(30);
+        groupedRun.seedXp(30);
+        const concrete = concreteRun.searchToCheckpoint({ exhaustive: true });
+        const flex = groupedRun.searchToCheckpoint({ exhaustive: true });
+        const projected = groupedRun.projectSnapshot(flex);
+
+        assert.strictEqual(concrete.fullyResolved, true);
+        assert.strictEqual(flex.fullyResolved, true);
+        assertProjectedRowsApproximatelyEqual(projected.results, concrete.results);
+        assert.ok(projected.clueIncompatible > 0n);
+        assert.strictEqual(projected.projectedMass + projected.clueIncompatible + projected.projectionLoss, projected.sourceMass);
+        assert.strictEqual(projected.results.has(0 as PackedCombo), false);
+        for (const combo of projected.results.keys()) {
+            assert.ok(comboContainsExactEnchant(combo, targetClueId, registry.indexToEnchant));
+        }
+        assert.ok(hasPlexSourceProgram(groupedRun, flex), 'clue fixture should exercise PlexNode programs');
+    });
+
     it('produces a bounded XP 30 checkpoint with PlexNode programs and conserved resolved source mass', () => {
         const { run, flex, projected } = runConcreteAndGrouped('1.21.11', 'sword', 'diamond', 30, {
             threshold: 0n,
@@ -241,6 +266,19 @@ function assertChoiceWeightsByName(
         alternative.weight
     ]));
     assert.deepStrictEqual(Object.fromEntries([...actual.entries()].sort()), Object.fromEntries(Object.entries(expected).sort()));
+}
+
+function findPoolEnchantByName(
+    registry: RegistryState,
+    kernel: RegistryKernel,
+    level: number,
+    name: string
+): number {
+    const entry = kernel.getPool(level).entries.find(candidate =>
+        registry.revIdMap[ComboUtils.getEnchantId(candidate.packedEnchant)] === name
+    );
+    assert.ok(entry, `Expected level ${String(level)} pool to include ${name}`);
+    return entry.packedEnchant;
 }
 
 function getLastEmission(fixture: GroupedGraphFixture, edge: FlexEdge): FlexEmission {
@@ -328,6 +366,10 @@ function assertProjectedRowsApproximatelyEqual(
             `combo ${String(key)} expected ${String(expectedMass)}, got ${String(actualMass)}, delta ${String(delta)}`
         );
     }
+}
+
+function comboContainsExactEnchant(combo: PackedCombo, targetClueId: number, indexToEnchant: number[]): boolean {
+    return ComboUtils.unpack(combo, indexToEnchant).some(enchant => enchant === targetClueId);
 }
 
 function hasPlexSourceProgram(run: GroupedFlexSearchRun, snapshot: FlexRunSnapshot): boolean {

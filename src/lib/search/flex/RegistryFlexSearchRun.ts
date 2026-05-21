@@ -21,10 +21,14 @@ interface RegistryFlexGraphRecord {
 export interface RegistryFlexProjectedCheckpoint extends FlexProjectedResults {
     readonly pendingEntries: readonly FlexProjectedPendingEntry[];
     readonly projectedPendingMass: bigint;
+    readonly projectedPendingSourceMass: bigint;
+    readonly pendingProjectionLoss: bigint;
+    readonly pendingClueIncompatible: bigint;
 }
 
 export interface RegistryFlexSearchRunOptions {
     readonly distributionService?: ModifiedLevelDistributionService | undefined;
+    readonly targetClueId?: number | undefined;
 }
 
 /**
@@ -41,6 +45,7 @@ export class RegistryFlexSearchRun {
     private readonly graphs: RegistryFlexGraph[] = [];
     private readonly coordinator = new FlexCoordinator(this.graphs);
     private readonly projector: FlexProjector;
+    private readonly targetClueId: number | undefined;
     private seeded = false;
 
     public constructor(
@@ -48,8 +53,10 @@ export class RegistryFlexSearchRun {
         options: RegistryFlexSearchRunOptions = {}
     ) {
         this.distributionService = options.distributionService ?? new ModifiedLevelDistributionService();
+        this.targetClueId = options.targetClueId;
         this.projector = new FlexProjector(this.programs, this.kernel.registry.enchantToIndex, {
-            applyBookRemoval: this.kernel.item === 'book'
+            applyBookRemoval: this.kernel.item === 'book',
+            targetClueId: this.targetClueId
         });
     }
 
@@ -87,13 +94,15 @@ export class RegistryFlexSearchRun {
 
     public projectSnapshot(snapshot: FlexRunSnapshot = this.snapshot()): RegistryFlexProjectedCheckpoint {
         const projectedResults = this.projector.projectResults(snapshot.results);
-        const pendingEntries = this.projector.projectPending(snapshot.pendingEntries);
-        const projectedPendingMass = pendingEntries.reduce((sum, entry) => sum + entry.mass, 0n);
+        const projectedPending = this.projector.projectPendingWithDiagnostics(snapshot.pendingEntries);
 
         return Object.freeze({
             ...projectedResults,
-            pendingEntries,
-            projectedPendingMass
+            pendingEntries: projectedPending.pendingEntries,
+            projectedPendingMass: projectedPending.projectedMass,
+            projectedPendingSourceMass: projectedPending.sourceMass,
+            pendingProjectionLoss: projectedPending.projectionLoss,
+            pendingClueIncompatible: projectedPending.clueIncompatible
         });
     }
 
