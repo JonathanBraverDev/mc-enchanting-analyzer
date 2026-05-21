@@ -50,7 +50,7 @@ export class FlexProgramStore {
         hasChoice: false,
         slotCount: 0
     })];
-    private readonly idsByTransition: Array<Map<number, FlexProgramId> | undefined> = [];
+    private readonly idsByTransition: Array<Array<FlexProgramId | undefined> | undefined> = [];
     private readonly fixedEmissions = new Map<PackedEnchant, FlexFixedEmission>();
     private readonly choiceInternRoot: FlexChoiceInternNode = {};
     private readonly programInternRoot: FlexProgramInternNode = { programId: EMPTY_PROGRAM_ID };
@@ -81,7 +81,7 @@ export class FlexProgramStore {
 
         const emissionId = this.getEmissionId(canonical);
         let transitions = this.idsByTransition[parentId];
-        const existing = transitions?.get(emissionId);
+        const existing = transitions?.[emissionId];
         if (existing !== undefined) return existing;
 
         const parent = this.records[parentId]!;
@@ -95,10 +95,10 @@ export class FlexProgramStore {
         });
         this.records.push(record);
         if (!transitions) {
-            transitions = new Map<number, FlexProgramId>();
+            transitions = [];
             this.idsByTransition[parentId] = transitions;
         }
-        transitions.set(emissionId, id);
+        transitions[emissionId] = id;
         this.programCache.push(undefined);
         return id;
     }
