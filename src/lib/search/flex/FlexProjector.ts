@@ -1,6 +1,12 @@
 import type { PackedCombo } from '#types/index.js';
 import { ComboUtils } from '#utils/index.js';
-import type { FlexPendingEntry, FlexProjectedPendingEntry, FlexProjectedResults, FlexProgramId } from '#lib/search/flex/FlexTypes.js';
+import type {
+    FlexPendingEntry,
+    FlexProgram,
+    FlexProjectedPendingEntry,
+    FlexProjectedResults,
+    FlexProgramId
+} from '#lib/search/flex/FlexTypes.js';
 import { FlexProgramStore } from '#lib/search/flex/FlexProgramStore.js';
 
 interface FlexProjectionFactor {
@@ -10,10 +16,15 @@ interface FlexProjectionFactor {
     readonly denominator: bigint;
 }
 
+export interface FlexProjectionOptions {
+    readonly applyBookRemoval?: boolean | undefined;
+}
+
 export class FlexProjector {
     public constructor(
         private readonly programs: FlexProgramStore,
-        private readonly enchantToIndex: Map<number, number>
+        private readonly enchantToIndex: Map<number, number>,
+        private readonly options: FlexProjectionOptions = {}
     ) {}
 
     public projectResults(results: ReadonlyMap<FlexProgramId, bigint>): FlexProjectedResults {
@@ -25,7 +36,7 @@ export class FlexProjector {
         for (const [programId, mass] of results) {
             sourceMass += mass;
             let assigned = 0n;
-            this.forEachProgramFactor(programId, (factor) => {
+            this.forEachResultProgramFactor(programId, (factor) => {
                 const share = (mass * factor.numerator) / factor.denominator;
                 assigned += share;
                 if (share === 0n) return;
@@ -63,12 +74,35 @@ export class FlexProjector {
         return Object.freeze(projected);
     }
 
-    private forEachProgramFactor(
+    private forEachResultProgramFactor(
         programId: FlexProgramId,
         visitor: (factor: FlexProjectionFactor) => void
     ): void {
         const program = this.programs.getProgram(programId);
+        if (this.options.applyBookRemoval && program.length >= 2) {
+            const slotDenominator = BigInt(program.length);
+            for (let removedEmissionIndex = 0; removedEmissionIndex < program.length; removedEmissionIndex++) {
+                this.visitProgramFactors(program, visitor, removedEmissionIndex, slotDenominator);
+            }
+            return;
+        }
 
+        this.visitProgramFactors(program, visitor);
+    }
+
+    private forEachProgramFactor(
+        programId: FlexProgramId,
+        visitor: (factor: FlexProjectionFactor) => void
+    ): void {
+        this.visitProgramFactors(this.programs.getProgram(programId), visitor);
+    }
+
+    private visitProgramFactors(
+        program: FlexProgram,
+        visitor: (factor: FlexProjectionFactor) => void,
+        removedEmissionIndex?: number,
+        initialDenominator: bigint = 1n
+    ): void {
         const visit = (
             emissionIndex: number,
             combo: PackedCombo,
@@ -78,6 +112,11 @@ export class FlexProjector {
         ): void => {
             if (emissionIndex >= program.length) {
                 visitor(Object.freeze({ combo, count, numerator, denominator }));
+                return;
+            }
+
+            if (emissionIndex === removedEmissionIndex) {
+                visit(emissionIndex + 1, combo, count, numerator, denominator);
                 return;
             }
 
@@ -107,6 +146,6 @@ export class FlexProjector {
             }
         };
 
-        visit(0, 0 as PackedCombo, 0, 1n, 1n);
+        visit(0, 0 as PackedCombo, 0, 1n, initialDenominator);
     }
 }
