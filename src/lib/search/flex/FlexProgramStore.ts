@@ -17,6 +17,15 @@ interface FlexProgramRecord {
     readonly slotCount: number;
 }
 
+export interface FlexProgramStoreOptions {
+    /**
+     * Canonicalizes full program emission order so conservative program-aware
+     * frontier identity can merge equivalent histories reached in different orders.
+     * The reduced Flex path keeps the cheaper parent+emission transition identity.
+     */
+    readonly canonicalizeProgramOrder?: boolean | undefined;
+}
+
 const EMPTY_PROGRAM_ID = 0 as FlexProgramId;
 
 export class FlexProgramStore {
@@ -30,7 +39,10 @@ export class FlexProgramStore {
         slotCount: 0
     })];
     private readonly idsByTransition = new Map<string, FlexProgramId>();
+    private readonly idsByProgramKey = new Map<string, FlexProgramId>([['', EMPTY_PROGRAM_ID]]);
     private readonly programCache: Array<FlexProgram | undefined> = [Object.freeze([])];
+
+    public constructor(private readonly options: FlexProgramStoreOptions = {}) {}
 
     public appendFixed(parentId: FlexProgramId, packedEnchant: PackedEnchant): FlexProgramId {
         return this.appendEmission(parentId, Object.freeze({
@@ -49,6 +61,11 @@ export class FlexProgramStore {
     public appendEmission(parentId: FlexProgramId, emission: FlexEmission): FlexProgramId {
         this.assertProgram(parentId);
         const canonical = this.canonicalizeEmission(emission);
+        if (this.options.canonicalizeProgramOrder) {
+            const nextProgram = this.insertCanonicalEmission(this.getProgram(parentId), canonical);
+            return this.getOrCreateProgram(nextProgram);
+        }
+
         const transitionKey = `${String(parentId)}|${this.createEmissionKey(canonical)}`;
         const existing = this.idsByTransition.get(transitionKey);
         if (existing !== undefined) return existing;
@@ -134,6 +151,47 @@ export class FlexProgramStore {
             alternatives: canonicalAlternatives,
             totalWeight: canonicalAlternatives.reduce((sum, alternative) => sum + alternative.weight, 0)
         });
+    }
+
+    private getOrCreateProgram(program: readonly FlexEmission[]): FlexProgramId {
+        if (program.length === 0) return EMPTY_PROGRAM_ID;
+        const key = this.createProgramKey(program);
+        const existing = this.idsByProgramKey.get(key);
+        if (existing !== undefined) return existing;
+
+        const parentId = this.getOrCreateProgram(program.slice(0, -1));
+        const parent = this.records[parentId]!;
+        const emission = program[program.length - 1]!;
+        const id = this.records.length as FlexProgramId;
+        const record = Object.freeze({
+            id,
+            parentId,
+            emission,
+            hasChoice: parent.hasChoice || emission.kind === 'choice',
+            slotCount: parent.slotCount + 1
+        });
+        this.records.push(record);
+        this.idsByProgramKey.set(key, id);
+        this.programCache.push(undefined);
+        return id;
+    }
+
+    private insertCanonicalEmission(program: FlexProgram, emission: FlexEmission): readonly FlexEmission[] {
+        const next = program.slice();
+        let index = 0;
+        while (index < next.length && this.compareEmissions(next[index]!, emission) <= 0) index++;
+        next.splice(index, 0, emission);
+        return Object.freeze(next);
+    }
+
+    private compareEmissions(left: FlexEmission, right: FlexEmission): number {
+        if (left.kind !== right.kind) return left.kind === 'fixed' ? -1 : 1;
+        if (left.kind === 'fixed' && right.kind === 'fixed') return Number(left.packedEnchant) - Number(right.packedEnchant);
+        return this.createEmissionKey(left).localeCompare(this.createEmissionKey(right));
+    }
+
+    private createProgramKey(program: readonly FlexEmission[]): string {
+        return program.map(emission => this.createEmissionKey(emission)).join('|');
     }
 
     private createEmissionKey(emission: FlexEmission): string {
