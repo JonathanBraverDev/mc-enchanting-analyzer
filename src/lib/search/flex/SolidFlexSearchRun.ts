@@ -49,7 +49,9 @@ export class SolidFlexSearchRun {
         options: SolidFlexSearchRunOptions = {}
     ) {
         this.distributionService = options.distributionService ?? new ModifiedLevelDistributionService();
-        this.projector = new FlexProjector(this.programs, this.kernel.registry.enchantToIndex);
+        this.projector = new FlexProjector(this.programs, this.kernel.registry.enchantToIndex, {
+            applyBookRemoval: this.kernel.item === 'book'
+        });
     }
 
     public seedXp(xp: number): void {

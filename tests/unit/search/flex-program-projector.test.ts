@@ -120,6 +120,39 @@ describe('FlexProjector', () => {
         assert.strictEqual(projected.projectionLoss, 0n);
     });
 
+    it('applies book removal uniformly across fixed generated slots', () => {
+        const store = new FlexProgramStore();
+        const projector = new FlexProjector(store, enchantToIndex, { applyBookRemoval: true });
+        const first = store.appendFixed(store.empty, sharpness);
+        const program = store.appendFixed(first, smite);
+
+        const projected = projector.projectResults(new Map([[program, 11n]]));
+
+        assert.strictEqual(projected.results.get(combo(sharpness)), 5n);
+        assert.strictEqual(projected.results.get(combo(smite)), 5n);
+        assert.strictEqual(projected.projectedMass, 10n);
+        assert.strictEqual(projected.projectionLoss, 1n);
+        assert.strictEqual(projected.projectedMass + projected.projectionLoss, projected.sourceMass);
+    });
+
+    it('treats a weighted choice as one removable book slot', () => {
+        const store = new FlexProgramStore();
+        const projector = new FlexProjector(store, enchantToIndex, { applyBookRemoval: true });
+        const first = store.appendFixed(store.empty, sharpness);
+        const program = store.appendChoice(first, [
+            { packedEnchant: looting, weight: 1 },
+            { packedEnchant: unbreaking, weight: 3 }
+        ]);
+
+        const projected = projector.projectResults(new Map([[program, 24n]]));
+
+        assert.strictEqual(projected.results.get(combo(sharpness)), 12n);
+        assert.strictEqual(projected.results.get(combo(looting)), 3n);
+        assert.strictEqual(projected.results.get(combo(unbreaking)), 9n);
+        assert.strictEqual(projected.projectedMass, 24n);
+        assert.strictEqual(projected.projectionLoss, 0n);
+    });
+
     it('does not expose the empty program as public combo row zero', () => {
         const store = new FlexProgramStore();
         const projector = new FlexProjector(store, enchantToIndex);
@@ -153,6 +186,28 @@ describe('FlexProjector', () => {
                 { combo: combo(sharpness), mass: 3n, count: 1 },
                 { combo: combo(smite), mass: 6n, count: 1 }
             ]
+        );
+    });
+
+    it('keeps pending projection pre-book-removal', () => {
+        const store = new FlexProgramStore();
+        const projector = new FlexProjector(store, enchantToIndex, { applyBookRemoval: true });
+        const first = store.appendFixed(store.empty, sharpness);
+        const program = store.appendFixed(first, smite);
+        const pending: FlexPendingEntry[] = [{
+            graphId: 0,
+            nodeId: nodeId(11),
+            programId: program,
+            mass: 10n,
+            count: 2,
+            nodeKind: 'solid'
+        }];
+
+        const projected = projector.projectPending(pending);
+
+        assert.deepStrictEqual(
+            projected.map(entry => ({ combo: entry.combo, mass: entry.mass, count: entry.count })),
+            [{ combo: combo(sharpness, smite), mass: 10n, count: 2 }]
         );
     });
 });

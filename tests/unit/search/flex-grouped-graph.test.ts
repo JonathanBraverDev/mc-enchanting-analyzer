@@ -165,6 +165,12 @@ describe('GroupedFlexSearchRun', () => {
         assertExhaustiveProjectedParity('1.4.6', 'book', 'book', 1, false);
     });
 
+    it('matches concrete projected public rows for low-XP multi-book searches', () => {
+        assertExhaustiveProjectedParity('1.7.2', 'book', 'book', 1, false);
+        assertExhaustiveProjectedParity('1.13', 'book', 'book', 1, true);
+        assertExhaustiveProjectedParity('1.21.11', 'book', 'book', 1, true);
+    });
+
     it('produces a bounded XP 30 checkpoint with PlexNode programs and conserved resolved source mass', () => {
         const { run, flex, projected } = runConcreteAndGrouped('1.21.11', 'sword', 'diamond', 30, {
             threshold: 0n,
