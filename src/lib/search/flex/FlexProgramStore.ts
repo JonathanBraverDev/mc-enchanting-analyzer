@@ -3,6 +3,7 @@ import {
     type FlexAlternative,
     type FlexChoiceEmission,
     type FlexEmission,
+    type FlexFixedEmission,
     type FlexNode,
     type FlexNodeId,
     type FlexProgram,
@@ -26,7 +27,18 @@ export interface FlexProgramStoreOptions {
     readonly canonicalizeProgramOrder?: boolean | undefined;
 }
 
+interface FlexChoiceInternNode {
+    children?: Map<number, FlexChoiceInternNode> | undefined;
+    emission?: FlexChoiceEmission | undefined;
+}
+
+interface FlexProgramInternNode {
+    children?: Map<number, FlexProgramInternNode> | undefined;
+    programId?: FlexProgramId | undefined;
+}
+
 const EMPTY_PROGRAM_ID = 0 as FlexProgramId;
+const FIRST_EMISSION_ID = 1;
 
 export class FlexProgramStore {
     public readonly empty: FlexProgramId = EMPTY_PROGRAM_ID;
@@ -38,17 +50,18 @@ export class FlexProgramStore {
         hasChoice: false,
         slotCount: 0
     })];
-    private readonly idsByTransition = new Map<string, FlexProgramId>();
-    private readonly idsByProgramKey = new Map<string, FlexProgramId>([['', EMPTY_PROGRAM_ID]]);
+    private readonly idsByTransition: Array<Map<number, FlexProgramId> | undefined> = [];
+    private readonly fixedEmissions = new Map<PackedEnchant, FlexFixedEmission>();
+    private readonly choiceInternRoot: FlexChoiceInternNode = {};
+    private readonly programInternRoot: FlexProgramInternNode = { programId: EMPTY_PROGRAM_ID };
+    private readonly emissionIds = new WeakMap<FlexEmission, number>();
     private readonly programCache: Array<FlexProgram | undefined> = [Object.freeze([])];
+    private nextEmissionId = FIRST_EMISSION_ID;
 
     public constructor(private readonly options: FlexProgramStoreOptions = {}) {}
 
     public appendFixed(parentId: FlexProgramId, packedEnchant: PackedEnchant): FlexProgramId {
-        return this.appendEmission(parentId, Object.freeze({
-            kind: 'fixed',
-            packedEnchant
-        }));
+        return this.appendEmission(parentId, this.getFixedEmission(packedEnchant));
     }
 
     public appendChoice(
@@ -66,8 +79,9 @@ export class FlexProgramStore {
             return this.getOrCreateProgram(nextProgram);
         }
 
-        const transitionKey = `${String(parentId)}|${this.createEmissionKey(canonical)}`;
-        const existing = this.idsByTransition.get(transitionKey);
+        const emissionId = this.getEmissionId(canonical);
+        let transitions = this.idsByTransition[parentId];
+        const existing = transitions?.get(emissionId);
         if (existing !== undefined) return existing;
 
         const parent = this.records[parentId]!;
@@ -80,7 +94,11 @@ export class FlexProgramStore {
             slotCount: parent.slotCount + 1
         });
         this.records.push(record);
-        this.idsByTransition.set(transitionKey, id);
+        if (!transitions) {
+            transitions = new Map<number, FlexProgramId>();
+            this.idsByTransition[parentId] = transitions;
+        }
+        transitions.set(emissionId, id);
         this.programCache.push(undefined);
         return id;
     }
@@ -116,10 +134,7 @@ export class FlexProgramStore {
 
     private canonicalizeEmission(emission: FlexEmission): FlexEmission {
         if (emission.kind === 'fixed') {
-            return Object.freeze({
-                kind: 'fixed',
-                packedEnchant: emission.packedEnchant
-            });
+            return this.getFixedEmission(emission.packedEnchant);
         }
 
         const canonical = this.canonicalizeChoice(emission.alternatives);
@@ -143,20 +158,49 @@ export class FlexProgramStore {
             );
         }
 
-        const canonicalAlternatives = Object.freeze([...weightsByEnchant.entries()]
+        const canonicalAlternatives = [...weightsByEnchant.entries()]
             .sort(([left], [right]) => Number(left) - Number(right))
-            .map(([packedEnchant, weight]) => Object.freeze({ packedEnchant, weight })));
-        return Object.freeze({
-            kind: 'choice',
+            .map(([packedEnchant, weight]) => Object.freeze({ packedEnchant, weight }));
+        return this.getChoiceEmission(canonicalAlternatives);
+    }
+
+    private getFixedEmission(packedEnchant: PackedEnchant): FlexFixedEmission {
+        const existing = this.fixedEmissions.get(packedEnchant);
+        if (existing) return existing;
+
+        const emission = Object.freeze({
+            kind: 'fixed' as const,
+            packedEnchant
+        });
+        this.fixedEmissions.set(packedEnchant, emission);
+        this.emissionIds.set(emission, this.nextEmissionId++);
+        return emission;
+    }
+
+    private getChoiceEmission(alternatives: readonly FlexAlternative[]): FlexChoiceEmission {
+        let node = this.choiceInternRoot;
+        for (const alternative of alternatives) {
+            node = getOrCreateChoiceInternNode(node, Number(alternative.packedEnchant));
+            node = getOrCreateChoiceInternNode(node, alternative.weight);
+        }
+
+        if (node.emission) return node.emission;
+
+        const canonicalAlternatives = Object.freeze([...alternatives]);
+        const emission = Object.freeze({
+            kind: 'choice' as const,
             alternatives: canonicalAlternatives,
             totalWeight: canonicalAlternatives.reduce((sum, alternative) => sum + alternative.weight, 0)
         });
+        node.emission = emission;
+        this.emissionIds.set(emission, this.nextEmissionId++);
+        return emission;
     }
 
     private getOrCreateProgram(program: readonly FlexEmission[]): FlexProgramId {
         if (program.length === 0) return EMPTY_PROGRAM_ID;
-        const key = this.createProgramKey(program);
-        const existing = this.idsByProgramKey.get(key);
+        const node = this.getProgramInternNode(program);
+        const existing = node.programId;
         if (existing !== undefined) return existing;
 
         const parentId = this.getOrCreateProgram(program.slice(0, -1));
@@ -171,9 +215,28 @@ export class FlexProgramStore {
             slotCount: parent.slotCount + 1
         });
         this.records.push(record);
-        this.idsByProgramKey.set(key, id);
+        node.programId = id;
         this.programCache.push(undefined);
         return id;
+    }
+
+    private getProgramInternNode(program: readonly FlexEmission[]): FlexProgramInternNode {
+        let node = this.programInternRoot;
+        for (const emission of program) {
+            const emissionId = this.getEmissionId(emission);
+            let children = node.children;
+            if (!children) {
+                children = new Map<number, FlexProgramInternNode>();
+                node.children = children;
+            }
+            let child = children.get(emissionId);
+            if (!child) {
+                child = {};
+                children.set(emissionId, child);
+            }
+            node = child;
+        }
+        return node;
     }
 
     private insertCanonicalEmission(program: FlexProgram, emission: FlexEmission): readonly FlexEmission[] {
@@ -190,10 +253,6 @@ export class FlexProgramStore {
         return this.createEmissionKey(left).localeCompare(this.createEmissionKey(right));
     }
 
-    private createProgramKey(program: readonly FlexEmission[]): string {
-        return program.map(emission => this.createEmissionKey(emission)).join('|');
-    }
-
     private createEmissionKey(emission: FlexEmission): string {
         if (emission.kind === 'fixed') return `f:${String(emission.packedEnchant)}`;
         return `c:${emission.alternatives
@@ -201,9 +260,30 @@ export class FlexProgramStore {
             .join(',')}`;
     }
 
+    private getEmissionId(emission: FlexEmission): number {
+        const id = this.emissionIds.get(emission);
+        if (id === undefined) throw new Error('Flex emission was not interned before use.');
+        return id;
+    }
+
     private assertProgram(id: FlexProgramId): void {
         if (id < 0 || id >= this.records.length) {
             throw new Error(`Unknown Flex program ID ${String(id)}.`);
         }
     }
+}
+
+function getOrCreateChoiceInternNode(parent: FlexChoiceInternNode, key: number): FlexChoiceInternNode {
+    let children = parent.children;
+    if (!children) {
+        children = new Map<number, FlexChoiceInternNode>();
+        parent.children = children;
+    }
+
+    let child = children.get(key);
+    if (!child) {
+        child = {};
+        children.set(key, child);
+    }
+    return child;
 }

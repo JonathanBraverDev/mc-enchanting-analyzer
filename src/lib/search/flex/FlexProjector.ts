@@ -1,5 +1,5 @@
 import type { PackedCombo } from '#types/index.js';
-import { ComboUtils } from '#utils/index.js';
+import { PACKING_CONSTANTS } from '#constants/engine.js';
 import type {
     FlexPendingEntry,
     FlexProgram,
@@ -168,7 +168,7 @@ export class FlexProjector {
                 const packedIndex = this.enchantToIndex.get(emission.packedEnchant);
                 visit(
                     emissionIndex + 1,
-                    packedIndex === undefined ? combo : ComboUtils.packAppendIndex(combo, packedIndex, count),
+                    packedIndex === undefined ? combo : appendPackedComboIndex(combo, packedIndex, count),
                     packedIndex === undefined ? count : count + 1,
                     numerator,
                     denominator,
@@ -182,7 +182,7 @@ export class FlexProjector {
                 const packedIndex = this.enchantToIndex.get(alternative.packedEnchant);
                 visit(
                     emissionIndex + 1,
-                    packedIndex === undefined ? combo : ComboUtils.packAppendIndex(combo, packedIndex, count),
+                    packedIndex === undefined ? combo : appendPackedComboIndex(combo, packedIndex, count),
                     packedIndex === undefined ? count : count + 1,
                     numerator * BigInt(alternative.weight),
                     denominator * totalWeight,
@@ -193,4 +193,18 @@ export class FlexProjector {
 
         visit(0, 0 as PackedCombo, 0, 1n, initialDenominator, false);
     }
+}
+
+function appendPackedComboIndex(combo: PackedCombo, packedIndex: number, count: number): PackedCombo {
+    if (count === 0) return packedIndex as PackedCombo;
+
+    let insertMultiplier = 1;
+    for (let index = 0; index < count; index++, insertMultiplier *= PACKING_CONSTANTS.BYTE_BASIS) {
+        const current = Math.floor(combo / insertMultiplier) % PACKING_CONSTANTS.BYTE_BASIS;
+        if (packedIndex > current) break;
+    }
+
+    const lowerDigits = combo % insertMultiplier;
+    const shiftedDigits = (combo - lowerDigits) * PACKING_CONSTANTS.BYTE_BASIS;
+    return (lowerDigits + packedIndex * insertMultiplier + shiftedDigits) as PackedCombo;
 }
