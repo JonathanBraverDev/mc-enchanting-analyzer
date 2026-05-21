@@ -1,4 +1,5 @@
 import { ProbabilityMassAccountant } from '#engine/search/ProbabilityMassAccountant.js';
+import { ENGINE_LIMITS } from '#constants/engine.js';
 import type { EngineExitReason } from '#types/index.js';
 import { PRECISION, ProbUtils } from '#utils/index.js';
 import type {
@@ -11,10 +12,13 @@ import type {
     FlexRunSnapshot
 } from '#lib/search/flex/FlexTypes.js';
 
+const SYSTEM_PROBABILITY_FLOOR = ProbUtils.toBigInt(ENGINE_LIMITS.SYSTEM_THRESHOLD_FLOOR);
+
 interface FlexAdvanceCriteria {
     readonly threshold: bigint;
     readonly maxIterations: number;
     readonly targetClassifiedMass: bigint | undefined;
+    readonly probabilityFloor: bigint;
 }
 
 interface FlexWorkItem {
@@ -88,6 +92,7 @@ export class FlexCoordinator {
         const maxIterations = request.exhaustive
             ? Number.POSITIVE_INFINITY
             : request.maxIterations ?? Number.POSITIVE_INFINITY;
+        const probabilityFloor = request.exhaustive ? 0n : SYSTEM_PROBABILITY_FLOOR;
         const hasBoundedStopCondition = targetClassifiedMass !== undefined
             || (request.threshold !== undefined && threshold > 0n)
             || request.maxIterations !== undefined;
@@ -96,7 +101,7 @@ export class FlexCoordinator {
             throw new Error('FlexCoordinator has no bounded stop condition. Provide a positive threshold, a finite maxIterations, a mass target, or set exhaustive: true.');
         }
 
-        return { threshold, maxIterations, targetClassifiedMass };
+        return { threshold, maxIterations, targetClassifiedMass, probabilityFloor };
     }
 
     private advanceUntilCheckpoint(criteria: FlexAdvanceCriteria): void {
@@ -108,7 +113,7 @@ export class FlexCoordinator {
                 this._exitReason = exitReason;
                 return;
             }
-            if (!this.step()) {
+            if (!this.step(criteria)) {
                 this._exitReason = 'empty';
                 return;
             }
@@ -123,18 +128,18 @@ export class FlexCoordinator {
         return undefined;
     }
 
-    private step(): boolean {
+    private step(criteria: FlexAdvanceCriteria): boolean {
         const current: FlexWorkItem = { graphId: 0, nodeId: 0 as FlexNodeId, mass: 0n };
         if (!this.frontier.pop(current)) return false;
 
         this.mass.subtract('pending', current.mass);
         this._lastExpandedMass = current.mass;
-        this.expand(current);
+        this.expand(current, criteria.probabilityFloor);
         this._iterations++;
         return true;
     }
 
-    private expand(current: FlexWorkItem): void {
+    private expand(current: FlexWorkItem, probabilityFloor: bigint): void {
         const expansion = this.getGraph(current.graphId).getExpansion(current.nodeId);
 
         if (expansion.node.count === 0 && (expansion.totalWeight <= 0 || expansion.edges.length === 0)) {
@@ -154,6 +159,11 @@ export class FlexCoordinator {
 
         if (expansion.totalWeight <= 0 || expansion.edges.length === 0) {
             this.recordResolved(expansion.node.programId, probForward);
+            return;
+        }
+
+        if (expansion.node.count > 0 && probabilityFloor > 0n && probForward < probabilityFloor) {
+            this.mass.record('sieved', probForward);
             return;
         }
 

@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { ENGINE_LIMITS } from '#constants/engine.js';
 import type { PackedEnchant } from '#types/index.js';
-import { PRECISION } from '#utils/index.js';
+import { PRECISION, ProbUtils } from '#utils/index.js';
 import {
     FlexCoordinator,
     FlexProgramStore,
@@ -13,6 +14,7 @@ import {
 const packed = (id: number, rank = 1): PackedEnchant => ((id << 8) | rank) as PackedEnchant;
 const nodeId = (id: number): FlexNodeId => id as FlexNodeId;
 const units = (snapshot: ReturnType<FlexCoordinator['snapshot']>) => snapshot.mass.units!;
+const SYSTEM_FLOOR_UNITS = ProbUtils.toBigInt(ENGINE_LIMITS.SYSTEM_THRESHOLD_FLOOR);
 
 class TestFlexGraph implements FlexGraph {
     private readonly expansions = new Map<number, FlexExpansion>();
@@ -115,6 +117,8 @@ describe('FlexCoordinator', () => {
         const threshold = thresholdRun.searchToCheckpoint({ threshold: 2n });
         assert.strictEqual(threshold.exitReason, 'threshold');
         assert.strictEqual(threshold.iterations, 0);
+        assert.strictEqual(units(threshold).pending, '1');
+        assert.strictEqual(units(threshold).sieved, '0');
 
         const massGraph = new TestFlexGraph();
         massGraph.set(nodeId(0), Object.freeze({
@@ -136,5 +140,68 @@ describe('FlexCoordinator', () => {
         const empty = emptyRun.searchToCheckpoint({ exhaustive: true });
         assert.strictEqual(empty.exitReason, 'empty');
         assert.strictEqual(empty.fullyResolved, true);
+    });
+
+    it('keeps checkpoint threshold separate from probability-floor sieving', () => {
+        const store = new FlexProgramStore();
+        const childProgram = store.appendFixed(store.empty, packed(1));
+        const pendingMass = SYSTEM_FLOOR_UNITS - 1n;
+        const graph = new TestFlexGraph();
+        graph.set(nodeId(0), Object.freeze({
+            node: store.createNode(nodeId(0), store.empty),
+            probContinue: PRECISION,
+            totalWeight: 1,
+            edges: Object.freeze([{ weight: 1, childId: nodeId(1) }]),
+            terminalReason: null
+        }));
+        graph.set(nodeId(1), terminalExpansion(store, nodeId(1), childProgram));
+
+        const run = new FlexCoordinator([graph]);
+        run.seedPending(0, nodeId(0), pendingMass);
+        const snapshot = run.searchToCheckpoint({
+            threshold: SYSTEM_FLOOR_UNITS,
+            maxIterations: 10
+        });
+
+        assert.strictEqual(snapshot.exitReason, 'threshold');
+        assert.strictEqual(snapshot.iterations, 0);
+        assert.strictEqual(snapshot.pendingEntries.length, 1);
+        assert.strictEqual(units(snapshot).pending, String(pendingMass));
+        assert.strictEqual(units(snapshot).sieved, '0');
+    });
+
+    it('records non-root continue mass below the probability floor as sieved', () => {
+        const store = new FlexProgramStore();
+        const firstProgram = store.appendFixed(store.empty, packed(1));
+        const secondProgram = store.appendFixed(firstProgram, packed(2));
+        const belowFloorMass = SYSTEM_FLOOR_UNITS - 1n;
+        const graph = new TestFlexGraph();
+        graph.set(nodeId(0), Object.freeze({
+            node: store.createNode(nodeId(0), store.empty),
+            probContinue: PRECISION,
+            totalWeight: 1,
+            edges: Object.freeze([{ weight: 1, childId: nodeId(1) }]),
+            terminalReason: null
+        }));
+        graph.set(nodeId(1), Object.freeze({
+            node: store.createNode(nodeId(1), firstProgram),
+            probContinue: PRECISION,
+            totalWeight: 1,
+            edges: Object.freeze([{ weight: 1, childId: nodeId(2) }]),
+            terminalReason: null
+        }));
+        graph.set(nodeId(2), terminalExpansion(store, nodeId(2), secondProgram));
+
+        const run = new FlexCoordinator([graph]);
+        run.seedPending(0, nodeId(0), belowFloorMass);
+        const snapshot = run.searchToCheckpoint({ threshold: 0n, maxIterations: 10 });
+
+        assert.strictEqual(snapshot.exitReason, 'empty');
+        assert.strictEqual(snapshot.iterations, 2);
+        assert.strictEqual(snapshot.lastExpandedMass, belowFloorMass);
+        assert.strictEqual(snapshot.results.size, 0);
+        assert.strictEqual(units(snapshot).pending, '0');
+        assert.strictEqual(units(snapshot).resolved, '0');
+        assert.strictEqual(units(snapshot).sieved, String(belowFloorMass));
     });
 });

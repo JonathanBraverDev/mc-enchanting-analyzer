@@ -55,8 +55,9 @@ function assertGroupedFlexParity(testCase: GroupedFlexParityCase): void {
     concreteRun.seedXp(1);
     groupedRun.seedXp(1);
 
-    const concrete = concreteRun.searchToCheckpoint({ exhaustive: true });
-    const flex = groupedRun.searchToCheckpoint({ exhaustive: true });
+    const request = { exhaustive: true } as const;
+    const concrete = concreteRun.searchToCheckpoint(request);
+    const flex = groupedRun.searchToCheckpoint(request);
     const projected = groupedRun.projectSnapshot(flex);
 
     assert.strictEqual(concrete.fullyResolved, true, label(testCase, 'concrete fully resolved'));
