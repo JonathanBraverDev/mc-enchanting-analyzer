@@ -6,3 +6,5 @@ export * from './SolidFlexGraph.js';
 export * from './SolidFlexSearchRun.js';
 export * from './RegistryFlexGraph.js';
 export * from './RegistryFlexSearchRun.js';
+export * from './GroupedFlexGraph.js';
+export * from './GroupedFlexSearchRun.js';
