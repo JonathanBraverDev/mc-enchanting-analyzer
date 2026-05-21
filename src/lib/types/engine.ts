@@ -78,7 +78,7 @@ export interface SearchTiming {
 export type EngineExitReason = 'threshold' | 'iterations' | 'mass' | 'aborted' | 'empty' | 'exhausted';
 
 /** Internal search implementation selector. Defaults to the concrete V7 SearchRun path. */
-export type SearchBackend = 'concrete' | 'plex';
+export type SearchBackend = 'concrete' | 'plex' | 'flex';
 
 export interface EngineInstrumentation {
   /** Eligible-pool registry cache metrics. */
@@ -166,6 +166,12 @@ export interface SearchInstrumentation {
   plexProjectionLoss?: number | undefined;
   /** Plex-only: projection-stage mass classified as incompatible with the requested clue. */
   plexProjectionClueIncompatible?: number | undefined;
+  /** Flex-only: structural pending buckets before compatibility projection expands program factors. */
+  flexStructuralPendingEntryCount?: number | undefined;
+  /** Flex-only: concrete-view materialization loss recorded as compatibility rounding in public accounting. */
+  flexProjectionLoss?: number | undefined;
+  /** Flex-only: projection-stage mass classified as incompatible with the requested clue. */
+  flexProjectionClueIncompatible?: number | undefined;
 }
 
 export interface ResolvedRegistry {
@@ -305,8 +311,8 @@ export interface SearchConfig {
     timing?: SearchTiming | undefined;
     /**
      * Internal/experimental search implementation selector.
-     * Omit for the supported/default concrete V7 SearchRun path. Use `plex` only for
-     * diagnostics, parity checks, and staged engine-internal migration work.
+     * Omit for the supported/default concrete V7 SearchRun path. Use `plex` or `flex` only
+     * for diagnostics, parity checks, and staged engine-internal migration work.
      */
     searchBackend?: SearchBackend | undefined;
 }
