@@ -11,6 +11,7 @@ import type {
     FlexProgramId,
     FlexRunSnapshot
 } from '#lib/search/flex/FlexTypes.js';
+import { FLEX_HASH_CONSTANTS, FLEX_INDEX_LIMITS, FLEX_INDEX_SENTINELS } from '#lib/search/flex/FlexConstants.js';
 
 const SYSTEM_PROBABILITY_FLOOR = ProbUtils.toBigInt(ENGINE_LIMITS.SYSTEM_THRESHOLD_FLOOR);
 
@@ -394,7 +395,7 @@ class FlexFrontier {
     private readonly heapGraphIds: number[] = [];
     private readonly heapNodeIds: number[] = [];
     private readonly heapMasses: bigint[] = [];
-    private readonly positionsByState = new Map<number, number>();
+    private readonly positionsByState = new FlexFrontierPositionIndex();
 
     public get size(): number {
         return this.heapNodeIds.length;
@@ -512,6 +513,118 @@ class FlexFrontier {
         return pairIntegers(graphId, nodeId as number);
     }
 }
+
+class FlexFrontierPositionIndex {
+    private keys: Float64Array;
+    private values: Int32Array;
+    private states: Uint8Array;
+    private mask: number;
+    private resizeAt: number;
+    private occupied = 0;
+    private used = 0;
+
+    public constructor(capacity: number = FLEX_INDEX_LIMITS.FRONTIER_INITIAL_CAPACITY) {
+        const size = FlexFrontierPositionIndex.nextPowerOfTwo(capacity);
+        this.keys = new Float64Array(size);
+        this.values = new Int32Array(size);
+        this.values.fill(FLEX_INDEX_SENTINELS.MISSING_VALUE);
+        this.states = new Uint8Array(size);
+        this.mask = size - 1;
+        this.resizeAt = Math.floor(size * FLEX_INDEX_LIMITS.FRONTIER_MAX_LOAD_FACTOR);
+    }
+
+    public get(key: number): number | undefined {
+        let index = this.hash(key) & this.mask;
+        while (this.states[index] !== FLEX_INDEX_SENTINELS.EMPTY_SLOT) {
+            if (this.states[index] === FLEX_INDEX_SENTINELS.OCCUPIED_SLOT && this.keys[index] === key) {
+                const value = this.values[index]!;
+                return value === FLEX_INDEX_SENTINELS.MISSING_VALUE ? undefined : value;
+            }
+            index = (index + 1) & this.mask;
+        }
+        return undefined;
+    }
+
+    public set(key: number, value: number): void {
+        if (this.used >= this.resizeAt) this.grow();
+        this.insert(key, value);
+    }
+
+    public delete(key: number): void {
+        let index = this.hash(key) & this.mask;
+        while (this.states[index] !== FLEX_INDEX_SENTINELS.EMPTY_SLOT) {
+            if (this.states[index] === FLEX_INDEX_SENTINELS.OCCUPIED_SLOT && this.keys[index] === key) {
+                this.states[index] = FLEX_INDEX_SENTINELS.DELETED_SLOT;
+                this.values[index] = FLEX_INDEX_SENTINELS.MISSING_VALUE;
+                this.occupied--;
+                return;
+            }
+            index = (index + 1) & this.mask;
+        }
+    }
+
+    private insert(key: number, value: number): void {
+        let index = this.hash(key) & this.mask;
+        let firstDeleted: number = FLEX_INDEX_SENTINELS.MISSING_VALUE;
+
+        while (this.states[index] !== FLEX_INDEX_SENTINELS.EMPTY_SLOT) {
+            if (this.states[index] === FLEX_INDEX_SENTINELS.OCCUPIED_SLOT && this.keys[index] === key) {
+                this.values[index] = value;
+                return;
+            }
+            if (firstDeleted === FLEX_INDEX_SENTINELS.MISSING_VALUE && this.states[index] === FLEX_INDEX_SENTINELS.DELETED_SLOT) firstDeleted = index;
+            index = (index + 1) & this.mask;
+        }
+
+        const target = firstDeleted === FLEX_INDEX_SENTINELS.MISSING_VALUE ? index : firstDeleted;
+        if (this.states[target] === FLEX_INDEX_SENTINELS.EMPTY_SLOT) this.used++;
+        this.states[target] = FLEX_INDEX_SENTINELS.OCCUPIED_SLOT;
+        this.keys[target] = key;
+        this.values[target] = value;
+        this.occupied++;
+    }
+
+    private grow(): void {
+        const oldKeys = this.keys;
+        const oldValues = this.values;
+        const oldStates = this.states;
+        const nextSize = this.occupied >= this.resizeAt
+            ? oldKeys.length * FLEX_INDEX_LIMITS.GROWTH_FACTOR
+            : oldKeys.length;
+
+        this.keys = new Float64Array(nextSize);
+        this.values = new Int32Array(nextSize);
+        this.values.fill(FLEX_INDEX_SENTINELS.MISSING_VALUE);
+        this.states = new Uint8Array(nextSize);
+        this.mask = nextSize - 1;
+        this.resizeAt = Math.floor(nextSize * FLEX_INDEX_LIMITS.FRONTIER_MAX_LOAD_FACTOR);
+        this.occupied = 0;
+        this.used = 0;
+
+        for (let i = 0; i < oldKeys.length; i++) {
+            if (oldStates[i] === FLEX_INDEX_SENTINELS.OCCUPIED_SLOT) this.insert(oldKeys[i]!, oldValues[i]!);
+        }
+    }
+
+    private hash(key: number): number {
+        const low = key >>> 0;
+        const high = Math.floor(key / FLEX_HASH_U32_BASIS) >>> 0;
+        let h = (low ^ Math.imul(high, FLEX_HASH_CONSTANTS.GOLDEN_RATIO_32)) >>> 0;
+        h ^= h >>> FLEX_HASH_CONSTANTS.AVALANCHE_SHIFT_1;
+        h = Math.imul(h, FLEX_HASH_CONSTANTS.AVALANCHE_MULTIPLIER_1) >>> 0;
+        h ^= h >>> FLEX_HASH_CONSTANTS.AVALANCHE_SHIFT_2;
+        h = Math.imul(h, FLEX_HASH_CONSTANTS.AVALANCHE_MULTIPLIER_2) >>> 0;
+        return (h ^ (h >>> FLEX_HASH_CONSTANTS.AVALANCHE_SHIFT_1)) >>> 0;
+    }
+
+    private static nextPowerOfTwo(value: number): number {
+        let size = 1;
+        while (size < value) size <<= 1;
+        return size;
+    }
+}
+
+const FLEX_HASH_U32_BASIS = 0x100000000;
 
 function pairIntegers(left: number, right: number): number {
     const sum = left + right;
