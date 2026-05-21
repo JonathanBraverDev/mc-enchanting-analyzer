@@ -22,10 +22,14 @@ interface SolidFlexGraphRecord {
 export interface SolidFlexProjectedCheckpoint extends FlexProjectedResults {
     readonly pendingEntries: readonly FlexProjectedPendingEntry[];
     readonly projectedPendingMass: bigint;
+    readonly projectedPendingSourceMass: bigint;
+    readonly pendingProjectionLoss: bigint;
+    readonly pendingClueIncompatible: bigint;
 }
 
 export interface SolidFlexSearchRunOptions {
     readonly distributionService?: ModifiedLevelDistributionService | undefined;
+    readonly targetClueId?: number | undefined;
 }
 
 /**
@@ -42,6 +46,7 @@ export class SolidFlexSearchRun {
     private readonly graphs: SolidFlexGraph[] = [];
     private readonly coordinator = new FlexCoordinator(this.graphs);
     private readonly projector: FlexProjector;
+    private readonly targetClueId: number | undefined;
     private seeded = false;
 
     public constructor(
@@ -49,8 +54,10 @@ export class SolidFlexSearchRun {
         options: SolidFlexSearchRunOptions = {}
     ) {
         this.distributionService = options.distributionService ?? new ModifiedLevelDistributionService();
+        this.targetClueId = options.targetClueId;
         this.projector = new FlexProjector(this.programs, this.kernel.registry.enchantToIndex, {
-            applyBookRemoval: this.kernel.item === 'book'
+            applyBookRemoval: this.kernel.item === 'book',
+            targetClueId: this.targetClueId
         });
     }
 
@@ -88,13 +95,15 @@ export class SolidFlexSearchRun {
 
     public projectSnapshot(snapshot: FlexRunSnapshot = this.snapshot()): SolidFlexProjectedCheckpoint {
         const projectedResults = this.projector.projectResults(snapshot.results);
-        const pendingEntries = this.projector.projectPending(snapshot.pendingEntries);
-        const projectedPendingMass = pendingEntries.reduce((sum, entry) => sum + entry.mass, 0n);
+        const projectedPending = this.projector.projectPendingWithDiagnostics(snapshot.pendingEntries);
 
         return Object.freeze({
             ...projectedResults,
-            pendingEntries,
-            projectedPendingMass
+            pendingEntries: projectedPending.pendingEntries,
+            projectedPendingMass: projectedPending.projectedMass,
+            projectedPendingSourceMass: projectedPending.sourceMass,
+            pendingProjectionLoss: projectedPending.projectionLoss,
+            pendingClueIncompatible: projectedPending.clueIncompatible
         });
     }
 

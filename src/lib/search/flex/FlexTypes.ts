@@ -92,6 +92,7 @@ export interface FlexRunSnapshot {
 export interface FlexProjectedResults {
     readonly results: ReadonlyMap<PackedCombo, bigint>;
     readonly projectionLoss: bigint;
+    readonly clueIncompatible: bigint;
     readonly projectedMass: bigint;
     readonly sourceMass: bigint;
 }
@@ -102,4 +103,12 @@ export interface FlexProjectedPendingEntry {
     readonly mass: bigint;
     readonly combo: PackedCombo;
     readonly count: number;
+}
+
+export interface FlexProjectedPendingResults {
+    readonly pendingEntries: readonly FlexProjectedPendingEntry[];
+    readonly projectionLoss: bigint;
+    readonly clueIncompatible: bigint;
+    readonly projectedMass: bigint;
+    readonly sourceMass: bigint;
 }

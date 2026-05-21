@@ -16,6 +16,7 @@ const sharpness = packed(1, 4);
 const smite = packed(2, 4);
 const looting = packed(3, 3);
 const unbreaking = packed(4, 3);
+const sharpnessThree = packed(1, 3);
 const enchantToIndex = new Map<number, number>([
     [sharpness, 1],
     [smite, 2],
@@ -117,7 +118,58 @@ describe('FlexProjector', () => {
         assert.strictEqual(projected.results.get(combo(smite, looting)), 3n);
         assert.strictEqual(projected.results.get(combo(smite, unbreaking)), 9n);
         assert.strictEqual(projected.projectedMass, 24n);
+        assert.strictEqual(projected.clueIncompatible, 0n);
         assert.strictEqual(projected.projectionLoss, 0n);
+    });
+
+    it('keeps only exact clue matches inside a choice emission', () => {
+        const store = new FlexProgramStore();
+        const projector = new FlexProjector(store, enchantToIndex, { targetClueId: sharpness });
+        const fixed = store.appendFixed(store.empty, looting);
+        const program = store.appendChoice(fixed, [
+            { packedEnchant: sharpness, weight: 2 },
+            { packedEnchant: smite, weight: 1 }
+        ]);
+
+        const projected = projector.projectResults(new Map([[program, 12n]]));
+
+        assert.strictEqual(projected.results.get(combo(sharpness, looting)), 8n);
+        assert.strictEqual(projected.results.has(combo(smite, looting)), false);
+        assert.strictEqual(projected.projectedMass, 8n);
+        assert.strictEqual(projected.clueIncompatible, 4n);
+        assert.strictEqual(projected.projectionLoss, 0n);
+        assert.strictEqual(projected.projectedMass + projected.clueIncompatible + projected.projectionLoss, projected.sourceMass);
+    });
+
+    it('lets a fixed matching clue survive all choice alternatives', () => {
+        const store = new FlexProgramStore();
+        const projector = new FlexProjector(store, enchantToIndex, { targetClueId: sharpness });
+        const fixed = store.appendFixed(store.empty, sharpness);
+        const program = store.appendChoice(fixed, [
+            { packedEnchant: looting, weight: 1 },
+            { packedEnchant: unbreaking, weight: 3 }
+        ]);
+
+        const projected = projector.projectResults(new Map([[program, 12n]]));
+
+        assert.strictEqual(projected.results.get(combo(sharpness, looting)), 3n);
+        assert.strictEqual(projected.results.get(combo(sharpness, unbreaking)), 9n);
+        assert.strictEqual(projected.clueIncompatible, 0n);
+        assert.strictEqual(projected.projectionLoss, 0n);
+    });
+
+    it('does not treat higher ranks as matching a lower exact table clue', () => {
+        const store = new FlexProgramStore();
+        const projector = new FlexProjector(store, enchantToIndex, { targetClueId: sharpnessThree });
+        const program = store.appendFixed(store.empty, sharpness);
+
+        const projected = projector.projectResults(new Map([[program, 10n]]));
+
+        assert.strictEqual(projected.results.size, 0);
+        assert.strictEqual(projected.projectedMass, 0n);
+        assert.strictEqual(projected.clueIncompatible, 10n);
+        assert.strictEqual(projected.projectionLoss, 0n);
+        assert.strictEqual(projected.projectedMass + projected.clueIncompatible + projected.projectionLoss, projected.sourceMass);
     });
 
     it('applies book removal uniformly across fixed generated slots', () => {
@@ -151,6 +203,25 @@ describe('FlexProjector', () => {
         assert.strictEqual(projected.results.get(combo(unbreaking)), 9n);
         assert.strictEqual(projected.projectedMass, 24n);
         assert.strictEqual(projected.projectionLoss, 0n);
+    });
+
+    it('treats book-removal outcomes that drop the exact clue as clue-incompatible', () => {
+        const store = new FlexProgramStore();
+        const projector = new FlexProjector(store, enchantToIndex, {
+            applyBookRemoval: true,
+            targetClueId: sharpness
+        });
+        const first = store.appendFixed(store.empty, sharpness);
+        const program = store.appendFixed(first, smite);
+
+        const projected = projector.projectResults(new Map([[program, 10n]]));
+
+        assert.strictEqual(projected.results.get(combo(sharpness)), 5n);
+        assert.strictEqual(projected.results.has(combo(smite)), false);
+        assert.strictEqual(projected.projectedMass, 5n);
+        assert.strictEqual(projected.clueIncompatible, 5n);
+        assert.strictEqual(projected.projectionLoss, 0n);
+        assert.strictEqual(projected.projectedMass + projected.clueIncompatible + projected.projectionLoss, projected.sourceMass);
     });
 
     it('does not expose the empty program as public combo row zero', () => {
@@ -209,5 +280,39 @@ describe('FlexProjector', () => {
             projected.map(entry => ({ combo: entry.combo, mass: entry.mass, count: entry.count })),
             [{ combo: combo(sharpness, smite), mass: 10n, count: 2 }]
         );
+    });
+
+    it('tracks clue-incompatible pending source mass without book removal', () => {
+        const store = new FlexProgramStore();
+        const projector = new FlexProjector(store, enchantToIndex, {
+            applyBookRemoval: true,
+            targetClueId: sharpness
+        });
+        const fixed = store.appendFixed(store.empty, looting);
+        const program = store.appendChoice(fixed, [
+            { packedEnchant: sharpness, weight: 2 },
+            { packedEnchant: smite, weight: 1 }
+        ]);
+        const pending: FlexPendingEntry[] = [{
+            graphId: 0,
+            nodeId: nodeId(13),
+            programId: program,
+            mass: 12n,
+            count: 2,
+            nodeKind: 'plex'
+        }];
+
+        const projected = projector.projectPendingWithDiagnostics(pending);
+
+        assert.deepStrictEqual(
+            projected.pendingEntries.map(entry => ({ combo: entry.combo, mass: entry.mass, count: entry.count })),
+            [
+                { combo: combo(sharpness, looting), mass: 8n, count: 2 }
+            ]
+        );
+        assert.strictEqual(projected.projectedMass, 8n);
+        assert.strictEqual(projected.clueIncompatible, 4n);
+        assert.strictEqual(projected.projectionLoss, 0n);
+        assert.strictEqual(projected.projectedMass + projected.clueIncompatible + projected.projectionLoss, projected.sourceMass);
     });
 });
