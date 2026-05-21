@@ -203,5 +203,19 @@ describe('FlexCoordinator', () => {
         assert.strictEqual(units(snapshot).pending, '0');
         assert.strictEqual(units(snapshot).resolved, '0');
         assert.strictEqual(units(snapshot).sieved, String(belowFloorMass));
+
+        const parityRun = new FlexCoordinator([graph]);
+        parityRun.seedPending(0, nodeId(0), belowFloorMass);
+        const paritySnapshot = parityRun.searchToCheckpoint({
+            threshold: 0n,
+            maxIterations: 10,
+            probabilityFloor: 0n
+        });
+
+        assert.strictEqual(paritySnapshot.exitReason, 'empty');
+        assert.strictEqual(paritySnapshot.iterations, 3);
+        assert.strictEqual(paritySnapshot.results.get(secondProgram), belowFloorMass);
+        assert.strictEqual(units(paritySnapshot).resolved, String(belowFloorMass));
+        assert.strictEqual(units(paritySnapshot).sieved, '0');
     });
 });

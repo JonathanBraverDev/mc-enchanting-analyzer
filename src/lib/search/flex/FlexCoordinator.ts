@@ -84,6 +84,7 @@ export class FlexCoordinator {
         if (request.maxIterations !== undefined) this.validateMaxIterations(request.maxIterations);
         this.validateProbabilityInput(request.threshold, 'threshold', 'Threshold must be between 0 and 1.0.');
         this.validateProbabilityInput(request.targetClassifiedMass, 'targetClassifiedMass', 'Must be between 0 and 1.0.');
+        this.validateProbabilityInput(request.probabilityFloor, 'probabilityFloor', 'Must be between 0 and 1.0.');
 
         const targetClassifiedMass = request.targetClassifiedMass === undefined
             ? undefined
@@ -92,7 +93,11 @@ export class FlexCoordinator {
         const maxIterations = request.exhaustive
             ? Number.POSITIVE_INFINITY
             : request.maxIterations ?? Number.POSITIVE_INFINITY;
-        const probabilityFloor = request.exhaustive ? 0n : SYSTEM_PROBABILITY_FLOOR;
+        const probabilityFloor = request.exhaustive
+            ? 0n
+            : request.probabilityFloor !== undefined
+                ? ProbUtils.toBigInt(request.probabilityFloor)
+                : SYSTEM_PROBABILITY_FLOOR;
         const hasBoundedStopCondition = targetClassifiedMass !== undefined
             || (request.threshold !== undefined && threshold > 0n)
             || request.maxIterations !== undefined;

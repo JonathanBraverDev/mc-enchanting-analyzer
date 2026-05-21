@@ -203,7 +203,8 @@ describe('GroupedFlexSearchRun', () => {
     it('produces a bounded XP 30 checkpoint with PlexNode programs and conserved resolved source mass', () => {
         const { run, flex, projected } = runConcreteAndGrouped('1.21.11', 'sword', 'diamond', 30, {
             threshold: 0n,
-            maxIterations: 500
+            maxIterations: 500,
+            probabilityFloor: 0n
         });
 
         assert.strictEqual(flex.exitReason, 'iterations');

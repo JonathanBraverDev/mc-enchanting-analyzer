@@ -93,7 +93,7 @@ describe('SolidFlexSearchRun', () => {
     });
 
     it('matches concrete bounded non-book checkpoint shape at XP 30', () => {
-        const { concrete, flex, projected } = runConcreteAndFlex(30, { threshold: 0n, maxIterations: 500 });
+        const { concrete, flex, projected } = runConcreteAndFlex(30, { threshold: 0n, maxIterations: 500, probabilityFloor: 0n });
 
         assert.strictEqual(flex.exitReason, 'iterations');
         assert.strictEqual(flex.iterations, concrete.iterations);
