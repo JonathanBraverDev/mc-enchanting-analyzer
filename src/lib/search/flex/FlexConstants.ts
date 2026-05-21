@@ -14,7 +14,9 @@ export const FLEX_INVARIANT_LIMITS = Object.freeze({
 /** Initial sizing and load factors for Flex's open-addressed hot-path indexes. */
 export const FLEX_INDEX_LIMITS = Object.freeze({
     GRAPH_INITIAL_CAPACITY: 256,
+    FRONTIER_INITIAL_CAPACITY: 1024,
     GRAPH_MAX_LOAD_FACTOR: 0.7,
+    FRONTIER_MAX_LOAD_FACTOR: 0.7,
     GROWTH_FACTOR: 2
 });
 
@@ -22,6 +24,7 @@ export const FLEX_INDEX_LIMITS = Object.freeze({
 export const FLEX_INDEX_SENTINELS = Object.freeze({
     EMPTY_SLOT: 0,
     OCCUPIED_SLOT: 1,
+    DELETED_SLOT: 2,
     MISSING_VALUE: -1
 });
 
