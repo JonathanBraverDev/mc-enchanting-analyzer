@@ -126,7 +126,8 @@ Missing `groups` on an enchantable item rule means “all active table enchantme
 | `SearchRun` | Runs the globally weighted best-first expansion loop, mass accounting, residue forwarding, and optional suffix merging until checkpoint or exhaustion |
 | `SearchRunFrontier` | Stores pending graph node IDs and weighted probability mass in best-first order |
 | `SearchGraph` | Owns canonical node identity, combo payloads, exact graph expansions, suffix identities, and graph-local expansion state |
-| `PlexRun` / `PlexGraph` | Experimental internal path that proved conflict-choice compression and projection boundaries. See `docs/plex-factorized-tree.md`; the target direction is a V7-internal factorized tree, not a permanently separate clever runner. |
+| `GroupedFlexSearchRun` / `FlexCoordinator` / `GroupedFlexGraph` | Active opt-in factorized runtime path selected with `searchBackend: 'flex'`. It uses fixed/choice result programs, V7-style mass flow, and concrete-compatible projection. See `docs/flex-factorized-tree.md`. |
+| `PlexRun` / `PlexGraph` | Historical opt-in prototype that proved conflict-choice compression and projection boundaries. Retained for comparison with `searchBackend: 'plex'`. |
 | `ProbabilityMassAccountant` | Records resolved, clue-incompatible, pending, sieved, capped, overflow, and rounding mass |
 | `ModifiedLevelDistributionService` | Computes the BigInt distribution of modified enchantment levels |
 | `SummaryAggregationService` | Scans resolved combos and pending frontiers once to derive shared any/rank/count/clue mass buckets |
@@ -148,7 +149,7 @@ interface SearchResult {
 }
 ```
 
-`SearchExecutionService` searches or resumes the selected internal backend for the request signature. Concrete `SearchRun` remains the default and supported product path. Experimental callers can set `searchBackend: 'plex'` to run the same checkpoint service through a cached `PlexRun`, which projects its aggregate internal state back into the compatible checkpoint shape. The next V7 direction is to make that projection/factorized-tree boundary internal to the default engine: graph construction can emit fixed or choice factors, while the runtime remains a mostly generic best-first mass-flow loop and the checkpoint result stays concrete-compatible. The selected run seeds each modified level as weighted root mass, expands the highest-probability pending graph node globally, and snapshots the completed checkpoint state. The checkpoint result owns:
+`SearchExecutionService` searches or resumes the selected internal backend for the request signature. Concrete `SearchRun` remains the default and supported product path. Experimental callers can set `searchBackend: 'flex'` to run the same checkpoint service through a cached Flex run, which projects fixed/choice result programs back into the compatible checkpoint shape. Legacy comparison callers can still set `searchBackend: 'plex'`. The next V7 direction is to make the Flex projection/factorized-tree boundary internal to the default engine: graph construction can emit fixed or choice factors, while the runtime remains a mostly generic best-first mass-flow loop and the checkpoint result stays concrete-compatible. The selected run seeds each modified level as weighted root mass, expands the highest-probability pending graph node globally, and snapshots the completed checkpoint state. The checkpoint result owns:
 
 - global combo mass
 - mass accounting buckets
@@ -177,7 +178,7 @@ The V7 search path separates graph node identity from weighted frontier priority
 - `SearchRunFrontier` stores `graphId`, `nodeId`, and pending weighted probability mass, using direct merge/heap lookups for best-first scheduling.
 - Forwarding residue is tracked by exact source expansion and outgoing edge, so fixed-point leftovers can recover only when later mass reaches the same equivalence point.
 - Suffix identity and suffix merging are implemented but opt-in; default product searches do not canonicalize pending suffix nodes because current profiling shows the overhead can outweigh the iteration savings.
-- Plex search is implemented as an opt-in internal backend selected through `SearchExecutionService` with `searchBackend: 'plex'`. It keeps structural frontier state separate from visible payload choices, can project resolved and pending aggregate state back into concrete compatibility rows, and is still not selected for product/default requests. The current design target is to reuse those lessons inside V7 itself: factorized tree nodes carry emitted result-program IDs, while traversal can stay dense/generic even after an earlier choice factor was emitted.
+- Flex search is implemented as an opt-in internal backend selected through `SearchExecutionService` with `searchBackend: 'flex'`. It keeps structural mass flow separate from visible fixed/choice result programs, can project resolved and pending aggregate state back into concrete compatibility rows, and is still not selected for product/default requests. Plex remains a legacy comparison backend. The current design target is to reuse Flex inside V7 itself: factorized tree nodes carry emitted result-program IDs, while traversal can stay dense/generic even after an earlier choice factor was emitted.
 
 This preserves best-first semantics while changing the scheduling scope: the highest-probability pending weighted node expands first across the whole XP search, not inside one modified level at a time. `meta` remains the canonical state identity. The scaling improvement comes from sharing graph identity and cache state across the weighted run instead of repeating independent per-modified-level searches.
 
@@ -205,7 +206,7 @@ The browser uses two dedicated workers:
 
 The registry rule model declares item/material compatibility together, but the engine cache keys still follow the computation they cache. Pool entries only depend on the fixed enchantable item pool at a modified level. Search run entries include material because material changes enchantability, which changes the modified-level distribution and therefore the weighted search state. Threshold-aware reads can reuse more precise cached state when it already satisfies the requested checkpoint.
 
-Expansion blueprint caching is enabled by default because it preserves exact graph edges while reducing repeated candidate checks. Suffix merging is implemented behind `useSuffixMerging` but remains off by default because lower iteration counts have not consistently translated into faster wall-clock runtime. Plex search is available as an opt-in `SearchExecutionService` backend for internal experiments, comparison tests, and refinement work, but remains outside the default execution path until broader parity and wall-clock evidence justify enabling it. The vNext performance thesis is not a separate public Plex engine; it is V7 running a better factorized tree where payload/program construction happens during graph building and checkpoint projection hides the internal representation from UI/reporting callers.
+Expansion blueprint caching is enabled by default because it preserves exact graph edges while reducing repeated candidate checks. Suffix merging is implemented behind `useSuffixMerging` but remains off by default because lower iteration counts have not consistently translated into faster wall-clock runtime. Flex search is available as an opt-in `SearchExecutionService` backend for internal experiments, comparison tests, and refinement work, but remains outside the default execution path until broader parity, mutated-registry safety, and wall-clock evidence justify enabling it. The vNext performance thesis is not a separate public Flex engine; it is V7 running a better factorized tree where program construction happens during graph building and checkpoint projection hides the internal representation from UI/reporting callers. Plex remains available for historical comparison.
 
 ## Release Documentation Rule
 
@@ -216,7 +217,8 @@ Major releases are expected to update this architecture map. Minor releases shou
 - `README.md` — product overview and setup.
 - `MASS_HANDLING.md` — V7 probability accounting and residue rules.
 - `docs/v7-shared-search-engine.md` — deep V7 current-state design reference.
-- `docs/plex-factorized-tree.md` — experimental Plex/factorized-tree design notes.
+- `docs/flex-factorized-tree.md` — active Flex/factorized-tree design notes.
+- `docs/plex-factorized-tree.md` — historical Plex prototype notes.
 
 ## Owner / Maintainer
 
@@ -224,4 +226,4 @@ Jonathan Braver / V7 engine maintainers.
 
 ## Last Updated
 
-2026-05-20
+2026-05-21
