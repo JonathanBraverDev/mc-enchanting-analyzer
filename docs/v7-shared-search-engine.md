@@ -4,7 +4,7 @@
 
 This document is the canonical reference for the current V7 shared search engine. V7 searches one globally weighted frontier across reusable lazy graphs, produces concrete-compatible checkpoint snapshots, and is the current supported engine path.
 
-Experimental factorized/Plex work is documented separately in [`docs/plex-factorized-tree.md`](plex-factorized-tree.md). This page only summarizes that work where it affects the current V7 boundary.
+Opt-in Flex/factorized-tree work is documented separately in [`docs/flex-factorized-tree.md`](flex-factorized-tree.md). This page only summarizes that work where it affects the current V7 boundary.
 
 ## Table of Contents
 
@@ -30,7 +30,7 @@ Experimental factorized/Plex work is documented separately in [`docs/plex-factor
 
 V7 is the current engine path for probability search, checkpointing, reporting, and worker-facing refinement. It replaces independent per-modified-level searches with one weighted search over reusable graph structure.
 
-This document describes current behavior and invariants. It intentionally avoids long experiment narratives. Design notes for the in-development Plex/factorized-tree path live in [`docs/plex-factorized-tree.md`](plex-factorized-tree.md).
+This document describes current behavior and invariants. It intentionally avoids long experiment narratives. Design notes for the in-development Flex/factorized-tree path live in [`docs/flex-factorized-tree.md`](flex-factorized-tree.md).
 
 ## Current Invariants
 
@@ -82,7 +82,7 @@ Implemented V7 behavior:
 - `exhaustive: true` forces threshold `0`, bypasses the normal iteration safety cap, and remains abortable.
 - `SearchExpansionBlueprintCache` reuses candidate scans across rank-variant pool families without changing exact graph edges or output payloads.
 - Suffix identity / pending suffix merging is implemented but opt-in because current profiling shows the overhead can outweigh lower iteration counts.
-- Opt-in Plex internals are available through `searchBackend: 'plex'` for diagnostics and experiments. Current product/default behavior still uses concrete `SearchRun`; see [`docs/plex-factorized-tree.md`](plex-factorized-tree.md).
+- Opt-in Flex internals are available through `searchBackend: 'flex'` for diagnostics and experiments. Current product/default behavior still uses concrete `SearchRun`; see [`docs/flex-factorized-tree.md`](flex-factorized-tree.md). Plex remains available as a legacy comparison backend through `searchBackend: 'plex'`.
 
 Current non-goals:
 
@@ -296,7 +296,7 @@ searchSequentialCheckpoints(request)
 
 Top selected-level searches use sequential checkpoints for uninterrupted coarse-to-deep progress. Chart sweeps remain worker-orchestrated: the chart worker loops refinement passes and XP levels, calls `searchToCheckpoint` for each cell, and relies on run caching for resume.
 
-Workers and reporting services consume `SearchRunSnapshot.pendingEntries` as globally weighted `(graph, node, mass, combo, count)` records. Any internal factorized/Plex path must provide a compatible materialized view unless it is exposed only through an explicit diagnostic API.
+Workers and reporting services consume `SearchRunSnapshot.pendingEntries` as globally weighted `(graph, node, mass, combo, count)` records. Any internal factorized/Flex path must provide a compatible materialized view unless it is exposed only through an explicit diagnostic API.
 
 ## Remainder and Equivalence Rules
 
@@ -322,7 +322,7 @@ Current optimization layers:
 - XP-cell `SearchRun` caching for refinement resume.
 - Edge-local residue forwarding and recovery.
 - Optional suffix merging by suffix identity.
-- Opt-in Plex/factorized-tree experiments behind `searchBackend: 'plex'`.
+- Opt-in Flex/factorized-tree experiments behind `searchBackend: 'flex'`, with Plex retained as a legacy comparison backend.
 
 Avoid merging by visible combo alone; visible equality is not enough to prove future equivalence.
 
@@ -345,7 +345,7 @@ Existing V6-era snapshots are reference material only. Snapshot updates, especia
 ## Maintenance Notes
 
 - Keep this page focused on current V7 behavior.
-- Keep long experiment notes, design alternatives, and Plex/factorized-tree development details in [`docs/plex-factorized-tree.md`](plex-factorized-tree.md) or another targeted design doc.
+- Keep long experiment notes, design alternatives, and Flex/factorized-tree development details in [`docs/flex-factorized-tree.md`](flex-factorized-tree.md) or another targeted design doc.
 - Keep `ARCHITECTURE.md` as the shorter system map and link here for deeper V7 reasoning.
 - Keep archived inventory docs clearly marked as non-canonical research snapshots.
 
@@ -353,7 +353,8 @@ Existing V6-era snapshots are reference material only. Snapshot updates, especia
 
 - `ARCHITECTURE.md` — V7 architecture map.
 - `MASS_HANDLING.md` — current V7 mass accounting and residue rules.
-- `docs/plex-factorized-tree.md` — Plex/factorized-tree design and migration notes.
+- `docs/flex-factorized-tree.md` — Flex/factorized-tree design and migration notes.
+- `docs/plex-factorized-tree.md` — historical Plex prototype notes.
 - `docs/search-function-inventory.md` — archived rename research snapshot, not canonical current behavior.
 - `docs/function-behavior-inventory.md` — archived function-reading research snapshot, not canonical current behavior.
 - Existing snapshot fixtures under `tests/snapshots/`.
@@ -364,4 +365,4 @@ Jonathan Braver / V7 engine maintainers.
 
 ## Last Updated
 
-2026-05-20
+2026-05-21
