@@ -79,9 +79,9 @@ export type EngineExitReason = 'threshold' | 'iterations' | 'mass' | 'aborted' |
 
 /**
  * Internal search implementation selector. Defaults to the concrete V7 SearchRun path.
- * `plex` and `flex` are opt-in experimental/diagnostic backends; do not treat them as semantic references.
+ * `flex` is the active experimental/diagnostic backend.
  */
-export type SearchBackend = 'concrete' | 'plex' | 'flex';
+export type SearchBackend = 'concrete' | 'flex';
 
 export interface EngineInstrumentation {
   /** Eligible-pool registry cache metrics. */
@@ -163,12 +163,6 @@ export interface SearchInstrumentation {
   suffixMergedPendingMass?: number | undefined;
   /** Estimated number of pending entries avoided by suffix canonicalization. */
   suffixAvoidedPendingEntries?: number | undefined;
-  /** Plex-only: structural pending buckets before compatibility projection expands payload factors. */
-  plexStructuralPendingEntryCount?: number | undefined;
-  /** Plex-only: concrete-view materialization loss recorded as compatibility rounding in public accounting. */
-  plexProjectionLoss?: number | undefined;
-  /** Plex-only: projection-stage mass classified as incompatible with the requested clue. */
-  plexProjectionClueIncompatible?: number | undefined;
   /** Flex-only: structural state identity mode used by this run. */
   flexStateIdentityMode?: 'reduced' | 'program' | undefined;
   /** Flex-only: structural pending buckets before compatibility projection expands program factors. */
@@ -329,7 +323,7 @@ export interface SearchConfig {
     timing?: SearchTiming | undefined;
     /**
      * Internal/experimental search implementation selector.
-     * Omit for the supported/default concrete V7 SearchRun path. Use `plex` or `flex` only
+     * Omit for the supported/default concrete V7 SearchRun path. Use `flex` only
      * for diagnostics, parity checks, and staged engine-internal migration work.
      */
     searchBackend?: SearchBackend | undefined;
