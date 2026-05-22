@@ -4,11 +4,11 @@ import { RegistryKernel } from '#lib/search/registry/RegistryKernel.js';
 import { SearchRun, SearchRunSnapshot } from '#lib/search/SearchRun.js';
 import type { SearchGraphNodeId } from '#lib/search/SearchGraph.js';
 import { PlexRun, ProjectedPlexCheckpoint } from '#lib/search/plex/PlexRun.js';
-import { GroupedFlexSearchRun, type GroupedFlexProjectedCheckpoint, type FlexRunSnapshot } from '#lib/search/flex/index.js';
+import { GroupedFlexSearchRun, checkFlexReducedKeyInvariant, type GroupedFlexProjectedCheckpoint, type FlexRunSnapshot, type FlexReducedKeyInvariantResult, type FlexStateIdentityMode } from '#lib/search/flex/index.js';
 import { checkPlexReducedKeyInvariant, type PlexReducedKeyInvariantResult } from '#lib/search/plex/PlexReducedKeyInvariant.js';
 import type { PlexFrontierIdentityMode } from '#lib/search/plex/PlexRunFrontier.js';
 import { PLEX_CACHE_LIMITS, PLEX_INVARIANT_LIMITS } from '#lib/search/plex/PlexConstants.js';
-import { FLEX_CACHE_LIMITS } from '#lib/search/flex/FlexConstants.js';
+import { FLEX_CACHE_LIMITS, FLEX_INVARIANT_LIMITS } from '#lib/search/flex/FlexConstants.js';
 import { SearchStateCache } from '#lib/search/SearchStateCache.js';
 import { PRECISION, ProbUtils } from '#utils/index.js';
 import { LRUCache } from '#utils/collections/LRUCache.js';
@@ -24,6 +24,7 @@ import type { MassAccountingBreakdown } from '#types/mass.js';
 export class SearchExecutionService {
     private readonly plexRunCache = new LRUCache<string, PlexRun>(PLEX_CACHE_LIMITS.RUNS);
     private readonly plexReducedKeyInvariantCache = new LRUCache<string, PlexReducedKeyInvariantResult>(PLEX_CACHE_LIMITS.REDUCED_KEY_INVARIANTS);
+    private readonly flexReducedKeyInvariantCache = new LRUCache<string, FlexReducedKeyInvariantResult>(FLEX_CACHE_LIMITS.REDUCED_KEY_INVARIANTS);
     private readonly flexRunCache = new LRUCache<string, GroupedFlexSearchRun>(FLEX_CACHE_LIMITS.RUNS);
     private plexRunCacheHits = 0;
     private plexRunCacheMisses = 0;
@@ -40,6 +41,7 @@ export class SearchExecutionService {
         this.cache.clearAll();
         this.plexRunCache.clear();
         this.plexReducedKeyInvariantCache.clear();
+        this.flexReducedKeyInvariantCache.clear();
         this.flexRunCache.clear();
         this.plexRunCacheHits = 0;
         this.plexRunCacheMisses = 0;
@@ -56,6 +58,7 @@ export class SearchExecutionService {
             const snapshot = await run.searchToCheckpointAsync({
                 threshold: request.exhaustive ? 0n : request.threshold ?? 0n,
                 maxIterations: request.exhaustive ? undefined : request.maxIterations,
+                drainEqualMassBand: request.drainEqualMassBand,
                 exhaustive: request.exhaustive,
                 targetClassifiedMass: request.exhaustive ? undefined : request.targetClassifiedMass,
                 signal: request.signal
@@ -66,10 +69,12 @@ export class SearchExecutionService {
         }
         if (this.getBackend(request) === 'flex') {
             this.throwIfAborted(request.signal);
-            const run = this.getFlexRun(request);
+            const flexStateIdentityMode = this.getFlexStateIdentityMode(request);
+            const run = this.getFlexRun(request, flexStateIdentityMode);
             const snapshot = await run.searchToCheckpointAsync({
                 threshold: request.exhaustive ? 0n : request.threshold ?? 0n,
                 maxIterations: request.exhaustive ? undefined : request.maxIterations,
+                drainEqualMassBand: request.drainEqualMassBand,
                 exhaustive: request.exhaustive,
                 targetClassifiedMass: request.exhaustive ? undefined : request.targetClassifiedMass,
                 probabilityFloor: request.probabilityFloor,
@@ -77,13 +82,14 @@ export class SearchExecutionService {
             });
             const projected = run.projectSnapshot(snapshot);
             this.finishTiming(request.timing, timingStart, 0);
-            return this.toFlexSearchResult(projected, snapshot, request.exhaustive ? 0n : request.threshold ?? 0n, request.targetClassifiedMass, request.instrumentation, request.timing);
+            return this.toFlexSearchResult(projected, snapshot, flexStateIdentityMode, request.exhaustive ? 0n : request.threshold ?? 0n, request.targetClassifiedMass, request.instrumentation, request.timing);
         }
 
         const run = this.getRun(request);
         const snapshot = await run.searchToCheckpointAsync({
             threshold: request.exhaustive ? 0n : request.threshold ?? 0n,
             maxIterations: request.exhaustive ? undefined : request.maxIterations,
+            drainEqualMassBand: request.drainEqualMassBand,
             exhaustive: request.exhaustive,
             targetClassifiedMass: request.exhaustive ? undefined : request.targetClassifiedMass,
             probabilityFloor: request.probabilityFloor,
@@ -119,6 +125,7 @@ export class SearchExecutionService {
                 snapshot = await run.searchToCheckpointAsync({
                     threshold: checkpoint.threshold,
                     maxIterations: checkpoint.limit,
+                    drainEqualMassBand: request.drainEqualMassBand,
                     targetClassifiedMass: checkpoint.targetClassifiedMass,
                     probabilityFloor: request.probabilityFloor,
                     signal: request.signal
@@ -157,6 +164,7 @@ export class SearchExecutionService {
                 snapshot = await run.searchToCheckpointAsync({
                     threshold: checkpoint.threshold,
                     maxIterations: checkpoint.limit,
+                    drainEqualMassBand: request.drainEqualMassBand,
                     targetClassifiedMass: checkpoint.targetClassifiedMass,
                     signal: request.signal
                 });
@@ -180,7 +188,8 @@ export class SearchExecutionService {
     private async searchSequentialFlexCheckpoints(request: SequentialCheckpointSearchContext, timingStart: number): Promise<SearchResult> {
         let recordedSearchMs = 0;
         this.throwIfAborted(request.signal);
-        const run = this.getFlexRun(request);
+        const flexStateIdentityMode = this.getFlexStateIdentityMode(request);
+        const run = this.getFlexRun(request, flexStateIdentityMode);
         let lastResult: SearchResult | undefined;
 
         for (let checkpointIndex = 0; checkpointIndex < request.checkpoints.length; checkpointIndex++) {
@@ -194,6 +203,7 @@ export class SearchExecutionService {
                 snapshot = await run.searchToCheckpointAsync({
                     threshold: checkpoint.threshold,
                     maxIterations: checkpoint.limit,
+                    drainEqualMassBand: request.drainEqualMassBand,
                     targetClassifiedMass: checkpoint.targetClassifiedMass,
                     probabilityFloor: request.probabilityFloor,
                     signal: request.signal
@@ -204,7 +214,7 @@ export class SearchExecutionService {
             }
             const projected = run.projectSnapshot(snapshot);
             recordedSearchMs = this.finishTiming(request.timing, timingStart, recordedSearchMs);
-            lastResult = this.toFlexSearchResult(projected, snapshot, checkpoint.threshold, checkpoint.targetClassifiedMass, request.instrumentation, request.timing);
+            lastResult = this.toFlexSearchResult(projected, snapshot, flexStateIdentityMode, checkpoint.threshold, checkpoint.targetClassifiedMass, request.instrumentation, request.timing);
             request.onCheckpointComplete(lastResult, checkpointIndex);
         }
 
@@ -213,7 +223,7 @@ export class SearchExecutionService {
         this.finishTiming(request.timing, timingStart, recordedSearchMs);
         const snapshot = run.snapshot();
         const projected = run.projectSnapshot(snapshot);
-        return this.toFlexSearchResult(projected, snapshot, 0, undefined, request.instrumentation, request.timing);
+        return this.toFlexSearchResult(projected, snapshot, flexStateIdentityMode, 0, undefined, request.instrumentation, request.timing);
     }
 
     private getBackend(request: CheckpointSearchContext): SearchBackend {
@@ -244,11 +254,11 @@ export class SearchExecutionService {
         return run;
     }
 
-    private getFlexRun(request: CheckpointSearchContext): GroupedFlexSearchRun {
-        const create = () => this.createFlexRun(request);
+    private getFlexRun(request: CheckpointSearchContext, stateIdentityMode: FlexStateIdentityMode): GroupedFlexSearchRun {
+        const create = () => this.createFlexRun(request, stateIdentityMode);
         if (request.useCache === false) return create();
 
-        const key = this.createRunCacheKey(request);
+        const key = this.createRunCacheKey(request, undefined, stateIdentityMode);
         const cached = this.flexRunCache.get(key);
         if (cached) {
             this.flexRunCacheHits++;
@@ -272,10 +282,11 @@ export class SearchExecutionService {
         return run;
     }
 
-    private createFlexRun(request: CheckpointSearchContext): GroupedFlexSearchRun {
+    private createFlexRun(request: CheckpointSearchContext, stateIdentityMode: FlexStateIdentityMode): GroupedFlexSearchRun {
         const run = new GroupedFlexSearchRun(this.createKernel(request), {
             distributionService: this.distributionService,
-            targetClueId: request.targetClueId
+            targetClueId: request.targetClueId,
+            stateIdentityMode
         });
         run.seedXp(request.xp);
         return run;
@@ -289,6 +300,24 @@ export class SearchExecutionService {
         });
         run.seedXp(request.xp);
         return run;
+    }
+
+    private getFlexStateIdentityMode(request: CheckpointSearchContext): FlexStateIdentityMode {
+        if (!isMutatedRegistry(request.registry)) return 'reduced';
+
+        const key = this.createFlexInvariantCacheKey(request);
+        let result = this.flexReducedKeyInvariantCache.get(key);
+        if (!result) {
+            result = checkFlexReducedKeyInvariant({
+                kernel: this.createKernel(request),
+                xp: request.xp,
+                distributionService: this.distributionService,
+                maxConflicts: FLEX_INVARIANT_LIMITS.MIN_CONFLICTS
+            });
+            this.flexReducedKeyInvariantCache.set(key, result);
+        }
+
+        return result.ok ? 'reduced' : 'program';
     }
 
     private getPlexFrontierIdentityMode(request: CheckpointSearchContext): PlexFrontierIdentityMode {
@@ -317,7 +346,11 @@ export class SearchExecutionService {
         });
     }
 
-    private createRunCacheKey(request: CheckpointSearchContext, plexFrontierIdentityMode?: PlexFrontierIdentityMode): string {
+    private createRunCacheKey(
+        request: CheckpointSearchContext,
+        plexFrontierIdentityMode?: PlexFrontierIdentityMode,
+        flexStateIdentityMode?: FlexStateIdentityMode
+    ): string {
         return JSON.stringify({
             schema: 1,
             version: request.registry.version,
@@ -326,7 +359,19 @@ export class SearchExecutionService {
             xp: request.xp,
             targetClueId: request.targetClueId ?? null,
             backend: this.getBackend(request),
-            plexFrontierIdentityMode: plexFrontierIdentityMode ?? null
+            plexFrontierIdentityMode: plexFrontierIdentityMode ?? null,
+            flexStateIdentityMode: flexStateIdentityMode ?? null
+        });
+    }
+
+    private createFlexInvariantCacheKey(request: CheckpointSearchContext): string {
+        return JSON.stringify({
+            schema: 1,
+            version: request.registry.version,
+            item: request.item,
+            material: request.material,
+            xp: request.xp,
+            mutations: isMutatedRegistry(request.registry) ? request.registry.mutations : null
         });
     }
 
@@ -474,6 +519,7 @@ export class SearchExecutionService {
     private toFlexSearchResult(
         projected: GroupedFlexProjectedCheckpoint,
         flexSnapshot: FlexRunSnapshot,
+        flexStateIdentityMode: FlexStateIdentityMode,
         threshold: number | bigint | undefined,
         targetClassifiedMass?: number | bigint | undefined,
         instrumentation?: EngineInstrumentation | undefined,
@@ -523,6 +569,7 @@ export class SearchExecutionService {
                 suffixMergeMisses: 0,
                 suffixMergedPendingMass: 0,
                 suffixAvoidedPendingEntries: 0,
+                flexStateIdentityMode,
                 flexStructuralPendingEntryCount: flexSnapshot.pendingCount,
                 flexProjectionLoss: ProbUtils.toNumber(projected.projectionLoss + projected.pendingProjectionLoss),
                 flexProjectionClueIncompatible: ProbUtils.toNumber(projected.clueIncompatible + projected.pendingClueIncompatible)

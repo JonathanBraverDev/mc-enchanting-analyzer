@@ -3,6 +3,7 @@ import type { MassAccountingBreakdown } from '#types/mass.js';
 
 export type FlexNodeId = number & { readonly __brand: 'FlexNodeId' };
 export type FlexProgramId = number & { readonly __brand: 'FlexProgramId' };
+export type FlexStateIdentityMode = 'reduced' | 'program';
 
 export interface FlexAlternative {
     readonly packedEnchant: PackedEnchant;
@@ -51,6 +52,7 @@ export interface FlexExpansion {
     readonly probContinue: bigint;
     readonly totalWeight: number;
     readonly edges: readonly FlexEdge[];
+    readonly clueIncompatibleWeight?: number | undefined;
     readonly terminalReason: FlexTerminalReason;
 }
 
@@ -61,6 +63,7 @@ export interface FlexGraph {
 export interface FlexCheckpointRequest {
     readonly threshold?: number | bigint | undefined;
     readonly maxIterations?: number | undefined;
+    readonly drainEqualMassBand?: boolean | undefined;
     readonly exhaustive?: boolean | undefined;
     readonly targetClassifiedMass?: number | bigint | undefined;
     /**
@@ -80,6 +83,7 @@ export interface FlexPendingEntry {
     readonly mass: bigint;
     readonly count: number;
     readonly nodeKind: FlexNode['kind'];
+    readonly targetClueReachable?: boolean | undefined;
 }
 
 export interface FlexRunSnapshot {

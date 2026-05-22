@@ -2,9 +2,9 @@
 
 ## Common Description
 
-This document records the current Flex/factorized-tree design for the V7 engine line. Flex is the active opt-in factorized runtime path: it compresses same-future enchantment alternatives into fixed/choice result programs, moves probability mass through a V7-style coordinator, and projects those programs back into concrete-compatible checkpoint/reporting rows.
+This document records the current Flex/factorized-tree design for the V7 engine line. Flex is an experimental opt-in factorized runtime path: it compresses same-future enchantment alternatives into fixed/choice result programs, moves probability mass through a V7-style coordinator, and projects those programs back into concrete-compatible checkpoint/reporting rows.
 
-The current V7 engine reference is [`docs/v7-shared-search-engine.md`](v7-shared-search-engine.md). Plex is now treated as the historical prototype that proved the projection and payload ideas; Flex is the poster-child implementation for carrying those ideas toward the V7 default path.
+The current semantic reference is concrete `SearchRun`, documented in [`docs/v7-shared-search-engine.md`](v7-shared-search-engine.md). Plex is the historical prototype that proved the projection and payload ideas; Flex is the current experiment for carrying those ideas toward the V7 default path. Neither Plex nor Flex is the oracle for correctness.
 
 ## Table of Contents
 
@@ -40,7 +40,7 @@ It does not redefine V7 checkpoint semantics, mass accounting, or worker API beh
 
 ## Current Status
 
-As of the v7.3.x development branch, Flex is available as an opt-in internal backend through `SearchExecutionService` using `searchBackend: 'flex'`. Concrete `SearchRun` remains the default product path. Plex remains available as a legacy comparison backend through `searchBackend: 'plex'`, but new factorized design work should prefer Flex.
+As of the v7.4.x line, Flex is available as an opt-in experimental/internal backend through `SearchExecutionService` using `searchBackend: 'flex'`. Concrete `SearchRun` remains the default product path and semantic reference. Plex remains available as a legacy experimental comparison backend through `searchBackend: 'plex'`, but new factorized design work should prefer Flex.
 
 Current Flex supports:
 
@@ -264,14 +264,14 @@ If the runtime asks questions like "what payload do I append?", "is this old cho
 - Use `checkFlexReducedKeyInvariant` to prove that reduced structural state determines a projection-equivalent program history for representative vanilla shapes.
 - If `(graphId, exclusionMask, currentLevel, count)` no longer determines a projection-equivalent program history, include `programId` in the structural key or use an equivalent conservative fallback for that mode.
 
-Current state: Flex has invariant tests that accept representative vanilla shapes and reject an adversarial mutated sword conflict graph. Runtime fallback for unsafe mutated registries is the next safety step before considering Flex as a default path.
+Current state: Flex has invariant tests that accept representative vanilla shapes and reject an adversarial mutated sword conflict graph. `SearchExecutionService` now runs that guard for mutated registries and keeps unsafe `searchBackend: 'flex'` requests inside Flex by switching grouped graphs from reduced structural identity to program-aware identity. Reduced mode keys nodes by `(graphId, exclusionMask, currentLevel, count)`; program mode includes `programId` so incompatible histories do not merge.
 
 ## API and Migration Policy
 
 Migration should be staged:
 
 1. **Experimental opt-in**: Flex remains behind explicit backend selection with `searchBackend: 'flex'` and comparison tests.
-2. **Safety parity**: Flex gets Plex-style mutated-registry guard/fallback behavior, not only invariant tests.
+2. **Safety parity**: Flex uses its own mutated-registry guard/fallback behavior for service routing: reduced identity for safe registries, program-aware identity for unsafe ones.
 3. **Performance evidence**: benchmark modern books and conflict-heavy item pools across concrete V7, Plex, and Flex.
 4. **V7-internal factorized tree**: graph construction emits fixed/choice factors while the runtime remains generic and checkpoint-compatible.
 5. **Default internal engine**: after parity, residue diagnostics, mutated-registry safety, and wall-clock benchmarks are acceptable, Flex can become the default implementation.
@@ -316,7 +316,7 @@ Books should be benchmarked separately because projection volume can dominate ev
 
 ## Open Questions
 
-- Should unsafe mutated registries make Flex include `programId` in node identity, or should they route to concrete V7 until a program-aware Flex graph is cheap enough?
+- How much performance overhead does program-aware Flex identity add on adversarial mutated registries, and does it need a cheaper specialized key/index before Flex can become the sole default engine?
 - Can fixed/singleton emissions use a denser combo append representation even after an earlier choice factor exists?
 - How much current `PlexRun` code survives as reference/prototype after Flex becomes the default factorized implementation?
 - Does book projection need streaming/capped materialization for product views?

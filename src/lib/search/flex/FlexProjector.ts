@@ -90,7 +90,7 @@ export class FlexProjector {
                 assigned += share;
                 if (share === 0n) return;
 
-                if (!this.isClueCompatible(factor)) {
+                if (!this.isPendingClueCompatible(factor.matchesTargetClue, entry.targetClueReachable)) {
                     clueIncompatible += share;
                     return;
                 }
@@ -133,6 +133,10 @@ export class FlexProjector {
 
     private isClueCompatible(factor: FlexProjectionFactor): boolean {
         return this.options.targetClueId === undefined || factor.matchesTargetClue;
+    }
+
+    private isPendingClueCompatible(matchesTargetClue: boolean, targetClueReachable: boolean | undefined): boolean {
+        return this.options.targetClueId === undefined || matchesTargetClue || targetClueReachable === true;
     }
 
     private visitProgramFactors(

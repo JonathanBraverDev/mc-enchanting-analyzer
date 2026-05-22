@@ -1,12 +1,15 @@
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
+import { BIGINT_CONSTANTS, PACKING_CONSTANTS } from '#constants/engine.js';
 import type { SearchPool, SearchPoolSignature } from '#lib/search/registry/RegistryKernel.js';
 import { RegistryKernel } from '#lib/search/registry/RegistryKernel.js';
 import { PRECISION } from '#utils/index.js';
 import type {
     FlexCheckpointRequest,
+    FlexPendingEntry,
     FlexProjectedPendingEntry,
     FlexProjectedResults,
-    FlexRunSnapshot
+    FlexRunSnapshot,
+    FlexStateIdentityMode
 } from '#lib/search/flex/FlexTypes.js';
 import { FlexCoordinator } from '#lib/search/flex/FlexCoordinator.js';
 import { FlexProgramStore } from '#lib/search/flex/FlexProgramStore.js';
@@ -29,6 +32,7 @@ export interface GroupedFlexProjectedCheckpoint extends FlexProjectedResults {
 export interface GroupedFlexSearchRunOptions {
     readonly distributionService?: ModifiedLevelDistributionService | undefined;
     readonly targetClueId?: number | undefined;
+    readonly stateIdentityMode?: FlexStateIdentityMode | undefined;
 }
 
 /**
@@ -46,6 +50,7 @@ export class GroupedFlexSearchRun {
     private readonly coordinator = new FlexCoordinator(this.graphs);
     private readonly projector: FlexProjector;
     private readonly targetClueId: number | undefined;
+    private readonly stateIdentityMode: FlexStateIdentityMode;
     private seeded = false;
 
     public constructor(
@@ -54,6 +59,7 @@ export class GroupedFlexSearchRun {
     ) {
         this.distributionService = options.distributionService ?? new ModifiedLevelDistributionService();
         this.targetClueId = options.targetClueId;
+        this.stateIdentityMode = options.stateIdentityMode ?? 'reduced';
         this.projector = new FlexProjector(this.programs, this.kernel.registry.enchantToIndex, {
             applyBookRemoval: this.kernel.item === 'book',
             targetClueId: this.targetClueId
@@ -74,7 +80,14 @@ export class GroupedFlexSearchRun {
         for (const [levelText, rootMass] of Object.entries(distribution)) {
             if (rootMass === 0n) continue;
             const level = Number(levelText);
-            const graph = this.graphForPool(this.kernel.getPool(level));
+            const pool = this.kernel.getPool(level);
+            if (this.targetClueId !== undefined && !pool.entries.some(entry => entry.packedEnchant === this.targetClueId)) {
+                this.coordinator.mass.record('clueIncompatible', rootMass);
+                seededMass += rootMass;
+                continue;
+            }
+
+            const graph = this.graphForPool(pool);
             const root = graph.graph.getRootNode(level);
             this.coordinator.seedPending(graph.id, root.id, rootMass);
             seededMass += rootMass;
@@ -98,7 +111,9 @@ export class GroupedFlexSearchRun {
 
     public projectSnapshot(snapshot: FlexRunSnapshot = this.snapshot()): GroupedFlexProjectedCheckpoint {
         const projectedResults = this.projector.projectResults(snapshot.results);
-        const projectedPending = this.projector.projectPendingWithDiagnostics(snapshot.pendingEntries);
+        const projectedPending = this.projector.projectPendingWithDiagnostics(
+            this.withPendingClueReachability(snapshot.pendingEntries)
+        );
 
         return Object.freeze({
             ...projectedResults,
@@ -122,10 +137,30 @@ export class GroupedFlexSearchRun {
 
         const record = Object.freeze({
             id: this.graphs.length,
-            graph: new GroupedFlexGraph(this.kernel, pool, this.programs)
+            graph: new GroupedFlexGraph(this.kernel, pool, this.programs, {
+                stateIdentityMode: this.stateIdentityMode,
+                targetClueId: this.targetClueId
+            })
         });
         this.graphs.push(record.graph);
         this.graphsBySignature.set(pool.signature, record);
         return record;
+    }
+
+    private withPendingClueReachability(entries: readonly FlexPendingEntry[]): readonly FlexPendingEntry[] {
+        if (this.targetClueId === undefined) return entries;
+
+        return Object.freeze(entries.map(entry => Object.freeze({
+            ...entry,
+            targetClueReachable: this.isTargetClueReachable(entry)
+        })));
+    }
+
+    private isTargetClueReachable(entry: FlexPendingEntry): boolean {
+        if (this.targetClueId === undefined) return false;
+        const targetEnchantId = this.targetClueId >> PACKING_CONSTANTS.ENCHANT_SHIFT;
+        const targetBit = BIGINT_CONSTANTS.ID_BIT_LOOKUP[targetEnchantId];
+        if (targetBit === undefined) return false;
+        return (this.getGraph(entry.graphId).getNodeExclusionMask(entry.nodeId) & targetBit) === 0n;
     }
 }

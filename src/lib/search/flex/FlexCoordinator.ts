@@ -17,6 +17,7 @@ const SYSTEM_PROBABILITY_FLOOR = ProbUtils.toBigInt(ENGINE_LIMITS.SYSTEM_THRESHO
 interface FlexAdvanceCriteria {
     readonly threshold: bigint;
     readonly maxIterations: number;
+    readonly drainEqualMassBand: boolean;
     readonly targetClassifiedMass: bigint | undefined;
     readonly probabilityFloor: bigint;
     readonly signal?: AbortSignal | undefined;
@@ -121,7 +122,14 @@ export class FlexCoordinator {
             throw new Error('FlexCoordinator has no bounded stop condition. Provide a positive threshold, a finite maxIterations, a mass target, or set exhaustive: true.');
         }
 
-        return { threshold, maxIterations, targetClassifiedMass, probabilityFloor, signal: request.signal };
+        return {
+            threshold,
+            maxIterations,
+            drainEqualMassBand: request.exhaustive ? false : request.drainEqualMassBand === true,
+            targetClassifiedMass,
+            probabilityFloor,
+            signal: request.signal
+        };
     }
 
     private advanceUntilCheckpoint(criteria: FlexAdvanceCriteria, chunkIterations?: number): boolean {
@@ -148,8 +156,15 @@ export class FlexCoordinator {
         if (this.frontier.size === 0) return 'empty';
         if (criteria.targetClassifiedMass !== undefined && this.mass.getClassifiedMass() >= criteria.targetClassifiedMass) return 'mass';
         if (this.frontier.peekMass() < criteria.threshold) return 'threshold';
-        if (this._iterations >= criteria.maxIterations) return 'iterations';
+        if (this.hasReachedIterationStop(criteria)) return 'iterations';
         return undefined;
+    }
+
+    private hasReachedIterationStop(criteria: FlexAdvanceCriteria): boolean {
+        if (this._iterations < criteria.maxIterations) return false;
+        if (!criteria.drainEqualMassBand) return true;
+        if (this._lastExpandedMass === 0n) return true;
+        return this.frontier.peekMass() < this._lastExpandedMass;
     }
 
     private step(criteria: FlexAdvanceCriteria): boolean {
@@ -203,7 +218,9 @@ export class FlexCoordinator {
         const totalWeight = BigInt(expansion.totalWeight);
         const oldResidues = this.getForwardingResidues(graphId, nodeId);
         const oldResidueMass = this.calculateForwardingResidueMass(oldResidues, totalWeight);
-        const nextResidues = new BigUint64Array(expansion.edges.length);
+        const clueIncompatibleWeight = expansion.clueIncompatibleWeight ?? 0;
+        const clueIncompatibleIndex = expansion.edges.length;
+        const nextResidues = new BigUint64Array(expansion.edges.length + (clueIncompatibleWeight > 0 ? 1 : 0));
         const shares: FlexEdgeMassShare[] = [];
         let assigned = 0n;
         let standaloneAssigned = 0n;
@@ -224,6 +241,19 @@ export class FlexCoordinator {
             assigned += childMass;
             standaloneAssigned += (mass * weight) / totalWeight;
             shares.push({ childId: edge.childId, mass: childMass });
+        }
+
+        if (clueIncompatibleWeight > 0) {
+            const weight = BigInt(clueIncompatibleWeight);
+            const numerator = (mass * weight) + (oldResidues?.[clueIncompatibleIndex] ?? 0n);
+            const childMass = numerator / totalWeight;
+            const edgeResidue = numerator - (childMass * totalWeight);
+            nextResidues[clueIncompatibleIndex] = edgeResidue;
+            nextResidueNumerator += edgeResidue;
+            hasResidue ||= edgeResidue !== 0n;
+            assigned += childMass;
+            standaloneAssigned += (mass * weight) / totalWeight;
+            this.mass.record('clueIncompatible', childMass);
         }
 
         const newResidueMass = nextResidueNumerator / totalWeight;

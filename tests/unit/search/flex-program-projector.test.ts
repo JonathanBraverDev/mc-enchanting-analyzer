@@ -315,4 +315,30 @@ describe('FlexProjector', () => {
         assert.strictEqual(projected.projectionLoss, 0n);
         assert.strictEqual(projected.projectedMass + projected.clueIncompatible + projected.projectionLoss, projected.sourceMass);
     });
+
+    it('keeps pending branches that can still reach the exact clue', () => {
+        const store = new FlexProgramStore();
+        const projector = new FlexProjector(store, enchantToIndex, { targetClueId: sharpness });
+        const program = store.appendFixed(store.empty, looting);
+        const pending: FlexPendingEntry[] = [{
+            graphId: 0,
+            nodeId: nodeId(17),
+            programId: program,
+            mass: 10n,
+            count: 1,
+            nodeKind: 'solid',
+            targetClueReachable: true
+        }];
+
+        const projected = projector.projectPendingWithDiagnostics(pending);
+
+        assert.deepStrictEqual(
+            projected.pendingEntries.map(entry => ({ combo: entry.combo, mass: entry.mass, count: entry.count })),
+            [{ combo: combo(looting), mass: 10n, count: 1 }]
+        );
+        assert.strictEqual(projected.projectedMass, 10n);
+        assert.strictEqual(projected.clueIncompatible, 0n);
+        assert.strictEqual(projected.projectionLoss, 0n);
+        assert.strictEqual(projected.projectedMass + projected.clueIncompatible + projected.projectionLoss, projected.sourceMass);
+    });
 });

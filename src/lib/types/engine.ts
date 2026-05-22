@@ -77,7 +77,10 @@ export interface SearchTiming {
 
 export type EngineExitReason = 'threshold' | 'iterations' | 'mass' | 'aborted' | 'empty' | 'exhausted';
 
-/** Internal search implementation selector. Defaults to the concrete V7 SearchRun path. */
+/**
+ * Internal search implementation selector. Defaults to the concrete V7 SearchRun path.
+ * `plex` and `flex` are opt-in experimental/diagnostic backends; do not treat them as semantic references.
+ */
 export type SearchBackend = 'concrete' | 'plex' | 'flex';
 
 export interface EngineInstrumentation {
@@ -166,6 +169,8 @@ export interface SearchInstrumentation {
   plexProjectionLoss?: number | undefined;
   /** Plex-only: projection-stage mass classified as incompatible with the requested clue. */
   plexProjectionClueIncompatible?: number | undefined;
+  /** Flex-only: structural state identity mode used by this run. */
+  flexStateIdentityMode?: 'reduced' | 'program' | undefined;
   /** Flex-only: structural pending buckets before compatibility projection expands program factors. */
   flexStructuralPendingEntryCount?: number | undefined;
   /** Flex-only: concrete-view materialization loss recorded as compatibility rounding in public accounting. */
@@ -298,6 +303,14 @@ export interface SearchConfig {
      * meaningful results.
      */
     maxIterations?: number | undefined;
+    /**
+     * Opt-in diagnostics/parity mode for iteration-capped checkpoints: after the iteration cap is
+     * reached, continue expanding any frontier entries whose mass is at least the last expanded
+     * mass. This avoids stopping midway through a same-mass frontier band when comparing backends
+     * with different tie-breakers. It is intentionally off by default because it can exceed the
+     * requested work cap.
+     */
+    drainEqualMassBand?: boolean | undefined;
     /**
      * Explicit full-search escape hatch: ignore threshold, iteration cap, and classified-mass target,
      * searching until the frontier is empty, aborted, or host resources are exhausted.

@@ -190,14 +190,15 @@ describe('GroupedFlexSearchRun', () => {
 
         assert.strictEqual(concrete.fullyResolved, true);
         assert.strictEqual(flex.fullyResolved, true);
+        assert.strictEqual(flex.iterations, concrete.iterations);
         assertProjectedRowsApproximatelyEqual(projected.results, concrete.results);
+        assert.ok(BigInt(flex.mass.units!.clueIncompatible) > 0n);
         assert.ok(projected.clueIncompatible > 0n);
         assert.strictEqual(projected.projectedMass + projected.clueIncompatible + projected.projectionLoss, projected.sourceMass);
         assert.strictEqual(projected.results.has(0 as PackedCombo), false);
         for (const combo of projected.results.keys()) {
             assert.ok(comboContainsExactEnchant(combo, targetClueId, registry.indexToEnchant));
         }
-        assert.ok(hasPlexSourceProgram(groupedRun, flex), 'clue fixture should exercise PlexNode programs');
     });
 
     it('produces a bounded XP 30 checkpoint with PlexNode programs and conserved resolved source mass', () => {
