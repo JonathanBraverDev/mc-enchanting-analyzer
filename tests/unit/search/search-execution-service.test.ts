@@ -322,6 +322,53 @@ describe('Search execution service', () => {
         assert.ok(result.snapshot.mass.resolved + result.snapshot.mass.pending > 0);
     });
 
+    it('uses program-aware Flex identity when a mutated registry breaks the reduced-key invariant', async () => {
+        const registry = RegistryFactory.buildWithMutations('1.21.11', [
+            { type: 'addConflictRule', rule: { enchants: ['Smite', 'Looting'], valid_from: '1.0' } },
+            { type: 'addConflictRule', rule: { enchants: ['Looting', 'Unbreaking'], valid_from: '1.0' } },
+            { type: 'addConflictRule', rule: { enchants: ['Unbreaking', 'Sharpness'], valid_from: '1.0' } }
+        ]);
+        const engine = EngineFactory.create(registry);
+        const instrumentation = createInstrumentation();
+
+        const result = await engine.searchToCheckpoint({
+            item: 'sword',
+            material: 'diamond',
+            xp: 30,
+            threshold: 0,
+            maxIterations: 100,
+            searchBackend: 'flex',
+            instrumentation
+        });
+
+        assert.strictEqual(result.instrumentation?.search?.backend, 'flex');
+        assert.strictEqual(result.instrumentation?.search?.flexStateIdentityMode, 'program');
+        assert.ok(result.snapshot.mass.resolved + result.snapshot.mass.pending > 0);
+    });
+
+    it('keeps reduced Flex identity for mutated registries that satisfy the reduced-key invariant', async () => {
+        const registry = RegistryFactory.buildWithMutations('1.21.11', {
+            type: 'removeConflictRule',
+            selector: { enchants: ['Smite', 'Sharpness'], valid_from: '1.0' }
+        });
+        const engine = EngineFactory.create(registry);
+        const instrumentation = createInstrumentation();
+
+        const result = await engine.searchToCheckpoint({
+            item: 'sword',
+            material: 'diamond',
+            xp: 30,
+            threshold: 0,
+            maxIterations: 100,
+            searchBackend: 'flex',
+            instrumentation
+        });
+
+        assert.strictEqual(result.instrumentation?.search?.backend, 'flex');
+        assert.strictEqual(result.instrumentation?.search?.flexStateIdentityMode, 'reduced');
+        assert.ok(result.snapshot.mass.resolved + result.snapshot.mass.pending > 0);
+    });
+
     it('produces EnchantStats through the public stats API', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
         engine.resetCaches();

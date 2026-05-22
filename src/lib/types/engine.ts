@@ -166,6 +166,8 @@ export interface SearchInstrumentation {
   plexProjectionLoss?: number | undefined;
   /** Plex-only: projection-stage mass classified as incompatible with the requested clue. */
   plexProjectionClueIncompatible?: number | undefined;
+  /** Flex-only: structural state identity mode used by this run. */
+  flexStateIdentityMode?: 'reduced' | 'program' | undefined;
   /** Flex-only: structural pending buckets before compatibility projection expands program factors. */
   flexStructuralPendingEntryCount?: number | undefined;
   /** Flex-only: concrete-view materialization loss recorded as compatibility rounding in public accounting. */

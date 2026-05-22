@@ -3,6 +3,7 @@ import type { MassAccountingBreakdown } from '#types/mass.js';
 
 export type FlexNodeId = number & { readonly __brand: 'FlexNodeId' };
 export type FlexProgramId = number & { readonly __brand: 'FlexProgramId' };
+export type FlexStateIdentityMode = 'reduced' | 'program';
 
 export interface FlexAlternative {
     readonly packedEnchant: PackedEnchant;
