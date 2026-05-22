@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## v7.4.1 (2026-05-22)
+
+### Fixed
+- **Plex clue projection**: Corrected the internal Plex backend to treat observed clues as exact enchantment-rank matches during clue-aware pruning and concrete compatibility projection, rather than treating clue ranks as minimum target thresholds. This keeps backend-only Plex comparisons aligned with the public concrete engine.
+
 ## v7.4.0 (2026-05-21)
 
 ### Added
