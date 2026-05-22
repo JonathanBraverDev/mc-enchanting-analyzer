@@ -228,17 +228,19 @@ function projectPlexPayloadMass(
     pendingSource?: PlexPendingEntry | undefined
 ): void {
     acc.source += sourceMass;
-    const clueSurvival = calculateClueSurvival(payload, options.targetClueId);
-    const clueEligibleMass = (sourceMass * clueSurvival.numerator) / clueSurvival.denominator;
-    acc.clueIncompatible += sourceMass - clueEligibleMass;
-    if (clueEligibleMass === 0n) return;
+    const targetPackedIndex = options.targetClueId === undefined
+        ? null
+        : enchantToIndex.get(options.targetClueId);
 
     let assigned = 0n;
     const visitFactor = (combo: PackedCombo, numerator: bigint, denominator: bigint): void => {
-        const mass = (sourceMass * numerator * clueSurvival.numerator) /
-            (denominator * clueSurvival.denominator);
+        const mass = (sourceMass * numerator) / denominator;
         assigned += mass;
         if (mass === 0n) return;
+        if (!isProjectedFactorClueCompatible(combo, targetPackedIndex)) {
+            acc.clueIncompatible += mass;
+            return;
+        }
         if (target === 'result') {
             acc.projectedResultMass += mass;
             if (combo !== 0) acc.results.set(combo, (acc.results.get(combo) ?? 0n) + mass);
@@ -259,42 +261,24 @@ function projectPlexPayloadMass(
         defaultPayloadStore.forEachFactor(payload, enchantToIndex, visitFactor);
     }
     // Projection loss reduces concrete-view accuracy, not internal engine mass.
-    acc.loss += clueEligibleMass - assigned;
+    acc.loss += sourceMass - assigned;
 }
 
-function calculateClueSurvival(
-    payload: PlexPayload,
-    targetClueId: number | undefined
-): { numerator: bigint; denominator: bigint } {
-    if (targetClueId === undefined) return { numerator: 1n, denominator: 1n };
-    if (payload.combo.fixed.some(packedEnchant => matchesClueTarget(packedEnchant, targetClueId))) {
-        return { numerator: 1n, denominator: 1n };
-    }
+function isProjectedFactorClueCompatible(combo: PackedCombo, targetPackedIndex: number | null | undefined): boolean {
+    if (targetPackedIndex === null) return true;
+    if (targetPackedIndex === undefined) return false;
 
-    for (const choice of payload.choices) {
-        let matchingWeight = 0;
-        for (const alternative of choice.alternatives) {
-            if (matchesClueTarget(alternative.packedEnchant, targetClueId)) {
-                matchingWeight += alternative.weight;
-            }
-        }
-        if (matchingWeight > 0) {
-            return {
-                numerator: BigInt(matchingWeight),
-                denominator: BigInt(choice.totalWeight)
-            };
-        }
+    let multiplier = 1;
+    for (let slot = 0; slot < PACKING_CONSTANTS.MAX_COMBO_SLOTS; slot++, multiplier *= PACKING_CONSTANTS.BYTE_BASIS) {
+        const packedIndex = Math.floor(combo / multiplier) % PACKING_CONSTANTS.BYTE_BASIS;
+        if (packedIndex === 0) return false;
+        if (packedIndex === targetPackedIndex) return true;
     }
-
-    return { numerator: 0n, denominator: 1n };
+    return false;
 }
 
 function matchesClueTarget(packedEnchant: PackedEnchant, targetClueId: number): boolean {
-    const targetEnchantId = targetClueId >> PACKING_CONSTANTS.ENCHANT_SHIFT;
-    const targetRank = targetClueId & PACKING_CONSTANTS.RANK_MASK;
-    const enchantId = packedEnchant >> PACKING_CONSTANTS.ENCHANT_SHIFT;
-    const rank = packedEnchant & PACKING_CONSTANTS.RANK_MASK;
-    return enchantId === targetEnchantId && rank >= targetRank;
+    return packedEnchant === targetClueId;
 }
 
 function createProjectionAccounting(

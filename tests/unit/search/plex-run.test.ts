@@ -103,7 +103,7 @@ describe('PlexRun', () => {
         assert.strictEqual(rootKeys.size, snapshot.pendingEntries.length, 'roots remain distinct by current level');
     });
 
-    it('classifies modified levels without the target enchant-or-higher as engine clue-incompatible', () => {
+    it('classifies modified levels without the exact target clue as engine clue-incompatible', () => {
         const registry = RegistryFactory.build('1.21.11');
         const kernel = new RegistryKernel({ registry, item: 'sword', material: 'diamond' });
         const targetClueId = kernel.getPool(30).entries
@@ -369,7 +369,7 @@ describe('PlexRun', () => {
         assert.strictEqual(projected.results.get(ComboUtils.pack([fixed, right], registry.enchantToIndex)), 3n);
     });
 
-    it('scales clue projection by the target weight inside the latent choice', () => {
+    it('filters latent-choice projection to factors that contain the exact clue', () => {
         const registry = RegistryFactory.build('1.21.11');
         const kernel = new RegistryKernel({ registry, item: 'sword', material: 'diamond' });
         const entries = kernel.getPool(30).entries.map(entry => entry.packedEnchant);
@@ -389,16 +389,16 @@ describe('PlexRun', () => {
             { targetClueId: target, indexToEnchant: registry.indexToEnchant }
         );
 
-        assert.strictEqual(projected.projectedMass, 7n);
-        assert.strictEqual(projected.projectionLoss, 1n);
-        assert.strictEqual(projected.mass.projection!.units?.projected, '7');
+        assert.strictEqual(projected.projectedMass, 8n);
+        assert.strictEqual(projected.projectionLoss, 0n);
+        assert.strictEqual(projected.mass.projection!.units?.projected, '8');
         assert.strictEqual(projected.mass.projection!.units?.source, '12');
         assert.strictEqual(projected.mass.projection!.units?.clueIncompatible, '4');
-        assert.strictEqual(projected.results.get(ComboUtils.pack([fixed, target], registry.enchantToIndex)), 5n);
-        assert.strictEqual(projected.results.get(ComboUtils.pack([fixed, other], registry.enchantToIndex)), 2n);
+        assert.strictEqual(projected.results.get(ComboUtils.pack([fixed, target], registry.enchantToIndex)), 8n);
+        assert.strictEqual(projected.results.get(ComboUtils.pack([fixed, other], registry.enchantToIndex)), undefined);
     });
 
-    it('treats target rank as a minimum while computing plex clue survival', () => {
+    it('requires the exact clue rank instead of treating the target rank as a minimum', () => {
         const registry = RegistryFactory.build('1.21.11');
         const kernel = new RegistryKernel({ registry, item: 'sword', material: 'diamond' });
         const entries = kernel.getPool(30).entries.map(entry => entry.packedEnchant);
@@ -418,7 +418,9 @@ describe('PlexRun', () => {
             { targetClueId: targetRankOne, indexToEnchant: registry.indexToEnchant }
         );
 
-        assert.strictEqual(projected.mass.projection!.units?.clueIncompatible, '4');
+        assert.strictEqual(projected.projectedMass, 0n);
+        assert.strictEqual(projected.projectionLoss, 0n);
+        assert.strictEqual(projected.mass.projection!.units?.clueIncompatible, '12');
     });
 
     it('applies book removal while projecting factorized plex results', () => {
@@ -507,7 +509,7 @@ describe('PlexRun', () => {
         assert.strictEqual(projected.projectedMass + BigInt(projected.mass.projection!.units!.clueIncompatible) + projected.projectionLoss, BigInt(plexSnapshot.mass.units!.resolved));
     });
 
-    it('projects clue-conditioned plex results as a survival-weighted compatibility view', () => {
+    it('projects clue-conditioned plex results as an exact-clue compatibility view', () => {
         const registry = RegistryFactory.build('1.4.6');
         const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
         const targetClueId = kernel.getPool(30).entries[0]!.packedEnchant;
