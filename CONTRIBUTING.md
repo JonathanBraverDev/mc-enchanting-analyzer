@@ -65,29 +65,47 @@ A non-required `CI Change Advisory` check also reviews CI-sensitive file changes
 
 ### Changelog section policy
 
-Release changelog entries should use concrete section headings so release intent is machine-checkable.
+Release changelog entries should use concrete section headings so release intent is machine-checkable and readable.
+
+Write release notes reader-first:
+
+- User-facing sections should describe the observable outcome: what is new, fixed, faster, safer, cleaned up, removed, or behaviorally different. Avoid implementation details unless the detail is itself part of the public or diagnostic surface.
+- Developer-facing sections can summarize the supporting work: tests, benchmark harnesses, release policy, diagnostics, migration notes, and documentation changes. Use docs for the deeper "how"; the changelog should be enough for users and a useful TL;DR for developers.
+- When a change has both sides, put the user-visible result in `### Fixed`, `### Performance`, `### Added`, etc., then put the validation or migration detail in `### Developer Experience` or `### Documentation`.
 
 | Section | Use for | Patch | Minor | Major | Version advice |
 | --- | --- | --- | --- | --- | --- |
-| `### Fixed` | Bug fixes, correctness fixes, release process fixes, and other patch-level repairs. | Yes | Bundled only | Bundled only | Lower minor releases that only contain fixes. |
+| `### Fixed` | User-visible bug fixes, correctness fixes, release process fixes, and other patch-level repairs. | Yes | Bundled only | Bundled only | Lower minor releases that only contain fixes. |
 | `### Security` | Security fixes or hardening. | Yes | Bundled only | Yes, when breaking | Lower minor releases that only contain security fixes. |
-| `### Developer Experience` | Tooling, tests, CI, documentation, validation, diagnostics, and contributor workflow changes. | Yes | Yes | Bundled only | Valid for CI/tooling-only patch releases. |
+| `### Performance` | User-visible speed, memory, startup, or responsiveness improvements. | Yes | Bundled only | Bundled only | Valid for performance-only patch releases. |
+| `### Documentation` | User or contributor documentation updates, release note framing, examples, and explanatory docs. | Yes | Bundled only | Bundled only | Valid for docs-only patch releases. |
+| `### Cleanup` | Internal pruning, dead-code removal, repo organization, or non-behavioral simplification that does not remove supported behavior. | Yes | Bundled only | Bundled only | Use instead of `### Removed` when supported behavior is unchanged. |
+| `### Developer Experience` | Tooling, tests, CI, validation, diagnostics, benchmark harnesses, release policy, and contributor workflow changes. | Yes | Yes | Bundled only | Valid for CI/tooling-only patch releases. |
 | `### Added` | New user-facing or public capabilities. | No | Yes | Bundled only | Patch-incompatible. |
 | `### Improved` | Meaningful improvements to existing behavior. | No | Yes | Bundled only | Patch-incompatible. |
 | `### Changed` | Behavior, workflow, or API changes that are not strictly additions or fixes. | No | Yes | Bundled only | Patch-incompatible. |
 | `### Deprecated` | Still-supported behavior planned for removal. | No | Yes | Bundled only | Patch-incompatible. |
-| `### Removed` | Removed behavior or cleanup. | No | Yes | Usually | Minor-compatible, but reviewers must confirm it did not remove supported public behavior. |
+| `### Removed` | Removed supported behavior, public API, workflows, or compatibility surface. | No | Yes | Usually | Minor-compatible, but reviewers must confirm it is not breaking. |
 | `### Breaking` | Breaking changes. | No | No | Required | Major-only. |
 
 SemVer section rules:
 
 - **Major releases** must include `### Breaking`.
 - **Minor releases** must include at least one of `### Added`, `### Improved`, `### Changed`, `### Developer Experience`, or `### Deprecated`.
-- **Patch releases** must include at least one of `### Fixed`, `### Security`, or `### Developer Experience`.
+- **Patch releases** must include at least one of `### Fixed`, `### Security`, `### Performance`, `### Developer Experience`, `### Documentation`, or `### Cleanup`.
 - Patch releases should not use `### Added`, `### Improved`, `### Changed`, `### Deprecated`, `### Removed`, or `### Breaking`.
 - Minor releases may use `### Removed`, but this requires reviewer judgment: CI cannot know whether a deletion removed supported behavior or only cleaned up internal/non-breaking surface.
 
-When a changelog section implies a larger or smaller SemVer bump, release CI posts a PR comment asking for the version to be promoted/lowered or the section to be renamed. Developer-facing patch releases are valid when they only affect tooling, CI, validation, diagnostics, documentation, tests, or contributor workflow.
+When a changelog section implies a larger or smaller SemVer bump, release CI posts a PR comment asking for the version to be promoted/lowered or the section to be renamed. Developer-facing patch releases are valid when they only affect tooling, CI, validation, diagnostics, documentation, cleanup, tests, release policy, or contributor workflow.
+
+Avoid ad-hoc `###` headings in new release entries. Common near-misses should map to the policy headings instead:
+
+- Use `### Fixed` for corrected game data, restored compatibility, reliability fixes, and validation repairs.
+- Use `### Added` for newly supported Minecraft versions, platforms, workflows, or public capabilities.
+- Use `### Changed` or `### Removed` when support policy or public compatibility changes intentionally.
+- Use `### Cleanup` for internal refactors, deleted dead code, repository reorganization, and non-behavioral simplification.
+- Use `### Developer Experience` for new validation coverage, benchmark harnesses, diagnostics, or release tooling.
+- Do not use `### Verified` just to say tests passed; put verification evidence in the PR/check output, or use `### Developer Experience` only when the release adds new coverage or validation behavior.
 
 ### Final release metadata commit
 

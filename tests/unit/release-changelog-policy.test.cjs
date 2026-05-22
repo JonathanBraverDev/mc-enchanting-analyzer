@@ -54,7 +54,10 @@ describe('release changelog section policy', () => {
   it('accepts patch-scope sections for patch releases', () => {
     assert.equal(policyIssue('patch', ['Fixed']), null);
     assert.equal(policyIssue('patch', ['Security']), null);
+    assert.equal(policyIssue('patch', ['Performance']), null);
     assert.equal(policyIssue('patch', ['Developer Experience']), null);
+    assert.equal(policyIssue('patch', ['Documentation']), null);
+    assert.equal(policyIssue('patch', ['Cleanup']), null);
   });
 
   it('rejects minor-or-larger sections for patch releases', () => {
@@ -72,6 +75,9 @@ describe('release changelog section policy', () => {
   it('rejects patch-only minor releases', () => {
     assert.match(policyIssue('minor', ['Fixed']), /Minor releases must include/);
     assert.match(policyIssue('minor', ['Security']), /Minor releases must include/);
+    assert.match(policyIssue('minor', ['Performance']), /Minor releases must include/);
+    assert.match(policyIssue('minor', ['Documentation']), /Minor releases must include/);
+    assert.match(policyIssue('minor', ['Cleanup']), /Minor releases must include/);
   });
 
   it('requires Breaking only for major releases', () => {
