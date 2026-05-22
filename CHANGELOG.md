@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## v7.4.3 (2026-05-22)
+
+### Developer Experience
+- **Release changelog categories**: Added patch-safe `Performance`, `Documentation`, and `Cleanup` sections, clarified reader-first release-note guidance, and documented common section near-misses.
+
 ## v7.4.2 (2026-05-22)
 
 ### Fixed
