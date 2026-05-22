@@ -58,6 +58,7 @@ export class SearchExecutionService {
             const snapshot = await run.searchToCheckpointAsync({
                 threshold: request.exhaustive ? 0n : request.threshold ?? 0n,
                 maxIterations: request.exhaustive ? undefined : request.maxIterations,
+                drainEqualMassBand: request.drainEqualMassBand,
                 exhaustive: request.exhaustive,
                 targetClassifiedMass: request.exhaustive ? undefined : request.targetClassifiedMass,
                 signal: request.signal
@@ -73,6 +74,7 @@ export class SearchExecutionService {
             const snapshot = await run.searchToCheckpointAsync({
                 threshold: request.exhaustive ? 0n : request.threshold ?? 0n,
                 maxIterations: request.exhaustive ? undefined : request.maxIterations,
+                drainEqualMassBand: request.drainEqualMassBand,
                 exhaustive: request.exhaustive,
                 targetClassifiedMass: request.exhaustive ? undefined : request.targetClassifiedMass,
                 probabilityFloor: request.probabilityFloor,
@@ -87,6 +89,7 @@ export class SearchExecutionService {
         const snapshot = await run.searchToCheckpointAsync({
             threshold: request.exhaustive ? 0n : request.threshold ?? 0n,
             maxIterations: request.exhaustive ? undefined : request.maxIterations,
+            drainEqualMassBand: request.drainEqualMassBand,
             exhaustive: request.exhaustive,
             targetClassifiedMass: request.exhaustive ? undefined : request.targetClassifiedMass,
             probabilityFloor: request.probabilityFloor,
@@ -122,6 +125,7 @@ export class SearchExecutionService {
                 snapshot = await run.searchToCheckpointAsync({
                     threshold: checkpoint.threshold,
                     maxIterations: checkpoint.limit,
+                    drainEqualMassBand: request.drainEqualMassBand,
                     targetClassifiedMass: checkpoint.targetClassifiedMass,
                     probabilityFloor: request.probabilityFloor,
                     signal: request.signal
@@ -160,6 +164,7 @@ export class SearchExecutionService {
                 snapshot = await run.searchToCheckpointAsync({
                     threshold: checkpoint.threshold,
                     maxIterations: checkpoint.limit,
+                    drainEqualMassBand: request.drainEqualMassBand,
                     targetClassifiedMass: checkpoint.targetClassifiedMass,
                     signal: request.signal
                 });
@@ -198,6 +203,7 @@ export class SearchExecutionService {
                 snapshot = await run.searchToCheckpointAsync({
                     threshold: checkpoint.threshold,
                     maxIterations: checkpoint.limit,
+                    drainEqualMassBand: request.drainEqualMassBand,
                     targetClassifiedMass: checkpoint.targetClassifiedMass,
                     probabilityFloor: request.probabilityFloor,
                     signal: request.signal

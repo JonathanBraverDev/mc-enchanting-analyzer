@@ -62,6 +62,7 @@ export interface FlexGraph {
 export interface FlexCheckpointRequest {
     readonly threshold?: number | bigint | undefined;
     readonly maxIterations?: number | undefined;
+    readonly drainEqualMassBand?: boolean | undefined;
     readonly exhaustive?: boolean | undefined;
     readonly targetClassifiedMass?: number | bigint | undefined;
     /**

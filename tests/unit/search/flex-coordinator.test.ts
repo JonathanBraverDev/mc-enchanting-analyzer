@@ -73,6 +73,44 @@ describe('FlexCoordinator', () => {
         assert.strictEqual(snapshot.lastExpandedMass, 75n);
     });
 
+    it('can drain the equal-mass frontier band after an iteration cap', () => {
+        const store = new FlexProgramStore();
+        const firstProgram = store.appendFixed(store.empty, packed(1));
+        const secondProgram = store.appendFixed(store.empty, packed(2));
+        const graph = new TestFlexGraph();
+        graph.set(nodeId(0), Object.freeze({
+            node: store.createNode(nodeId(0), store.empty),
+            probContinue: PRECISION,
+            totalWeight: 2,
+            edges: Object.freeze([
+                { weight: 1, childId: nodeId(1) },
+                { weight: 1, childId: nodeId(2) }
+            ]),
+            terminalReason: null
+        }));
+        graph.set(nodeId(1), terminalExpansion(store, nodeId(1), firstProgram));
+        graph.set(nodeId(2), terminalExpansion(store, nodeId(2), secondProgram));
+
+        const capped = new FlexCoordinator([graph]);
+        capped.seedPending(0, nodeId(0), 100n);
+        const cappedSnapshot = capped.searchToCheckpoint({ maxIterations: 2 });
+        assert.strictEqual(cappedSnapshot.exitReason, 'iterations');
+        assert.strictEqual(cappedSnapshot.iterations, 2);
+        assert.strictEqual(cappedSnapshot.pendingEntries.length, 1);
+
+        const drained = new FlexCoordinator([graph]);
+        drained.seedPending(0, nodeId(0), 100n);
+        const drainedSnapshot = drained.searchToCheckpoint({
+            maxIterations: 2,
+            drainEqualMassBand: true
+        });
+        assert.strictEqual(drainedSnapshot.exitReason, 'empty');
+        assert.strictEqual(drainedSnapshot.iterations, 3);
+        assert.strictEqual(drainedSnapshot.results.get(firstProgram), 50n);
+        assert.strictEqual(drainedSnapshot.results.get(secondProgram), 50n);
+        assert.strictEqual(drainedSnapshot.pendingCount, 0);
+    });
+
     it('asynchronously advances through scheduler chunks to the same checkpoint', async () => {
         const store = new FlexProgramStore();
         const firstProgram = store.appendFixed(store.empty, packed(1));
