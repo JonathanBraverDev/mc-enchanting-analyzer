@@ -4,7 +4,7 @@
 
 This document records the current Flex/factorized-tree design for the V7 engine line. Flex is an experimental opt-in factorized runtime path: it compresses same-future enchantment alternatives into fixed/choice result programs, moves probability mass through a V7-style coordinator, and projects those programs back into concrete-compatible checkpoint/reporting rows.
 
-The current semantic reference is concrete `SearchRun`, documented in [`docs/v7-shared-search-engine.md`](v7-shared-search-engine.md). Plex is the historical prototype that proved the projection and payload ideas; Flex is the current experiment for carrying those ideas toward the V7 default path. Neither Plex nor Flex is the oracle for correctness.
+The current semantic reference is concrete `SearchRun`, documented in [`docs/v7-shared-search-engine.md`](v7-shared-search-engine.md). Plex was the historical prototype that proved the projection and payload ideas; Flex is the current experiment for carrying those ideas toward the V7 default path. The Plex implementation and backend selector were removed in v7.4.4, and Flex is still not the oracle for correctness.
 
 ## Table of Contents
 
@@ -40,7 +40,7 @@ It does not redefine V7 checkpoint semantics, mass accounting, or worker API beh
 
 ## Current Status
 
-As of the v7.4.x line, Flex is available as an opt-in experimental/internal backend through `SearchExecutionService` using `searchBackend: 'flex'`. Concrete `SearchRun` remains the default product path and semantic reference. Plex remains available as a legacy experimental comparison backend through `searchBackend: 'plex'`, but new factorized design work should prefer Flex.
+As of the v7.4.x line, Flex is available as an opt-in experimental/internal backend through `SearchExecutionService` using `searchBackend: 'flex'`. Concrete `SearchRun` remains the default product path and semantic reference. The obsolete Plex backend is no longer routed or implemented; stale `searchBackend: 'plex'` requests use the same unsupported-backend error path as any other unknown backend.
 
 Current Flex supports:
 
@@ -272,7 +272,7 @@ Migration should be staged:
 
 1. **Experimental opt-in**: Flex remains behind explicit backend selection with `searchBackend: 'flex'` and comparison tests.
 2. **Safety parity**: Flex uses its own mutated-registry guard/fallback behavior for service routing: reduced identity for safe registries, program-aware identity for unsafe ones.
-3. **Performance evidence**: benchmark modern books and conflict-heavy item pools across concrete V7, Plex, and Flex.
+3. **Performance evidence**: benchmark modern books and conflict-heavy item pools across concrete V7 and Flex, using archived Plex numbers only as historical context.
 4. **V7-internal factorized tree**: graph construction emits fixed/choice factors while the runtime remains generic and checkpoint-compatible.
 5. **Default internal engine**: after parity, residue diagnostics, mutated-registry safety, and wall-clock benchmarks are acceptable, Flex can become the default implementation.
 6. **Concrete fallback/reference**: keep the old concrete path available for debugging and rollback for at least one release window.
@@ -318,10 +318,9 @@ Books should be benchmarked separately because projection volume can dominate ev
 
 - How much performance overhead does program-aware Flex identity add on adversarial mutated registries, and does it need a cheaper specialized key/index before Flex can become the sole default engine?
 - Can fixed/singleton emissions use a denser combo append representation even after an earlier choice factor exists?
-- How much current `PlexRun` code survives as reference/prototype after Flex becomes the default factorized implementation?
 - Does book projection need streaming/capped materialization for product views?
 - What diagnostics should expose structural factorized counts without changing existing public instrumentation meanings?
-- When should `searchBackend: 'plex'` be retired or hidden behind narrower diagnostics?
+- Which historical Plex notes are still useful once Flex becomes the default path, and which should be archived further?
 
 ## References / Related Docs
 
@@ -330,7 +329,6 @@ Books should be benchmarked separately because projection volume can dominate ev
 - `ARCHITECTURE.md` — high-level architecture map.
 - `MASS_HANDLING.md` — current probability accounting and residue rules.
 - `src/lib/search/flex/` — current Flex implementation.
-- `src/lib/search/plex/` — historical Plex prototype and comparison implementation.
 - `src/lib/search/SearchRun.ts` and `src/lib/search/SearchGraph.ts` — current concrete V7 runtime/graph implementation.
 
 ## Owner / Maintainer
@@ -339,4 +337,4 @@ Jonathan Braver / V7 engine maintainers.
 
 ## Last Updated
 
-2026-05-21
+2026-05-23
