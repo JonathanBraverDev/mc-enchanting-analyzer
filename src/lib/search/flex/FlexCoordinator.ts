@@ -218,7 +218,9 @@ export class FlexCoordinator {
         const totalWeight = BigInt(expansion.totalWeight);
         const oldResidues = this.getForwardingResidues(graphId, nodeId);
         const oldResidueMass = this.calculateForwardingResidueMass(oldResidues, totalWeight);
-        const nextResidues = new BigUint64Array(expansion.edges.length);
+        const clueIncompatibleWeight = expansion.clueIncompatibleWeight ?? 0;
+        const clueIncompatibleIndex = expansion.edges.length;
+        const nextResidues = new BigUint64Array(expansion.edges.length + (clueIncompatibleWeight > 0 ? 1 : 0));
         const shares: FlexEdgeMassShare[] = [];
         let assigned = 0n;
         let standaloneAssigned = 0n;
@@ -239,6 +241,19 @@ export class FlexCoordinator {
             assigned += childMass;
             standaloneAssigned += (mass * weight) / totalWeight;
             shares.push({ childId: edge.childId, mass: childMass });
+        }
+
+        if (clueIncompatibleWeight > 0) {
+            const weight = BigInt(clueIncompatibleWeight);
+            const numerator = (mass * weight) + (oldResidues?.[clueIncompatibleIndex] ?? 0n);
+            const childMass = numerator / totalWeight;
+            const edgeResidue = numerator - (childMass * totalWeight);
+            nextResidues[clueIncompatibleIndex] = edgeResidue;
+            nextResidueNumerator += edgeResidue;
+            hasResidue ||= edgeResidue !== 0n;
+            assigned += childMass;
+            standaloneAssigned += (mass * weight) / totalWeight;
+            this.mass.record('clueIncompatible', childMass);
         }
 
         const newResidueMass = nextResidueNumerator / totalWeight;
