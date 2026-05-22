@@ -39,6 +39,12 @@ export interface SearchRunCheckpointRequest {
      * runtime proxy.
      */
     readonly maxIterations?: number | undefined;
+    /**
+     * Opt-in parity/diagnostic mode: when an iteration cap is reached, keep expanding entries in the
+     * same pending-mass band before returning. This makes checkpoints stable across tie-breakers but
+     * can exceed the requested work cap, so product flows should leave it disabled.
+     */
+    readonly drainEqualMassBand?: boolean | undefined;
     /** Ignore threshold, iteration cap, and classified-mass target, searching until the frontier is empty. */
     readonly exhaustive?: boolean | undefined;
     /** Stop once non-pending mass reaches this absolute fixed-point/number target. Omitted means no classified-mass stop. */
@@ -135,6 +141,7 @@ interface EdgeMassShare {
 interface AdvanceCriteria {
     readonly threshold: bigint;
     readonly maxIterations: number;
+    readonly drainEqualMassBand: boolean;
     readonly targetClassifiedMass?: bigint | undefined;
     readonly targetResolvedMass?: bigint | undefined;
     readonly probabilityFloor: bigint;
@@ -273,6 +280,7 @@ export class SearchRun {
         return {
             threshold,
             maxIterations,
+            drainEqualMassBand: request.exhaustive ? false : request.drainEqualMassBand === true,
             targetClassifiedMass,
             targetResolvedMass,
             probabilityFloor: request.probabilityFloor !== undefined
@@ -304,7 +312,7 @@ export class SearchRun {
         while (true) {
             if (criteria.signal?.aborted) throw new Error('Aborted');
             if (this.frontier.size === 0) return true;
-            if (this._iterations >= criteria.maxIterations) return true;
+            if (this.hasReachedIterationStop(criteria)) return true;
             if (criteria.targetClassifiedMass !== undefined && this.mass.getClassifiedMass() >= criteria.targetClassifiedMass) return true;
             if (criteria.targetResolvedMass !== undefined && this.mass.getResolvedMass() >= criteria.targetResolvedMass) return true;
             if (this.frontier.peekMass() < criteria.threshold) return true;
@@ -317,6 +325,13 @@ export class SearchRun {
             this._iterations++;
             advancedInChunk++;
         }
+    }
+
+    private hasReachedIterationStop(criteria: AdvanceCriteria): boolean {
+        if (this._iterations < criteria.maxIterations) return false;
+        if (!criteria.drainEqualMassBand) return true;
+        if (this._lastExpandedMass === 0n) return true;
+        return this.frontier.peekMass() < this._lastExpandedMass;
     }
 
     /** Materializes the current run state without advancing search. */

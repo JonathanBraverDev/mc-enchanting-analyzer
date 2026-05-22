@@ -31,6 +31,7 @@ export interface PlexRunAdvanceRequest {
 export interface PlexRunCheckpointRequest {
     readonly threshold?: number | bigint | undefined;
     readonly maxIterations?: number | undefined;
+    readonly drainEqualMassBand?: boolean | undefined;
     readonly exhaustive?: boolean | undefined;
     readonly targetClassifiedMass?: number | bigint | undefined;
     readonly signal?: AbortSignal | undefined;
@@ -114,6 +115,7 @@ type PendingPlexWork = PlexWorkItem;
 interface PlexAdvanceCriteria {
     readonly threshold: bigint;
     readonly maxIterations: number;
+    readonly drainEqualMassBand: boolean;
     readonly targetClassifiedMass?: bigint | undefined;
     readonly signal?: AbortSignal | undefined;
 }
@@ -498,6 +500,7 @@ export class PlexRun {
         return {
             threshold,
             maxIterations,
+            drainEqualMassBand: request.exhaustive ? false : request.drainEqualMassBand === true,
             targetClassifiedMass,
             signal: request.signal
         };
@@ -535,8 +538,15 @@ export class PlexRun {
         if (this.work.size === 0) return 'empty';
         if (criteria.targetClassifiedMass !== undefined && this.mass.getClassifiedMass() >= criteria.targetClassifiedMass) return 'mass';
         if (this.work.peekMass() < criteria.threshold) return 'threshold';
-        if (this._iterations >= criteria.maxIterations) return 'iterations';
+        if (this.hasReachedIterationStop(criteria)) return 'iterations';
         return undefined;
+    }
+
+    private hasReachedIterationStop(criteria: PlexAdvanceCriteria): boolean {
+        if (this._iterations < criteria.maxIterations) return false;
+        if (!criteria.drainEqualMassBand) return true;
+        if (this._lastExpandedMass === 0n) return true;
+        return this.work.peekMass() < this._lastExpandedMass;
     }
 
     private validateMaxIterations(maxIterations: number): void {

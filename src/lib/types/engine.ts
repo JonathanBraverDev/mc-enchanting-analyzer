@@ -301,6 +301,14 @@ export interface SearchConfig {
      */
     maxIterations?: number | undefined;
     /**
+     * Opt-in diagnostics/parity mode for iteration-capped checkpoints: after the iteration cap is
+     * reached, continue expanding any frontier entries whose mass is at least the last expanded
+     * mass. This avoids stopping midway through a same-mass frontier band when comparing backends
+     * with different tie-breakers. It is intentionally off by default because it can exceed the
+     * requested work cap.
+     */
+    drainEqualMassBand?: boolean | undefined;
+    /**
      * Explicit full-search escape hatch: ignore threshold, iteration cap, and classified-mass target,
      * searching until the frontier is empty, aborted, or host resources are exhausted.
      * This can be extremely expensive on modern book searches; keep product flows on checkpoint limits.
