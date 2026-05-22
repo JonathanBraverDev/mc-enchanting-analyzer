@@ -2,7 +2,7 @@
 
 ## Common Description
 
-This document is a historical pointer for the Plex prototype. Plex proved that same-future alternatives can be compressed into weighted factorized payloads and projected back into concrete-compatible result rows, but Flex is now the active factorized-tree design path.
+This document is a historical pointer for the Plex prototype. Plex proved that same-future alternatives can be compressed into weighted factorized payloads and projected back into concrete-compatible result rows, but Plex is now an experimental/internal comparison backend rather than a semantic reference.
 
 Use [`docs/flex-factorized-tree.md`](flex-factorized-tree.md) for current factorized-tree design, migration policy, and guardrails.
 
@@ -20,7 +20,7 @@ This page exists to preserve old links and clarify terminology. It should not ac
 
 ## Current Role
 
-Plex remains available as an opt-in internal comparison backend through `searchBackend: 'plex'`, but it is no longer the poster-child implementation for the factorized runtime direction.
+Plex remains available as an opt-in experimental/internal comparison backend through `searchBackend: 'plex'`. Concrete `SearchRun` remains the correctness reference; Plex output is diagnostic telemetry, not an oracle.
 
 Flex replaces Plex as the active design target because it keeps the successful projection boundary while moving factor construction into graph/program building and keeping runtime closer to V7-style mass flow.
 
@@ -37,4 +37,4 @@ Jonathan Braver / V7 engine maintainers.
 
 ## Last Updated
 
-2026-05-21
+2026-05-22

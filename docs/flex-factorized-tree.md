@@ -2,9 +2,9 @@
 
 ## Common Description
 
-This document records the current Flex/factorized-tree design for the V7 engine line. Flex is the active opt-in factorized runtime path: it compresses same-future enchantment alternatives into fixed/choice result programs, moves probability mass through a V7-style coordinator, and projects those programs back into concrete-compatible checkpoint/reporting rows.
+This document records the current Flex/factorized-tree design for the V7 engine line. Flex is an experimental opt-in factorized runtime path: it compresses same-future enchantment alternatives into fixed/choice result programs, moves probability mass through a V7-style coordinator, and projects those programs back into concrete-compatible checkpoint/reporting rows.
 
-The current V7 engine reference is [`docs/v7-shared-search-engine.md`](v7-shared-search-engine.md). Plex is now treated as the historical prototype that proved the projection and payload ideas; Flex is the poster-child implementation for carrying those ideas toward the V7 default path.
+The current semantic reference is concrete `SearchRun`, documented in [`docs/v7-shared-search-engine.md`](v7-shared-search-engine.md). Plex is the historical prototype that proved the projection and payload ideas; Flex is the current experiment for carrying those ideas toward the V7 default path. Neither Plex nor Flex is the oracle for correctness.
 
 ## Table of Contents
 
@@ -40,7 +40,7 @@ It does not redefine V7 checkpoint semantics, mass accounting, or worker API beh
 
 ## Current Status
 
-As of the v7.3.x development branch, Flex is available as an opt-in internal backend through `SearchExecutionService` using `searchBackend: 'flex'`. Concrete `SearchRun` remains the default product path. Plex remains available as a legacy comparison backend through `searchBackend: 'plex'`, but new factorized design work should prefer Flex.
+As of the v7.4.x line, Flex is available as an opt-in experimental/internal backend through `SearchExecutionService` using `searchBackend: 'flex'`. Concrete `SearchRun` remains the default product path and semantic reference. Plex remains available as a legacy experimental comparison backend through `searchBackend: 'plex'`, but new factorized design work should prefer Flex.
 
 Current Flex supports:
 
