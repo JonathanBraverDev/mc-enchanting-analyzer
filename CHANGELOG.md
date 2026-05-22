@@ -2,7 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## v7.4.2 (2026-05-22)
+
+### Fixed
+- **Flex custom-registry searches**: Kept unsafe explicit Flex searches inside Flex by switching only unsafe custom-registry cases to program-aware node identity.
+- **Flex checkpoint consistency**: Drained equal-priority frontier bands at checkpoint limits so bounded book-heavy diagnostic searches do not split equivalent-priority mass arbitrarily.
+- **Flex clue checkpoints**: Aligned explicit Flex clue-aware expansion and pending projection with concrete V7 by pruning clue-impossible grouped-edge mass while keeping unfinished clue-reachable branches pending.
+
+### Developer Experience
+- **Experimental backend framing**: Clarified that Plex and Flex are opt-in experimental/internal diagnostic backends. Concrete `SearchRun` remains the semantic reference and default product path.
+- **Flex correctness coverage**: Added targeted coverage for custom-registry fallback, equal-priority checkpoint draining, exact clue projection, and concrete-led backend checks.
 
 ## v7.4.1 (2026-05-22)
 
