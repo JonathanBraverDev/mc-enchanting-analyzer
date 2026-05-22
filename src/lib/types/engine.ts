@@ -77,7 +77,10 @@ export interface SearchTiming {
 
 export type EngineExitReason = 'threshold' | 'iterations' | 'mass' | 'aborted' | 'empty' | 'exhausted';
 
-/** Internal search implementation selector. Defaults to the concrete V7 SearchRun path. */
+/**
+ * Internal search implementation selector. Defaults to the concrete V7 SearchRun path.
+ * `plex` and `flex` are opt-in experimental/diagnostic backends; do not treat them as semantic references.
+ */
 export type SearchBackend = 'concrete' | 'plex' | 'flex';
 
 export interface EngineInstrumentation {

@@ -82,7 +82,7 @@ Implemented V7 behavior:
 - `exhaustive: true` forces threshold `0`, bypasses the normal iteration safety cap, and remains abortable.
 - `SearchExpansionBlueprintCache` reuses candidate scans across rank-variant pool families without changing exact graph edges or output payloads.
 - Suffix identity / pending suffix merging is implemented but opt-in because current profiling shows the overhead can outweigh lower iteration counts.
-- Opt-in Flex internals are available through `searchBackend: 'flex'` for diagnostics and experiments. Current product/default behavior still uses concrete `SearchRun`; see [`docs/flex-factorized-tree.md`](flex-factorized-tree.md). Plex remains available as a legacy comparison backend through `searchBackend: 'plex'`.
+- Opt-in Flex internals are available through `searchBackend: 'flex'` for diagnostics and experiments. Current product/default behavior still uses concrete `SearchRun`, and concrete `SearchRun` remains the semantic reference for tests and compatibility; see [`docs/flex-factorized-tree.md`](flex-factorized-tree.md). Plex remains available as a legacy experimental comparison backend through `searchBackend: 'plex'`.
 
 Current non-goals:
 
@@ -322,7 +322,7 @@ Current optimization layers:
 - XP-cell `SearchRun` caching for refinement resume.
 - Edge-local residue forwarding and recovery.
 - Optional suffix merging by suffix identity.
-- Opt-in Flex/factorized-tree experiments behind `searchBackend: 'flex'`, with Plex retained as a legacy comparison backend.
+- Opt-in Flex/factorized-tree experiments behind `searchBackend: 'flex'`, with Plex retained as a legacy experimental comparison backend. Concrete `SearchRun` remains the correctness reference while these paths are evaluated.
 
 Avoid merging by visible combo alone; visible equality is not enough to prove future equivalence.
 
