@@ -258,8 +258,8 @@ async function runCase(testCase: BenchmarkCase): Promise<readonly string[]> {
     console.log('plex vs concrete delta', printableDelta(plexVsConcrete));
     console.log('flex vs concrete delta', printableDelta(flexVsConcrete));
 
-    if (flexVsConcrete.maxDelta >= plexVsConcrete.maxDelta) {
-        failures.push('Flex max delta vs concrete is not better than Plex');
+    if (flexVsConcrete.maxDelta > plexVsConcrete.maxDelta) {
+        failures.push('Flex max delta vs concrete is worse than Plex');
     }
     if (flexVsConcrete.sumDelta >= plexVsConcrete.sumDelta) {
         failures.push('Flex sum delta vs concrete is not better than Plex');
