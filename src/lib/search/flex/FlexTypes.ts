@@ -52,6 +52,7 @@ export interface FlexExpansion {
     readonly probContinue: bigint;
     readonly totalWeight: number;
     readonly edges: readonly FlexEdge[];
+    readonly clueIncompatibleWeight?: number | undefined;
     readonly terminalReason: FlexTerminalReason;
 }
 
@@ -82,6 +83,7 @@ export interface FlexPendingEntry {
     readonly mass: bigint;
     readonly count: number;
     readonly nodeKind: FlexNode['kind'];
+    readonly targetClueReachable?: boolean | undefined;
 }
 
 export interface FlexRunSnapshot {
