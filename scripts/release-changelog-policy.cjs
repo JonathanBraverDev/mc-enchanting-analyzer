@@ -4,14 +4,17 @@ const ALLOWED_CHANGELOG_SECTIONS = new Set([
   'Changed',
   'Fixed',
   'Security',
+  'Performance',
   'Developer Experience',
+  'Documentation',
+  'Cleanup',
   'Deprecated',
   'Removed',
   'Breaking',
 ]);
 
 const MINOR_SECTIONS = ['Added', 'Improved', 'Changed', 'Developer Experience', 'Deprecated'];
-const PATCH_SECTIONS = ['Fixed', 'Security', 'Developer Experience'];
+const PATCH_SECTIONS = ['Fixed', 'Security', 'Performance', 'Developer Experience', 'Documentation', 'Cleanup'];
 const PATCH_MINOR_SIGNAL_SECTIONS = ['Added', 'Improved', 'Changed', 'Deprecated', 'Removed'];
 
 function parseVersion(value) {
