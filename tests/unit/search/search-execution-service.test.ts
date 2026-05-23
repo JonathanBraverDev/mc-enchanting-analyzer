@@ -9,8 +9,24 @@ import { getDefaultStatsCheckpoint, getSearchCheckpointForRefinement } from '#co
 import { getRegistryVersionBoundaries } from '#core/version-resolution.js';
 import { SearchExecutionService } from '#lib/search/SearchExecutionService.js';
 import { FLEX_CACHE_LIMITS } from '#lib/search/flex/FlexConstants.js';
-import { EnchantStats, EngineInstrumentation, SearchResult } from '#types/index.js';
+import { CheckpointSearchRequest, EnchantStats, EngineInstrumentation, SearchResult } from '#types/index.js';
 import { PRECISION } from '#utils/index.js';
+
+const MASS_UNIT_TOLERANCE = 1_000n;
+const ACCOUNTING_UNIT_BUCKETS = [
+    'resolved',
+    'clueIncompatible',
+    'pending',
+    'sieved',
+    'overflow',
+    'capped',
+    'rounding',
+    'recoveredRounding',
+    'recoveredSieved'
+] as const;
+
+type AccountingUnitBucket = typeof ACCOUNTING_UNIT_BUCKETS[number];
+type AccountingUnitBreakdown = Record<AccountingUnitBucket, bigint>;
 
 function accountingTotal(stats: EnchantStats): number {
     const a = stats.accounting;
@@ -28,6 +44,67 @@ function getStageDetailUnits(result: SearchResult, stage: string, bucket: string
 
 function getOperationDetailUnits(result: SearchResult, stage: string, operation: string, bucket: string): bigint {
     return BigInt(result.snapshot.mass.details?.stages[stage]?.operations[operation]?.buckets[bucket]?.units ?? 0);
+}
+
+function getPublicAccountingUnits(result: SearchResult, label: string): AccountingUnitBreakdown {
+    const units = result.snapshot.mass.units;
+    assert.ok(units, `${label}: missing precise mass accounting units`);
+
+    const output = {} as AccountingUnitBreakdown;
+    for (const bucket of ACCOUNTING_UNIT_BUCKETS) output[bucket] = BigInt(units[bucket]);
+    return output;
+}
+
+function foldFlexDetailUnits(result: SearchResult, label: string): AccountingUnitBreakdown {
+    assert.ok(result.snapshot.mass.details, `${label}: missing detailed mass accounting`);
+
+    assert.strictEqual(
+        getStageDetailUnits(result, 'search', 'resolved'),
+        getOperationDetailUnits(result, 'projection', 'results', 'source'),
+        `${label}: result projection source should equal search resolved mass`
+    );
+    assert.strictEqual(
+        getStageDetailUnits(result, 'search', 'pending'),
+        getOperationDetailUnits(result, 'projection', 'pending', 'source'),
+        `${label}: pending projection source should equal search pending mass`
+    );
+
+    return {
+        resolved: getOperationDetailUnits(result, 'projection', 'results', 'projected'),
+        clueIncompatible: getStageDetailUnits(result, 'search', 'clueIncompatible')
+            + getStageDetailUnits(result, 'projection', 'clueIncompatible'),
+        pending: getOperationDetailUnits(result, 'projection', 'pending', 'projected'),
+        sieved: getStageDetailUnits(result, 'search', 'sieved'),
+        overflow: getStageDetailUnits(result, 'search', 'overflow'),
+        capped: getStageDetailUnits(result, 'search', 'capped'),
+        rounding: getStageDetailUnits(result, 'search', 'rounding')
+            + getStageDetailUnits(result, 'projection', 'loss'),
+        recoveredRounding: getStageDetailUnits(result, 'search', 'recoveredRounding'),
+        recoveredSieved: getStageDetailUnits(result, 'search', 'recoveredSieved')
+    };
+}
+
+function assertAccountingUnitsEqual(label: string, actual: AccountingUnitBreakdown, expected: AccountingUnitBreakdown): void {
+    for (const bucket of ACCOUNTING_UNIT_BUCKETS) {
+        assert.strictEqual(actual[bucket], expected[bucket], `${label}: ${bucket}`);
+    }
+}
+
+function assertAccountingUnitsApproximatelyEqual(
+    label: string,
+    actual: AccountingUnitBreakdown,
+    expected: AccountingUnitBreakdown,
+    tolerance: bigint = MASS_UNIT_TOLERANCE
+): void {
+    for (const bucket of ACCOUNTING_UNIT_BUCKETS) {
+        const delta = actual[bucket] > expected[bucket]
+            ? actual[bucket] - expected[bucket]
+            : expected[bucket] - actual[bucket];
+        assert.ok(
+            delta <= tolerance,
+            `${label}: ${bucket} expected ${String(expected[bucket])}, got ${String(actual[bucket])}, delta ${String(delta)}`
+        );
+    }
 }
 
 function assertPublicStatsMatchConcrete(label: string, concrete: EnchantStats, candidate: EnchantStats): void {
@@ -160,6 +237,67 @@ describe('Search execution service', () => {
             + getStageDetailUnits(result, 'projection', 'loss');
         assert.strictEqual(projectionSource, projectionOutput);
         assert.ok(Math.abs(snapshotAccountingTotal(result) - 1) < 1e-12);
+    });
+
+    it('folds Flex detailed mass accounting back to V7-compatible public buckets', async () => {
+        const cases: Array<{ readonly label: string; readonly request: CheckpointSearchRequest }> = [
+            {
+                label: 'bounded book checkpoint',
+                request: {
+                    item: 'book',
+                    material: 'book',
+                    xp: 30,
+                    threshold: 0,
+                    maxIterations: 1,
+                    probabilityFloor: 0n
+                }
+            },
+            {
+                label: 'exhaustive low-XP mace',
+                request: {
+                    item: 'mace',
+                    material: 'mace',
+                    xp: 1,
+                    exhaustive: true
+                }
+            },
+            {
+                label: 'bounded exact clue checkpoint',
+                request: {
+                    item: 'sword',
+                    material: 'diamond',
+                    xp: 30,
+                    clue: 'Sharpness III',
+                    threshold: 0,
+                    maxIterations: 10_000,
+                    probabilityFloor: 0n
+                }
+            }
+        ];
+
+        for (const testCase of cases) {
+            const concrete = await EngineFactory.createForVersion('1.21.11').searchToCheckpoint({
+                ...testCase.request,
+                useCache: false
+            });
+            const flex = await EngineFactory.createForVersion('1.21.11').searchToCheckpoint({
+                ...testCase.request,
+                searchBackend: 'flex',
+                useCache: false
+            });
+
+            const flexPublic = getPublicAccountingUnits(flex, testCase.label);
+            assertAccountingUnitsEqual(
+                `${testCase.label}: folded Flex details`,
+                foldFlexDetailUnits(flex, testCase.label),
+                flexPublic
+            );
+            assertAccountingUnitsApproximatelyEqual(
+                `${testCase.label}: concrete V7 public accounting`,
+                flexPublic,
+                getPublicAccountingUnits(concrete, testCase.label)
+            );
+        }
     });
 
     it('resumes cached Flex runs across one-at-a-time checkpoint calls', async () => {
