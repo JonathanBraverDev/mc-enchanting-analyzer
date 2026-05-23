@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## v7.4.4 (2026-05-23)
+
+### Cleanup
+- **Experimental backend cleanup**: Removed the obsolete Plex prototype so internal grouped-search diagnostics use the maintained Flex path instead.
+
+### Documentation
+- **Factorized engine notes**: Updated the architecture, mass-accounting, and Flex design docs to describe Plex as a removed prototype and Flex as the only active grouped-engine diagnostic path.
+
 ## v7.4.3 (2026-05-22)
 
 ### Developer Experience
