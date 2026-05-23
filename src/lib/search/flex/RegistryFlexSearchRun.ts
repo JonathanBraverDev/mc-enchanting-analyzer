@@ -80,7 +80,7 @@ export class RegistryFlexSearchRun {
             seededMass += rootMass;
         }
 
-        if (seededMass < PRECISION) this.coordinator.mass.record('rounding', PRECISION - seededMass);
+        if (seededMass < PRECISION) this.coordinator.recordSeedRounding(PRECISION - seededMass);
         if (seededMass > PRECISION) throw new Error(`Modified-level distribution overflowed precision by ${seededMass - PRECISION} units.`);
     }
 

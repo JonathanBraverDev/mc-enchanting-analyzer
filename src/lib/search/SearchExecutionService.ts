@@ -1,4 +1,5 @@
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
+import { ProbabilityMassAccountant, PROJECTION_MASS_BUCKET, PROJECTION_MASS_OPERATION } from '#engine/search/ProbabilityMassAccountant.js';
 import { SearchResult, SequentialCheckpointSearchContext, CheckpointSearchContext, EngineInstrumentation, SearchTiming, SearchBackend, RegistryState, MutatedRegistryState } from '#types/index.js';
 import { RegistryKernel } from '#lib/search/registry/RegistryKernel.js';
 import { SearchRun, SearchRunSnapshot } from '#lib/search/SearchRun.js';
@@ -8,7 +9,7 @@ import { FLEX_CACHE_LIMITS, FLEX_INVARIANT_LIMITS } from '#lib/search/flex/FlexC
 import { SearchStateCache } from '#lib/search/SearchStateCache.js';
 import { PRECISION, ProbUtils } from '#utils/index.js';
 import { LRUCache } from '#utils/collections/LRUCache.js';
-import type { MassAccountingBreakdown } from '#types/mass.js';
+import type { MassAccountingBreakdown, MassAccountingDetailBucket, MassAccountingDetails, MassAccountingOperationDetails, MassAccountingStageDetails } from '#types/mass.js';
 
 /**
  * Engine-facing service that advances shared search runs to checkpoint boundaries.
@@ -446,7 +447,8 @@ export class SearchExecutionService {
         const recoveredRounding = BigInt(engine.recoveredRounding);
         const recoveredSieved = BigInt(engine.recoveredSieved);
 
-        return Object.freeze({
+        const details = this.toCompatibleFlexMassDetails(projected, flexSnapshot);
+        const mass: MassAccountingBreakdown = {
             resolved: ProbUtils.toNumber(resolved),
             clueIncompatible: ProbUtils.toNumber(clueIncompatible),
             pending: ProbUtils.toNumber(pending),
@@ -467,7 +469,19 @@ export class SearchExecutionService {
                 recoveredRounding: recoveredRounding.toString(),
                 recoveredSieved: recoveredSieved.toString()
             })
-        });
+        };
+        if (details) mass.details = details;
+        return Object.freeze(mass);
+    }
+
+    private toCompatibleFlexMassDetails(
+        projected: GroupedFlexProjectedCheckpoint,
+        flexSnapshot: FlexRunSnapshot
+    ): MassAccountingDetails | undefined {
+        const details = cloneMassAccountingDetails(flexSnapshot.massDetails);
+        mergeMassAccountingDetails(details, createFlexProjectionMassDetails(projected));
+        if (Object.keys(details.stages).length === 0) return undefined;
+        return freezeMassAccountingDetails(details);
     }
 
     private throwIfAborted(signal: AbortSignal | undefined): void {
@@ -487,4 +501,118 @@ export class SearchExecutionService {
 
 function isMutatedRegistry(registry: RegistryState): registry is MutatedRegistryState {
     return 'source' in registry && registry.source === 'mutated';
+}
+
+function cloneMassAccountingDetails(source: MassAccountingDetails | undefined): MassAccountingDetails {
+    const stages: Record<string, MassAccountingStageDetails> = {};
+    if (!source) return { stages };
+
+    for (const [stageName, stage] of Object.entries(source.stages)) {
+        const operations: Record<string, MassAccountingOperationDetails> = {};
+        for (const [operationName, operation] of Object.entries(stage.operations)) {
+            operations[operationName] = {
+                buckets: cloneMassDetailBuckets(operation.buckets)
+            };
+        }
+
+        stages[stageName] = {
+            buckets: cloneMassDetailBuckets(stage.buckets),
+            operations
+        };
+    }
+
+    return { stages };
+}
+
+function cloneMassDetailBuckets(
+    buckets: Record<string, MassAccountingDetailBucket>
+): Record<string, MassAccountingDetailBucket> {
+    const clone: Record<string, MassAccountingDetailBucket> = {};
+    for (const [bucketName, bucket] of Object.entries(buckets)) {
+        clone[bucketName] = { ...bucket };
+    }
+    return clone;
+}
+
+function createFlexProjectionMassDetails(projected: GroupedFlexProjectedCheckpoint): MassAccountingDetails | undefined {
+    const accountant = new ProbabilityMassAccountant();
+    const results = accountant.forProjectionOperation(PROJECTION_MASS_OPERATION.Results);
+    results.record(PROJECTION_MASS_BUCKET.Source, projected.sourceMass);
+    results.record(PROJECTION_MASS_BUCKET.Projected, projected.projectedMass);
+    results.record(PROJECTION_MASS_BUCKET.ClueIncompatible, projected.clueIncompatible);
+    results.record(PROJECTION_MASS_BUCKET.Loss, projected.projectionLoss);
+
+    const pending = accountant.forProjectionOperation(PROJECTION_MASS_OPERATION.Pending);
+    pending.record(PROJECTION_MASS_BUCKET.Source, projected.projectedPendingSourceMass);
+    pending.record(PROJECTION_MASS_BUCKET.Projected, projected.projectedPendingMass);
+    pending.record(PROJECTION_MASS_BUCKET.ClueIncompatible, projected.pendingClueIncompatible);
+    pending.record(PROJECTION_MASS_BUCKET.Loss, projected.pendingProjectionLoss);
+
+    return accountant.toPublicDetails();
+}
+
+function mergeMassAccountingDetails(target: MassAccountingDetails, source: MassAccountingDetails | undefined): void {
+    if (!source) return;
+
+    for (const [stageName, sourceStage] of Object.entries(source.stages)) {
+        const targetStage = target.stages[stageName] ?? {
+            buckets: {},
+            operations: {}
+        };
+        target.stages[stageName] = targetStage;
+        mergeMassDetailBuckets(targetStage.buckets, sourceStage.buckets);
+
+        for (const [operationName, sourceOperation] of Object.entries(sourceStage.operations)) {
+            const targetOperation = targetStage.operations[operationName] ?? {
+                buckets: {}
+            };
+            targetStage.operations[operationName] = targetOperation;
+            mergeMassDetailBuckets(targetOperation.buckets, sourceOperation.buckets);
+        }
+    }
+}
+
+function mergeMassDetailBuckets(
+    target: Record<string, MassAccountingDetailBucket>,
+    source: Record<string, MassAccountingDetailBucket>
+): void {
+    for (const [bucketName, bucket] of Object.entries(source)) {
+        addMassDetailBucket(target, bucketName, BigInt(bucket.units));
+    }
+}
+
+function addMassDetailBucket(
+    buckets: Record<string, MassAccountingDetailBucket>,
+    bucketName: string,
+    units: bigint
+): void {
+    const previousUnits = BigInt(buckets[bucketName]?.units ?? 0);
+    buckets[bucketName] = toMassDetailBucket(previousUnits + units);
+}
+
+function toMassDetailBucket(units: bigint): MassAccountingDetailBucket {
+    return {
+        value: ProbUtils.toNumber(units),
+        units: units.toString()
+    };
+}
+
+function freezeMassAccountingDetails(details: MassAccountingDetails): MassAccountingDetails {
+    for (const stage of Object.values(details.stages)) {
+        for (const bucket of Object.values(stage.buckets)) Object.freeze(bucket);
+        Object.freeze(stage.buckets);
+
+        for (const operation of Object.values(stage.operations)) {
+            for (const bucket of Object.values(operation.buckets)) Object.freeze(bucket);
+            Object.freeze(operation.buckets);
+            Object.freeze(operation);
+        }
+
+        Object.freeze(stage.operations);
+        Object.freeze(stage);
+    }
+
+    return Object.freeze({
+        stages: Object.freeze(details.stages)
+    });
 }

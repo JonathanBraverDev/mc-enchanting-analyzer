@@ -10,6 +10,7 @@ import { getRegistryVersionBoundaries } from '#core/version-resolution.js';
 import { SearchExecutionService } from '#lib/search/SearchExecutionService.js';
 import { FLEX_CACHE_LIMITS } from '#lib/search/flex/FlexConstants.js';
 import { EnchantStats, EngineInstrumentation, SearchResult } from '#types/index.js';
+import { PRECISION } from '#utils/index.js';
 
 function accountingTotal(stats: EnchantStats): number {
     const a = stats.accounting;
@@ -19,6 +20,14 @@ function accountingTotal(stats: EnchantStats): number {
 function snapshotAccountingTotal(result: SearchResult): number {
     const a = result.snapshot.mass;
     return a.resolved + a.clueIncompatible + a.pending + a.sieved + a.overflow + a.capped + a.rounding;
+}
+
+function getStageDetailUnits(result: SearchResult, stage: string, bucket: string): bigint {
+    return BigInt(result.snapshot.mass.details?.stages[stage]?.buckets[bucket]?.units ?? 0);
+}
+
+function getOperationDetailUnits(result: SearchResult, stage: string, operation: string, bucket: string): bigint {
+    return BigInt(result.snapshot.mass.details?.stages[stage]?.operations[operation]?.buckets[bucket]?.units ?? 0);
 }
 
 function assertPublicStatsMatchConcrete(label: string, concrete: EnchantStats, candidate: EnchantStats): void {
@@ -115,6 +124,41 @@ describe('Search execution service', () => {
         assert.strictEqual(result.instrumentation?.exitReason, 'iterations');
         assert.ok(result.snapshot.pendingEntries.length > 0);
         assert.ok(result.instrumentation.search.pendingEntryCount > (result.instrumentation.search.flexStructuralPendingEntryCount ?? 0));
+        assert.ok(Math.abs(snapshotAccountingTotal(result) - 1) < 1e-12);
+    });
+
+    it('exposes Flex mass accounting details without changing compatible public totals', async () => {
+        const engine = EngineFactory.createForVersion('1.21.11');
+
+        const result = await engine.searchToCheckpoint({
+            item: 'book',
+            material: 'book',
+            xp: 30,
+            threshold: 0,
+            maxIterations: 1,
+            searchBackend: 'flex'
+        });
+
+        assert.ok(result.snapshot.mass.details);
+        assert.ok(getOperationDetailUnits(result, 'search', 'seed', 'pending') > 0n);
+        assert.ok(getOperationDetailUnits(result, 'search', 'frontier', 'pending') < 0n);
+        assert.ok(getOperationDetailUnits(result, 'projection', 'pending', 'source') > 0n);
+        assert.ok(getOperationDetailUnits(result, 'projection', 'pending', 'projected') > 0n);
+
+        const searchTotal = getStageDetailUnits(result, 'search', 'resolved')
+            + getStageDetailUnits(result, 'search', 'clueIncompatible')
+            + getStageDetailUnits(result, 'search', 'pending')
+            + getStageDetailUnits(result, 'search', 'sieved')
+            + getStageDetailUnits(result, 'search', 'overflow')
+            + getStageDetailUnits(result, 'search', 'capped')
+            + getStageDetailUnits(result, 'search', 'rounding');
+        assert.strictEqual(searchTotal, PRECISION);
+
+        const projectionSource = getStageDetailUnits(result, 'projection', 'source');
+        const projectionOutput = getStageDetailUnits(result, 'projection', 'projected')
+            + getStageDetailUnits(result, 'projection', 'clueIncompatible')
+            + getStageDetailUnits(result, 'projection', 'loss');
+        assert.strictEqual(projectionSource, projectionOutput);
         assert.ok(Math.abs(snapshotAccountingTotal(result) - 1) < 1e-12);
     });
 

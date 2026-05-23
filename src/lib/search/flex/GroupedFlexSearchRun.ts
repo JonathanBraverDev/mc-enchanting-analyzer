@@ -82,7 +82,7 @@ export class GroupedFlexSearchRun {
             const level = Number(levelText);
             const pool = this.kernel.getPool(level);
             if (this.targetClueId !== undefined && !pool.entries.some(entry => entry.packedEnchant === this.targetClueId)) {
-                this.coordinator.mass.record('clueIncompatible', rootMass);
+                this.coordinator.recordSeedClueIncompatible(rootMass);
                 seededMass += rootMass;
                 continue;
             }
@@ -93,7 +93,7 @@ export class GroupedFlexSearchRun {
             seededMass += rootMass;
         }
 
-        if (seededMass < PRECISION) this.coordinator.mass.record('rounding', PRECISION - seededMass);
+        if (seededMass < PRECISION) this.coordinator.recordSeedRounding(PRECISION - seededMass);
         if (seededMass > PRECISION) throw new Error(`Modified-level distribution overflowed precision by ${seededMass - PRECISION} units.`);
     }
 
