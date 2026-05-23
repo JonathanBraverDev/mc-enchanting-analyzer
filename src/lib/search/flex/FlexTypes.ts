@@ -1,5 +1,5 @@
 import type { EngineExitReason, PackedCombo, PackedEnchant } from '#types/index.js';
-import type { MassAccountingBreakdown } from '#types/mass.js';
+import type { MassAccountingBreakdown, MassAccountingDetails } from '#types/mass.js';
 
 export type FlexNodeId = number & { readonly __brand: 'FlexNodeId' };
 export type FlexProgramId = number & { readonly __brand: 'FlexProgramId' };
@@ -58,6 +58,7 @@ export interface FlexExpansion {
 
 export interface FlexGraph {
     getExpansion(nodeId: FlexNodeId): FlexExpansion;
+    getNode(nodeId: FlexNodeId): FlexNode;
 }
 
 export interface FlexCheckpointRequest {
@@ -89,6 +90,7 @@ export interface FlexPendingEntry {
 export interface FlexRunSnapshot {
     readonly results: ReadonlyMap<FlexProgramId, bigint>;
     readonly mass: MassAccountingBreakdown;
+    readonly massDetails?: MassAccountingDetails | undefined;
     readonly iterations: number;
     readonly lastExpandedMass: bigint;
     readonly pendingCount: number;

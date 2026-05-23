@@ -1,4 +1,4 @@
-import { ProbabilityMassAccountant } from '#engine/search/ProbabilityMassAccountant.js';
+import { ProbabilityMassAccountant, SEARCH_MASS_BUCKET, SEARCH_MASS_OPERATION } from '#engine/search/ProbabilityMassAccountant.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import type { EngineExitReason } from '#types/index.js';
 import { AsyncUtils, PRECISION, ProbUtils } from '#utils/index.js';
@@ -29,11 +29,6 @@ interface FlexWorkItem {
     mass: bigint;
 }
 
-interface FlexEdgeMassShare {
-    readonly childId: FlexNodeId;
-    readonly mass: bigint;
-}
-
 interface FlexResidueStats {
     readonly count: number;
     readonly mass: bigint;
@@ -42,8 +37,17 @@ interface FlexResidueStats {
 export class FlexCoordinator {
     public readonly results = new Map<FlexProgramId, bigint>();
     public readonly mass = new ProbabilityMassAccountant();
+    private readonly seedMass = this.mass.forSearchOperation(SEARCH_MASS_OPERATION.Seed);
+    private readonly frontierMass = this.mass.forSearchOperation(SEARCH_MASS_OPERATION.Frontier);
+    private readonly resolveMass = this.mass.forSearchOperation(SEARCH_MASS_OPERATION.Resolve);
+    private readonly edgeSplitMass = this.mass.forSearchOperation(SEARCH_MASS_OPERATION.EdgeSplit);
+    private readonly cluePruneMass = this.mass.forSearchOperation(SEARCH_MASS_OPERATION.CluePrune);
+    private readonly probabilityFloorMass = this.mass.forSearchOperation(SEARCH_MASS_OPERATION.ProbabilityFloor);
+    private readonly overflowMass = this.mass.forSearchOperation(SEARCH_MASS_OPERATION.Overflow);
+    private readonly residueMass = this.mass.forSearchOperation(SEARCH_MASS_OPERATION.Residue);
 
     private readonly frontier = new FlexFrontier();
+    private readonly workItem: FlexWorkItem = { graphId: 0, nodeId: 0 as FlexNodeId, mass: 0n };
     private readonly forwardingResidues: Array<Map<number, BigUint64Array> | undefined> = [];
     private _iterations = 0;
     private _lastExpandedMass = 0n;
@@ -55,7 +59,15 @@ export class FlexCoordinator {
         this.assertGraph(graphId);
         if (mass === 0n) return;
         this.frontier.pushOrMerge(graphId, nodeId, mass);
-        this.mass.record('pending', mass);
+        this.seedMass.record(SEARCH_MASS_BUCKET.Pending, mass);
+    }
+
+    public recordSeedClueIncompatible(mass: bigint): void {
+        this.seedMass.record(SEARCH_MASS_BUCKET.ClueIncompatible, mass);
+    }
+
+    public recordSeedRounding(mass: bigint): void {
+        this.seedMass.record(SEARCH_MASS_BUCKET.Rounding, mass);
     }
 
     public searchToCheckpoint(request: FlexCheckpointRequest = {}): FlexRunSnapshot {
@@ -83,6 +95,7 @@ export class FlexCoordinator {
         return Object.freeze({
             results: new Map(this.results),
             mass: this.mass.toPublic(),
+            massDetails: this.mass.toPublicDetails(),
             iterations: this._iterations,
             lastExpandedMass: this._lastExpandedMass,
             pendingCount: this.frontier.size,
@@ -168,12 +181,11 @@ export class FlexCoordinator {
     }
 
     private step(criteria: FlexAdvanceCriteria): boolean {
-        const current: FlexWorkItem = { graphId: 0, nodeId: 0 as FlexNodeId, mass: 0n };
-        if (!this.frontier.pop(current)) return false;
+        if (!this.frontier.pop(this.workItem)) return false;
 
-        this.mass.subtract('pending', current.mass);
-        this._lastExpandedMass = current.mass;
-        this.expand(current, criteria.probabilityFloor);
+        this.frontierMass.subtract(SEARCH_MASS_BUCKET.Pending, this.workItem.mass);
+        this._lastExpandedMass = this.workItem.mass;
+        this.expand(this.workItem, criteria.probabilityFloor);
         this._iterations++;
         return true;
     }
@@ -192,7 +204,7 @@ export class FlexCoordinator {
 
         if (probForward === 0n) return;
         if (expansion.terminalReason === 'overflow') {
-            this.mass.record('overflow', probForward);
+            this.overflowMass.record(SEARCH_MASS_BUCKET.Overflow, probForward);
             return;
         }
 
@@ -202,7 +214,7 @@ export class FlexCoordinator {
         }
 
         if (expansion.node.count > 0 && probabilityFloor > 0n && probForward < probabilityFloor) {
-            this.mass.record('sieved', probForward);
+            this.probabilityFloorMass.record(SEARCH_MASS_BUCKET.Sieved, probForward);
             return;
         }
 
@@ -221,7 +233,6 @@ export class FlexCoordinator {
         const clueIncompatibleWeight = expansion.clueIncompatibleWeight ?? 0;
         const clueIncompatibleIndex = expansion.edges.length;
         const nextResidues = new BigUint64Array(expansion.edges.length + (clueIncompatibleWeight > 0 ? 1 : 0));
-        const shares: FlexEdgeMassShare[] = [];
         let assigned = 0n;
         let standaloneAssigned = 0n;
         let nextResidueNumerator = 0n;
@@ -240,7 +251,7 @@ export class FlexCoordinator {
             hasResidue ||= edgeResidue !== 0n;
             assigned += childMass;
             standaloneAssigned += (mass * weight) / totalWeight;
-            shares.push({ childId: edge.childId, mass: childMass });
+            this.pushPending(graphId, edge.childId, childMass);
         }
 
         if (clueIncompatibleWeight > 0) {
@@ -253,35 +264,31 @@ export class FlexCoordinator {
             hasResidue ||= edgeResidue !== 0n;
             assigned += childMass;
             standaloneAssigned += (mass * weight) / totalWeight;
-            this.mass.record('clueIncompatible', childMass);
+            this.cluePruneMass.record(SEARCH_MASS_BUCKET.ClueIncompatible, childMass);
         }
 
         const newResidueMass = nextResidueNumerator / totalWeight;
         this.setForwardingResidues(graphId, nodeId, hasResidue ? nextResidues : undefined);
         this.recordResidueDelta(oldResidueMass, newResidueMass);
         this.recordResiduePromotion(assigned - standaloneAssigned);
-
-        for (const share of shares) {
-            this.pushPending(graphId, share.childId, share.mass);
-        }
     }
 
     private recordResolved(programId: FlexProgramId, mass: bigint): void {
         if (mass === 0n) return;
         this.results.set(programId, (this.results.get(programId) ?? 0n) + mass);
-        this.mass.record('resolved', mass);
+        this.resolveMass.record(SEARCH_MASS_BUCKET.Resolved, mass);
     }
 
     private pushPending(graphId: number, nodeId: FlexNodeId, mass: bigint): void {
         if (mass === 0n) return;
         this.frontier.pushOrMerge(graphId, nodeId, mass);
-        this.mass.record('pending', mass);
+        this.frontierMass.record(SEARCH_MASS_BUCKET.Pending, mass);
     }
 
     private getPendingEntries(): FlexPendingEntry[] {
         const entries: FlexPendingEntry[] = [];
         this.frontier.forEach((graphId, nodeId, mass) => {
-            const node = this.getGraph(graphId).getExpansion(nodeId).node;
+            const node = this.getGraph(graphId).getNode(nodeId);
             entries.push(Object.freeze({
                 graphId,
                 nodeId,
@@ -318,17 +325,17 @@ export class FlexCoordinator {
 
     private recordResidueDelta(oldResidue: bigint, newResidue: bigint): void {
         if (newResidue > oldResidue) {
-            this.mass.record('rounding', newResidue - oldResidue);
+            this.edgeSplitMass.record(SEARCH_MASS_BUCKET.Rounding, newResidue - oldResidue);
             return;
         }
 
         if (oldResidue > newResidue) {
-            this.mass.subtract('rounding', oldResidue - newResidue);
+            this.edgeSplitMass.subtract(SEARCH_MASS_BUCKET.Rounding, oldResidue - newResidue);
         }
     }
 
     private recordResiduePromotion(promotedMass: bigint): void {
-        if (promotedMass > 0n) this.mass.record('recoveredRounding', promotedMass);
+        if (promotedMass > 0n) this.residueMass.record(SEARCH_MASS_BUCKET.RecoveredRounding, promotedMass);
     }
 
     private getForwardingResidues(graphId: number, nodeId: FlexNodeId): BigUint64Array | undefined {
@@ -383,14 +390,11 @@ export class FlexCoordinator {
     }
 }
 
-interface FlexFrontierStorage {
-    readonly masses: Map<number, bigint>;
-}
-
 class FlexFrontier {
     private readonly heapGraphIds: number[] = [];
     private readonly heapNodeIds: number[] = [];
-    private readonly storages: FlexFrontierStorage[] = [];
+    private readonly heapMasses: bigint[] = [];
+    private readonly positionsByState = new Map<number, number>();
 
     public get size(): number {
         return this.heapNodeIds.length;
@@ -398,13 +402,11 @@ class FlexFrontier {
 
     public pushOrMerge(graphId: number, nodeId: FlexNodeId, mass: bigint): void {
         if (mass === 0n) return;
-        const storage = this.ensureStorage(graphId);
         const nodeKey = nodeId as number;
-        const existingMass = storage.masses.get(nodeKey) ?? 0n;
-        storage.masses.set(nodeKey, existingMass + mass);
-
-        const existingIndex = this.findHeapIndex(graphId, nodeId);
+        const positionKey = this.getPositionKey(graphId, nodeId);
+        const existingIndex = this.positionsByState.get(positionKey);
         if (existingIndex !== undefined) {
+            this.heapMasses[existingIndex] = this.heapMasses[existingIndex]! + mass;
             this.bubbleUp(existingIndex);
             return;
         }
@@ -412,18 +414,20 @@ class FlexFrontier {
         const index = this.heapNodeIds.length;
         this.heapGraphIds.push(graphId);
         this.heapNodeIds.push(nodeKey);
+        this.heapMasses.push(mass);
+        this.positionsByState.set(positionKey, index);
         this.bubbleUp(index);
     }
 
     public peekMass(): bigint {
-        return this.heapNodeIds.length === 0 ? 0n : this.getHeapMass(0);
+        return this.heapNodeIds.length === 0 ? 0n : this.heapMasses[0]!;
     }
 
     public forEach(callback: (graphId: number, nodeId: FlexNodeId, mass: bigint) => void): void {
         for (let index = 0; index < this.heapNodeIds.length; index++) {
             const graphId = this.heapGraphIds[index]!;
             const nodeId = this.heapNodeIds[index]! as FlexNodeId;
-            callback(graphId, nodeId, this.getNodeMass(graphId, nodeId));
+            callback(graphId, nodeId, this.heapMasses[index]!);
         }
     }
 
@@ -432,17 +436,19 @@ class FlexFrontier {
 
         const graphId = this.heapGraphIds[0]!;
         const nodeId = this.heapNodeIds[0]!;
-        const mass = this.getNodeMass(graphId, nodeId as FlexNodeId);
-        this.storages[graphId]!.masses.delete(nodeId);
+        const mass = this.heapMasses[0]!;
+        this.positionsByState.delete(this.getPositionKey(graphId, nodeId as FlexNodeId));
         out.graphId = graphId;
         out.nodeId = nodeId as FlexNodeId;
         out.mass = mass;
 
         const lastGraphId = this.heapGraphIds.pop();
         const lastNodeId = this.heapNodeIds.pop();
-        if (this.heapNodeIds.length > 0 && lastGraphId !== undefined && lastNodeId !== undefined) {
+        const lastMass = this.heapMasses.pop();
+        if (this.heapNodeIds.length > 0 && lastGraphId !== undefined && lastNodeId !== undefined && lastMass !== undefined) {
             this.heapGraphIds[0] = lastGraphId;
             this.heapNodeIds[0] = lastNodeId;
+            this.heapMasses[0] = lastMass;
             this.sinkDown(0);
         }
 
@@ -453,68 +459,61 @@ class FlexFrontier {
         let current = index;
         const graphId = this.heapGraphIds[current]!;
         const nodeId = this.heapNodeIds[current]!;
+        const mass = this.heapMasses[current]!;
 
         while (current > 0) {
             const parent = (current - 1) >>> 1;
-            if (this.getHeapMass(parent) >= this.getNodeMass(graphId, nodeId as FlexNodeId)) break;
+            if (this.heapMasses[parent]! >= mass) break;
             this.moveHeapEntry(parent, current);
             current = parent;
         }
 
         this.heapGraphIds[current] = graphId;
         this.heapNodeIds[current] = nodeId;
+        this.heapMasses[current] = mass;
+        this.positionsByState.set(this.getPositionKey(graphId, nodeId as FlexNodeId), current);
     }
 
     private sinkDown(index: number): void {
         let current = index;
         const graphId = this.heapGraphIds[current]!;
         const nodeId = this.heapNodeIds[current]!;
-        const mass = this.getNodeMass(graphId, nodeId as FlexNodeId);
+        const mass = this.heapMasses[current]!;
 
         while (true) {
             const left = (current << 1) + 1;
             if (left >= this.heapNodeIds.length) break;
             const right = left + 1;
             let child = left;
-            if (right < this.heapNodeIds.length && this.getHeapMass(right) > this.getHeapMass(left)) {
+            if (right < this.heapNodeIds.length && this.heapMasses[right]! > this.heapMasses[left]!) {
                 child = right;
             }
-            if (mass >= this.getHeapMass(child)) break;
+            if (mass >= this.heapMasses[child]!) break;
             this.moveHeapEntry(child, current);
             current = child;
         }
 
         this.heapGraphIds[current] = graphId;
         this.heapNodeIds[current] = nodeId;
+        this.heapMasses[current] = mass;
+        this.positionsByState.set(this.getPositionKey(graphId, nodeId as FlexNodeId), current);
     }
 
     private moveHeapEntry(from: number, to: number): void {
-        this.heapGraphIds[to] = this.heapGraphIds[from]!;
-        this.heapNodeIds[to] = this.heapNodeIds[from]!;
+        const graphId = this.heapGraphIds[from]!;
+        const nodeId = this.heapNodeIds[from]!;
+        this.heapGraphIds[to] = graphId;
+        this.heapNodeIds[to] = nodeId;
+        this.heapMasses[to] = this.heapMasses[from]!;
+        this.positionsByState.set(this.getPositionKey(graphId, nodeId as FlexNodeId), to);
     }
 
-    private findHeapIndex(graphId: number, nodeId: FlexNodeId): number | undefined {
-        const nodeKey = nodeId as number;
-        for (let index = 0; index < this.heapNodeIds.length; index++) {
-            if (this.heapGraphIds[index] === graphId && this.heapNodeIds[index] === nodeKey) return index;
-        }
-        return undefined;
+    private getPositionKey(graphId: number, nodeId: FlexNodeId): number {
+        return pairIntegers(graphId, nodeId as number);
     }
+}
 
-    private getHeapMass(index: number): bigint {
-        return this.getNodeMass(this.heapGraphIds[index]!, this.heapNodeIds[index]! as FlexNodeId);
-    }
-
-    private getNodeMass(graphId: number, nodeId: FlexNodeId): bigint {
-        return this.storages[graphId]?.masses.get(nodeId as number) ?? 0n;
-    }
-
-    private ensureStorage(graphId: number): FlexFrontierStorage {
-        let storage = this.storages[graphId];
-        if (!storage) {
-            storage = { masses: new Map<number, bigint>() };
-            this.storages[graphId] = storage;
-        }
-        return storage;
-    }
+function pairIntegers(left: number, right: number): number {
+    const sum = left + right;
+    return ((sum * (sum + 1)) / 2) + right;
 }

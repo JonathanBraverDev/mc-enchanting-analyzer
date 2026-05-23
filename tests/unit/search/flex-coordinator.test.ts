@@ -28,6 +28,10 @@ class TestFlexGraph implements FlexGraph {
         if (!expansion) throw new Error(`Missing test expansion ${String(nodeIdValue)}.`);
         return expansion;
     }
+
+    public getNode(nodeIdValue: FlexNodeId): FlexExpansion['node'] {
+        return this.getExpansion(nodeIdValue).node;
+    }
 }
 
 function terminalExpansion(store: FlexProgramStore, id: FlexNodeId, programId = store.empty): FlexExpansion {

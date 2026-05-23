@@ -23,6 +23,8 @@ export interface MassAccountingBreakdown {
   recoveredSieved: number;
   /** Diagnostic: Precise mass counts as strings to preserve BigInt precision in JSON. */
   units?: { [K in keyof MassBucketUnits]: string };
+  /** Optional diagnostic view grouped by engine stage, operation, and bucket. */
+  details?: MassAccountingDetails | undefined;
 }
 
 /**
@@ -41,6 +43,31 @@ export interface MassBucketUnits {
 }
 
 export type MassBucketName = keyof MassBucketUnits;
+
+/**
+ * Drill-down mass accounting for implementations that can expose where mass moved.
+ *
+ * Operation buckets may be signed deltas. For example, frontier expansion removes
+ * mass from the pending public bucket, so that operation reports a negative
+ * pending delta while the stage total still matches the public compatibility view.
+ */
+export interface MassAccountingDetails {
+    stages: Record<string, MassAccountingStageDetails>;
+}
+
+export interface MassAccountingStageDetails {
+    buckets: Record<string, MassAccountingDetailBucket>;
+    operations: Record<string, MassAccountingOperationDetails>;
+}
+
+export interface MassAccountingOperationDetails {
+    buckets: Record<string, MassAccountingDetailBucket>;
+}
+
+export interface MassAccountingDetailBucket {
+    value: number;
+    units: string;
+}
 
 export interface MassAccountingPhases {
     /** Engine/search-stage accounting. */

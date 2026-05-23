@@ -55,6 +55,11 @@ export class SolidFlexGraph implements FlexGraph {
         return expansion;
     }
 
+    public getNode(nodeId: FlexNodeId): FlexNode {
+        const searchNodeId = nodeId as number as SearchGraphNodeId;
+        return this.createNode(searchNodeId, this.getProgramForSearchNode(searchNodeId));
+    }
+
     public getProgramId(nodeId: FlexNodeId): FlexProgramId {
         return this.getProgramForSearchNode(nodeId as number as SearchGraphNodeId);
     }
