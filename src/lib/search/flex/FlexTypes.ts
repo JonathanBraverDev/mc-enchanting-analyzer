@@ -58,6 +58,7 @@ export interface FlexExpansion {
 
 export interface FlexGraph {
     getExpansion(nodeId: FlexNodeId): FlexExpansion;
+    getNode(nodeId: FlexNodeId): FlexNode;
 }
 
 export interface FlexCheckpointRequest {
