@@ -34,15 +34,11 @@ interface FlexWorkItem {
     mass: bigint;
 }
 
-interface FlexResidueStats {
-    readonly count: number;
-    readonly mass: bigint;
-}
-
 interface FlexForwardingResidueRecord {
     readonly residues: BigUint64Array;
     readonly denominator: bigint;
     readonly residueMass: bigint;
+    readonly nonZeroCount: number;
 }
 
 export class FlexCoordinator {
@@ -60,6 +56,9 @@ export class FlexCoordinator {
     private readonly frontier = new FlexFrontier();
     private readonly workItem: FlexWorkItem = { graphId: 0, nodeId: 0 as FlexNodeId, mass: 0n };
     private readonly forwardingResidues: Array<Map<number, FlexForwardingResidueRecord> | undefined> = [];
+    private activeResidueCount = 0;
+    private activeResidueMass = 0n;
+    private activeResidueRecordCount = 0;
     private residueArrayAllocationCount = 0;
     private _iterations = 0;
     private _lastExpandedMass = 0n;
@@ -117,7 +116,6 @@ export class FlexCoordinator {
     }
 
     public state(): FlexRunState {
-        const residue = this.getActiveResidueStats();
         return Object.freeze({
             results: this.results,
             mass: this.mass.toPublic(),
@@ -127,8 +125,8 @@ export class FlexCoordinator {
             pendingCount: this.frontier.size,
             largestPendingMass: this.frontier.peekMass(),
             graphCount: this.graphs.length,
-            activeResidueCount: residue.count,
-            activeResidueMass: residue.mass,
+            activeResidueCount: this.activeResidueCount,
+            activeResidueMass: this.activeResidueMass,
             fullyResolved: this.frontier.size === 0,
             exitReason: this.frontier.size === 0 ? 'empty' : this._exitReason
         });
@@ -154,8 +152,28 @@ export class FlexCoordinator {
             frontierGrowCount: this.frontier.growCount,
             frontierIndexGrowCount: this.frontier.positionIndexGrowCount,
             residueArrayAllocationCount: this.residueArrayAllocationCount,
-            activeResidueRecordCount: this.getActiveResidueRecordCount()
+            activeResidueRecordCount: this.activeResidueRecordCount
         };
+    }
+
+    public scanActiveResidueStatsForDiagnostics(): { readonly count: number; readonly mass: bigint } {
+        let count = 0;
+        let mass = 0n;
+        for (const graphResidues of this.forwardingResidues) {
+            if (!graphResidues) continue;
+            for (const record of graphResidues.values()) {
+                let residueNumerator = 0n;
+                let nonZeroCount = 0;
+                for (const residue of record.residues) {
+                    if (residue === 0n) continue;
+                    nonZeroCount++;
+                    residueNumerator += residue;
+                }
+                count += nonZeroCount;
+                mass += residueNumerator / record.denominator;
+            }
+        }
+        return { count, mass };
     }
 
     private createAdvanceCriteria(request: FlexCheckpointRequest): FlexAdvanceCriteria {
@@ -240,34 +258,34 @@ export class FlexCoordinator {
     }
 
     private expand(current: FlexWorkItem, probabilityFloor: bigint): void {
-        const expansion = this.getSearchExpansion(current.graphId, current.nodeId);
+        this.withSearchExpansion(current.graphId, current.nodeId, expansion => {
+            if (expansion.count === 0 && (expansion.totalWeight <= 0 || expansion.edgeCount === 0)) {
+                this.recordResolved(expansion.programId, current.mass);
+                return;
+            }
 
-        if (expansion.count === 0 && (expansion.totalWeight <= 0 || expansion.edgeCount === 0)) {
-            this.recordResolved(expansion.programId, current.mass);
-            return;
-        }
+            const probStop = ProbUtils.scale(current.mass, PRECISION - expansion.probContinue);
+            const probForward = current.mass - probStop;
+            this.recordResolved(expansion.programId, probStop);
 
-        const probStop = ProbUtils.scale(current.mass, PRECISION - expansion.probContinue);
-        const probForward = current.mass - probStop;
-        this.recordResolved(expansion.programId, probStop);
+            if (probForward === 0n) return;
+            if (expansion.terminalReason === 'overflow') {
+                this.overflowMass.record(SEARCH_MASS_BUCKET.Overflow, probForward);
+                return;
+            }
 
-        if (probForward === 0n) return;
-        if (expansion.terminalReason === 'overflow') {
-            this.overflowMass.record(SEARCH_MASS_BUCKET.Overflow, probForward);
-            return;
-        }
+            if (expansion.totalWeight <= 0 || expansion.edgeCount === 0) {
+                this.recordResolved(expansion.programId, probForward);
+                return;
+            }
 
-        if (expansion.totalWeight <= 0 || expansion.edgeCount === 0) {
-            this.recordResolved(expansion.programId, probForward);
-            return;
-        }
+            if (expansion.count > 0 && probabilityFloor > 0n && probForward < probabilityFloor) {
+                this.probabilityFloorMass.record(SEARCH_MASS_BUCKET.Sieved, probForward);
+                return;
+            }
 
-        if (expansion.count > 0 && probabilityFloor > 0n && probForward < probabilityFloor) {
-            this.probabilityFloorMass.record(SEARCH_MASS_BUCKET.Sieved, probForward);
-            return;
-        }
-
-        this.forwardMass(current.graphId, current.nodeId, expansion, probForward);
+            this.forwardMass(current.graphId, current.nodeId, expansion, probForward);
+        });
     }
 
     private forwardMass(
@@ -286,6 +304,8 @@ export class FlexCoordinator {
         let assigned = 0n;
         let standaloneAssigned = 0n;
         let nextResidueNumerator = 0n;
+        let nextResidueNonZeroCount = 0;
+        let pendingMass = 0n;
 
         for (let edgeIndex = 0; edgeIndex < expansion.edgeCount; edgeIndex++) {
             const edgeWeight = expansion.edgeWeights[edgeIndex]!;
@@ -298,10 +318,12 @@ export class FlexCoordinator {
             if (edgeResidue !== 0n) {
                 nextResidues ??= this.createResidueArray(residueLength);
                 nextResidues[edgeIndex] = edgeResidue;
+                nextResidueNonZeroCount++;
             }
             nextResidueNumerator += edgeResidue;
             assigned += childMass;
             standaloneAssigned += (mass * BigInt(edgeWeight)) / totalWeight;
+            pendingMass += childMass;
             this.pushPending(graphId, expansion.edgeChildIds[edgeIndex]! as FlexNodeId, childMass);
         }
 
@@ -313,6 +335,7 @@ export class FlexCoordinator {
             if (edgeResidue !== 0n) {
                 nextResidues ??= this.createResidueArray(residueLength);
                 nextResidues[clueIncompatibleIndex] = edgeResidue;
+                nextResidueNonZeroCount++;
             }
             nextResidueNumerator += edgeResidue;
             assigned += childMass;
@@ -322,8 +345,9 @@ export class FlexCoordinator {
 
         const newResidueMass = nextResidueNumerator / totalWeight;
         this.setForwardingResidues(graphId, nodeId, nextResidues
-            ? { residues: nextResidues, denominator: totalWeight, residueMass: newResidueMass }
+            ? { residues: nextResidues, denominator: totalWeight, residueMass: newResidueMass, nonZeroCount: nextResidueNonZeroCount }
             : undefined);
+        if (pendingMass > 0n) this.frontierMass.record(SEARCH_MASS_BUCKET.Pending, pendingMass);
         this.recordResidueDelta(oldResidueMass, newResidueMass);
         this.recordResiduePromotion(assigned - standaloneAssigned);
     }
@@ -337,7 +361,6 @@ export class FlexCoordinator {
     private pushPending(graphId: number, nodeId: FlexNodeId, mass: bigint): void {
         if (mass === 0n) return;
         this.frontier.pushOrMerge(graphId, nodeId, mass);
-        this.frontierMass.record(SEARCH_MASS_BUCKET.Pending, mass);
     }
 
     private getPendingEntries(): FlexPendingEntry[] {
@@ -354,24 +377,6 @@ export class FlexCoordinator {
             }));
         });
         return entries;
-    }
-
-    private getActiveResidueStats(): FlexResidueStats {
-        let count = 0;
-        let mass = 0n;
-        for (const graphResidues of this.forwardingResidues) {
-            if (!graphResidues) continue;
-            for (const record of graphResidues.values()) {
-                let residueNumerator = 0n;
-                for (const residue of record.residues) {
-                    if (residue === 0n) continue;
-                    count++;
-                    residueNumerator += residue;
-                }
-                mass += residueNumerator / record.denominator;
-            }
-        }
-        return { count, mass };
     }
 
     private recordResidueDelta(oldResidue: bigint, newResidue: bigint): void {
@@ -401,10 +406,21 @@ export class FlexCoordinator {
             this.forwardingResidues[graphId] = graphResidues;
         }
 
+        const key = nodeId as number;
+        const previous = graphResidues.get(key);
+        if (previous) {
+            this.activeResidueCount -= previous.nonZeroCount;
+            this.activeResidueMass -= previous.residueMass;
+            this.activeResidueRecordCount--;
+        }
+
         if (residues) {
-            graphResidues.set(nodeId as number, residues);
+            graphResidues.set(key, residues);
+            this.activeResidueCount += residues.nonZeroCount;
+            this.activeResidueMass += residues.residueMass;
+            this.activeResidueRecordCount++;
         } else {
-            graphResidues.delete(nodeId as number);
+            graphResidues.delete(key);
         }
     }
 
@@ -413,18 +429,17 @@ export class FlexCoordinator {
         return new BigUint64Array(length);
     }
 
-    private getActiveResidueRecordCount(): number {
-        let count = 0;
-        for (const graphResidues of this.forwardingResidues) {
-            count += graphResidues?.size ?? 0;
-        }
-        return count;
-    }
-
-    private getSearchExpansion(graphId: number, nodeId: FlexNodeId): FlexSearchExpansion {
+    private withSearchExpansion<T>(
+        graphId: number,
+        nodeId: FlexNodeId,
+        consumer: (expansion: FlexSearchExpansion) => T
+    ): T {
         const graph = this.getGraph(graphId);
-        if (graph.getSearchExpansion) return graph.getSearchExpansion(nodeId);
-        return createSearchExpansionAdapter(graph.getExpansion(nodeId));
+        if (graph.withSearchExpansion) return graph.withSearchExpansion(nodeId, consumer);
+        const expansion = graph.getSearchExpansion
+            ? graph.getSearchExpansion(nodeId)
+            : createSearchExpansionAdapter(graph.getExpansion(nodeId));
+        return consumer(expansion);
     }
 
     private validateMaxIterations(maxIterations: number): void {
@@ -457,7 +472,7 @@ class FlexFrontier {
     private heapGraphIds: Int32Array;
     private heapNodeIds: Int32Array;
     private heapMasses: bigint[];
-    private readonly positionsByState: FlexFrontierPositionIndex;
+    private readonly positionsByGraph: Array<FlexFrontierPositionIndex | undefined> = [];
     private length = 0;
     private _growCount = 0;
 
@@ -466,7 +481,6 @@ class FlexFrontier {
         this.heapGraphIds = new Int32Array(size);
         this.heapNodeIds = new Int32Array(size);
         this.heapMasses = new Array<bigint>(size).fill(0n);
-        this.positionsByState = new FlexFrontierPositionIndex(size);
     }
 
     public get size(): number {
@@ -478,14 +492,18 @@ class FlexFrontier {
     }
 
     public get positionIndexGrowCount(): number {
-        return this.positionsByState.growCount;
+        let count = 0;
+        for (const positions of this.positionsByGraph) {
+            count += positions?.growCount ?? 0;
+        }
+        return count;
     }
 
     public pushOrMerge(graphId: number, nodeId: FlexNodeId, mass: bigint): void {
         if (mass === 0n) return;
         const nodeKey = nodeId as number;
-        const positionKey = this.getPositionKey(graphId, nodeId);
-        const existingIndex = this.positionsByState.get(positionKey);
+        const positions = this.getPositions(graphId);
+        const existingIndex = positions.get(nodeKey);
         if (existingIndex !== undefined) {
             this.heapMasses[existingIndex] = this.heapMasses[existingIndex]! + mass;
             this.bubbleUp(existingIndex);
@@ -498,7 +516,7 @@ class FlexFrontier {
         this.heapGraphIds[index] = graphId;
         this.heapNodeIds[index] = nodeKey;
         this.heapMasses[index] = mass;
-        this.positionsByState.set(positionKey, index);
+        positions.set(nodeKey, index);
         this.bubbleUp(index);
     }
 
@@ -520,7 +538,7 @@ class FlexFrontier {
         const graphId = this.heapGraphIds[0]!;
         const nodeId = this.heapNodeIds[0]!;
         const mass = this.heapMasses[0]!;
-        this.positionsByState.delete(this.getPositionKey(graphId, nodeId as FlexNodeId));
+        this.getPositions(graphId).delete(nodeId);
         out.graphId = graphId;
         out.nodeId = nodeId as FlexNodeId;
         out.mass = mass;
@@ -556,7 +574,7 @@ class FlexFrontier {
         this.heapGraphIds[current] = graphId;
         this.heapNodeIds[current] = nodeId;
         this.heapMasses[current] = mass;
-        this.positionsByState.set(this.getPositionKey(graphId, nodeId as FlexNodeId), current);
+        this.getPositions(graphId).set(nodeId, current);
     }
 
     private sinkDown(index: number): void {
@@ -581,7 +599,7 @@ class FlexFrontier {
         this.heapGraphIds[current] = graphId;
         this.heapNodeIds[current] = nodeId;
         this.heapMasses[current] = mass;
-        this.positionsByState.set(this.getPositionKey(graphId, nodeId as FlexNodeId), current);
+        this.getPositions(graphId).set(nodeId, current);
     }
 
     private moveHeapEntry(from: number, to: number): void {
@@ -590,11 +608,19 @@ class FlexFrontier {
         this.heapGraphIds[to] = graphId;
         this.heapNodeIds[to] = nodeId;
         this.heapMasses[to] = this.heapMasses[from]!;
-        this.positionsByState.set(this.getPositionKey(graphId, nodeId as FlexNodeId), to);
+        this.getPositions(graphId).set(nodeId, to);
     }
 
-    private getPositionKey(graphId: number, nodeId: FlexNodeId): number {
-        return pairIntegers(graphId, nodeId as number);
+    private getPositions(graphId: number): FlexFrontierPositionIndex {
+        let positions = this.positionsByGraph[graphId];
+        if (!positions) {
+            positions = new FlexFrontierPositionIndex(Math.max(
+                this.heapNodeIds.length,
+                FLEX_INDEX_LIMITS.FRONTIER_GRAPH_POSITION_INITIAL_CAPACITY
+            ));
+            this.positionsByGraph[graphId] = positions;
+        }
+        return positions;
     }
 
     private ensureCapacity(required: number): void {
@@ -620,7 +646,7 @@ class FlexFrontier {
 }
 
 class FlexFrontierPositionIndex {
-    private keys: Float64Array;
+    private keys: Int32Array;
     private values: Int32Array;
     private states: Uint8Array;
     private mask: number;
@@ -631,7 +657,7 @@ class FlexFrontierPositionIndex {
 
     public constructor(capacity: number = FLEX_INDEX_LIMITS.FRONTIER_INITIAL_CAPACITY) {
         const size = FlexFrontierPositionIndex.nextPowerOfTwo(capacity);
-        this.keys = new Float64Array(size);
+        this.keys = new Int32Array(size);
         this.values = new Int32Array(size);
         this.values.fill(FLEX_INDEX_SENTINELS.MISSING_VALUE);
         this.states = new Uint8Array(size);
@@ -703,7 +729,7 @@ class FlexFrontierPositionIndex {
             ? oldKeys.length * FLEX_INDEX_LIMITS.GROWTH_FACTOR
             : oldKeys.length;
 
-        this.keys = new Float64Array(nextSize);
+        this.keys = new Int32Array(nextSize);
         this.values = new Int32Array(nextSize);
         this.values.fill(FLEX_INDEX_SENTINELS.MISSING_VALUE);
         this.states = new Uint8Array(nextSize);
@@ -718,9 +744,7 @@ class FlexFrontierPositionIndex {
     }
 
     private hash(key: number): number {
-        const low = key >>> 0;
-        const high = Math.floor(key / FLEX_HASH_U32_BASIS) >>> 0;
-        let h = (low ^ Math.imul(high, FLEX_HASH_CONSTANTS.GOLDEN_RATIO_32)) >>> 0;
+        let h = Math.imul(key >>> 0, FLEX_HASH_CONSTANTS.GOLDEN_RATIO_32) >>> 0;
         h ^= h >>> FLEX_HASH_CONSTANTS.AVALANCHE_SHIFT_1;
         h = Math.imul(h, FLEX_HASH_CONSTANTS.AVALANCHE_MULTIPLIER_1) >>> 0;
         h ^= h >>> FLEX_HASH_CONSTANTS.AVALANCHE_SHIFT_2;
@@ -733,13 +757,6 @@ class FlexFrontierPositionIndex {
         while (size < value) size <<= 1;
         return size;
     }
-}
-
-const FLEX_HASH_U32_BASIS = 0x100000000;
-
-function pairIntegers(left: number, right: number): number {
-    const sum = left + right;
-    return ((sum * (sum + 1)) / 2) + right;
 }
 
 function createSearchExpansionAdapter(expansion: FlexExpansion): FlexSearchExpansion {

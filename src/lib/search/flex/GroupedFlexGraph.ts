@@ -5,6 +5,7 @@ import type { PackedEnchant } from '#types/index.js';
 import { PRECISION, ProbUtils } from '#utils/index.js';
 import type {
     FlexEdge,
+    FlexEmission,
     FlexExpansion,
     FlexGraph,
     FlexGraphMemoryStats,
@@ -12,6 +13,7 @@ import type {
     FlexNodeId,
     FlexProgramId,
     FlexSearchExpansion,
+    FlexSearchExpansionConsumer,
     FlexStateIdentityMode
 } from '#lib/search/flex/FlexTypes.js';
 import { FlexProgramStore } from '#lib/search/flex/FlexProgramStore.js';
@@ -20,6 +22,29 @@ import { FLEX_HASH_CONSTANTS, FLEX_INDEX_LIMITS, FLEX_INDEX_SENTINELS } from '#l
 const FLEX_NODE_STATE_COUNT_STRIDE = ENGINE_LIMITS.MAX_ENCHANTS_PER_ITEM + 1;
 const EMPTY_EDGE_WEIGHTS = new Uint32Array(0);
 const EMPTY_EDGE_CHILD_IDS = new Int32Array(0);
+
+interface GroupedExpansionShape {
+    readonly totalWeight: number;
+    readonly clueIncompatibleWeight: number;
+    readonly groupCount: number;
+    readonly childExclusionMasks: ArrayLike<bigint>;
+    readonly edgeWeights: ArrayLike<number>;
+    readonly emissions: readonly FlexEmission[];
+}
+
+interface MutableFlexSearchExpansion {
+    nodeId: FlexNodeId;
+    programId: FlexProgramId;
+    nodeKind: FlexNode['kind'];
+    count: number;
+    probContinue: bigint;
+    totalWeight: number;
+    edgeCount: number;
+    edgeWeights: ArrayLike<number>;
+    edgeChildIds: ArrayLike<number>;
+    clueIncompatibleWeight?: number | undefined;
+    terminalReason: FlexExpansion['terminalReason'];
+}
 
 class FlexNodeIndex {
     private exclusionMasks: bigint[] = [];
@@ -150,12 +175,31 @@ export class GroupedFlexGraph implements FlexGraph {
     private readonly nodeIndex = new FlexNodeIndex();
     private readonly expansionCache: Array<FlexSearchExpansion | undefined> = [];
     private readonly debugExpansionCache: Array<FlexExpansion | undefined> = [];
+    private readonly shapeCache = new Map<bigint, GroupedExpansionShape>();
     private readonly scratchGroupMasks: bigint[] = [];
     private readonly scratchGroupWeights: number[] = [];
     private readonly scratchGroupPackedEnchants: number[][] = [];
     private readonly scratchGroupAlternativeWeights: number[][] = [];
+    private scratchEdgeWeights = EMPTY_EDGE_WEIGHTS;
+    private scratchEdgeChildIds = EMPTY_EDGE_CHILD_IDS;
+    private readonly scratchExpansion: MutableFlexSearchExpansion = {
+        nodeId: 0 as FlexNodeId,
+        programId: 0 as FlexProgramId,
+        nodeKind: 'solid',
+        count: 0,
+        probContinue: 0n,
+        totalWeight: 0,
+        edgeCount: 0,
+        edgeWeights: EMPTY_EDGE_WEIGHTS,
+        edgeChildIds: EMPTY_EDGE_CHILD_IDS,
+        clueIncompatibleWeight: 0,
+        terminalReason: null
+    };
     private readonly stateIdentityMode: FlexStateIdentityMode;
     private readonly targetClueId: number | undefined;
+    private readonly targetClueEnchantId: number | undefined;
+    private readonly targetClueConflictBitset: bigint;
+    private searchExpansionCount = 0;
     private groupCount = 0;
     private groupingBuildCount = 0;
     private groupedEdgeCount = 0;
@@ -171,6 +215,12 @@ export class GroupedFlexGraph implements FlexGraph {
         this.pool = pool;
         this.stateIdentityMode = options.stateIdentityMode ?? 'reduced';
         this.targetClueId = options.targetClueId;
+        this.targetClueEnchantId = this.targetClueId === undefined
+            ? undefined
+            : this.targetClueId >> PACKING_CONSTANTS.ENCHANT_SHIFT;
+        this.targetClueConflictBitset = this.targetClueEnchantId === undefined
+            ? 0n
+            : this.kernel.registry.conflictBitsets[this.targetClueEnchantId] ?? 0n;
     }
 
     public get size(): number {
@@ -202,11 +252,14 @@ export class GroupedFlexGraph implements FlexGraph {
         const cached = this.expansionCache[nodeId as number];
         if (cached) return cached;
 
-        const expansion = this.counts[nodeId as number] === 0
-            ? this.buildRootSearchExpansion(nodeId)
-            : this.buildSearchExpansion(nodeId);
+        const expansion = this.createOwnedSearchExpansion(nodeId);
         this.expansionCache[nodeId as number] = expansion;
         return expansion;
+    }
+
+    public withSearchExpansion<T>(nodeId: FlexNodeId, consumer: FlexSearchExpansionConsumer<T>): T {
+        this.assertNode(nodeId);
+        return consumer(this.createScratchSearchExpansion(nodeId));
     }
 
     public getNode(nodeId: FlexNodeId): FlexNode {
@@ -237,7 +290,7 @@ export class GroupedFlexGraph implements FlexGraph {
     public getMemoryStats(): FlexGraphMemoryStats {
         return {
             nodeCount: this.size,
-            searchExpansionCount: this.expansionCache.reduce((count, expansion) => count + (expansion ? 1 : 0), 0),
+            searchExpansionCount: this.searchExpansionCount,
             debugExpansionCount: this.debugExpansionCount,
             groupingBuildCount: this.groupingBuildCount,
             groupedEdgeCount: this.groupedEdgeCount,
@@ -246,20 +299,35 @@ export class GroupedFlexGraph implements FlexGraph {
         };
     }
 
-    private buildRootSearchExpansion(nodeId: FlexNodeId): FlexSearchExpansion {
+    private createOwnedSearchExpansion(nodeId: FlexNodeId): FlexSearchExpansion {
+        return this.createSearchExpansionForNode(nodeId, false);
+    }
+
+    private createScratchSearchExpansion(nodeId: FlexNodeId): FlexSearchExpansion {
+        return this.createSearchExpansionForNode(nodeId, true);
+    }
+
+    private createSearchExpansionForNode(nodeId: FlexNodeId, useScratch: boolean): FlexSearchExpansion {
+        return this.counts[nodeId as number] === 0
+            ? this.createRootSearchExpansion(nodeId, useScratch)
+            : this.createNonRootSearchExpansion(nodeId, useScratch);
+    }
+
+    private createRootSearchExpansion(nodeId: FlexNodeId, useScratch: boolean): FlexSearchExpansion {
         const nodeIndex = nodeId as number;
         const currentLevel = this.currentLevels[nodeIndex]!;
-        return this.buildGroupedSearchExpansion(
+        return this.createGroupedSearchExpansion(
             nodeId,
             PRECISION,
             0n,
             currentLevel,
             1,
-            null
+            null,
+            useScratch
         );
     }
 
-    private buildSearchExpansion(nodeId: FlexNodeId): FlexSearchExpansion {
+    private createNonRootSearchExpansion(nodeId: FlexNodeId, useScratch: boolean): FlexSearchExpansion {
         const nodeIndex = nodeId as number;
         const exclusionMask = this.exclusionMasks[nodeIndex]!;
         const currentLevel = this.currentLevels[nodeIndex]!;
@@ -278,32 +346,184 @@ export class GroupedFlexGraph implements FlexGraph {
                 EMPTY_EDGE_CHILD_IDS,
                 0,
                 0,
-                terminalReason === 'max-enchants' ? 'overflow' : null
+                terminalReason === 'max-enchants' ? 'overflow' : null,
+                useScratch
             );
         }
 
         const childLevel = Math.floor(currentLevel / 2);
         const childCount = count + 1;
-        return this.buildGroupedSearchExpansion(nodeId, probContinue, exclusionMask, childLevel, childCount, null);
+        return this.createGroupedSearchExpansion(nodeId, probContinue, exclusionMask, childLevel, childCount, null, useScratch);
     }
 
-    private buildGroupedSearchExpansion(
+    private createGroupedSearchExpansion(
         nodeId: FlexNodeId,
         probContinue: bigint,
         parentExclusionMask: bigint,
         childLevel: number,
         childCount: number,
-        terminalReason: FlexExpansion['terminalReason']
+        terminalReason: FlexExpansion['terminalReason'],
+        useScratch: boolean
     ): FlexSearchExpansion {
         const parentNodeIndex = nodeId as number;
         const parentProgramId = this.programIds[parentNodeIndex]!;
         const clueRestricted = this.targetClueId !== undefined && !this.programGuaranteesTargetClue(parentProgramId);
+        const shapeKey = this.createGroupedExpansionShapeKey(parentExclusionMask, clueRestricted);
+        const cached = this.shapeCache.get(shapeKey);
+        if (cached) {
+            return this.createGroupedSearchExpansionFromShape(
+                nodeId,
+                probContinue,
+                childLevel,
+                childCount,
+                terminalReason,
+                useScratch,
+                parentNodeIndex,
+                cached
+            );
+        }
+
+        if (parentExclusionMask !== 0n) {
+            return this.createDirectGroupedSearchExpansion(
+                nodeId,
+                probContinue,
+                parentExclusionMask,
+                childLevel,
+                childCount,
+                terminalReason,
+                useScratch,
+                parentNodeIndex,
+                clueRestricted
+            );
+        }
+
+        const shape = this.buildGroupedExpansionShape(parentExclusionMask, clueRestricted);
+        this.shapeCache.set(shapeKey, shape);
+        return this.createGroupedSearchExpansionFromShape(
+            nodeId,
+            probContinue,
+            childLevel,
+            childCount,
+            terminalReason,
+            useScratch,
+            parentNodeIndex,
+            shape
+        );
+    }
+
+    private createGroupedSearchExpansionFromShape(
+        nodeId: FlexNodeId,
+        probContinue: bigint,
+        childLevel: number,
+        childCount: number,
+        terminalReason: FlexExpansion['terminalReason'],
+        useScratch: boolean,
+        parentNodeIndex: number,
+        shape: GroupedExpansionShape
+    ): FlexSearchExpansion {
+        const edgeWeights = useScratch
+            ? this.getScratchEdgeWeights(shape.groupCount)
+            : new Uint32Array(shape.groupCount);
+        const edgeChildIds = useScratch
+            ? this.getScratchEdgeChildIds(shape.groupCount)
+            : new Int32Array(shape.groupCount);
+
+        for (let groupIndex = 0; groupIndex < shape.groupCount; groupIndex++) {
+            edgeWeights[groupIndex] = shape.edgeWeights[groupIndex]!;
+            edgeChildIds[groupIndex] = this.createGroupedChildId(shape, groupIndex, parentNodeIndex, childLevel, childCount) as number;
+        }
+        sortEdgeArrays(edgeWeights, edgeChildIds, shape.groupCount);
+
+        return this.createSearchExpansion(
+            nodeId,
+            probContinue,
+            shape.totalWeight,
+            edgeWeights,
+            edgeChildIds,
+            shape.groupCount,
+            shape.clueIncompatibleWeight,
+            terminalReason,
+            useScratch
+        );
+    }
+
+    private createDirectGroupedSearchExpansion(
+        nodeId: FlexNodeId,
+        probContinue: bigint,
+        parentExclusionMask: bigint,
+        childLevel: number,
+        childCount: number,
+        terminalReason: FlexExpansion['terminalReason'],
+        useScratch: boolean,
+        parentNodeIndex: number,
+        clueRestricted: boolean
+    ): FlexSearchExpansion {
+        const { totalWeight, clueIncompatibleWeight } = this.buildScratchGroups(parentExclusionMask, clueRestricted);
+        const edgeWeights = useScratch
+            ? this.getScratchEdgeWeights(this.groupCount)
+            : new Uint32Array(this.groupCount);
+        const edgeChildIds = useScratch
+            ? this.getScratchEdgeChildIds(this.groupCount)
+            : new Int32Array(this.groupCount);
+
+        for (let groupIndex = 0; groupIndex < this.groupCount; groupIndex++) {
+            this.sortScratchAlternatives(groupIndex);
+            edgeWeights[groupIndex] = this.scratchGroupWeights[groupIndex]!;
+            edgeChildIds[groupIndex] = this.createGroupedChildIdFromScratch(groupIndex, parentNodeIndex, childLevel, childCount) as number;
+        }
+        sortEdgeArrays(edgeWeights, edgeChildIds, this.groupCount);
+
+        return this.createSearchExpansion(
+            nodeId,
+            probContinue,
+            totalWeight,
+            edgeWeights,
+            edgeChildIds,
+            this.groupCount,
+            clueIncompatibleWeight,
+            terminalReason,
+            useScratch
+        );
+    }
+
+    private createGroupedExpansionShapeKey(parentExclusionMask: bigint, clueRestricted: boolean): bigint {
+        return (parentExclusionMask << 1n) | (clueRestricted ? 1n : 0n);
+    }
+
+    private buildGroupedExpansionShape(parentExclusionMask: bigint, clueRestricted: boolean): GroupedExpansionShape {
+        const { totalWeight, clueIncompatibleWeight } = this.buildScratchGroups(parentExclusionMask, clueRestricted);
+        const childExclusionMasks = new BigUint64Array(this.groupCount);
+        const edgeWeights = new Uint32Array(this.groupCount);
+        const emissions = new Array<FlexEmission>(this.groupCount);
+        for (let groupIndex = 0; groupIndex < this.groupCount; groupIndex++) {
+            this.sortScratchAlternatives(groupIndex);
+            childExclusionMasks[groupIndex] = this.scratchGroupMasks[groupIndex]!;
+            edgeWeights[groupIndex] = this.scratchGroupWeights[groupIndex]!;
+            emissions[groupIndex] = this.createPreparedGroupEmission(groupIndex);
+        }
+
+        return {
+            totalWeight,
+            clueIncompatibleWeight,
+            groupCount: this.groupCount,
+            childExclusionMasks,
+            edgeWeights,
+            emissions: Object.freeze(emissions)
+        };
+    }
+
+    private buildScratchGroups(parentExclusionMask: bigint, clueRestricted: boolean): {
+        readonly totalWeight: number;
+        readonly clueIncompatibleWeight: number;
+    } {
         let totalWeight = 0;
         let clueIncompatibleWeight = 0;
         this.resetScratchGroups();
         this.groupingBuildCount++;
 
-        for (const entry of this.pool.entries) {
+        const entries = this.pool.entries;
+        for (let entryIndex = 0; entryIndex < entries.length; entryIndex++) {
+            const entry = entries[entryIndex]!;
             if ((parentExclusionMask & entry.idBit) !== 0n) continue;
 
             totalWeight += entry.weight;
@@ -318,29 +538,19 @@ export class GroupedFlexGraph implements FlexGraph {
             this.scratchGroupWeights[groupIndex] = (this.scratchGroupWeights[groupIndex] ?? 0) + entry.weight;
         }
 
-        const edgeWeights = new Uint32Array(this.groupCount);
-        const edgeChildIds = new Int32Array(this.groupCount);
-        for (let groupIndex = 0; groupIndex < this.groupCount; groupIndex++) {
-            this.sortScratchAlternatives(groupIndex);
-            edgeWeights[groupIndex] = this.scratchGroupWeights[groupIndex]!;
-            edgeChildIds[groupIndex] = this.createGroupedChildId(groupIndex, parentNodeIndex, childLevel, childCount) as number;
-        }
-        sortEdgeArrays(edgeWeights, edgeChildIds);
-
         this.groupedEdgeCount += this.groupCount;
-        return this.createSearchExpansion(
-            nodeId,
-            probContinue,
-            totalWeight,
-            edgeWeights,
-            edgeChildIds,
-            this.groupCount,
-            clueIncompatibleWeight,
-            terminalReason
-        );
+        return { totalWeight, clueIncompatibleWeight };
     }
 
-    private createGroupedChildId(
+    private createPreparedGroupEmission(groupIndex: number): FlexEmission {
+        const alternatives = this.scratchGroupPackedEnchants[groupIndex]!;
+        const alternativeWeights = this.scratchGroupAlternativeWeights[groupIndex]!;
+        return alternatives.length === 1
+            ? this.programs.prepareFixedEmission(alternatives[0]! as PackedEnchant)
+            : this.programs.prepareCanonicalChoiceFromArrays(alternatives, alternativeWeights, alternatives.length);
+    }
+
+    private createGroupedChildIdFromScratch(
         groupIndex: number,
         parentNodeIndex: number,
         childLevel: number,
@@ -348,16 +558,45 @@ export class GroupedFlexGraph implements FlexGraph {
     ): FlexNodeId {
         const childExclusionMask = this.scratchGroupMasks[groupIndex]!;
         if (this.stateIdentityMode === 'reduced') {
-            const existing = this.getExistingReducedNodeId(childExclusionMask, childLevel, childCount);
+            const identityProgramId = 0 as FlexProgramId;
+            const stateKey = this.createNodeStateKey(childLevel, childCount);
+            const existing = this.nodeIndex.get(childExclusionMask, stateKey, identityProgramId);
             if (existing !== undefined) return existing;
+            const parentProgramId = this.programIds[parentNodeIndex]!;
+            const childProgramId = this.programs.appendPreparedEmission(parentProgramId, this.createPreparedGroupEmission(groupIndex));
+            return this.createNodeId(childExclusionMask, childLevel, childCount, childProgramId, identityProgramId);
         }
 
-        const alternatives = this.scratchGroupPackedEnchants[groupIndex]!;
-        const alternativeWeights = this.scratchGroupAlternativeWeights[groupIndex]!;
         const parentProgramId = this.programIds[parentNodeIndex]!;
-        const childProgramId = alternatives.length === 1
-            ? this.programs.appendFixed(parentProgramId, alternatives[0]! as PackedEnchant)
-            : this.programs.appendCanonicalChoiceFromArrays(parentProgramId, alternatives, alternativeWeights, alternatives.length);
+        const childProgramId = this.programs.appendPreparedEmission(parentProgramId, this.createPreparedGroupEmission(groupIndex));
+        return this.getOrCreateNodeId(
+            childExclusionMask,
+            childLevel,
+            childCount,
+            childProgramId
+        );
+    }
+
+    private createGroupedChildId(
+        shape: GroupedExpansionShape,
+        groupIndex: number,
+        parentNodeIndex: number,
+        childLevel: number,
+        childCount: number
+    ): FlexNodeId {
+        const childExclusionMask = shape.childExclusionMasks[groupIndex]!;
+        if (this.stateIdentityMode === 'reduced') {
+            const identityProgramId = 0 as FlexProgramId;
+            const stateKey = this.createNodeStateKey(childLevel, childCount);
+            const existing = this.nodeIndex.get(childExclusionMask, stateKey, identityProgramId);
+            if (existing !== undefined) return existing;
+            const parentProgramId = this.programIds[parentNodeIndex]!;
+            const childProgramId = this.programs.appendPreparedEmission(parentProgramId, shape.emissions[groupIndex]!);
+            return this.createNodeId(childExclusionMask, childLevel, childCount, childProgramId, identityProgramId);
+        }
+
+        const parentProgramId = this.programIds[parentNodeIndex]!;
+        const childProgramId = this.programs.appendPreparedEmission(parentProgramId, shape.emissions[groupIndex]!);
         const childId = this.getOrCreateNodeId(
             childExclusionMask,
             childLevel,
@@ -376,9 +615,27 @@ export class GroupedFlexGraph implements FlexGraph {
         edgeChildIds: ArrayLike<number>,
         edgeCount: number,
         clueIncompatibleWeight: number,
-        terminalReason: FlexExpansion['terminalReason']
+        terminalReason: FlexExpansion['terminalReason'],
+        useScratch: boolean
     ): FlexSearchExpansion {
         const programId = this.getProgramId(nodeId);
+        this.searchExpansionCount++;
+
+        if (useScratch) {
+            this.scratchExpansion.nodeId = nodeId;
+            this.scratchExpansion.programId = programId;
+            this.scratchExpansion.nodeKind = this.programs.hasChoice(programId) ? 'plex' : 'solid';
+            this.scratchExpansion.count = this.getNodeCount(nodeId);
+            this.scratchExpansion.probContinue = probContinue;
+            this.scratchExpansion.totalWeight = totalWeight;
+            this.scratchExpansion.edgeCount = edgeCount;
+            this.scratchExpansion.edgeWeights = edgeWeights;
+            this.scratchExpansion.edgeChildIds = edgeChildIds;
+            this.scratchExpansion.clueIncompatibleWeight = clueIncompatibleWeight;
+            this.scratchExpansion.terminalReason = terminalReason;
+            return this.scratchExpansion;
+        }
+
         return {
             nodeId,
             programId,
@@ -392,6 +649,20 @@ export class GroupedFlexGraph implements FlexGraph {
             clueIncompatibleWeight,
             terminalReason
         };
+    }
+
+    private getScratchEdgeWeights(required: number): Uint32Array {
+        if (this.scratchEdgeWeights.length < required) {
+            this.scratchEdgeWeights = new Uint32Array(required);
+        }
+        return this.scratchEdgeWeights;
+    }
+
+    private getScratchEdgeChildIds(required: number): Int32Array {
+        if (this.scratchEdgeChildIds.length < required) {
+            this.scratchEdgeChildIds = new Int32Array(required);
+        }
+        return this.scratchEdgeChildIds;
     }
 
     private createDebugExpansion(expansion: FlexSearchExpansion): FlexExpansion {
@@ -414,11 +685,6 @@ export class GroupedFlexGraph implements FlexGraph {
     }
 
     private resetScratchGroups(): void {
-        for (let groupIndex = 0; groupIndex < this.groupCount; groupIndex++) {
-            this.scratchGroupWeights[groupIndex] = 0;
-            this.scratchGroupPackedEnchants[groupIndex]!.length = 0;
-            this.scratchGroupAlternativeWeights[groupIndex]!.length = 0;
-        }
         this.groupCount = 0;
     }
 
@@ -480,11 +746,11 @@ export class GroupedFlexGraph implements FlexGraph {
         if (targetClueId === undefined) return true;
         if (entry.packedEnchant === targetClueId) return true;
 
-        const targetEnchantId = targetClueId >> PACKING_CONSTANTS.ENCHANT_SHIFT;
+        const targetEnchantId = this.targetClueEnchantId;
+        if (targetEnchantId === undefined) return true;
         if (entry.enchantId === targetEnchantId) return false;
 
-        const targetConflictBitset = this.kernel.registry.conflictBitsets[targetEnchantId] ?? 0n;
-        return (targetConflictBitset & entry.idBit) === 0n;
+        return (this.targetClueConflictBitset & entry.idBit) === 0n;
     }
 
     private getOrCreateNodeId(
@@ -498,6 +764,17 @@ export class GroupedFlexGraph implements FlexGraph {
         const existing = this.nodeIndex.get(exclusionMask, stateKey, identityProgramId);
         if (existing !== undefined) return existing;
 
+        return this.createNodeId(exclusionMask, currentLevel, count, programId, identityProgramId);
+    }
+
+    private createNodeId(
+        exclusionMask: bigint,
+        currentLevel: number,
+        count: number,
+        programId: FlexProgramId,
+        identityProgramId: FlexProgramId
+    ): FlexNodeId {
+        const stateKey = this.createNodeStateKey(currentLevel, count);
         const id = this.counts.length as FlexNodeId;
         this.exclusionMasks.push(exclusionMask);
         this.currentLevels.push(currentLevel);
@@ -507,15 +784,6 @@ export class GroupedFlexGraph implements FlexGraph {
         this.debugExpansionCache.push(undefined);
         this.nodeIndex.set(exclusionMask, stateKey, identityProgramId, id);
         return id;
-    }
-
-    private getExistingReducedNodeId(
-        exclusionMask: bigint,
-        currentLevel: number,
-        count: number
-    ): FlexNodeId | undefined {
-        const stateKey = this.createNodeStateKey(currentLevel, count);
-        return this.nodeIndex.get(exclusionMask, stateKey, 0 as FlexProgramId);
     }
 
     private createNode(nodeId: FlexNodeId): FlexNode {
@@ -551,8 +819,8 @@ export class GroupedFlexGraph implements FlexGraph {
     }
 }
 
-function sortEdgeArrays(edgeWeights: Uint32Array, edgeChildIds: Int32Array): void {
-    for (let index = 1; index < edgeWeights.length; index++) {
+function sortEdgeArrays(edgeWeights: Uint32Array, edgeChildIds: Int32Array, edgeCount: number): void {
+    for (let index = 1; index < edgeCount; index++) {
         const weight = edgeWeights[index]!;
         const childId = edgeChildIds[index]!;
         let cursor = index - 1;
