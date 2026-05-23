@@ -22,6 +22,18 @@ interface PendingGroupedEdge {
     weight: number;
 }
 
+interface GroupedEdgeTemplate {
+    readonly childExclusionMask: bigint;
+    readonly alternatives: readonly FlexAlternative[];
+    readonly weight: number;
+}
+
+interface GroupedExpansionTemplate {
+    readonly totalWeight: number;
+    readonly clueIncompatibleWeight: number;
+    readonly groups: readonly GroupedEdgeTemplate[];
+}
+
 const FLEX_NODE_STATE_COUNT_STRIDE = ENGINE_LIMITS.MAX_ENCHANTS_PER_ITEM + 1;
 
 class FlexNodeIndex {
@@ -146,6 +158,7 @@ export class GroupedFlexGraph implements FlexGraph {
     private readonly programIds: FlexProgramId[] = [];
     private readonly nodeIndex = new FlexNodeIndex();
     private readonly expansionCache: Array<FlexExpansion | undefined> = [];
+    private readonly groupedTemplateCache = new Map<bigint, GroupedExpansionTemplate>();
     private readonly stateIdentityMode: FlexStateIdentityMode;
     private readonly targetClueId: number | undefined;
 
@@ -213,15 +226,15 @@ export class GroupedFlexGraph implements FlexGraph {
     private buildRootExpansion(nodeId: FlexNodeId): FlexExpansion {
         const nodeIndex = nodeId as number;
         const currentLevel = this.currentLevels[nodeIndex]!;
-        const { entries, clueIncompatibleWeight } = this.filterClueCompatibleEntries(this.pool.entries, this.programIds[nodeIndex]!);
-        const edges = this.buildGroupedEdges(entries, nodeIndex, currentLevel, 1);
+        const template = this.getGroupedExpansionTemplate(0n, this.programIds[nodeIndex]!);
+        const edges = this.materializeGroupedEdges(template.groups, nodeIndex, currentLevel, 1);
 
         return this.createExpansion(
             nodeId,
             PRECISION,
-            this.pool.totalWeight,
+            template.totalWeight,
             edges,
-            clueIncompatibleWeight,
+            template.clueIncompatibleWeight,
             null
         );
     }
@@ -247,26 +260,45 @@ export class GroupedFlexGraph implements FlexGraph {
             );
         }
 
-        const eligibleEntries = this.pool.entries.filter(entry => (exclusionMask & entry.idBit) === 0n);
-        const { entries, clueIncompatibleWeight } = this.filterClueCompatibleEntries(eligibleEntries, this.programIds[nodeIndex]!);
         const childLevel = Math.floor(currentLevel / 2);
         const childCount = count + 1;
-        const edges = this.buildGroupedEdges(entries, nodeIndex, childLevel, childCount);
-        const totalWeight = eligibleEntries.reduce((sum, entry) => sum + entry.weight, 0);
+        const template = this.getGroupedExpansionTemplate(exclusionMask, this.programIds[nodeIndex]!);
+        const edges = this.materializeGroupedEdges(template.groups, nodeIndex, childLevel, childCount);
 
-        return this.createExpansion(nodeId, probContinue, totalWeight, edges, clueIncompatibleWeight, null);
+        return this.createExpansion(nodeId, probContinue, template.totalWeight, edges, template.clueIncompatibleWeight, null);
     }
 
-    private buildGroupedEdges(
-        entries: readonly SearchPoolEntry[],
-        parentNodeIndex: number,
-        childLevel: number,
-        childCount: number
-    ): readonly FlexEdge[] {
-        const groups = new Map<bigint, PendingGroupedEdge>();
-        const parentExclusionMask = this.exclusionMasks[parentNodeIndex]!;
+    private getGroupedExpansionTemplate(
+        parentExclusionMask: bigint,
+        programId: FlexProgramId
+    ): GroupedExpansionTemplate {
+        const clueRestricted = this.targetClueId !== undefined && !this.programGuaranteesTargetClue(programId);
+        const key = this.createGroupedTemplateKey(parentExclusionMask, clueRestricted);
+        const cached = this.groupedTemplateCache.get(key);
+        if (cached) return cached;
 
-        for (const entry of entries) {
+        const template = this.buildGroupedExpansionTemplate(parentExclusionMask, clueRestricted);
+        this.groupedTemplateCache.set(key, template);
+        return template;
+    }
+
+    private buildGroupedExpansionTemplate(
+        parentExclusionMask: bigint,
+        clueRestricted: boolean
+    ): GroupedExpansionTemplate {
+        const groups = new Map<bigint, PendingGroupedEdge>();
+        let totalWeight = 0;
+        let clueIncompatibleWeight = 0;
+
+        for (const entry of this.pool.entries) {
+            if ((parentExclusionMask & entry.idBit) !== 0n) continue;
+
+            totalWeight += entry.weight;
+            if (clueRestricted && !this.canSelectBeforeTargetClue(entry)) {
+                clueIncompatibleWeight += entry.weight;
+                continue;
+            }
+
             const childExclusionMask = parentExclusionMask | entry.blocksBitset;
             let group = groups.get(childExclusionMask);
             if (!group) {
@@ -282,7 +314,23 @@ export class GroupedFlexGraph implements FlexGraph {
             group.weight += entry.weight;
         }
 
-        return Object.freeze([...groups.values()]
+        const groupedTemplates = [...groups.values()]
+            .map(group => this.createGroupedEdgeTemplate(group));
+
+        return Object.freeze({
+            totalWeight,
+            clueIncompatibleWeight,
+            groups: Object.freeze(groupedTemplates)
+        });
+    }
+
+    private materializeGroupedEdges(
+        groups: readonly GroupedEdgeTemplate[],
+        parentNodeIndex: number,
+        childLevel: number,
+        childCount: number
+    ): readonly FlexEdge[] {
+        return Object.freeze(groups
             .map(group => this.createGroupedEdge(group, parentNodeIndex, childLevel, childCount))
             .sort(compareFlexEdges));
     }
@@ -291,27 +339,45 @@ export class GroupedFlexGraph implements FlexGraph {
         const existing = group.alternatives.find(alternative => alternative.packedEnchant === packedEnchant);
         if (existing) {
             const index = group.alternatives.indexOf(existing);
-            group.alternatives[index] = Object.freeze({
+            group.alternatives[index] = {
                 packedEnchant,
                 weight: existing.weight + weight
-            });
+            };
             return;
         }
 
-        group.alternatives.push(Object.freeze({ packedEnchant, weight }));
+        group.alternatives.push({ packedEnchant, weight });
+    }
+
+    private createGroupedEdgeTemplate(group: PendingGroupedEdge): GroupedEdgeTemplate {
+        return Object.freeze({
+            childExclusionMask: group.childExclusionMask,
+            alternatives: Object.freeze([...group.alternatives].sort(compareAlternatives)),
+            weight: group.weight
+        });
     }
 
     private createGroupedEdge(
-        group: PendingGroupedEdge,
+        group: GroupedEdgeTemplate,
         parentNodeIndex: number,
         childLevel: number,
         childCount: number
     ): FlexEdge {
-        const alternatives = Object.freeze([...group.alternatives].sort(compareAlternatives));
+        if (this.stateIdentityMode === 'reduced') {
+            const existing = this.getExistingReducedNodeId(group.childExclusionMask, childLevel, childCount);
+            if (existing !== undefined) {
+                return {
+                    weight: group.weight,
+                    childId: existing
+                };
+            }
+        }
+
+        const alternatives = group.alternatives;
         const parentProgramId = this.programIds[parentNodeIndex]!;
         const childProgramId = alternatives.length === 1
             ? this.programs.appendFixed(parentProgramId, alternatives[0]!.packedEnchant)
-            : this.programs.appendChoice(parentProgramId, alternatives);
+            : this.programs.appendCanonicalChoice(parentProgramId, alternatives);
         const childId = this.getOrCreateNodeId(
             group.childExclusionMask,
             childLevel,
@@ -343,28 +409,8 @@ export class GroupedFlexGraph implements FlexGraph {
         });
     }
 
-    private filterClueCompatibleEntries(
-        entries: readonly SearchPoolEntry[],
-        programId: FlexProgramId
-    ): { readonly entries: readonly SearchPoolEntry[]; readonly clueIncompatibleWeight: number } {
-        if (this.targetClueId === undefined || this.programGuaranteesTargetClue(programId)) {
-            return { entries, clueIncompatibleWeight: 0 };
-        }
-
-        const compatible: SearchPoolEntry[] = [];
-        let clueIncompatibleWeight = 0;
-        for (const entry of entries) {
-            if (this.canSelectBeforeTargetClue(entry)) {
-                compatible.push(entry);
-            } else {
-                clueIncompatibleWeight += entry.weight;
-            }
-        }
-
-        return {
-            entries: Object.freeze(compatible),
-            clueIncompatibleWeight
-        };
+    private createGroupedTemplateKey(parentExclusionMask: bigint, clueRestricted: boolean): bigint {
+        return (parentExclusionMask << 1n) | (clueRestricted ? 1n : 0n);
     }
 
     private programGuaranteesTargetClue(programId: FlexProgramId): boolean {
@@ -409,6 +455,15 @@ export class GroupedFlexGraph implements FlexGraph {
         this.expansionCache.push(undefined);
         this.nodeIndex.set(exclusionMask, stateKey, identityProgramId, id);
         return id;
+    }
+
+    private getExistingReducedNodeId(
+        exclusionMask: bigint,
+        currentLevel: number,
+        count: number
+    ): FlexNodeId | undefined {
+        const stateKey = this.createNodeStateKey(currentLevel, count);
+        return this.nodeIndex.get(exclusionMask, stateKey, 0 as FlexProgramId);
     }
 
     private createNode(nodeId: FlexNodeId): FlexNode {
