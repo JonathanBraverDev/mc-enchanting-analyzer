@@ -14,8 +14,7 @@ type SearchRequest = {
     readonly threshold: bigint;
     readonly probabilityFloor: bigint;
     readonly exhaustive?: boolean;
-    readonly maxIterations?: number;
-    readonly drainEqualMassBand?: boolean;
+    readonly targetClassifiedMass?: number;
     readonly clue?: string;
 };
 
@@ -93,60 +92,53 @@ const CASES: readonly BenchmarkCase[] = Object.freeze([
         req: { item: 'pickaxe', material: 'diamond', xp: 30, exhaustive: true, threshold: 0n, probabilityFloor: 0n }
     },
     {
-        label: 'modern book xp30 20k floor0',
+        label: 'modern book xp30 mass98 floor0',
         runs: 5,
         engine: () => EngineFactory.createForVersion('1.21.11'),
-        req: { item: 'book', material: 'book', xp: 30, maxIterations: 20_000, threshold: 0n, probabilityFloor: 0n }
+        req: { item: 'book', material: 'book', xp: 30, targetClassifiedMass: 0.98, threshold: 0n, probabilityFloor: 0n }
     },
     {
-        label: 'modern book xp30 50k floor0',
+        label: 'modern book xp30 mass995 floor0',
         runs: 5,
         engine: () => EngineFactory.createForVersion('1.21.11'),
-        req: { item: 'book', material: 'book', xp: 30, maxIterations: 50_000, threshold: 0n, probabilityFloor: 0n }
+        req: { item: 'book', material: 'book', xp: 30, targetClassifiedMass: 0.995, threshold: 0n, probabilityFloor: 0n }
     },
     {
-        label: 'modern book xp30 100k floor0',
-        runs: 3,
-        engine: () => EngineFactory.createForVersion('1.21.11'),
-        req: { item: 'book', material: 'book', xp: 30, maxIterations: 100_000, threshold: 0n, probabilityFloor: 0n }
-    },
-    {
-        label: 'legacy single-book 1.4.6 xp30 20k floor0',
+        label: 'legacy single-book 1.4.6 xp30 mass98 floor0',
         runs: 5,
-        enforceConcreteClose: true,
         engine: () => EngineFactory.createForVersion('1.4.6'),
-        req: { item: 'book', material: 'book', xp: 30, maxIterations: 20_000, threshold: 0n, probabilityFloor: 0n }
+        req: { item: 'book', material: 'book', xp: 30, targetClassifiedMass: 0.98, threshold: 0n, probabilityFloor: 0n }
     },
     {
-        label: 'modern sword xp30 clue Sharpness III 20k',
+        label: 'modern sword xp30 clue Sharpness III exhaustive',
         runs: 5,
         enforceConcreteClose: true,
         engine: () => EngineFactory.createForVersion('1.21.11'),
-        req: { item: 'sword', material: 'diamond', xp: 30, clue: 'Sharpness III', maxIterations: 20_000, threshold: 0n, probabilityFloor: 0n }
+        req: { item: 'sword', material: 'diamond', xp: 30, clue: 'Sharpness III', exhaustive: true, threshold: 0n, probabilityFloor: 0n }
     },
     {
-        label: 'modern book xp30 clue Sharpness III 20k',
+        label: 'modern book xp30 clue Sharpness III mass98',
         runs: 5,
         engine: () => EngineFactory.createForVersion('1.21.11'),
-        req: { item: 'book', material: 'book', xp: 30, clue: 'Sharpness III', maxIterations: 20_000, threshold: 0n, probabilityFloor: 0n }
+        req: { item: 'book', material: 'book', xp: 30, clue: 'Sharpness III', targetClassifiedMass: 0.98, threshold: 0n, probabilityFloor: 0n }
     },
     {
-        label: 'adversarial mutated book xp30 one spot 20k floor0',
+        label: 'adversarial mutated book xp30 one spot mass98 floor0',
         runs: 3,
         engine: () => EngineFactory.create(RegistryFactory.buildWithMutations('1.21.11', createAdversarialBookMutations(ADVERSARIAL_BOOK_SPOTS.slice(0, 1)))),
-        req: { item: 'book', material: 'book', xp: 30, maxIterations: 20_000, drainEqualMassBand: true, threshold: 0n, probabilityFloor: 0n }
+        req: { item: 'book', material: 'book', xp: 30, targetClassifiedMass: 0.98, threshold: 0n, probabilityFloor: 0n }
     },
     {
-        label: 'adversarial mutated book xp30 two spots 20k floor0',
+        label: 'adversarial mutated book xp30 two spots mass98 floor0',
         runs: 3,
         engine: () => EngineFactory.create(RegistryFactory.buildWithMutations('1.21.11', createAdversarialBookMutations(ADVERSARIAL_BOOK_SPOTS.slice(0, 2)))),
-        req: { item: 'book', material: 'book', xp: 30, maxIterations: 20_000, drainEqualMassBand: true, threshold: 0n, probabilityFloor: 0n }
+        req: { item: 'book', material: 'book', xp: 30, targetClassifiedMass: 0.98, threshold: 0n, probabilityFloor: 0n }
     },
     {
-        label: 'adversarial mutated book xp30 all spots 20k floor0',
+        label: 'adversarial mutated book xp30 all spots mass98 floor0',
         runs: 3,
         engine: () => EngineFactory.create(RegistryFactory.buildWithMutations('1.21.11', createAdversarialBookMutations(ADVERSARIAL_BOOK_SPOTS))),
-        req: { item: 'book', material: 'book', xp: 30, maxIterations: 20_000, drainEqualMassBand: true, threshold: 0n, probabilityFloor: 0n }
+        req: { item: 'book', material: 'book', xp: 30, targetClassifiedMass: 0.98, threshold: 0n, probabilityFloor: 0n }
     }
 ]);
 
