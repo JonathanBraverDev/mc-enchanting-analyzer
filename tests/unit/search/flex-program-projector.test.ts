@@ -72,6 +72,27 @@ describe('FlexProgramStore', () => {
         assert.deepStrictEqual(store.getProgram(sharpThenChoice).map(emission => emission.kind), ['fixed', 'choice']);
     });
 
+    it('uses already-canonical grouped choices without changing choice identity', () => {
+        const store = new FlexProgramStore();
+        const canonical = store.appendCanonicalChoice(store.empty, [
+            { packedEnchant: sharpness, weight: 1 },
+            { packedEnchant: smite, weight: 2 }
+        ]);
+        const normalized = store.appendChoice(store.empty, [
+            { packedEnchant: smite, weight: 2 },
+            { packedEnchant: sharpness, weight: 1 }
+        ]);
+
+        assert.strictEqual(canonical, normalized);
+        assert.throws(
+            () => store.appendCanonicalChoice(store.empty, [
+                { packedEnchant: smite, weight: 2 },
+                { packedEnchant: sharpness, weight: 1 }
+            ]),
+            /unique and sorted/
+        );
+    });
+
     it('classifies SolidNode and PlexNode variants from program contents', () => {
         const store = new FlexProgramStore();
         const solidProgram = store.appendFixed(store.empty, sharpness);

@@ -71,9 +71,21 @@ export class FlexProgramStore {
         return this.appendEmission(parentId, this.canonicalizeChoice(alternatives));
     }
 
+    public appendCanonicalChoice(
+        parentId: FlexProgramId,
+        alternatives: readonly FlexAlternative[]
+    ): FlexProgramId {
+        return this.appendCanonicalEmission(parentId, this.getChoiceEmission(alternatives));
+    }
+
     public appendEmission(parentId: FlexProgramId, emission: FlexEmission): FlexProgramId {
         this.assertProgram(parentId);
         const canonical = this.canonicalizeEmission(emission);
+        return this.appendCanonicalEmission(parentId, canonical);
+    }
+
+    private appendCanonicalEmission(parentId: FlexProgramId, canonical: FlexEmission): FlexProgramId {
+        this.assertProgram(parentId);
         if (this.options.canonicalizeProgramOrder) {
             const nextProgram = this.insertCanonicalEmission(this.getProgram(parentId), canonical);
             return this.getOrCreateProgram(nextProgram);
@@ -178,10 +190,13 @@ export class FlexProgramStore {
     }
 
     private getChoiceEmission(alternatives: readonly FlexAlternative[]): FlexChoiceEmission {
+        this.assertCanonicalChoiceAlternatives(alternatives);
         let node = this.choiceInternRoot;
+        let totalWeight = 0;
         for (const alternative of alternatives) {
             node = getOrCreateChoiceInternNode(node, Number(alternative.packedEnchant));
             node = getOrCreateChoiceInternNode(node, alternative.weight);
+            totalWeight += alternative.weight;
         }
 
         if (node.emission) return node.emission;
@@ -190,11 +205,26 @@ export class FlexProgramStore {
         const emission = Object.freeze({
             kind: 'choice' as const,
             alternatives: canonicalAlternatives,
-            totalWeight: canonicalAlternatives.reduce((sum, alternative) => sum + alternative.weight, 0)
+            totalWeight
         });
         node.emission = emission;
         this.emissionIds.set(emission, this.nextEmissionId++);
         return emission;
+    }
+
+    private assertCanonicalChoiceAlternatives(alternatives: readonly FlexAlternative[]): void {
+        if (alternatives.length === 0) throw new Error('Cannot create an empty Flex choice emission.');
+
+        let previousPackedEnchant: PackedEnchant | undefined;
+        for (const alternative of alternatives) {
+            if (!Number.isInteger(alternative.weight) || alternative.weight <= 0) {
+                throw new Error('Flex choice weights must be positive integers.');
+            }
+            if (previousPackedEnchant !== undefined && alternative.packedEnchant <= previousPackedEnchant) {
+                throw new Error('Flex canonical choice alternatives must be unique and sorted by packed enchant.');
+            }
+            previousPackedEnchant = alternative.packedEnchant;
+        }
     }
 
     private getOrCreateProgram(program: readonly FlexEmission[]): FlexProgramId {

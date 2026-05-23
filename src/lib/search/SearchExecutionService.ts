@@ -3,7 +3,6 @@ import { ProbabilityMassAccountant, PROJECTION_MASS_BUCKET, PROJECTION_MASS_OPER
 import { SearchResult, SequentialCheckpointSearchContext, CheckpointSearchContext, EngineInstrumentation, SearchTiming, SearchBackend, RegistryState, MutatedRegistryState } from '#types/index.js';
 import { RegistryKernel } from '#lib/search/registry/RegistryKernel.js';
 import { SearchRun, SearchRunSnapshot } from '#lib/search/SearchRun.js';
-import type { SearchGraphNodeId } from '#lib/search/SearchGraph.js';
 import { GroupedFlexSearchRun, checkFlexReducedKeyInvariant, type GroupedFlexProjectedCheckpoint, type FlexRunSnapshot, type FlexReducedKeyInvariantResult, type FlexStateIdentityMode } from '#lib/search/flex/index.js';
 import { FLEX_CACHE_LIMITS, FLEX_INVARIANT_LIMITS } from '#lib/search/flex/FlexConstants.js';
 import { SearchStateCache } from '#lib/search/SearchStateCache.js';
@@ -405,13 +404,7 @@ export class SearchExecutionService {
             lastExpandedMass: flexSnapshot.lastExpandedMass,
             pendingCount: projected.pendingEntries.length,
             largestPendingMass: flexSnapshot.largestPendingMass,
-            pendingEntries: Object.freeze(projected.pendingEntries.map(entry => Object.freeze({
-                graphId: entry.graphId,
-                nodeId: entry.nodeId as unknown as SearchGraphNodeId,
-                mass: entry.mass,
-                combo: entry.combo,
-                count: entry.count
-            }))),
+            pendingEntries: Object.freeze(projected.pendingEntries) as unknown as SearchRunSnapshot['pendingEntries'],
             graphCount: flexSnapshot.graphCount,
             seededLevelCount: flexSnapshot.graphCount,
             activeResidueCount: flexSnapshot.activeResidueCount,
