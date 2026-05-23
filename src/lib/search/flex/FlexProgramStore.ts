@@ -95,6 +95,22 @@ export class FlexProgramStore {
         return this.appendCanonicalEmission(parentId, this.getChoiceEmissionFromArrays(packedEnchants, weights, length));
     }
 
+    public appendPreparedEmission(parentId: FlexProgramId, emission: FlexEmission): FlexProgramId {
+        return this.appendCanonicalEmission(parentId, emission);
+    }
+
+    public prepareFixedEmission(packedEnchant: PackedEnchant): FlexFixedEmission {
+        return this.getFixedEmission(packedEnchant);
+    }
+
+    public prepareCanonicalChoiceFromArrays(
+        packedEnchants: ArrayLike<number>,
+        weights: ArrayLike<number>,
+        length: number
+    ): FlexChoiceEmission {
+        return this.getChoiceEmissionFromArrays(packedEnchants, weights, length);
+    }
+
     public appendEmission(parentId: FlexProgramId, emission: FlexEmission): FlexProgramId {
         this.assertProgram(parentId);
         const canonical = this.canonicalizeEmission(emission);

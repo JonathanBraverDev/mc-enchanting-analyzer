@@ -34,7 +34,54 @@ interface GroupedGraphFixture {
     readonly programs: FlexProgramStore;
 }
 
+interface HotExpansionSnapshot {
+    readonly nodeId: ReturnType<GroupedFlexGraph['getRootNode']>['id'];
+    readonly programId: number;
+    readonly nodeKind: string;
+    readonly count: number;
+    readonly probContinue: bigint;
+    readonly totalWeight: number;
+    readonly clueIncompatibleWeight: number;
+    readonly terminalReason: ReturnType<GroupedFlexGraph['getExpansion']>['terminalReason'];
+    readonly edges: readonly { readonly weight: number; readonly childId: ReturnType<GroupedFlexGraph['getRootNode']>['id'] }[];
+}
+
 describe('GroupedFlexGraph', () => {
+    it('exposes the same edge order and weights through the hot-path expansion view', () => {
+        const fixture = createGraphFixture('book', 'book', 30);
+        const root = fixture.graph.getRootNode(30);
+        const hot = captureHotExpansion(fixture.graph, root.id);
+        const debug = fixture.graph.getExpansion(root.id);
+
+        assert.strictEqual(hot.nodeId, debug.node.id);
+        assert.strictEqual(hot.programId, debug.node.programId);
+        assert.strictEqual(hot.nodeKind, debug.node.kind);
+        assert.strictEqual(hot.count, debug.node.count);
+        assert.strictEqual(hot.probContinue, debug.probContinue);
+        assert.strictEqual(hot.totalWeight, debug.totalWeight);
+        assert.strictEqual(hot.clueIncompatibleWeight, debug.clueIncompatibleWeight ?? 0);
+        assert.strictEqual(hot.terminalReason, debug.terminalReason);
+        assert.deepStrictEqual(hot.edges, debug.edges.map(edge => ({
+            weight: edge.weight,
+            childId: edge.childId
+        })));
+    });
+
+    it('reuses grouped shapes across nodes with the same exclusion mask and clue mode', () => {
+        const fixture = createGraphFixture('book', 'book', 30);
+        const firstRoot = fixture.graph.getRootNode(30);
+        fixture.graph.withSearchExpansion!(firstRoot.id, () => undefined);
+        const afterFirst = fixture.graph.getMemoryStats();
+
+        const secondRoot = fixture.graph.getRootNode(20);
+        fixture.graph.withSearchExpansion!(secondRoot.id, () => undefined);
+        const afterSecond = fixture.graph.getMemoryStats();
+
+        assert.strictEqual(afterFirst.groupingBuildCount, 1);
+        assert.strictEqual(afterSecond.groupingBuildCount, 1);
+        assert.strictEqual(afterSecond.searchExpansionCount, afterFirst.searchExpansionCount + 1);
+    });
+
     it('collapses diamond sword damage alternatives into one PlexNode edge', () => {
         const fixture = createGraphFixture('sword', 'diamond', 30);
         const concreteRoot = fixture.concrete.getExpansion(fixture.concrete.getRootNode(30).id);
@@ -216,6 +263,25 @@ describe('GroupedFlexSearchRun', () => {
         assert.ok(hasPlexSourceProgram(run, flex), 'checkpoint should include at least one PlexNode source program');
     });
 
+    it('keeps incremental residue diagnostics aligned with a full residue scan', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
+        const run = new GroupedFlexSearchRun(kernel);
+        run.seedXp(30);
+
+        const snapshot = run.searchToCheckpoint({
+            threshold: 0n,
+            maxIterations: 500,
+            probabilityFloor: 0n
+        });
+        const scanned = run.scanActiveResidueStatsForDiagnostics();
+
+        assert.ok(snapshot.activeResidueCount > 0);
+        assert.ok(snapshot.activeResidueMass > 0n);
+        assert.strictEqual(snapshot.activeResidueCount, scanned.count);
+        assert.strictEqual(snapshot.activeResidueMass, scanned.mass);
+    });
+
     it('applies probability-floor sieving with grouped PlexNode projection parity', () => {
         const registry = RegistryFactory.build('1.21.11');
         const kernel = new RegistryKernel({ registry, item: 'sword', material: 'diamond' });
@@ -263,6 +329,31 @@ function createGraphFixture(
     const programs = new FlexProgramStore();
     const graph = new GroupedFlexGraph(kernel, pool, programs);
     return { registry, kernel, concrete, graph, programs };
+}
+
+function captureHotExpansion(
+    graph: GroupedFlexGraph,
+    nodeId: ReturnType<GroupedFlexGraph['getRootNode']>['id']
+): HotExpansionSnapshot {
+    let captured: HotExpansionSnapshot | undefined;
+    graph.withSearchExpansion!(nodeId, expansion => {
+        captured = {
+            nodeId: expansion.nodeId,
+            programId: expansion.programId,
+            nodeKind: expansion.nodeKind,
+            count: expansion.count,
+            probContinue: expansion.probContinue,
+            totalWeight: expansion.totalWeight,
+            clueIncompatibleWeight: expansion.clueIncompatibleWeight ?? 0,
+            terminalReason: expansion.terminalReason,
+            edges: Object.freeze(Array.from({ length: expansion.edgeCount }, (_, edgeIndex) => Object.freeze({
+                weight: expansion.edgeWeights[edgeIndex]!,
+                childId: expansion.edgeChildIds[edgeIndex]! as ReturnType<GroupedFlexGraph['getRootNode']>['id']
+            })))
+        };
+    });
+    assert.ok(captured, 'hot-path expansion callback should run');
+    return captured;
 }
 
 function findChoiceEdgeByNames(
