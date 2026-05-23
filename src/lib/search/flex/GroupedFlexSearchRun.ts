@@ -6,11 +6,13 @@ import { PRECISION } from '#utils/index.js';
 import type {
     FlexCheckpointRequest,
     FlexPendingEntry,
+    FlexProjectedPendingAggregateResults,
     FlexProjectedPendingEntry,
     FlexProjectedResults,
     FlexRunSnapshot,
     FlexStateIdentityMode
 } from '#lib/search/flex/FlexTypes.js';
+import type { PendingFrontierAggregates } from '#lib/search/SearchRun.js';
 import { FlexCoordinator } from '#lib/search/flex/FlexCoordinator.js';
 import { FlexProgramStore } from '#lib/search/flex/FlexProgramStore.js';
 import { FlexProjector } from '#lib/search/flex/FlexProjector.js';
@@ -23,10 +25,17 @@ interface GroupedFlexGraphRecord {
 
 export interface GroupedFlexProjectedCheckpoint extends FlexProjectedResults {
     readonly pendingEntries: readonly FlexProjectedPendingEntry[];
+    readonly pendingAggregates?: PendingFrontierAggregates | undefined;
     readonly projectedPendingMass: bigint;
     readonly projectedPendingSourceMass: bigint;
     readonly pendingProjectionLoss: bigint;
     readonly pendingClueIncompatible: bigint;
+}
+
+export type GroupedFlexPendingProjectionMode = 'rows' | 'aggregates';
+
+export interface GroupedFlexProjectionOptions {
+    readonly pendingMode?: GroupedFlexPendingProjectionMode | undefined;
 }
 
 export interface GroupedFlexSearchRunOptions {
@@ -116,15 +125,26 @@ export class GroupedFlexSearchRun {
         return this.coordinator.snapshot();
     }
 
-    public projectSnapshot(snapshot: FlexRunSnapshot = this.snapshot()): GroupedFlexProjectedCheckpoint {
+    public projectSnapshot(
+        snapshot: FlexRunSnapshot = this.snapshot(),
+        options: GroupedFlexProjectionOptions = {}
+    ): GroupedFlexProjectedCheckpoint {
         const projectedResults = this.projector.projectResults(snapshot.results);
-        const projectedPending = this.projector.projectPendingWithDiagnostics(
-            this.withPendingClueReachability(snapshot.pendingEntries)
-        );
+        const pendingEntries = this.withPendingClueReachability(snapshot.pendingEntries);
+        const projectedPending = options.pendingMode === 'aggregates'
+            ? this.projector.projectPendingAggregates(pendingEntries)
+            : this.projector.projectPendingWithDiagnostics(pendingEntries);
+
+        const compatibilityPendingEntries = isAggregatePendingProjection(projectedPending)
+            ? Object.freeze([]) as readonly FlexProjectedPendingEntry[]
+            : projectedPending.pendingEntries;
 
         return Object.freeze({
             ...projectedResults,
-            pendingEntries: projectedPending.pendingEntries,
+            pendingEntries: compatibilityPendingEntries,
+            ...(isAggregatePendingProjection(projectedPending)
+                ? { pendingAggregates: projectedPending.pendingAggregates }
+                : {}),
             projectedPendingMass: projectedPending.projectedMass,
             projectedPendingSourceMass: projectedPending.sourceMass,
             pendingProjectionLoss: projectedPending.projectionLoss,
@@ -170,4 +190,10 @@ export class GroupedFlexSearchRun {
         if (targetBit === undefined) return false;
         return (this.getGraph(entry.graphId).getNodeExclusionMask(entry.nodeId) & targetBit) === 0n;
     }
+}
+
+function isAggregatePendingProjection(
+    projected: FlexProjectedPendingAggregateResults | { readonly pendingEntries: readonly FlexProjectedPendingEntry[] }
+): projected is FlexProjectedPendingAggregateResults {
+    return 'pendingAggregates' in projected;
 }

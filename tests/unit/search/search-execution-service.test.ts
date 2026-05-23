@@ -8,6 +8,7 @@ import { DATA } from '#data/index.js';
 import { getDefaultStatsCheckpoint, getSearchCheckpointForRefinement } from '#core/config.js';
 import { getRegistryVersionBoundaries } from '#core/version-resolution.js';
 import { SearchExecutionService } from '#lib/search/SearchExecutionService.js';
+import { ENGINE_FRONTIER_KIND } from '#lib/search/SearchRun.js';
 import { FLEX_CACHE_LIMITS } from '#lib/search/flex/FlexConstants.js';
 import { CheckpointSearchRequest, EnchantStats, EngineInstrumentation, SearchResult } from '#types/index.js';
 import { PRECISION } from '#utils/index.js';
@@ -163,6 +164,7 @@ describe('Search execution service', () => {
 
         assert.strictEqual(result.instrumentation?.search?.backend, 'concrete');
         assert.ok(result.snapshot.pendingEntries.length > 0);
+        assert.strictEqual(result.snapshot.frontier.kind, ENGINE_FRONTIER_KIND.MATERIALIZED);
     });
 
     it('rejects unsupported backend selectors', async () => {
@@ -199,9 +201,41 @@ describe('Search execution service', () => {
 
         assert.strictEqual(result.instrumentation?.search?.backend, 'flex');
         assert.strictEqual(result.instrumentation?.exitReason, 'iterations');
-        assert.ok(result.snapshot.pendingEntries.length > 0);
-        assert.ok(result.instrumentation.search.pendingEntryCount > (result.instrumentation.search.flexStructuralPendingEntryCount ?? 0));
+        assert.strictEqual(result.snapshot.frontier.kind, ENGINE_FRONTIER_KIND.FACTORIZED);
+        if (result.snapshot.frontier.kind !== ENGINE_FRONTIER_KIND.FACTORIZED) {
+            throw new Error('Expected factorized Flex frontier');
+        }
+        assert.strictEqual(result.snapshot.pendingEntries.length, 0);
+        assert.ok(result.snapshot.pendingAggregates);
+        assert.strictEqual(result.snapshot.frontier.summary, result.snapshot.pendingAggregates);
+        assert.ok(result.snapshot.pendingAggregates.count.reduce((sum, mass) => sum + mass, 0n) > 0n);
+        assert.strictEqual(result.instrumentation.search.pendingEntryCount, result.instrumentation.search.flexStructuralPendingEntryCount);
         assert.ok(Math.abs(snapshotAccountingTotal(result) - 1) < 1e-12);
+    });
+
+    it('keeps clue-conditioned Flex checkpoints on the native factorized frontier', async () => {
+        const engine = EngineFactory.createForVersion('1.21.11');
+
+        const result = await engine.searchToCheckpoint({
+            item: 'book',
+            material: 'book',
+            xp: 30,
+            clue: 'Sharpness III',
+            threshold: 0,
+            maxIterations: 1,
+            searchBackend: 'flex'
+        });
+
+        assert.strictEqual(result.snapshot.frontier.kind, ENGINE_FRONTIER_KIND.FACTORIZED);
+        if (result.snapshot.frontier.kind !== ENGINE_FRONTIER_KIND.FACTORIZED) {
+            throw new Error('Expected factorized Flex frontier');
+        }
+        assert.strictEqual(result.snapshot.pendingEntries.length, 0);
+        assert.ok(result.snapshot.frontier.summary.clueJoint);
+        assert.strictEqual(
+            result.snapshot.frontier.summary.shownClueDistribution.get(result.snapshot.frontier.summary.clueJoint.targetClueId),
+            result.snapshot.frontier.summary.clueJoint.knownSpace
+        );
     });
 
     it('exposes Flex mass accounting details without changing compatible public totals', async () => {

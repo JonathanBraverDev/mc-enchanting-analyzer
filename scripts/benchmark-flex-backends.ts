@@ -1,6 +1,7 @@
 import { performance } from 'node:perf_hooks';
 import { RegistryFactory } from '#core/factory.js';
 import { EngineFactory } from '#engine/factory.js';
+import { ENGINE_FRONTIER_KIND } from '#lib/search/SearchRun.js';
 import type { RegistryMutation } from '#types/domain.js';
 
 type Backend = 'flex' | 'concrete';
@@ -216,7 +217,14 @@ async function runBackend(engine: Engine, backend: Backend, req: SearchRequest):
         result,
         summary: {
             iterations: result.snapshot.iterations,
-            pendingEntries: result.snapshot.pendingEntries.length,
+            frontierKind: result.snapshot.frontier.kind,
+            materializedPendingEntries: result.snapshot.frontier.kind === ENGINE_FRONTIER_KIND.MATERIALIZED
+                ? result.snapshot.frontier.entries.length
+                : 0,
+            factorizedPendingEntries: result.snapshot.frontier.kind === ENGINE_FRONTIER_KIND.FACTORIZED
+                ? result.snapshot.frontier.entries.length
+                : 0,
+            compatibilityPendingEntries: result.snapshot.pendingEntries.length,
             structuralPending: result.instrumentation?.search?.flexStructuralPendingEntryCount,
             projectionLoss: result.instrumentation?.search?.flexProjectionLoss,
             flexIdentityMode: result.instrumentation?.search?.flexStateIdentityMode,

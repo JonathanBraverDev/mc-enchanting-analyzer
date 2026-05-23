@@ -1,12 +1,16 @@
 import { PACKING_CONSTANTS } from '#constants/engine.js';
 import { PackedCombo } from '#types/index.js';
-import type { PendingFrontierEntry } from '#lib/search/SearchRun.js';
+import { ENGINE_FRONTIER_KIND, type EngineFrontierView, type PendingFrontierAggregates, type PendingFrontierEntry } from '#lib/search/SearchRun.js';
 
 export interface SummaryAggregationRequest {
     combos: ReadonlyMap<PackedCombo, bigint>;
     indexToEnchant: number[];
+    /** Native frontier view. New callers should prefer this over compatibility pending fields. */
+    frontier?: EngineFrontierView | undefined;
     /** Native pending entries from the shared search run. */
     pendingEntries?: readonly PendingFrontierEntry[] | undefined;
+    /** Pre-aggregated pending contribution for engines that keep pending rows factorized. */
+    pendingAggregates?: PendingFrontierAggregates | undefined;
     isBook?: boolean | undefined;
     includeMasses?: boolean | undefined;
     includeShownClueDistribution?: boolean | undefined;
@@ -27,7 +31,9 @@ export class SummaryAggregationService {
         const {
             combos,
             indexToEnchant,
+            frontier,
             pendingEntries = [],
+            pendingAggregates,
             isBook = false,
             includeMasses = true,
             includeShownClueDistribution = true
@@ -44,12 +50,97 @@ export class SummaryAggregationService {
             this.addContribution(result, packed, mass, indexToEnchant, false, isBook, includeMasses, includeShownClueDistribution);
         }
 
+        if (frontier) this.addFrontierContribution(result, frontier, indexToEnchant, isBook, includeMasses, includeShownClueDistribution);
+        else this.addCompatibilityPendingContribution(
+            result,
+            pendingEntries,
+            pendingAggregates,
+            indexToEnchant,
+            isBook,
+            includeMasses,
+            includeShownClueDistribution
+        );
+
+        return result;
+    }
+
+    private static addFrontierContribution(
+        result: SummaryAggregationResult,
+        frontier: EngineFrontierView,
+        indexToEnchant: number[],
+        isBook: boolean,
+        includeMasses: boolean,
+        includeShownClueDistribution: boolean
+    ): void {
+        switch (frontier.kind) {
+            case ENGINE_FRONTIER_KIND.EMPTY:
+                return;
+            case ENGINE_FRONTIER_KIND.MATERIALIZED:
+                this.addMaterializedPendingContribution(
+                    result,
+                    frontier.entries,
+                    indexToEnchant,
+                    isBook,
+                    includeMasses,
+                    includeShownClueDistribution
+                );
+                return;
+            case ENGINE_FRONTIER_KIND.FACTORIZED:
+                this.addPendingAggregateContribution(result, frontier.summary, includeMasses, includeShownClueDistribution);
+                return;
+        }
+    }
+
+    private static addCompatibilityPendingContribution(
+        result: SummaryAggregationResult,
+        pendingEntries: readonly PendingFrontierEntry[],
+        pendingAggregates: PendingFrontierAggregates | undefined,
+        indexToEnchant: number[],
+        isBook: boolean,
+        includeMasses: boolean,
+        includeShownClueDistribution: boolean
+    ): void {
+        this.addMaterializedPendingContribution(
+            result,
+            pendingEntries,
+            indexToEnchant,
+            isBook,
+            includeMasses,
+            includeShownClueDistribution
+        );
+        if (pendingAggregates) {
+            this.addPendingAggregateContribution(result, pendingAggregates, includeMasses, includeShownClueDistribution);
+        }
+    }
+
+    private static addMaterializedPendingContribution(
+        result: SummaryAggregationResult,
+        pendingEntries: readonly PendingFrontierEntry[],
+        indexToEnchant: number[],
+        isBook: boolean,
+        includeMasses: boolean,
+        includeShownClueDistribution: boolean
+    ): void {
         for (const entry of pendingEntries) {
             this.addContribution(result, entry.combo, entry.mass, indexToEnchant, true, isBook, includeMasses, includeShownClueDistribution);
         }
+    }
 
+    private static addPendingAggregateContribution(
+        result: SummaryAggregationResult,
+        pendingAggregates: PendingFrontierAggregates,
+        includeMasses: boolean,
+        includeShownClueDistribution: boolean
+    ): void {
+        if (includeMasses) {
+            this.addArrayAggregate(result.any, pendingAggregates.any);
+            this.addArrayAggregate(result.ranks, pendingAggregates.ranks);
+            this.addArrayAggregate(result.count, pendingAggregates.count);
+        }
 
-        return result;
+        if (includeShownClueDistribution) {
+            this.addMapAggregate(result.shownClueDistribution, pendingAggregates.shownClueDistribution);
+        }
     }
 
     private static addContribution(
@@ -117,5 +208,18 @@ export class SummaryAggregationService {
 
     private static addArrayMass(target: bigint[], key: number, mass: bigint): void {
         target[key] = (target[key] ?? 0n) + mass;
+    }
+
+    private static addArrayAggregate(target: bigint[], source: readonly bigint[]): void {
+        for (let index = 0; index < source.length; index++) {
+            const mass = source[index];
+            if (mass !== undefined && mass > 0n) this.addArrayMass(target, index, mass);
+        }
+    }
+
+    private static addMapAggregate(target: Map<number, bigint>, source: ReadonlyMap<number, bigint>): void {
+        for (const [key, mass] of source) {
+            if (mass > 0n) target.set(key, (target.get(key) ?? 0n) + mass);
+        }
     }
 }

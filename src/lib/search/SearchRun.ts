@@ -67,8 +67,60 @@ export interface PendingFrontierEntry {
     readonly count: number;
 }
 
-/** Explicit materialized snapshot of live SearchRun state. Expensive for large frontiers. */
-export interface SearchRunSnapshot {
+/** Aggregate pending-frontier contribution harvested without materializing public row factors. */
+export interface PendingFrontierAggregates {
+    readonly any: readonly bigint[];
+    readonly ranks: readonly bigint[];
+    readonly count: readonly bigint[];
+    readonly shownClueDistribution: ReadonlyMap<number, bigint>;
+    readonly clueJoint?: PendingClueJointAggregates | undefined;
+}
+
+/** Unnormalized pending aggregate mass that is already joint with one observed table clue. */
+export interface PendingClueJointAggregates {
+    readonly targetClueId: number;
+    readonly knownSpace: bigint;
+    readonly any: readonly bigint[];
+    readonly ranks: readonly bigint[];
+    readonly count: readonly bigint[];
+}
+
+export interface FactorizedFrontierEntry {
+    readonly graphId: number;
+    readonly nodeId: number;
+    readonly programId: number;
+    readonly mass: bigint;
+    readonly count: number;
+    readonly nodeKind: 'solid' | 'plex';
+    readonly targetClueReachable?: boolean | undefined;
+}
+
+export const ENGINE_FRONTIER_KIND = Object.freeze({
+    EMPTY: 'empty',
+    MATERIALIZED: 'materialized',
+    FACTORIZED: 'factorized'
+} as const);
+
+export type EngineFrontierKind = typeof ENGINE_FRONTIER_KIND[keyof typeof ENGINE_FRONTIER_KIND];
+
+export interface EmptyEngineFrontier {
+    readonly kind: typeof ENGINE_FRONTIER_KIND.EMPTY;
+}
+
+export interface MaterializedEngineFrontier {
+    readonly kind: typeof ENGINE_FRONTIER_KIND.MATERIALIZED;
+    readonly entries: readonly PendingFrontierEntry[];
+}
+
+export interface FactorizedEngineFrontier {
+    readonly kind: typeof ENGINE_FRONTIER_KIND.FACTORIZED;
+    readonly entries: readonly FactorizedFrontierEntry[];
+    readonly summary: PendingFrontierAggregates;
+}
+
+export type EngineFrontierView = EmptyEngineFrontier | MaterializedEngineFrontier | FactorizedEngineFrontier;
+
+export interface EngineSearchSnapshot {
     readonly results: ReadonlyMap<PackedCombo, bigint>;
     readonly mass: MassAccountingBreakdown;
     readonly iterations: number;
@@ -76,13 +128,30 @@ export interface SearchRunSnapshot {
     readonly lastExpandedMass: bigint;
     readonly pendingCount: number;
     readonly largestPendingMass: bigint;
+    /**
+     * Compatibility materialized pending rows. Concrete uses this natively; Flex only fills it
+     * for exact compatibility modes such as clue-conditioned checkpoints.
+     */
     readonly pendingEntries: readonly PendingFrontierEntry[];
+    /**
+     * Compatibility pending summary for factorized engines. Prefer `frontier` for new code so
+     * consumers can distinguish native frontier shape explicitly.
+     */
+    readonly pendingAggregates?: PendingFrontierAggregates | undefined;
+    readonly frontier: EngineFrontierView;
     readonly graphCount: number;
     readonly seededLevelCount: number;
     readonly activeResidueCount: number;
     readonly activeResidueMass: bigint;
     readonly fullyResolved: boolean;
     readonly suffixMerging: SearchSuffixMergeDiagnostics;
+}
+
+/** Explicit materialized snapshot of live concrete SearchRun state. Expensive for large frontiers. */
+export interface SearchRunSnapshot extends EngineSearchSnapshot {
+    readonly pendingEntries: readonly PendingFrontierEntry[];
+    readonly pendingAggregates?: undefined;
+    readonly frontier: EmptyEngineFrontier | MaterializedEngineFrontier;
 }
 
 export interface SearchSuffixMergeDiagnostics {
@@ -337,6 +406,7 @@ export class SearchRun {
     /** Materializes the current run state without advancing search. */
     public snapshot(): SearchRunSnapshot {
         const residue = this.getActiveResidueStats();
+        const pendingEntries = Object.freeze(this.getPendingEntries());
         return Object.freeze({
             results: new Map(this.results),
             mass: this.mass.toPublic(),
@@ -344,7 +414,8 @@ export class SearchRun {
             lastExpandedMass: this._lastExpandedMass,
             pendingCount: this.frontier.size,
             largestPendingMass: this.frontier.peekMass(),
-            pendingEntries: Object.freeze(this.getPendingEntries()),
+            pendingEntries,
+            frontier: createMaterializedEngineFrontier(pendingEntries),
             graphCount: this.graphs.length,
             seededLevelCount: this._seededLevelCount,
             activeResidueCount: residue.count,
@@ -759,6 +830,34 @@ export class SearchRun {
         if (!record) throw new Error(`Unknown search graph ID ${graphId}`);
         return record;
     }
+}
+
+export function createEmptyEngineFrontier(): EmptyEngineFrontier {
+    return Object.freeze({ kind: ENGINE_FRONTIER_KIND.EMPTY });
+}
+
+export function createMaterializedEngineFrontier(entries: readonly PendingFrontierEntry[]): EmptyEngineFrontier | MaterializedEngineFrontier {
+    if (entries.length === 0) return createEmptyEngineFrontier();
+    return Object.freeze({
+        kind: ENGINE_FRONTIER_KIND.MATERIALIZED,
+        entries
+    });
+}
+
+export function createFactorizedEngineFrontier(
+    entries: readonly FactorizedFrontierEntry[],
+    summary: PendingFrontierAggregates
+): EmptyEngineFrontier | FactorizedEngineFrontier {
+    if (entries.length === 0) return createEmptyEngineFrontier();
+    return Object.freeze({
+        kind: ENGINE_FRONTIER_KIND.FACTORIZED,
+        entries,
+        summary
+    });
+}
+
+export function getMaterializedFrontierEntries(frontier: EngineFrontierView): readonly PendingFrontierEntry[] {
+    return frontier.kind === ENGINE_FRONTIER_KIND.MATERIALIZED ? frontier.entries : [];
 }
 
 interface FrontierGraphStorage {
