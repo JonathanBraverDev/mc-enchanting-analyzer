@@ -24,7 +24,7 @@ import { SummaryAggregationService } from '#services/SummaryAggregationService.j
 import { TargetAnalysisService } from '#services/TargetAnalysisService.js';
 import { TargetClueAdvisorService } from '#services/TargetClueAdvisorService.js';
 import { ClueSignalAdvisorService } from '#services/ClueSignalAdvisorService.js';
-import type { SearchRunSnapshot } from '#lib/search/SearchRun.js';
+import { getMaterializedFrontierEntries, type EngineSearchSnapshot } from '#lib/search/SearchRun.js';
 
 
 export class SnapshotService {
@@ -40,7 +40,7 @@ export class SnapshotService {
    */
   public static create(
     state: RegistryState,
-    snapshot: SearchRunSnapshot,
+    snapshot: EngineSearchSnapshot,
     request: SnapshotRequest
   ): TopRunView | ChartCellView {
     const { snapshotType, refinementLevel, clue } = request;
@@ -48,6 +48,7 @@ export class SnapshotService {
     const combos = new Map(snapshot.results);
     const includeCombos = request.includeCombos ?? snapshotType === 'top';
     const isBook = request.input.item === 'book';
+    const materializedPendingEntries = getMaterializedFrontierEntries(snapshot.frontier);
 
     // Resolve clue here as a final guard against invalid worker or test input.
     let targetClueId: number | null = null;
@@ -73,7 +74,8 @@ export class SnapshotService {
         targetClueId!,
         state.indexToEnchant,
         isBook,
-        snapshot.pendingEntries
+        materializedPendingEntries,
+        snapshot.frontier
       );
       knownSpace = ProbUtils.toNumber(conditioned.knownSpace);
       result = conditioned;
@@ -82,7 +84,7 @@ export class SnapshotService {
       const derived = SummaryAggregationService.aggregate({
         combos,
         indexToEnchant: state.indexToEnchant,
-        pendingEntries: snapshot.pendingEntries,
+        frontier: snapshot.frontier,
         isBook,
         includeShownClueDistribution: false
       });
@@ -106,7 +108,7 @@ export class SnapshotService {
       combos: result.combos,
       indexToEnchant: state.indexToEnchant,
       targets: packedTargets,
-      pendingEntries: isConditioned ? [] : snapshot.pendingEntries,
+      pendingEntries: isConditioned ? [] : materializedPendingEntries,
       comboLimit: includeCombos ? comboLimit ?? result.combos.size : 0,
       registry: state,
       isBook
@@ -129,7 +131,7 @@ export class SnapshotService {
         indexToEnchant: state.indexToEnchant,
         targets: packedTargets,
         registry: state,
-        pendingEntries: snapshot.pendingEntries,
+        pendingEntries: materializedPendingEntries,
         limit: 5
       })
       : undefined;

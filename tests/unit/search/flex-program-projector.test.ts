@@ -318,6 +318,102 @@ describe('FlexProjector', () => {
         );
     });
 
+    it('harvests aggregate pending stats without materializing pending rows', () => {
+        const store = new FlexProgramStore();
+        const projector = new FlexProjector(store, enchantToIndex);
+        const fixed = store.appendFixed(store.empty, sharpness);
+        const program = store.appendChoice(fixed, [
+            { packedEnchant: smite, weight: 1 },
+            { packedEnchant: looting, weight: 3 }
+        ]);
+        const pending: FlexPendingEntry[] = [{
+            graphId: 0,
+            nodeId: nodeId(12),
+            programId: program,
+            mass: 8n,
+            count: 2,
+            nodeKind: 'plex'
+        }];
+
+        const projected = projector.projectPendingAggregates(pending);
+
+        assert.strictEqual(projected.projectedMass, 8n);
+        assert.strictEqual(projected.projectionLoss, 0n);
+        assert.strictEqual(projected.pendingAggregates.any[sharpness >> 8], 8n);
+        assert.strictEqual(projected.pendingAggregates.any[smite >> 8], 2n);
+        assert.strictEqual(projected.pendingAggregates.any[looting >> 8], 6n);
+        assert.strictEqual(projected.pendingAggregates.ranks[sharpness], 8n);
+        assert.strictEqual(projected.pendingAggregates.ranks[smite], 2n);
+        assert.strictEqual(projected.pendingAggregates.ranks[looting], 6n);
+        assert.strictEqual(projected.pendingAggregates.count[2], 8n);
+        assert.strictEqual(projected.pendingAggregates.shownClueDistribution.get(sharpness), 4n);
+        assert.strictEqual(projected.pendingAggregates.shownClueDistribution.get(smite), 1n);
+        assert.strictEqual(projected.pendingAggregates.shownClueDistribution.get(looting), 3n);
+    });
+
+    it('uses book pending aggregate survival rates without applying result book removal', () => {
+        const store = new FlexProgramStore();
+        const projector = new FlexProjector(store, enchantToIndex, { applyBookRemoval: true });
+        const first = store.appendFixed(store.empty, sharpness);
+        const program = store.appendFixed(first, smite);
+        const pending: FlexPendingEntry[] = [{
+            graphId: 0,
+            nodeId: nodeId(14),
+            programId: program,
+            mass: 10n,
+            count: 2,
+            nodeKind: 'solid'
+        }];
+
+        const projected = projector.projectPendingAggregates(pending);
+
+        assert.strictEqual(projected.projectedMass, 10n);
+        assert.strictEqual(projected.projectionLoss, 0n);
+        assert.strictEqual(projected.pendingAggregates.any[sharpness >> 8], 5n);
+        assert.strictEqual(projected.pendingAggregates.any[smite >> 8], 5n);
+        assert.strictEqual(projected.pendingAggregates.ranks[sharpness], 5n);
+        assert.strictEqual(projected.pendingAggregates.ranks[smite], 5n);
+        assert.strictEqual(projected.pendingAggregates.count[1], 10n);
+        assert.strictEqual(projected.pendingAggregates.shownClueDistribution.get(sharpness), 5n);
+        assert.strictEqual(projected.pendingAggregates.shownClueDistribution.get(smite), 5n);
+    });
+
+    it('splits clue-choice pending aggregates without expanding independent alternatives', () => {
+        const store = new FlexProgramStore();
+        const projector = new FlexProjector(store, enchantToIndex, { targetClueId: sharpness });
+        const fixed = store.appendFixed(store.empty, looting);
+        const program = store.appendChoice(fixed, [
+            { packedEnchant: sharpness, weight: 2 },
+            { packedEnchant: smite, weight: 1 }
+        ]);
+        const pending: FlexPendingEntry[] = [{
+            graphId: 0,
+            nodeId: nodeId(15),
+            programId: program,
+            mass: 12n,
+            count: 2,
+            nodeKind: 'plex',
+            targetClueReachable: false
+        }];
+
+        const projected = projector.projectPendingAggregates(pending);
+        const clueJoint = projected.pendingAggregates.clueJoint;
+
+        assert.strictEqual(projected.projectedMass, 8n);
+        assert.strictEqual(projected.clueIncompatible, 4n);
+        assert.strictEqual(projected.projectionLoss, 0n);
+        assert.strictEqual(projected.pendingAggregates.shownClueDistribution.get(sharpness), 4n);
+        assert.ok(clueJoint);
+        assert.strictEqual(clueJoint.targetClueId, sharpness);
+        assert.strictEqual(clueJoint.knownSpace, 4n);
+        assert.strictEqual(clueJoint.count[2], 4n);
+        assert.strictEqual(clueJoint.any[sharpness >> 8], 4n);
+        assert.strictEqual(clueJoint.any[looting >> 8], 4n);
+        assert.strictEqual(clueJoint.any[smite >> 8] ?? 0n, 0n);
+        assert.strictEqual(clueJoint.ranks[sharpness], 4n);
+        assert.strictEqual(clueJoint.ranks[looting], 4n);
+    });
+
     it('tracks clue-incompatible pending source mass without book removal', () => {
         const store = new FlexProgramStore();
         const projector = new FlexProjector(store, enchantToIndex, {

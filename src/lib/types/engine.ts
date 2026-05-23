@@ -1,5 +1,5 @@
 import { Enchantment, MaterialValues, RegistryMutation, RomanMap } from '#types/domain.js';
-import type { SearchRunSnapshot } from '#lib/search/SearchRun.js';
+import type { EngineSearchSnapshot } from '#lib/search/SearchRun.js';
 
 import { MassAccountingBreakdown } from '#types/mass.js';
 
@@ -346,7 +346,7 @@ export type SequentialCheckpointSearchRequest = SearchConfig & ItemSelectionRequ
 
 export interface SummaryRequest {
     combos: ReadonlyMap<PackedCombo, bigint>;
-    snapshot: SearchRunSnapshot;
+    snapshot: EngineSearchSnapshot;
     indexToEnchant: number[];
     /** Maximum combo entries to include. Values above the normal export cap require `uncappedResults: true`. */
     comboLimit?: number | undefined;
@@ -381,7 +381,7 @@ export interface ProgressReporter {
 
 /** Search results before presentation summarization. */
 export interface SearchResult {
-    snapshot: SearchRunSnapshot;
+    snapshot: EngineSearchSnapshot;
     combos: ReadonlyMap<PackedCombo, bigint>;
     instrumentation?: EngineInstrumentation | undefined;
     timing?: SearchTiming | undefined;
