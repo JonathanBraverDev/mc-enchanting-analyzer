@@ -38,6 +38,7 @@ interface CliOptions {
     readonly files: readonly string[];
     readonly top: number;
     readonly includeIdle: boolean;
+    readonly includeProfiler: boolean;
 }
 
 const DEFAULT_TOP = 15;
@@ -46,9 +47,24 @@ const flexProjectionFunctions = new Set([
     'projectResults',
     'projectSnapshot',
     'projectPendingWithDiagnostics',
+    'projectPendingAggregates',
+    'getPendingClueSplit',
+    'addPendingProgramAggregate',
+    'addPendingEmissionAggregate',
+    'addPendingClueJointAggregate',
+    'addPendingClueJointEmissionAggregate',
+    'createPendingAggregates',
+    'freezePendingAggregates',
+    'createPendingClueJointAggregates',
+    'freezePendingClueJointAggregates',
+    'addPendingAggregateContribution',
+    'addMaterializedPendingContribution',
+    'addFrontierContribution',
     'toCompatibleFlexSearchRunSnapshot',
     'toCompatibleFlexMass',
     'toCompatibleFlexMassDetails',
+    'createFactorizedEngineFrontier',
+    'createMaterializedEngineFrontier',
     'visitProgramFactors',
     'materializeBookFactors',
     'visit',
@@ -208,6 +224,7 @@ function parseArgs(args: readonly string[]): CliOptions {
     const files: string[] = [];
     let top = DEFAULT_TOP;
     let includeIdle = false;
+    let includeProfiler = false;
 
     for (let index = 0; index < args.length; index++) {
         const arg = args[index]!;
@@ -219,6 +236,8 @@ function parseArgs(args: readonly string[]): CliOptions {
             top = parsePositiveInteger(arg.slice('--top='.length), '--top');
         } else if (arg === '--include-idle') {
             includeIdle = true;
+        } else if (arg === '--include-profiler') {
+            includeProfiler = true;
         } else if (arg === '--help' || arg === '-h') {
             printUsage();
             process.exit(0);
@@ -229,7 +248,7 @@ function parseArgs(args: readonly string[]): CliOptions {
         }
     }
 
-    return { files, top, includeIdle };
+    return { files, top, includeIdle, includeProfiler };
 }
 
 function parsePositiveInteger(value: string, label: string): number {
@@ -242,7 +261,7 @@ function parsePositiveInteger(value: string, label: string): number {
 
 function printUsage(): void {
     console.log([
-        'Usage: tsx scripts/analyze_cpu_profile.ts [--top N] [--include-idle] <CPU.cpuprofile...>',
+        'Usage: tsx scripts/analyze_cpu_profile.ts [--top N] [--include-idle] [--include-profiler] <CPU.cpuprofile...>',
         '',
         'Splits Node/V8 CPU profile samples into Flex/V7 phases using call-stack ancestry:',
         '- flex/graph-grouping',
@@ -265,9 +284,11 @@ function printUsage(): void {
 function analyzeFile(file: string, options: CliOptions): void {
     const profile = readProfile(file);
     const samples = collectSamples(profile);
-    const filteredSamples = options.includeIdle
-        ? samples
-        : samples.filter(sample => sample.self.functionName !== '(idle)');
+    const filteredSamples = samples.filter(sample => {
+        if (!options.includeIdle && sample.self.functionName === '(idle)') return false;
+        if (!options.includeProfiler && isProfilerOverhead(sample.self)) return false;
+        return true;
+    });
     const totalMicroseconds = sumNumbers(filteredSamples.map(sample => sample.microseconds));
 
     const phaseTotals = new Map<string, number>();
@@ -413,6 +434,10 @@ function sumSelfTime(samples: readonly ProfileSample[], functionName: string): n
 
 function formatFrame(frame: FrameKey): string {
     return `${frame.functionName} - ${frame.url}`;
+}
+
+function isProfilerOverhead(frame: FrameKey): boolean {
+    return frame.url === 'node:inspector' && frame.functionName === 'post';
 }
 
 function addToMap(map: Map<string, number>, key: string, value: number): void {
