@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## v7.4.5 (2026-05-23)
+
+### Performance
+- **Flex checkpoint internals**: Reduced allocation and lookup overhead in explicit Flex checkpoint searches by keeping frontier mass directly on heap entries and avoiding temporary edge-share objects during expansion.
+
+### Developer Experience
+- **Flex mass diagnostics**: Added a detailed stage/operation accounting view for explicit Flex searches so internal comparisons can separate search mass movement from projection rounding while preserving the existing public accounting totals.
+
 ## v7.4.4 (2026-05-23)
 
 ### Cleanup
