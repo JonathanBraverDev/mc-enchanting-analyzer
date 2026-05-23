@@ -10,6 +10,7 @@ import type {
     FlexProjectedPendingEntry,
     FlexProjectedResults,
     FlexRunSnapshot,
+    FlexRunMemoryStats,
     FlexStateIdentityMode
 } from '#lib/search/flex/FlexTypes.js';
 import type { PendingFrontierAggregates } from '#lib/search/SearchRun.js';
@@ -123,6 +124,14 @@ export class GroupedFlexSearchRun {
 
     public snapshot(): FlexRunSnapshot {
         return this.coordinator.snapshot();
+    }
+
+    public getMemoryStats(): FlexRunMemoryStats {
+        return {
+            coordinator: this.coordinator.getMemoryStats(),
+            programs: this.programs.getMemoryStats(),
+            graphs: this.graphs.map(graph => graph.getMemoryStats())
+        };
     }
 
     public projectSnapshot(
