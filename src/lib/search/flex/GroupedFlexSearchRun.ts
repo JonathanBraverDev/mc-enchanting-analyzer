@@ -156,6 +156,10 @@ export class GroupedFlexSearchRun {
         };
     }
 
+    public scanActiveResidueStatsForDiagnostics(): { readonly count: number; readonly mass: bigint } {
+        return this.coordinator.scanActiveResidueStatsForDiagnostics();
+    }
+
     public buildEngineSnapshot(
         state: FlexRunState = this.coordinator.state(),
         options: FlexNativeSnapshotOptions = {}

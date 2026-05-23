@@ -62,6 +62,8 @@ export interface FlexSearchExpansion {
     readonly terminalReason: FlexTerminalReason;
 }
 
+export type FlexSearchExpansionConsumer<T> = (expansion: FlexSearchExpansion) => T;
+
 export interface FlexExpansion {
     readonly node: FlexNode;
     readonly probContinue: bigint;
@@ -74,6 +76,7 @@ export interface FlexExpansion {
 export interface FlexGraph {
     getExpansion(nodeId: FlexNodeId): FlexExpansion;
     getSearchExpansion?(nodeId: FlexNodeId): FlexSearchExpansion;
+    withSearchExpansion?<T>(nodeId: FlexNodeId, consumer: FlexSearchExpansionConsumer<T>): T;
     getNode(nodeId: FlexNodeId): FlexNode;
 }
 
