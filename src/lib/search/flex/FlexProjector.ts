@@ -96,13 +96,13 @@ export class FlexProjector {
                 }
 
                 projectedMass += share;
-                pendingEntries.push(Object.freeze({
+                pendingEntries.push({
                     graphId: entry.graphId,
                     nodeId: entry.nodeId,
                     mass: share,
                     combo,
                     count
-                }));
+                });
             });
             projectionLoss += entry.mass - assigned;
         }
