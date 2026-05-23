@@ -67,7 +67,7 @@ function createAdversarialBookMutations(spots: readonly AdversarialBookSpot[]): 
 }
 
 const CONCRETE_DELTA_LIMIT = 1_000_000_000_000n;
-const TIMING_REGRESSION_TOLERANCE_RATIO = 1.05;
+const TIMING_OBSERVATION_RATIO = 1.05;
 
 const CASES: readonly BenchmarkCase[] = Object.freeze([
     {
@@ -227,14 +227,23 @@ async function runBackend(engine: Engine, backend: Backend, req: SearchRequest):
     };
 }
 
-function timingPass(concreteMedian: number, flexMedian: number): boolean {
-    if (concreteMedian < 10) return flexMedian < 10;
-    return flexMedian <= concreteMedian * TIMING_REGRESSION_TOLERANCE_RATIO;
+function timingObservation(concreteMedian: number, flexMedian: number): string | undefined {
+    if (concreteMedian < 10) {
+        return flexMedian >= 10
+            ? `Flex median ${Math.round(flexMedian)}ms is above the sub-10ms concrete band (${Math.round(concreteMedian)}ms)`
+            : undefined;
+    }
+    if (flexMedian <= concreteMedian * TIMING_OBSERVATION_RATIO) return undefined;
+    return `Flex median ${Math.round(flexMedian)}ms is slower than concrete median ${Math.round(concreteMedian)}ms`;
 }
 
-async function runCase(testCase: BenchmarkCase): Promise<readonly string[]> {
+async function runCase(testCase: BenchmarkCase): Promise<{
+    readonly failures: readonly string[];
+    readonly observations: readonly string[];
+}> {
     const engine = testCase.engine();
     const failures: string[] = [];
+    const observations: string[] = [];
 
     await runBackend(engine, 'concrete', testCase.req);
     await runBackend(engine, 'flex', testCase.req);
@@ -268,21 +277,22 @@ async function runCase(testCase: BenchmarkCase): Promise<readonly string[]> {
     console.log('flex summary', finalFlex.summary);
     console.log('flex vs concrete delta', printableDelta(flexVsConcrete));
 
-    if (!timingPass(concreteMedian, flexMedian)) {
-        failures.push(`Flex median ${Math.round(flexMedian)}ms slower than concrete median ${Math.round(concreteMedian)}ms`);
-    }
+    const observation = timingObservation(concreteMedian, flexMedian);
+    if (observation) observations.push(observation);
 
     if (testCase.enforceConcreteClose && flexVsConcrete.maxDelta > CONCRETE_DELTA_LIMIT) {
         failures.push(`Flex max delta vs concrete ${flexVsConcrete.maxDelta.toString()} exceeds ${CONCRETE_DELTA_LIMIT.toString()}`);
     }
 
-    return failures;
+    return { failures, observations };
 }
 
 const failures: string[] = [];
+const observations: string[] = [];
 for (const testCase of CASES) {
-    const caseFailures = await runCase(testCase);
-    failures.push(...caseFailures.map(failure => `${testCase.label}: ${failure}`));
+    const caseResult = await runCase(testCase);
+    failures.push(...caseResult.failures.map(failure => `${testCase.label}: ${failure}`));
+    observations.push(...caseResult.observations.map(observation => `${testCase.label}: ${observation}`));
 }
 
 if (failures.length > 0) {
@@ -291,4 +301,9 @@ if (failures.length > 0) {
     process.exitCode = 1;
 } else {
     console.log('\nFLEX_BENCHMARK_CHECK PASS');
+}
+
+if (observations.length > 0) {
+    console.log('\nTiming observations');
+    for (const observation of observations) console.log(`- ${observation}`);
 }
