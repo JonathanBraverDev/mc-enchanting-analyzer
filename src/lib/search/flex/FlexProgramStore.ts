@@ -7,7 +7,8 @@ import {
     type FlexNode,
     type FlexNodeId,
     type FlexProgram,
-    type FlexProgramId
+    type FlexProgramId,
+    type FlexProgramStoreMemoryStats
 } from '#lib/search/flex/FlexTypes.js';
 
 interface FlexProgramRecord {
@@ -35,6 +36,13 @@ interface FlexChoiceInternNode {
 interface FlexProgramInternNode {
     children?: Map<number, FlexProgramInternNode> | undefined;
     programId?: FlexProgramId | undefined;
+}
+
+type FlexEmissionVisitor = (emission: FlexEmission, index: number) => false | void;
+
+interface FlexEmissionVisitResult {
+    readonly nextIndex: number;
+    readonly stopped: boolean;
 }
 
 const EMPTY_PROGRAM_ID = 0 as FlexProgramId;
@@ -76,6 +84,15 @@ export class FlexProgramStore {
         alternatives: readonly FlexAlternative[]
     ): FlexProgramId {
         return this.appendCanonicalEmission(parentId, this.getChoiceEmission(alternatives));
+    }
+
+    public appendCanonicalChoiceFromArrays(
+        parentId: FlexProgramId,
+        packedEnchants: ArrayLike<number>,
+        weights: ArrayLike<number>,
+        length: number
+    ): FlexProgramId {
+        return this.appendCanonicalEmission(parentId, this.getChoiceEmissionFromArrays(packedEnchants, weights, length));
     }
 
     public appendEmission(parentId: FlexProgramId, emission: FlexEmission): FlexProgramId {
@@ -127,6 +144,48 @@ export class FlexProgramStore {
         return program;
     }
 
+    public forEachEmission(id: FlexProgramId, visitor: FlexEmissionVisitor): void {
+        this.assertProgram(id);
+        this.visitEmissionChain(id, 0, visitor);
+    }
+
+    public writeProgramEmissions(id: FlexProgramId, target: FlexEmission[]): number {
+        this.assertProgram(id);
+        const slotCount = this.getSlotCount(id);
+        target.length = slotCount;
+        let cursor = slotCount - 1;
+        let currentId: FlexProgramId | null = id;
+
+        while (currentId !== null) {
+            const record: FlexProgramRecord = this.records[currentId]!;
+            if (record.emission !== null) target[cursor--] = record.emission;
+            currentId = record.parentId;
+        }
+
+        return slotCount;
+    }
+
+    public guaranteesTargetClue(id: FlexProgramId, targetClueId: number): boolean {
+        let guaranteed = false;
+        this.forEachEmission(id, emission => {
+            if (emission.kind === 'fixed') {
+                if (emission.packedEnchant === targetClueId) {
+                    guaranteed = true;
+                    return false;
+                }
+                return;
+            }
+
+            if (emission.alternatives.length > 0
+                && emission.alternatives.every(alternative => alternative.packedEnchant === targetClueId)) {
+                guaranteed = true;
+                return false;
+            }
+            return;
+        });
+        return guaranteed;
+    }
+
     public hasChoice(id: FlexProgramId): boolean {
         this.assertProgram(id);
         return this.records[id]!.hasChoice;
@@ -142,6 +201,18 @@ export class FlexProgramStore {
         return Object.freeze(this.hasChoice(programId)
             ? { kind: 'plex', id, programId, count }
             : { kind: 'solid', id, programId, count });
+    }
+
+    public getMemoryStats(): FlexProgramStoreMemoryStats {
+        let cachedProgramCount = 0;
+        for (const program of this.programCache) {
+            if (program !== undefined) cachedProgramCount++;
+        }
+
+        return {
+            programCount: this.records.length,
+            cachedProgramCount
+        };
     }
 
     private canonicalizeEmission(emission: FlexEmission): FlexEmission {
@@ -212,6 +283,42 @@ export class FlexProgramStore {
         return emission;
     }
 
+    private getChoiceEmissionFromArrays(
+        packedEnchants: ArrayLike<number>,
+        weights: ArrayLike<number>,
+        length: number
+    ): FlexChoiceEmission {
+        this.assertCanonicalChoiceArrays(packedEnchants, weights, length);
+        let node = this.choiceInternRoot;
+        let totalWeight = 0;
+        for (let index = 0; index < length; index++) {
+            const packedEnchant = packedEnchants[index]!;
+            const weight = weights[index]!;
+            node = getOrCreateChoiceInternNode(node, packedEnchant);
+            node = getOrCreateChoiceInternNode(node, weight);
+            totalWeight += weight;
+        }
+
+        if (node.emission) return node.emission;
+
+        const canonicalAlternatives = new Array<FlexAlternative>(length);
+        for (let index = 0; index < length; index++) {
+            canonicalAlternatives[index] = Object.freeze({
+                packedEnchant: packedEnchants[index]! as PackedEnchant,
+                weight: weights[index]!
+            });
+        }
+
+        const emission = Object.freeze({
+            kind: 'choice' as const,
+            alternatives: Object.freeze(canonicalAlternatives),
+            totalWeight
+        });
+        node.emission = emission;
+        this.emissionIds.set(emission, this.nextEmissionId++);
+        return emission;
+    }
+
     private assertCanonicalChoiceAlternatives(alternatives: readonly FlexAlternative[]): void {
         if (alternatives.length === 0) throw new Error('Cannot create an empty Flex choice emission.');
 
@@ -224,6 +331,27 @@ export class FlexProgramStore {
                 throw new Error('Flex canonical choice alternatives must be unique and sorted by packed enchant.');
             }
             previousPackedEnchant = alternative.packedEnchant;
+        }
+    }
+
+    private assertCanonicalChoiceArrays(
+        packedEnchants: ArrayLike<number>,
+        weights: ArrayLike<number>,
+        length: number
+    ): void {
+        if (length <= 0) throw new Error('Cannot create an empty Flex choice emission.');
+
+        let previousPackedEnchant: number | undefined;
+        for (let index = 0; index < length; index++) {
+            const packedEnchant = packedEnchants[index]!;
+            const weight = weights[index]!;
+            if (!Number.isInteger(weight) || weight <= 0) {
+                throw new Error('Flex choice weights must be positive integers.');
+            }
+            if (previousPackedEnchant !== undefined && packedEnchant <= previousPackedEnchant) {
+                throw new Error('Flex canonical choice alternatives must be unique and sorted by packed enchant.');
+            }
+            previousPackedEnchant = packedEnchant;
         }
     }
 
@@ -294,6 +422,25 @@ export class FlexProgramStore {
         const id = this.emissionIds.get(emission);
         if (id === undefined) throw new Error('Flex emission was not interned before use.');
         return id;
+    }
+
+    private visitEmissionChain(
+        id: FlexProgramId,
+        startIndex: number,
+        visitor: FlexEmissionVisitor
+    ): FlexEmissionVisitResult {
+        const record = this.records[id]!;
+        let nextIndex = startIndex;
+
+        if (record.parentId !== null) {
+            const parentResult = this.visitEmissionChain(record.parentId, startIndex, visitor);
+            if (parentResult.stopped) return parentResult;
+            nextIndex = parentResult.nextIndex;
+        }
+
+        if (record.emission === null) return { nextIndex, stopped: false };
+        const stopped = visitor(record.emission, nextIndex) === false;
+        return { nextIndex: nextIndex + 1, stopped };
     }
 
     private assertProgram(id: FlexProgramId): void {

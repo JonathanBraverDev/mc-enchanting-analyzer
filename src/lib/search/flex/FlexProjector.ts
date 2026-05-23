@@ -32,6 +32,8 @@ export class FlexProjector {
         private readonly options: FlexProjectionOptions = {}
     ) {}
 
+    private readonly pendingProgramScratch: FlexProgram[number][] = [];
+
     public projectResults(results: ReadonlyMap<FlexProgramId, bigint>): FlexProjectedResults {
         const projected = new Map<PackedCombo, bigint>();
         let sourceMass = 0n;
@@ -133,8 +135,7 @@ export class FlexProjector {
             if (entry.mass === 0n) continue;
 
             if (clueJoint) {
-                const program = this.programs.getProgram(entry.programId);
-                const split = this.getPendingClueSplit(program, entry.mass, entry.count, entry.targetClueReachable);
+                const split = this.getPendingClueSplit(entry.programId, entry.mass, entry.count, entry.targetClueReachable);
                 projectedMass += split.projectedMass;
                 clueIncompatible += split.clueIncompatible;
                 projectionLoss += split.projectionLoss;
@@ -144,7 +145,7 @@ export class FlexProjector {
                         clueJoint.targetClueId,
                         (pendingAggregates.shownClueDistribution.get(clueJoint.targetClueId) ?? 0n) + split.clueKnownSpace
                     );
-                    this.addPendingClueJointAggregate(clueJoint, program, split.clueKnownSpace, entry.count);
+                    this.addPendingClueJointAggregate(clueJoint, entry.programId, split.clueKnownSpace, entry.count);
                 }
                 continue;
             }
@@ -152,7 +153,7 @@ export class FlexProjector {
             projectedMass += entry.mass;
             this.addPendingProgramAggregate(
                 pendingAggregates,
-                this.programs.getProgram(entry.programId),
+                entry.programId,
                 entry.mass,
                 entry.count
             );
@@ -168,7 +169,7 @@ export class FlexProjector {
     }
 
     private getPendingClueSplit(
-        program: FlexProgram,
+        programId: FlexProgramId,
         mass: bigint,
         count: number,
         targetClueReachable: boolean | undefined
@@ -183,15 +184,25 @@ export class FlexProjector {
             return { projectedMass: mass, clueIncompatible: 0n, projectionLoss: 0n, clueKnownSpace: 0n };
         }
 
-        for (const emission of program) {
+        let split: {
+            projectedMass: bigint;
+            clueIncompatible: bigint;
+            projectionLoss: bigint;
+            clueKnownSpace: bigint;
+        } | undefined;
+
+        const programLength = this.programs.writeProgramEmissions(programId, this.pendingProgramScratch);
+        for (let emissionIndex = 0; emissionIndex < programLength; emissionIndex++) {
+            const emission = this.pendingProgramScratch[emissionIndex]!;
             if (emission.kind === 'fixed') {
                 if (emission.packedEnchant === targetClueId) {
-                    return {
+                    split = {
                         projectedMass: mass,
                         clueIncompatible: 0n,
                         projectionLoss: 0n,
                         clueKnownSpace: count > 0 ? mass / BigInt(count) : 0n
                     };
+                    break;
                 }
                 continue;
             }
@@ -207,13 +218,16 @@ export class FlexProjector {
             const splitLoss = mass - targetMass - nonTargetMass;
             const nonTargetCanStillReachClue = targetClueReachable === true;
 
-            return {
+            split = {
                 projectedMass: targetMass + (nonTargetCanStillReachClue ? nonTargetMass : 0n),
                 clueIncompatible: nonTargetCanStillReachClue ? 0n : nonTargetMass,
                 projectionLoss: splitLoss,
                 clueKnownSpace: count > 0 ? targetMass / BigInt(count) : 0n
             };
+            break;
         }
+
+        if (split) return split;
 
         return targetClueReachable === true
             ? { projectedMass: mass, clueIncompatible: 0n, projectionLoss: 0n, clueKnownSpace: 0n }
@@ -300,7 +314,7 @@ export class FlexProjector {
 
     private addPendingProgramAggregate(
         pendingAggregates: MutablePendingFrontierAggregates,
-        program: FlexProgram,
+        programId: FlexProgramId,
         mass: bigint,
         count: number
     ): void {
@@ -313,8 +327,9 @@ export class FlexProjector {
         const clueQuotient = mass / BigInt(count);
         const clueRemainder = Number(mass % BigInt(count));
 
-        for (let emissionIndex = 0; emissionIndex < program.length; emissionIndex++) {
-            const emission = program[emissionIndex]!;
+        const programLength = this.programs.writeProgramEmissions(programId, this.pendingProgramScratch);
+        for (let emissionIndex = 0; emissionIndex < programLength; emissionIndex++) {
+            const emission = this.pendingProgramScratch[emissionIndex]!;
             const clueSlotMass = clueQuotient + (emissionIndex < clueRemainder ? 1n : 0n);
 
             if (emission.kind === 'fixed') {
@@ -367,7 +382,7 @@ export class FlexProjector {
 
     private addPendingClueJointAggregate(
         clueJoint: MutablePendingClueJointAggregates,
-        program: FlexProgram,
+        programId: FlexProgramId,
         clueMass: bigint,
         count: number
     ): void {
@@ -378,7 +393,9 @@ export class FlexProjector {
         addArrayMass(clueJoint.count, displayCount, clueMass);
 
         const targetClueId = clueJoint.targetClueId;
-        for (const emission of program) {
+        const programLength = this.programs.writeProgramEmissions(programId, this.pendingProgramScratch);
+        for (let emissionIndex = 0; emissionIndex < programLength; emissionIndex++) {
+            const emission = this.pendingProgramScratch[emissionIndex]!;
             if (emission.kind === 'fixed') {
                 this.addPendingClueJointEmissionAggregate(clueJoint, emission.packedEnchant, clueMass, count);
                 continue;
