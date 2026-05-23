@@ -218,9 +218,11 @@ function summarizeRun(
     result: SearchResult
 ): ProfileRunSummary {
     const frontier = result.snapshot.frontier;
-    const nativeFrontierEntries = frontier.kind === ENGINE_FRONTIER_KIND.MATERIALIZED || frontier.kind === ENGINE_FRONTIER_KIND.FACTORIZED
+    const nativeFrontierEntries = frontier.kind === ENGINE_FRONTIER_KIND.MATERIALIZED
         ? frontier.entries.length
-        : 0;
+        : frontier.kind === ENGINE_FRONTIER_KIND.FACTORIZED
+            ? result.snapshot.pendingCount
+            : 0;
     const units = result.snapshot.mass.units;
 
     return {
