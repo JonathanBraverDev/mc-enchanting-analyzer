@@ -160,26 +160,26 @@ export class GroupedFlexGraph implements FlexGraph {
         childLevel: number,
         childCount: number
     ): readonly FlexEdge[] {
-        const groups: PendingGroupedEdge[] = [];
+        const groups = new Map<bigint, PendingGroupedEdge>();
         const parentExclusionMask = this.exclusionMasks[parentNodeIndex]!;
 
         for (const entry of entries) {
             const childExclusionMask = parentExclusionMask | entry.blocksBitset;
-            let group = groups.find(candidate => candidate.childExclusionMask === childExclusionMask);
+            let group = groups.get(childExclusionMask);
             if (!group) {
                 group = {
                     childExclusionMask,
                     alternatives: [],
                     weight: 0
                 };
-                groups.push(group);
+                groups.set(childExclusionMask, group);
             }
 
             this.addAlternative(group, entry.packedEnchant, entry.weight);
             group.weight += entry.weight;
         }
 
-        return Object.freeze(groups
+        return Object.freeze([...groups.values()]
             .map(group => this.createGroupedEdge(group, parentNodeIndex, childLevel, childCount))
             .sort(compareFlexEdges));
     }
