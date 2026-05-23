@@ -48,6 +48,20 @@ export interface FlexEdge {
 
 export type FlexTerminalReason = 'overflow' | null;
 
+export interface FlexSearchExpansion {
+    readonly nodeId: FlexNodeId;
+    readonly programId: FlexProgramId;
+    readonly nodeKind: FlexNode['kind'];
+    readonly count: number;
+    readonly probContinue: bigint;
+    readonly totalWeight: number;
+    readonly edgeCount: number;
+    readonly edgeWeights: ArrayLike<number>;
+    readonly edgeChildIds: ArrayLike<number>;
+    readonly clueIncompatibleWeight?: number | undefined;
+    readonly terminalReason: FlexTerminalReason;
+}
+
 export interface FlexExpansion {
     readonly node: FlexNode;
     readonly probContinue: bigint;
@@ -59,7 +73,36 @@ export interface FlexExpansion {
 
 export interface FlexGraph {
     getExpansion(nodeId: FlexNodeId): FlexExpansion;
+    getSearchExpansion?(nodeId: FlexNodeId): FlexSearchExpansion;
     getNode(nodeId: FlexNodeId): FlexNode;
+}
+
+export interface FlexGraphMemoryStats {
+    readonly nodeCount: number;
+    readonly searchExpansionCount: number;
+    readonly debugExpansionCount: number;
+    readonly groupingBuildCount: number;
+    readonly groupedEdgeCount: number;
+    readonly groupedAlternativeCount: number;
+    readonly nodeIndexGrowCount: number;
+}
+
+export interface FlexCoordinatorMemoryStats {
+    readonly frontierGrowCount: number;
+    readonly frontierIndexGrowCount: number;
+    readonly residueArrayAllocationCount: number;
+    readonly activeResidueRecordCount: number;
+}
+
+export interface FlexProgramStoreMemoryStats {
+    readonly programCount: number;
+    readonly cachedProgramCount: number;
+}
+
+export interface FlexRunMemoryStats {
+    readonly coordinator: FlexCoordinatorMemoryStats;
+    readonly programs: FlexProgramStoreMemoryStats;
+    readonly graphs: readonly FlexGraphMemoryStats[];
 }
 
 export interface FlexCheckpointRequest {
