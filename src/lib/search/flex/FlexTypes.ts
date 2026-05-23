@@ -1,5 +1,6 @@
 import type { EngineExitReason, PackedCombo, PackedEnchant } from '#types/index.js';
 import type { MassAccountingBreakdown, MassAccountingDetails } from '#types/mass.js';
+import type { PendingFrontierAggregates } from '#lib/search/SearchRun.js';
 
 export type FlexNodeId = number & { readonly __brand: 'FlexNodeId' };
 export type FlexProgramId = number & { readonly __brand: 'FlexProgramId' };
@@ -121,6 +122,14 @@ export interface FlexProjectedPendingEntry {
 
 export interface FlexProjectedPendingResults {
     readonly pendingEntries: readonly FlexProjectedPendingEntry[];
+    readonly projectionLoss: bigint;
+    readonly clueIncompatible: bigint;
+    readonly projectedMass: bigint;
+    readonly sourceMass: bigint;
+}
+
+export interface FlexProjectedPendingAggregateResults {
+    readonly pendingAggregates: PendingFrontierAggregates;
     readonly projectionLoss: bigint;
     readonly clueIncompatible: bigint;
     readonly projectedMass: bigint;

@@ -1,5 +1,10 @@
 import { PackedCombo, PackedEnchant } from '#types/index.js';
-import type { PendingFrontierEntry } from '#lib/search/SearchRun.js';
+import {
+    ENGINE_FRONTIER_KIND,
+    type EngineFrontierView,
+    type PendingClueJointAggregates,
+    type PendingFrontierEntry
+} from '#lib/search/SearchRun.js';
 import { ComboUtils, ProbUtils, PRECISION } from '#utils/index.js';
 import { SummaryAggregationService } from '#services/SummaryAggregationService.js';
 
@@ -21,7 +26,8 @@ export class ClueAnalysisService {
         targetClueId: number,
         indexToEnchant: number[],
         isBook = false,
-        pendingEntries: readonly PendingFrontierEntry[] = []
+        pendingEntries: readonly PendingFrontierEntry[] = [],
+        frontier?: EngineFrontierView | undefined
     ): {
         combos: ReadonlyMap<PackedCombo, bigint>,
         anyMass: Map<number, bigint>,
@@ -33,6 +39,7 @@ export class ClueAnalysisService {
             combos,
             indexToEnchant,
             pendingEntries,
+            frontier,
             includeMasses: false
         }).shownClueDistribution;
         const pClue = clueMasses.get(targetClueId) ?? 0n;
@@ -52,14 +59,18 @@ export class ClueAnalysisService {
             totalMass += this.processConditionedNode(packed, pCombo, targetClueId, pClue, indexToEnchant, conditionedCombos, anyMass, rankMass, countMass);
         }
 
-        for (const entry of pendingEntries) {
-            if (isBook && entry.count > 1) {
-                totalMass += this.processPendingBookAggregate(entry.combo, entry.mass, targetClueId, pClue, indexToEnchant, anyMass, rankMass, countMass);
-                continue;
-            }
-
-            totalMass += this.processConditionedNode(entry.combo, entry.mass, targetClueId, pClue, indexToEnchant, conditionedCombos, anyMass, rankMass, countMass);
-        }
+        totalMass += this.processPendingFrontier(
+            frontier,
+            pendingEntries,
+            isBook,
+            targetClueId,
+            pClue,
+            indexToEnchant,
+            conditionedCombos,
+            anyMass,
+            rankMass,
+            countMass
+        );
 
         // Final normalization to exactly 1.0.
         const remainder = PRECISION - totalMass;
@@ -88,6 +99,68 @@ export class ClueAnalysisService {
             countMass,
             knownSpace: pClue
         };
+    }
+
+    private static processPendingFrontier(
+        frontier: EngineFrontierView | undefined,
+        pendingEntries: readonly PendingFrontierEntry[],
+        isBook: boolean,
+        targetClueId: number,
+        pClue: bigint,
+        indexToEnchant: number[],
+        conditionedCombos: Map<PackedCombo, bigint>,
+        anyMass: Map<number, bigint>,
+        rankMass: Map<number, bigint>,
+        countMass: Map<number, bigint>
+    ): bigint {
+        if (frontier?.kind === ENGINE_FRONTIER_KIND.FACTORIZED) {
+            const clueJoint = frontier.summary.clueJoint;
+            return clueJoint?.targetClueId === targetClueId
+                ? this.processPendingClueJointAggregate(clueJoint, pClue, anyMass, rankMass, countMass)
+                : 0n;
+        }
+
+        const entries = frontier?.kind === ENGINE_FRONTIER_KIND.MATERIALIZED
+            ? frontier.entries
+            : pendingEntries;
+        let totalMass = 0n;
+        for (const entry of entries) {
+            if (isBook && entry.count > 1) {
+                totalMass += this.processPendingBookAggregate(entry.combo, entry.mass, targetClueId, pClue, indexToEnchant, anyMass, rankMass, countMass);
+                continue;
+            }
+
+            totalMass += this.processConditionedNode(entry.combo, entry.mass, targetClueId, pClue, indexToEnchant, conditionedCombos, anyMass, rankMass, countMass);
+        }
+        return totalMass;
+    }
+
+    private static processPendingClueJointAggregate(
+        clueJoint: PendingClueJointAggregates,
+        pClue: bigint,
+        anyMass: Map<number, bigint>,
+        rankMass: Map<number, bigint>,
+        countMass: Map<number, bigint>
+    ): bigint {
+        let totalMass = 0n;
+        totalMass += this.addNormalizedArrayMass(countMass, clueJoint.count, pClue);
+        this.addNormalizedArrayMass(anyMass, clueJoint.any, pClue);
+        this.addNormalizedArrayMass(rankMass, clueJoint.ranks, pClue);
+        return totalMass;
+    }
+
+    private static addNormalizedArrayMass(target: Map<number, bigint>, source: readonly bigint[], pClue: bigint): bigint {
+        let totalMass = 0n;
+        for (let key = 0; key < source.length; key++) {
+            const jointMass = source[key];
+            if (jointMass === undefined || jointMass <= 0n) continue;
+
+            const normalizedMass = (jointMass * PRECISION) / pClue;
+            if (normalizedMass <= 0n) continue;
+            ProbUtils.addItemMass(target, key, normalizedMass);
+            totalMass += normalizedMass;
+        }
+        return totalMass;
     }
 
     private static processConditionedNode(

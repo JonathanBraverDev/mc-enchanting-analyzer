@@ -2,8 +2,8 @@ import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedL
 import { ProbabilityMassAccountant, PROJECTION_MASS_BUCKET, PROJECTION_MASS_OPERATION } from '#engine/search/ProbabilityMassAccountant.js';
 import { SearchResult, SequentialCheckpointSearchContext, CheckpointSearchContext, EngineInstrumentation, SearchTiming, SearchBackend, RegistryState, MutatedRegistryState } from '#types/index.js';
 import { RegistryKernel } from '#lib/search/registry/RegistryKernel.js';
-import { SearchRun, SearchRunSnapshot } from '#lib/search/SearchRun.js';
-import { GroupedFlexSearchRun, checkFlexReducedKeyInvariant, type GroupedFlexProjectedCheckpoint, type FlexRunSnapshot, type FlexReducedKeyInvariantResult, type FlexStateIdentityMode } from '#lib/search/flex/index.js';
+import { createFactorizedEngineFrontier, createMaterializedEngineFrontier, SearchRun, type EngineSearchSnapshot, type SearchRunSnapshot } from '#lib/search/SearchRun.js';
+import { GroupedFlexSearchRun, checkFlexReducedKeyInvariant, type GroupedFlexPendingProjectionMode, type GroupedFlexProjectedCheckpoint, type FlexRunSnapshot, type FlexReducedKeyInvariantResult, type FlexStateIdentityMode } from '#lib/search/flex/index.js';
 import { FLEX_CACHE_LIMITS, FLEX_INVARIANT_LIMITS } from '#lib/search/flex/FlexConstants.js';
 import { SearchStateCache } from '#lib/search/SearchStateCache.js';
 import { PRECISION, ProbUtils } from '#utils/index.js';
@@ -53,7 +53,9 @@ export class SearchExecutionService {
                 probabilityFloor: request.probabilityFloor,
                 signal: request.signal
             });
-            const projected = run.projectSnapshot(snapshot);
+            const projected = run.projectSnapshot(snapshot, {
+                pendingMode: this.getFlexPendingProjectionMode()
+            });
             this.finishTiming(request.timing, timingStart, 0);
             return this.toFlexSearchResult(projected, snapshot, flexStateIdentityMode, request.exhaustive ? 0n : request.threshold ?? 0n, request.targetClassifiedMass, request.instrumentation, request.timing);
         }
@@ -144,7 +146,9 @@ export class SearchExecutionService {
                 if (request.signal?.aborted && lastResult) return lastResult;
                 throw error;
             }
-            const projected = run.projectSnapshot(snapshot);
+            const projected = run.projectSnapshot(snapshot, {
+                pendingMode: this.getFlexPendingProjectionMode()
+            });
             recordedSearchMs = this.finishTiming(request.timing, timingStart, recordedSearchMs);
             lastResult = this.toFlexSearchResult(projected, snapshot, flexStateIdentityMode, checkpoint.threshold, checkpoint.targetClassifiedMass, request.instrumentation, request.timing);
             request.onCheckpointComplete(lastResult, checkpointIndex);
@@ -154,7 +158,9 @@ export class SearchExecutionService {
 
         this.finishTiming(request.timing, timingStart, recordedSearchMs);
         const snapshot = run.snapshot();
-        const projected = run.projectSnapshot(snapshot);
+        const projected = run.projectSnapshot(snapshot, {
+            pendingMode: this.getFlexPendingProjectionMode()
+        });
         return this.toFlexSearchResult(projected, snapshot, flexStateIdentityMode, 0, undefined, request.instrumentation, request.timing);
     }
 
@@ -224,6 +230,10 @@ export class SearchExecutionService {
         }
 
         return result.ok ? 'reduced' : 'program';
+    }
+
+    private getFlexPendingProjectionMode(): GroupedFlexPendingProjectionMode {
+        return 'aggregates';
     }
 
     private createKernel(request: CheckpointSearchContext): RegistryKernel {
@@ -396,15 +406,22 @@ export class SearchExecutionService {
     private toCompatibleFlexSearchRunSnapshot(
         projected: GroupedFlexProjectedCheckpoint,
         flexSnapshot: FlexRunSnapshot
-    ): SearchRunSnapshot {
+    ): EngineSearchSnapshot {
+        const pendingEntries = Object.freeze(projected.pendingEntries) as unknown as SearchRunSnapshot['pendingEntries'];
+        const frontier = projected.pendingAggregates
+            ? createFactorizedEngineFrontier(flexSnapshot.pendingEntries, projected.pendingAggregates)
+            : createMaterializedEngineFrontier(pendingEntries);
+
         return Object.freeze({
             results: new Map(projected.results),
             mass: this.toCompatibleFlexMass(projected, flexSnapshot),
             iterations: flexSnapshot.iterations,
             lastExpandedMass: flexSnapshot.lastExpandedMass,
-            pendingCount: projected.pendingEntries.length,
+            pendingCount: projected.pendingAggregates ? flexSnapshot.pendingCount : projected.pendingEntries.length,
             largestPendingMass: flexSnapshot.largestPendingMass,
-            pendingEntries: Object.freeze(projected.pendingEntries) as unknown as SearchRunSnapshot['pendingEntries'],
+            pendingEntries,
+            ...(projected.pendingAggregates ? { pendingAggregates: projected.pendingAggregates } : {}),
+            frontier,
             graphCount: flexSnapshot.graphCount,
             seededLevelCount: flexSnapshot.graphCount,
             activeResidueCount: flexSnapshot.activeResidueCount,
