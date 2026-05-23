@@ -83,6 +83,7 @@ export class SnapshotService {
       // Unconditioned views derive aggregate stats from combos + pending search entries.
       const derived = SummaryAggregationService.aggregate({
         combos,
+        resolvedAggregates: snapshot.resolvedAggregates,
         indexToEnchant: state.indexToEnchant,
         frontier: snapshot.frontier,
         isBook,

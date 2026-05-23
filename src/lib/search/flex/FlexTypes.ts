@@ -131,7 +131,16 @@ export interface FlexPendingEntry {
     readonly targetClueReachable?: boolean | undefined;
 }
 
-export interface FlexRunSnapshot {
+export type FlexPendingEntryVisitor = (
+    graphId: number,
+    nodeId: FlexNodeId,
+    programId: FlexProgramId,
+    mass: bigint,
+    count: number,
+    nodeKind: FlexNode['kind']
+) => void;
+
+export interface FlexRunState {
     readonly results: ReadonlyMap<FlexProgramId, bigint>;
     readonly mass: MassAccountingBreakdown;
     readonly massDetails?: MassAccountingDetails | undefined;
@@ -139,12 +148,15 @@ export interface FlexRunSnapshot {
     readonly lastExpandedMass: bigint;
     readonly pendingCount: number;
     readonly largestPendingMass: bigint;
-    readonly pendingEntries: readonly FlexPendingEntry[];
     readonly graphCount: number;
     readonly activeResidueCount: number;
     readonly activeResidueMass: bigint;
     readonly fullyResolved: boolean;
     readonly exitReason: EngineExitReason | undefined;
+}
+
+export interface FlexRunSnapshot extends FlexRunState {
+    readonly pendingEntries: readonly FlexPendingEntry[];
 }
 
 export interface FlexProjectedResults {
