@@ -35,6 +35,7 @@ export class SummaryService {
 
         const derived = SummaryAggregationService.aggregate({
             combos,
+            resolvedAggregates: snapshot.resolvedAggregates,
             indexToEnchant,
             frontier: snapshot.frontier,
             isBook

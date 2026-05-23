@@ -1,14 +1,12 @@
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
-import { ProbabilityMassAccountant, PROJECTION_MASS_BUCKET, PROJECTION_MASS_OPERATION } from '#engine/search/ProbabilityMassAccountant.js';
-import { SearchResult, SequentialCheckpointSearchContext, CheckpointSearchContext, EngineInstrumentation, SearchTiming, SearchBackend, RegistryState, MutatedRegistryState } from '#types/index.js';
+import { SearchResult, SequentialCheckpointSearchContext, CheckpointSearchContext, EngineInstrumentation, SearchTiming, SearchBackend, RegistryState, MutatedRegistryState, RESULT_COMBO_MODE, type ResultComboMode } from '#types/index.js';
 import { RegistryKernel } from '#lib/search/registry/RegistryKernel.js';
-import { createFactorizedEngineFrontier, createMaterializedEngineFrontier, SearchRun, type EngineSearchSnapshot, type SearchRunSnapshot } from '#lib/search/SearchRun.js';
-import { GroupedFlexSearchRun, checkFlexReducedKeyInvariant, type GroupedFlexPendingProjectionMode, type GroupedFlexProjectedCheckpoint, type FlexRunSnapshot, type FlexReducedKeyInvariantResult, type FlexStateIdentityMode } from '#lib/search/flex/index.js';
+import { SearchRun, type SearchRunSnapshot } from '#lib/search/SearchRun.js';
+import { GroupedFlexSearchRun, checkFlexReducedKeyInvariant, type FlexNativeCheckpoint, type FlexReducedKeyInvariantResult, type FlexRunState, type FlexStateIdentityMode } from '#lib/search/flex/index.js';
 import { FLEX_CACHE_LIMITS, FLEX_INVARIANT_LIMITS } from '#lib/search/flex/FlexConstants.js';
 import { SearchStateCache } from '#lib/search/SearchStateCache.js';
 import { PRECISION, ProbUtils } from '#utils/index.js';
 import { LRUCache } from '#utils/collections/LRUCache.js';
-import type { MassAccountingBreakdown, MassAccountingDetailBucket, MassAccountingDetails, MassAccountingOperationDetails, MassAccountingStageDetails } from '#types/mass.js';
 
 /**
  * Engine-facing service that advances shared search runs to checkpoint boundaries.
@@ -44,7 +42,7 @@ export class SearchExecutionService {
             this.throwIfAborted(request.signal);
             const flexStateIdentityMode = this.getFlexStateIdentityMode(request);
             const run = this.getFlexRun(request, flexStateIdentityMode);
-            const snapshot = await run.searchToCheckpointAsync({
+            const flexState = await run.searchToCheckpointStateAsync({
                 threshold: request.exhaustive ? 0n : request.threshold ?? 0n,
                 maxIterations: request.exhaustive ? undefined : request.maxIterations,
                 drainEqualMassBand: request.drainEqualMassBand,
@@ -53,11 +51,11 @@ export class SearchExecutionService {
                 probabilityFloor: request.probabilityFloor,
                 signal: request.signal
             });
-            const projected = run.projectSnapshot(snapshot, {
-                pendingMode: this.getFlexPendingProjectionMode()
+            const checkpoint = run.buildEngineSnapshot(flexState, {
+                resultComboMode: this.getResultComboMode(request)
             });
             this.finishTiming(request.timing, timingStart, 0);
-            return this.toFlexSearchResult(projected, snapshot, flexStateIdentityMode, request.exhaustive ? 0n : request.threshold ?? 0n, request.targetClassifiedMass, request.instrumentation, request.timing);
+            return this.toFlexSearchResult(checkpoint, flexState, flexStateIdentityMode, request.exhaustive ? 0n : request.threshold ?? 0n, request.targetClassifiedMass, request.instrumentation, request.timing);
         }
 
         const run = this.getRun(request);
@@ -132,9 +130,9 @@ export class SearchExecutionService {
             const checkpoint = request.checkpoints[checkpointIndex];
             if (!checkpoint) continue;
 
-            let snapshot: FlexRunSnapshot;
+            let flexState: FlexRunState;
             try {
-                snapshot = await run.searchToCheckpointAsync({
+                flexState = await run.searchToCheckpointStateAsync({
                     threshold: checkpoint.threshold,
                     maxIterations: checkpoint.limit,
                     drainEqualMassBand: request.drainEqualMassBand,
@@ -146,22 +144,22 @@ export class SearchExecutionService {
                 if (request.signal?.aborted && lastResult) return lastResult;
                 throw error;
             }
-            const projected = run.projectSnapshot(snapshot, {
-                pendingMode: this.getFlexPendingProjectionMode()
+            const nativeCheckpoint = run.buildEngineSnapshot(flexState, {
+                resultComboMode: this.getResultComboMode(request, checkpoint)
             });
             recordedSearchMs = this.finishTiming(request.timing, timingStart, recordedSearchMs);
-            lastResult = this.toFlexSearchResult(projected, snapshot, flexStateIdentityMode, checkpoint.threshold, checkpoint.targetClassifiedMass, request.instrumentation, request.timing);
+            lastResult = this.toFlexSearchResult(nativeCheckpoint, flexState, flexStateIdentityMode, checkpoint.threshold, checkpoint.targetClassifiedMass, request.instrumentation, request.timing);
             request.onCheckpointComplete(lastResult, checkpointIndex);
         }
 
         if (lastResult) return lastResult;
 
         this.finishTiming(request.timing, timingStart, recordedSearchMs);
-        const snapshot = run.snapshot();
-        const projected = run.projectSnapshot(snapshot, {
-            pendingMode: this.getFlexPendingProjectionMode()
+        const flexState = run.state();
+        const checkpoint = run.buildEngineSnapshot(flexState, {
+            resultComboMode: this.getResultComboMode(request)
         });
-        return this.toFlexSearchResult(projected, snapshot, flexStateIdentityMode, 0, undefined, request.instrumentation, request.timing);
+        return this.toFlexSearchResult(checkpoint, flexState, flexStateIdentityMode, 0, undefined, request.instrumentation, request.timing);
     }
 
     private getBackend(request: CheckpointSearchContext): SearchBackend {
@@ -232,8 +230,11 @@ export class SearchExecutionService {
         return result.ok ? 'reduced' : 'program';
     }
 
-    private getFlexPendingProjectionMode(): GroupedFlexPendingProjectionMode {
-        return 'aggregates';
+    private getResultComboMode(
+        request: CheckpointSearchContext,
+        checkpoint?: { readonly resultComboMode?: ResultComboMode | undefined } | undefined
+    ): ResultComboMode {
+        return checkpoint?.resultComboMode ?? request.resultComboMode ?? RESULT_COMBO_MODE.EXACT;
     }
 
     private createKernel(request: CheckpointSearchContext): RegistryKernel {
@@ -335,15 +336,15 @@ export class SearchExecutionService {
     }
 
     private toFlexSearchResult(
-        projected: GroupedFlexProjectedCheckpoint,
-        flexSnapshot: FlexRunSnapshot,
+        checkpoint: FlexNativeCheckpoint,
+        flexState: FlexRunState,
         flexStateIdentityMode: FlexStateIdentityMode,
         threshold: number | bigint | undefined,
         targetClassifiedMass?: number | bigint | undefined,
         instrumentation?: EngineInstrumentation | undefined,
         timing?: SearchTiming | undefined
     ): SearchResult {
-        const snapshot = this.toCompatibleFlexSearchRunSnapshot(projected, flexSnapshot);
+        const snapshot = checkpoint.snapshot;
         const thresholdUnits = ProbUtils.toBigInt(threshold ?? 0);
         const targetClassifiedMassUnits = targetClassifiedMass === undefined
             ? undefined
@@ -360,7 +361,7 @@ export class SearchExecutionService {
             instrumentation.fullyResolved = snapshot.fullyResolved;
             instrumentation.resultsSize = snapshot.results.size;
             instrumentation.queueSize = snapshot.pendingCount;
-            instrumentation.exitReason = flexSnapshot.exitReason ?? (snapshot.fullyResolved
+            instrumentation.exitReason = flexState.exitReason ?? (snapshot.fullyResolved
                 ? 'empty'
                 : targetClassifiedMassUnits !== undefined && classifiedMassUnits >= targetClassifiedMassUnits
                     ? 'mass'
@@ -388,9 +389,9 @@ export class SearchExecutionService {
                 suffixMergedPendingMass: 0,
                 suffixAvoidedPendingEntries: 0,
                 flexStateIdentityMode,
-                flexStructuralPendingEntryCount: flexSnapshot.pendingCount,
-                flexProjectionLoss: ProbUtils.toNumber(projected.projectionLoss + projected.pendingProjectionLoss),
-                flexProjectionClueIncompatible: ProbUtils.toNumber(projected.clueIncompatible + projected.pendingClueIncompatible)
+                flexStructuralPendingEntryCount: flexState.pendingCount,
+                flexProjectionLoss: ProbUtils.toNumber(checkpoint.projectionLoss),
+                flexProjectionClueIncompatible: ProbUtils.toNumber(checkpoint.projectionClueIncompatible)
             };
         }
 
@@ -401,97 +402,6 @@ export class SearchExecutionService {
             timing: timing ? { ...timing } : undefined,
             threshold: ProbUtils.toNumber(threshold ?? 0)
         };
-    }
-
-    private toCompatibleFlexSearchRunSnapshot(
-        projected: GroupedFlexProjectedCheckpoint,
-        flexSnapshot: FlexRunSnapshot
-    ): EngineSearchSnapshot {
-        const pendingEntries = Object.freeze(projected.pendingEntries) as unknown as SearchRunSnapshot['pendingEntries'];
-        const frontier = projected.pendingAggregates
-            ? createFactorizedEngineFrontier(flexSnapshot.pendingEntries, projected.pendingAggregates)
-            : createMaterializedEngineFrontier(pendingEntries);
-
-        return Object.freeze({
-            results: new Map(projected.results),
-            mass: this.toCompatibleFlexMass(projected, flexSnapshot),
-            iterations: flexSnapshot.iterations,
-            lastExpandedMass: flexSnapshot.lastExpandedMass,
-            pendingCount: projected.pendingAggregates ? flexSnapshot.pendingCount : projected.pendingEntries.length,
-            largestPendingMass: flexSnapshot.largestPendingMass,
-            pendingEntries,
-            ...(projected.pendingAggregates ? { pendingAggregates: projected.pendingAggregates } : {}),
-            frontier,
-            graphCount: flexSnapshot.graphCount,
-            seededLevelCount: flexSnapshot.graphCount,
-            activeResidueCount: flexSnapshot.activeResidueCount,
-            activeResidueMass: flexSnapshot.activeResidueMass,
-            fullyResolved: flexSnapshot.fullyResolved,
-            suffixMerging: Object.freeze({
-                enabled: false,
-                canonicalEntryCount: 0,
-                hits: 0,
-                misses: 0,
-                mergedPendingMass: 0n,
-                avoidedPendingEntries: 0
-            })
-        });
-    }
-
-    private toCompatibleFlexMass(
-        projected: GroupedFlexProjectedCheckpoint,
-        flexSnapshot: FlexRunSnapshot
-    ): MassAccountingBreakdown {
-        const engine = flexSnapshot.mass.units;
-        if (!engine) {
-            throw new Error('Cannot expose Flex checkpoint without precise engine accounting units.');
-        }
-
-        const resolved = projected.projectedMass;
-        const pending = projected.projectedPendingMass;
-        const clueIncompatible = BigInt(engine.clueIncompatible) + projected.clueIncompatible + projected.pendingClueIncompatible;
-        const sieved = BigInt(engine.sieved);
-        const overflow = BigInt(engine.overflow);
-        const capped = BigInt(engine.capped);
-        const rounding = BigInt(engine.rounding) + projected.projectionLoss + projected.pendingProjectionLoss;
-        const recoveredRounding = BigInt(engine.recoveredRounding);
-        const recoveredSieved = BigInt(engine.recoveredSieved);
-
-        const details = this.toCompatibleFlexMassDetails(projected, flexSnapshot);
-        const mass: MassAccountingBreakdown = {
-            resolved: ProbUtils.toNumber(resolved),
-            clueIncompatible: ProbUtils.toNumber(clueIncompatible),
-            pending: ProbUtils.toNumber(pending),
-            sieved: ProbUtils.toNumber(sieved),
-            overflow: ProbUtils.toNumber(overflow),
-            capped: ProbUtils.toNumber(capped),
-            rounding: ProbUtils.toNumber(rounding),
-            recoveredRounding: ProbUtils.toNumber(recoveredRounding),
-            recoveredSieved: ProbUtils.toNumber(recoveredSieved),
-            units: Object.freeze({
-                resolved: resolved.toString(),
-                clueIncompatible: clueIncompatible.toString(),
-                pending: pending.toString(),
-                sieved: sieved.toString(),
-                overflow: overflow.toString(),
-                capped: capped.toString(),
-                rounding: rounding.toString(),
-                recoveredRounding: recoveredRounding.toString(),
-                recoveredSieved: recoveredSieved.toString()
-            })
-        };
-        if (details) mass.details = details;
-        return Object.freeze(mass);
-    }
-
-    private toCompatibleFlexMassDetails(
-        projected: GroupedFlexProjectedCheckpoint,
-        flexSnapshot: FlexRunSnapshot
-    ): MassAccountingDetails | undefined {
-        const details = cloneMassAccountingDetails(flexSnapshot.massDetails);
-        mergeMassAccountingDetails(details, createFlexProjectionMassDetails(projected));
-        if (Object.keys(details.stages).length === 0) return undefined;
-        return freezeMassAccountingDetails(details);
     }
 
     private throwIfAborted(signal: AbortSignal | undefined): void {
@@ -511,118 +421,4 @@ export class SearchExecutionService {
 
 function isMutatedRegistry(registry: RegistryState): registry is MutatedRegistryState {
     return 'source' in registry && registry.source === 'mutated';
-}
-
-function cloneMassAccountingDetails(source: MassAccountingDetails | undefined): MassAccountingDetails {
-    const stages: Record<string, MassAccountingStageDetails> = {};
-    if (!source) return { stages };
-
-    for (const [stageName, stage] of Object.entries(source.stages)) {
-        const operations: Record<string, MassAccountingOperationDetails> = {};
-        for (const [operationName, operation] of Object.entries(stage.operations)) {
-            operations[operationName] = {
-                buckets: cloneMassDetailBuckets(operation.buckets)
-            };
-        }
-
-        stages[stageName] = {
-            buckets: cloneMassDetailBuckets(stage.buckets),
-            operations
-        };
-    }
-
-    return { stages };
-}
-
-function cloneMassDetailBuckets(
-    buckets: Record<string, MassAccountingDetailBucket>
-): Record<string, MassAccountingDetailBucket> {
-    const clone: Record<string, MassAccountingDetailBucket> = {};
-    for (const [bucketName, bucket] of Object.entries(buckets)) {
-        clone[bucketName] = { ...bucket };
-    }
-    return clone;
-}
-
-function createFlexProjectionMassDetails(projected: GroupedFlexProjectedCheckpoint): MassAccountingDetails | undefined {
-    const accountant = new ProbabilityMassAccountant();
-    const results = accountant.forProjectionOperation(PROJECTION_MASS_OPERATION.Results);
-    results.record(PROJECTION_MASS_BUCKET.Source, projected.sourceMass);
-    results.record(PROJECTION_MASS_BUCKET.Projected, projected.projectedMass);
-    results.record(PROJECTION_MASS_BUCKET.ClueIncompatible, projected.clueIncompatible);
-    results.record(PROJECTION_MASS_BUCKET.Loss, projected.projectionLoss);
-
-    const pending = accountant.forProjectionOperation(PROJECTION_MASS_OPERATION.Pending);
-    pending.record(PROJECTION_MASS_BUCKET.Source, projected.projectedPendingSourceMass);
-    pending.record(PROJECTION_MASS_BUCKET.Projected, projected.projectedPendingMass);
-    pending.record(PROJECTION_MASS_BUCKET.ClueIncompatible, projected.pendingClueIncompatible);
-    pending.record(PROJECTION_MASS_BUCKET.Loss, projected.pendingProjectionLoss);
-
-    return accountant.toPublicDetails();
-}
-
-function mergeMassAccountingDetails(target: MassAccountingDetails, source: MassAccountingDetails | undefined): void {
-    if (!source) return;
-
-    for (const [stageName, sourceStage] of Object.entries(source.stages)) {
-        const targetStage = target.stages[stageName] ?? {
-            buckets: {},
-            operations: {}
-        };
-        target.stages[stageName] = targetStage;
-        mergeMassDetailBuckets(targetStage.buckets, sourceStage.buckets);
-
-        for (const [operationName, sourceOperation] of Object.entries(sourceStage.operations)) {
-            const targetOperation = targetStage.operations[operationName] ?? {
-                buckets: {}
-            };
-            targetStage.operations[operationName] = targetOperation;
-            mergeMassDetailBuckets(targetOperation.buckets, sourceOperation.buckets);
-        }
-    }
-}
-
-function mergeMassDetailBuckets(
-    target: Record<string, MassAccountingDetailBucket>,
-    source: Record<string, MassAccountingDetailBucket>
-): void {
-    for (const [bucketName, bucket] of Object.entries(source)) {
-        addMassDetailBucket(target, bucketName, BigInt(bucket.units));
-    }
-}
-
-function addMassDetailBucket(
-    buckets: Record<string, MassAccountingDetailBucket>,
-    bucketName: string,
-    units: bigint
-): void {
-    const previousUnits = BigInt(buckets[bucketName]?.units ?? 0);
-    buckets[bucketName] = toMassDetailBucket(previousUnits + units);
-}
-
-function toMassDetailBucket(units: bigint): MassAccountingDetailBucket {
-    return {
-        value: ProbUtils.toNumber(units),
-        units: units.toString()
-    };
-}
-
-function freezeMassAccountingDetails(details: MassAccountingDetails): MassAccountingDetails {
-    for (const stage of Object.values(details.stages)) {
-        for (const bucket of Object.values(stage.buckets)) Object.freeze(bucket);
-        Object.freeze(stage.buckets);
-
-        for (const operation of Object.values(stage.operations)) {
-            for (const bucket of Object.values(operation.buckets)) Object.freeze(bucket);
-            Object.freeze(operation.buckets);
-            Object.freeze(operation);
-        }
-
-        Object.freeze(stage.operations);
-        Object.freeze(stage);
-    }
-
-    return Object.freeze({
-        stages: Object.freeze(details.stages)
-    });
 }

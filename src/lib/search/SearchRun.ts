@@ -67,12 +67,16 @@ export interface PendingFrontierEntry {
     readonly count: number;
 }
 
-/** Aggregate pending-frontier contribution harvested without materializing public row factors. */
-export interface PendingFrontierAggregates {
+/** Aggregate combo/frontier contribution harvested without materializing public row factors. */
+export interface ComboMassAggregates {
     readonly any: readonly bigint[];
     readonly ranks: readonly bigint[];
     readonly count: readonly bigint[];
     readonly shownClueDistribution: ReadonlyMap<number, bigint>;
+}
+
+/** Aggregate pending-frontier contribution harvested without materializing public row factors. */
+export interface PendingFrontierAggregates extends ComboMassAggregates {
     readonly clueJoint?: PendingClueJointAggregates | undefined;
 }
 
@@ -122,6 +126,8 @@ export type EngineFrontierView = EmptyEngineFrontier | MaterializedEngineFrontie
 
 export interface EngineSearchSnapshot {
     readonly results: ReadonlyMap<PackedCombo, bigint>;
+    /** Exact resolved aggregate buckets for engines that can expose stats without combo rows. */
+    readonly resolvedAggregates?: ComboMassAggregates | undefined;
     readonly mass: MassAccountingBreakdown;
     readonly iterations: number;
     /** Mass of the most recently expanded frontier node. Useful for checkpoint overshoot diagnostics. */
@@ -846,9 +852,10 @@ export function createMaterializedEngineFrontier(entries: readonly PendingFronti
 
 export function createFactorizedEngineFrontier(
     entries: readonly FactorizedFrontierEntry[],
-    summary: PendingFrontierAggregates
+    summary: PendingFrontierAggregates,
+    pendingCount = entries.length
 ): EmptyEngineFrontier | FactorizedEngineFrontier {
-    if (entries.length === 0) return createEmptyEngineFrontier();
+    if (pendingCount === 0) return createEmptyEngineFrontier();
     return Object.freeze({
         kind: ENGINE_FRONTIER_KIND.FACTORIZED,
         entries,
