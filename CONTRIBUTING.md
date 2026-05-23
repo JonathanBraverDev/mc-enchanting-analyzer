@@ -173,6 +173,13 @@ For the repeatable book clue/no-clue perf cases, use:
 npx tsx scripts/profile_perf_cases.ts
 ```
 
+For V7 checkpoint baseline reports across known item/material/xp combinations, use:
+```bash
+npm run benchmark:report -- --version 1.21.11
+```
+
+Use `--item`, `--material`, and `--xp` to narrow the report. The default baseline ladder uses XP `10,15,20,25,30`, writes per-combination JSON files to `scripts/search-report-output/`, and records classified-mass checkpoints through the deep book snapshot target.
+
 These scripts report result counts, active search time, post-processing time, and total engine time. `scripts/benchmark_engine.ts` remains available for simple cold/warm cache smoke checks.
 
 ### Optimizing the Search

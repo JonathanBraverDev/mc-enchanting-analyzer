@@ -5,6 +5,7 @@
  * and writes one JSON report per combination to scripts/search-report-output/.
  *
  * Usage:
+ *   npm run benchmark:report
  *   npx tsx scripts/run_search_reporting.ts
  *   npx tsx scripts/run_search_reporting.ts --version 1.21.11 --item book --material book --xp 30
  */
@@ -19,7 +20,7 @@ import { ProbUtils } from '#utils/index.js';
 
 const DEFAULT_VERSION = '1.21.11';
 const DEFAULT_XP_LEVELS = [10, 15, 20, 25, 30];
-const DEFAULT_MASS_TARGETS = [0.1, 0.25, 0.5, 0.75, 0.85, 0.9, 0.95, 0.99, 0.999, 0.9995];
+const DEFAULT_MASS_TARGETS = [0.1, 0.25, 0.5, 0.75, 0.8, 0.85, 0.9, 0.95, 0.99, 0.999, 0.9995];
 const DEFAULT_THRESHOLD = TEST_DEFAULTS.SNAPSHOT_THRESHOLD;
 
 const __filename = fileURLToPath(import.meta.url);
