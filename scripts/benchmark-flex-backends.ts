@@ -222,7 +222,7 @@ async function runBackend(engine: Engine, backend: Backend, req: SearchRequest):
                 ? result.snapshot.frontier.entries.length
                 : 0,
             factorizedPendingEntries: result.snapshot.frontier.kind === ENGINE_FRONTIER_KIND.FACTORIZED
-                ? result.snapshot.frontier.entries.length
+                ? result.snapshot.pendingCount
                 : 0,
             compatibilityPendingEntries: result.snapshot.pendingEntries.length,
             structuralPending: result.instrumentation?.search?.flexStructuralPendingEntryCount,
