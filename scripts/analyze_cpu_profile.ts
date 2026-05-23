@@ -43,13 +43,11 @@ interface CliOptions {
 const DEFAULT_TOP = 15;
 
 const projectionFunctions = new Set([
-    'projectPlexResults',
-    'projectPlexCheckpoint',
-    'projectPlexPayloadMass',
-    'materializePlexPayloadFactors',
-    'materializePlexPayloadWithRemovedChoice',
+    'projectResults',
+    'projectSnapshot',
+    'projectPendingWithDiagnostics',
+    'visitProgramFactors',
     'materializeBookFactors',
-    'materializePlexPayload',
     'visit',
     'pack'
 ]);
@@ -73,13 +71,11 @@ const engineFunctions = new Set([
     'buildSearchExpansion',
     'getOrCreateNodeId',
     'getExpansion',
-    'appendPlexPayloadEdge',
-    'createCanonicalPlexPayload',
+    'appendChoice',
+    'appendFixed',
+    'insertCanonicalEmission',
     'insertPackedEnchant',
-    'insertWeightedChoice',
-    'getPlexPayloadInternNode',
-    'getOrCreatePayloadInternNode',
-    'canonicalizeWeightedChoice',
+    'getProgramInternNode',
     'canonicalizePackedEnchantList',
     'recordResolved',
     'recordResidueDelta',
@@ -90,14 +86,14 @@ const phaseRules: readonly PhaseRule[] = [
     {
         name: 'projection/materialization',
         matches: frame => projectionFunctions.has(frame.functionName)
-            || frame.url.includes('PlexProjection')
+            || frame.url.includes('FlexProjector')
             || (frame.url.includes('ComboUtils') && (frame.functionName === 'pack' || frame.functionName === '(anonymous)'))
     },
     {
         name: 'engine/search',
         matches: frame => engineFunctions.has(frame.functionName)
-            || frame.url.includes('search/plex/PlexGraph.ts')
-            || frame.url.includes('search/plex/PlexRunFrontier.ts')
+            || frame.url.includes('search/flex/GroupedFlexGraph.ts')
+            || frame.url.includes('search/flex/FlexCoordinator.ts')
     }
 ];
 
@@ -153,14 +149,14 @@ function printUsage(): void {
     console.log([
         'Usage: tsx scripts/analyze_cpu_profile.ts [--top N] [--include-idle] <CPU.cpuprofile...>',
         '',
-        'Splits Node/V8 CPU profile samples into coarse Plex phases using call-stack ancestry:',
+        'Splits Node/V8 CPU profile samples into coarse Flex phases using call-stack ancestry:',
         '- engine/search',
         '- projection/materialization',
         '- runtime/unattributed',
         '- shared/runtime/other',
         '',
         'Example:',
-        '  node --cpu-prof --import tsx scratch/plex-book-once.ts',
+        '  node --cpu-prof --import tsx scratch/flex-book-once.ts',
         '  tsx scripts/analyze_cpu_profile.ts --top 20 CPU.*.cpuprofile'
     ].join('\n'));
 }
