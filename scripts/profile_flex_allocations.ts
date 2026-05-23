@@ -294,17 +294,17 @@ function runSearch(testCase: ProfileCase, backend: Backend): CapturedRun {
     if (backend === 'flex') {
         const run = new GroupedFlexSearchRun(kernel, { targetClueId });
         run.seedXp(testCase.xp);
-        const snapshot = run.searchToCheckpoint(request);
-        const projected = run.projectSnapshot(snapshot, { pendingMode: 'aggregates' });
+        const state = run.searchToCheckpointState(request);
+        const checkpoint = run.buildEngineSnapshot(state);
         const ms = performance.now() - started;
         return {
             ms,
-            iterations: snapshot.iterations,
-            resultsSize: projected.results.size,
-            pendingEntries: snapshot.pendingEntries.length,
-            pendingMass: snapshot.mass.pending,
-            activeResidueCount: snapshot.activeResidueCount,
-            activeResidueMass: snapshot.activeResidueMass.toString(),
+            iterations: state.iterations,
+            resultsSize: checkpoint.snapshot.results.size,
+            pendingEntries: checkpoint.snapshot.pendingCount,
+            pendingMass: checkpoint.snapshot.mass.pending,
+            activeResidueCount: state.activeResidueCount,
+            activeResidueMass: state.activeResidueMass.toString(),
             flexMemory: run.getMemoryStats()
         };
     }
