@@ -20,6 +20,15 @@ type FlexProjectionFactorVisitor = (
     matchesTargetClue: boolean
 ) => void;
 
+export type FlexResultProjectionFactorVisitor = FlexProjectionFactorVisitor;
+
+export type FlexPendingAggregateVisitor = (
+    programId: FlexProgramId,
+    mass: bigint,
+    count: number,
+    targetClueReachable?: boolean | undefined
+) => void;
+
 export interface FlexProjectionOptions {
     readonly applyBookRemoval?: boolean | undefined;
     readonly targetClueId?: number | undefined;
@@ -42,11 +51,10 @@ export class FlexProjector {
         let clueIncompatible = 0n;
 
         for (const [programId, mass] of results) {
-            const program = this.programs.getProgram(programId);
             sourceMass += mass;
 
             let assigned = 0n;
-            this.forEachResultProgramFactor(program, (combo, _count, numerator, denominator, matchesTargetClue) => {
+            this.visitResultProgramFactors(programId, (combo, _count, numerator, denominator, matchesTargetClue) => {
                 const share = (mass * numerator) / denominator;
                 assigned += share;
                 if (share === 0n) return;
@@ -120,7 +128,25 @@ export class FlexProjector {
         });
     }
 
+    public visitResultProgramFactors(programId: FlexProgramId, visitor: FlexResultProjectionFactorVisitor): void {
+        this.forEachResultProgramFactor(this.programs.getProgram(programId), visitor);
+    }
+
+    public isResultClueCompatible(matchesTargetClue: boolean): boolean {
+        return this.isClueCompatible(matchesTargetClue);
+    }
+
     public projectPendingAggregates(entries: readonly FlexPendingEntry[]): FlexProjectedPendingAggregateResults {
+        return this.projectPendingAggregatesFromCursor(visitor => {
+            for (const entry of entries) {
+                visitor(entry.programId, entry.mass, entry.count, entry.targetClueReachable);
+            }
+        });
+    }
+
+    public projectPendingAggregatesFromCursor(
+        visitEntries: (visitor: FlexPendingAggregateVisitor) => void
+    ): FlexProjectedPendingAggregateResults {
         const pendingAggregates = createPendingAggregates();
         const clueJoint = this.options.targetClueId === undefined
             ? undefined
@@ -130,12 +156,12 @@ export class FlexProjector {
         let projectionLoss = 0n;
         let clueIncompatible = 0n;
 
-        for (const entry of entries) {
-            sourceMass += entry.mass;
-            if (entry.mass === 0n) continue;
+        visitEntries((programId, mass, count, targetClueReachable) => {
+            sourceMass += mass;
+            if (mass === 0n) return;
 
             if (clueJoint) {
-                const split = this.getPendingClueSplit(entry.programId, entry.mass, entry.count, entry.targetClueReachable);
+                const split = this.getPendingClueSplit(programId, mass, count, targetClueReachable);
                 projectedMass += split.projectedMass;
                 clueIncompatible += split.clueIncompatible;
                 projectionLoss += split.projectionLoss;
@@ -145,19 +171,19 @@ export class FlexProjector {
                         clueJoint.targetClueId,
                         (pendingAggregates.shownClueDistribution.get(clueJoint.targetClueId) ?? 0n) + split.clueKnownSpace
                     );
-                    this.addPendingClueJointAggregate(clueJoint, entry.programId, split.clueKnownSpace, entry.count);
+                    this.addPendingClueJointAggregate(clueJoint, programId, split.clueKnownSpace, count);
                 }
-                continue;
+                return;
             }
 
-            projectedMass += entry.mass;
+            projectedMass += mass;
             this.addPendingProgramAggregate(
                 pendingAggregates,
-                entry.programId,
-                entry.mass,
-                entry.count
+                programId,
+                mass,
+                count
             );
-        }
+        });
 
         return Object.freeze({
             pendingAggregates: freezePendingAggregates(pendingAggregates, clueJoint),

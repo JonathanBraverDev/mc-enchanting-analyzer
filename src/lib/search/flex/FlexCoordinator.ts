@@ -9,7 +9,9 @@ import type {
     FlexGraph,
     FlexNodeId,
     FlexPendingEntry,
+    FlexPendingEntryVisitor,
     FlexProgramId,
+    FlexRunState,
     FlexRunSnapshot,
     FlexSearchExpansion
 } from '#lib/search/flex/FlexTypes.js';
@@ -81,12 +83,22 @@ export class FlexCoordinator {
     }
 
     public searchToCheckpoint(request: FlexCheckpointRequest = {}): FlexRunSnapshot {
+        const state = this.searchToCheckpointState(request);
+        return this.snapshotFromState(state);
+    }
+
+    public searchToCheckpointState(request: FlexCheckpointRequest = {}): FlexRunState {
         const criteria = this.createAdvanceCriteria(request);
         this.advanceUntilCheckpoint(criteria);
-        return this.snapshot();
+        return this.state();
     }
 
     public async searchToCheckpointAsync(request: FlexCheckpointRequest = {}): Promise<FlexRunSnapshot> {
+        const state = await this.searchToCheckpointStateAsync(request);
+        return this.snapshotFromState(state);
+    }
+
+    public async searchToCheckpointStateAsync(request: FlexCheckpointRequest = {}): Promise<FlexRunState> {
         const criteria = this.createAdvanceCriteria(request);
         const chunkIterations = Math.max(
             1,
@@ -97,25 +109,43 @@ export class FlexCoordinator {
             await AsyncUtils.yield();
         }
 
-        return this.snapshot();
+        return this.state();
     }
 
     public snapshot(): FlexRunSnapshot {
+        return this.snapshotFromState(this.state());
+    }
+
+    public state(): FlexRunState {
         const residue = this.getActiveResidueStats();
         return Object.freeze({
-            results: new Map(this.results),
+            results: this.results,
             mass: this.mass.toPublic(),
             massDetails: this.mass.toPublicDetails(),
             iterations: this._iterations,
             lastExpandedMass: this._lastExpandedMass,
             pendingCount: this.frontier.size,
             largestPendingMass: this.frontier.peekMass(),
-            pendingEntries: Object.freeze(this.getPendingEntries()),
             graphCount: this.graphs.length,
             activeResidueCount: residue.count,
             activeResidueMass: residue.mass,
             fullyResolved: this.frontier.size === 0,
             exitReason: this.frontier.size === 0 ? 'empty' : this._exitReason
+        });
+    }
+
+    public forEachPending(callback: FlexPendingEntryVisitor): void {
+        this.frontier.forEach((graphId, nodeId, mass) => {
+            const node = this.getGraph(graphId).getNode(nodeId);
+            callback(graphId, nodeId, node.programId, mass, node.count, node.kind);
+        });
+    }
+
+    private snapshotFromState(state: FlexRunState): FlexRunSnapshot {
+        return Object.freeze({
+            ...state,
+            results: new Map(state.results),
+            pendingEntries: Object.freeze(this.getPendingEntries())
         });
     }
 

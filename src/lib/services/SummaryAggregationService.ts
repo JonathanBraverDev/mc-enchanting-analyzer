@@ -1,9 +1,11 @@
 import { PACKING_CONSTANTS } from '#constants/engine.js';
 import { PackedCombo } from '#types/index.js';
-import { ENGINE_FRONTIER_KIND, type EngineFrontierView, type PendingFrontierAggregates, type PendingFrontierEntry } from '#lib/search/SearchRun.js';
+import { ENGINE_FRONTIER_KIND, type ComboMassAggregates, type EngineFrontierView, type PendingFrontierAggregates, type PendingFrontierEntry } from '#lib/search/SearchRun.js';
 
 export interface SummaryAggregationRequest {
     combos: ReadonlyMap<PackedCombo, bigint>;
+    /** Exact resolved contribution supplied by engines that can avoid combo-row materialization. */
+    resolvedAggregates?: ComboMassAggregates | undefined;
     indexToEnchant: number[];
     /** Native frontier view. New callers should prefer this over compatibility pending fields. */
     frontier?: EngineFrontierView | undefined;
@@ -30,6 +32,7 @@ export class SummaryAggregationService {
     public static aggregate(request: SummaryAggregationRequest): SummaryAggregationResult {
         const {
             combos,
+            resolvedAggregates,
             indexToEnchant,
             frontier,
             pendingEntries = [],
@@ -46,8 +49,12 @@ export class SummaryAggregationService {
             shownClueDistribution: new Map()
         };
 
-        for (const [packed, mass] of combos) {
-            this.addContribution(result, packed, mass, indexToEnchant, false, isBook, includeMasses, includeShownClueDistribution);
+        if (resolvedAggregates) {
+            this.addAggregateContribution(result, resolvedAggregates, includeMasses, includeShownClueDistribution);
+        } else {
+            for (const [packed, mass] of combos) {
+                this.addContribution(result, packed, mass, indexToEnchant, false, isBook, includeMasses, includeShownClueDistribution);
+            }
         }
 
         if (frontier) this.addFrontierContribution(result, frontier, indexToEnchant, isBook, includeMasses, includeShownClueDistribution);
@@ -86,7 +93,7 @@ export class SummaryAggregationService {
                 );
                 return;
             case ENGINE_FRONTIER_KIND.FACTORIZED:
-                this.addPendingAggregateContribution(result, frontier.summary, includeMasses, includeShownClueDistribution);
+                this.addAggregateContribution(result, frontier.summary, includeMasses, includeShownClueDistribution);
                 return;
         }
     }
@@ -109,7 +116,7 @@ export class SummaryAggregationService {
             includeShownClueDistribution
         );
         if (pendingAggregates) {
-            this.addPendingAggregateContribution(result, pendingAggregates, includeMasses, includeShownClueDistribution);
+            this.addAggregateContribution(result, pendingAggregates, includeMasses, includeShownClueDistribution);
         }
     }
 
@@ -126,20 +133,20 @@ export class SummaryAggregationService {
         }
     }
 
-    private static addPendingAggregateContribution(
+    private static addAggregateContribution(
         result: SummaryAggregationResult,
-        pendingAggregates: PendingFrontierAggregates,
+        aggregates: ComboMassAggregates,
         includeMasses: boolean,
         includeShownClueDistribution: boolean
     ): void {
         if (includeMasses) {
-            this.addArrayAggregate(result.any, pendingAggregates.any);
-            this.addArrayAggregate(result.ranks, pendingAggregates.ranks);
-            this.addArrayAggregate(result.count, pendingAggregates.count);
+            this.addArrayAggregate(result.any, aggregates.any);
+            this.addArrayAggregate(result.ranks, aggregates.ranks);
+            this.addArrayAggregate(result.count, aggregates.count);
         }
 
         if (includeShownClueDistribution) {
-            this.addMapAggregate(result.shownClueDistribution, pendingAggregates.shownClueDistribution);
+            this.addMapAggregate(result.shownClueDistribution, aggregates.shownClueDistribution);
         }
     }
 
