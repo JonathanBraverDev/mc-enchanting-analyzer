@@ -42,58 +42,153 @@ interface CliOptions {
 
 const DEFAULT_TOP = 15;
 
-const projectionFunctions = new Set([
+const flexProjectionFunctions = new Set([
     'projectResults',
     'projectSnapshot',
     'projectPendingWithDiagnostics',
+    'toCompatibleFlexSearchRunSnapshot',
+    'toCompatibleFlexMass',
+    'toCompatibleFlexMassDetails',
     'visitProgramFactors',
     'materializeBookFactors',
     'visit',
     'pack'
 ]);
 
-const engineFunctions = new Set([
-    'seedXp',
-    'step',
-    'advance',
-    'searchToCheckpoint',
-    'advanceUntilCheckpoint',
-    'expand',
-    'forwardOrResolve',
+const flexGraphFunctions = new Set([
+    'buildRootExpansion',
+    'buildSearchExpansion',
+    'getGroupedExpansionTemplate',
+    'buildGroupedExpansionTemplate',
+    'materializeGroupedEdges',
+    'addAlternative',
+    'createGroupedEdgeTemplate',
+    'createGroupedEdge',
+    'compareFlexEdges',
+    'getOrCreateNodeId',
+    'getExistingReducedNodeId',
+    'getExpansion',
+    'getNode',
+    'hash',
+    'insert',
+    'grow',
+    'get',
+    'set'
+]);
+
+const flexProgramFunctions = new Set([
+    'appendChoice',
+    'appendCanonicalChoice',
+    'appendEmission',
+    'appendCanonicalEmission',
+    'appendFixed',
+    'canonicalizeChoice',
+    'canonicalizeEmission',
+    'compareEmissions',
+    'createEmissionKey',
+    'createNode',
+    'getChoiceEmission',
+    'getEmissionId',
+    'getFixedEmission',
+    'getOrCreateProgram',
+    'getProgram',
+    'getProgramInternNode',
+    'insertCanonicalEmission'
+]);
+
+const flexFrontierFunctions = new Set([
     'pushPending',
     'popLargestPending',
     'pushOrMerge',
     'setPosition',
     'sinkDown',
     'bubbleUp',
-    'moveHeapEntry',
-    'buildGroupedEdges',
-    'buildSearchExpansion',
-    'getOrCreateNodeId',
-    'getExpansion',
-    'appendChoice',
-    'appendFixed',
-    'insertCanonicalEmission',
-    'insertPackedEnchant',
-    'getProgramInternNode',
-    'canonicalizePackedEnchantList',
+    'moveHeapEntry'
+]);
+
+const flexForwardingFunctions = new Set([
+    'forwardMass',
+    'forwardOrResolve',
     'recordResolved',
     'recordResidueDelta',
-    'recordResiduePromotion'
+    'recordResiduePromotion',
+    'recordEdgeResidue',
+    'getForwardingResidues',
+    'setForwardingResidues'
+]);
+
+const flexCoordinatorFunctions = new Set([
+    'seedXp',
+    'step',
+    'advance',
+    'searchToCheckpoint',
+    'advanceUntilCheckpoint',
+    'expand',
+    'snapshot',
+    'getPendingEntries',
+    'getActiveResidueStats'
+]);
+
+const flexAccountingFunctions = new Set([
+    'recordSearch',
+    'subtractSearch',
+    'recordProjection',
+    'recordDetail',
+    'snapshot',
+    'toMassAccountingBreakdown',
+    'toMassAccountingDetails'
+]);
+
+const concreteFunctions = new Set([
+    'buildRootExpansion',
+    'buildSearchExpansion',
+    'getBlueprintLookupForNode',
+    'addExpansionEdge',
+    'getOrCreateNodeId',
+    'searchToCheckpoint',
+    'advanceUntilCheckpoint',
+    'expand',
+    'forwardMass',
+    'pushPending',
+    'pushOrMerge',
+    'popLargestPending'
 ]);
 
 const phaseRules: readonly PhaseRule[] = [
     {
-        name: 'projection/materialization',
-        matches: frame => projectionFunctions.has(frame.functionName)
-            || frame.url.includes('FlexProjector')
+        name: 'flex/projection',
+        matches: frame => flexProjectionFunctions.has(frame.functionName)
+            || frame.url.includes('search/flex/FlexProjector.ts')
             || (frame.url.includes('ComboUtils') && (frame.functionName === 'pack' || frame.functionName === '(anonymous)'))
     },
     {
-        name: 'engine/search',
-        matches: frame => engineFunctions.has(frame.functionName)
-            || frame.url.includes('search/flex/GroupedFlexGraph.ts')
-            || frame.url.includes('search/flex/FlexCoordinator.ts')
+        name: 'flex/graph-grouping',
+        matches: frame => frame.url.includes('search/flex/GroupedFlexGraph.ts') && flexGraphFunctions.has(frame.functionName)
+    },
+    {
+        name: 'flex/program-store',
+        matches: frame => frame.url.includes('search/flex/FlexProgramStore.ts') && flexProgramFunctions.has(frame.functionName)
+    },
+    {
+        name: 'flex/frontier',
+        matches: frame => frame.url.includes('search/flex/FlexCoordinator.ts') && flexFrontierFunctions.has(frame.functionName)
+    },
+    {
+        name: 'flex/forwarding',
+        matches: frame => frame.url.includes('search/flex/FlexCoordinator.ts') && flexForwardingFunctions.has(frame.functionName)
+    },
+    {
+        name: 'flex/coordinator',
+        matches: frame => frame.url.includes('search/flex/FlexCoordinator.ts') && flexCoordinatorFunctions.has(frame.functionName)
+    },
+    {
+        name: 'flex/accounting',
+        matches: frame => frame.url.includes('engine/search/ProbabilityMassAccountant.ts') && flexAccountingFunctions.has(frame.functionName)
+    },
+    {
+        name: 'concrete/v7-search',
+        matches: frame => (frame.url.includes('search/SearchRun.ts') || frame.url.includes('search/SearchGraph.ts') || frame.url.includes('search/SearchExpansionBlueprintCache.ts'))
+            && concreteFunctions.has(frame.functionName)
     }
 ];
 
@@ -149,9 +244,15 @@ function printUsage(): void {
     console.log([
         'Usage: tsx scripts/analyze_cpu_profile.ts [--top N] [--include-idle] <CPU.cpuprofile...>',
         '',
-        'Splits Node/V8 CPU profile samples into coarse Flex phases using call-stack ancestry:',
-        '- engine/search',
-        '- projection/materialization',
+        'Splits Node/V8 CPU profile samples into Flex/V7 phases using call-stack ancestry:',
+        '- flex/graph-grouping',
+        '- flex/program-store',
+        '- flex/frontier',
+        '- flex/forwarding',
+        '- flex/coordinator',
+        '- flex/projection',
+        '- flex/accounting',
+        '- concrete/v7-search',
         '- runtime/unattributed',
         '- shared/runtime/other',
         '',
@@ -273,8 +374,10 @@ function shortenUrl(url: string): string {
 }
 
 function classifySample(sample: ProfileSample): string {
-    for (const rule of phaseRules) {
-        if (sample.stack.some(rule.matches)) return rule.name;
+    for (const frame of sample.stack) {
+        for (const rule of phaseRules) {
+            if (rule.matches(frame)) return rule.name;
+        }
     }
 
     if (sample.self.functionName === '(garbage collector)' || sample.self.functionName === '(program)' || sample.self.functionName === '(idle)') {
@@ -309,7 +412,7 @@ function sumSelfTime(samples: readonly ProfileSample[], functionName: string): n
 }
 
 function formatFrame(frame: FrameKey): string {
-    return `${frame.functionName} — ${frame.url}`;
+    return `${frame.functionName} - ${frame.url}`;
 }
 
 function addToMap(map: Map<string, number>, key: string, value: number): void {
