@@ -1,4 +1,4 @@
-import { ProbabilityMassAccountant } from '#engine/search/ProbabilityMassAccountant.js';
+import { ProbabilityMassAccountant, SEARCH_MASS_BUCKET, SEARCH_MASS_OPERATION } from '#engine/search/ProbabilityMassAccountant.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import type { EngineExitReason } from '#types/index.js';
 import { AsyncUtils, PRECISION, ProbUtils } from '#utils/index.js';
@@ -42,6 +42,14 @@ interface FlexResidueStats {
 export class FlexCoordinator {
     public readonly results = new Map<FlexProgramId, bigint>();
     public readonly mass = new ProbabilityMassAccountant();
+    private readonly seedMass = this.mass.forSearchOperation(SEARCH_MASS_OPERATION.Seed);
+    private readonly frontierMass = this.mass.forSearchOperation(SEARCH_MASS_OPERATION.Frontier);
+    private readonly resolveMass = this.mass.forSearchOperation(SEARCH_MASS_OPERATION.Resolve);
+    private readonly edgeSplitMass = this.mass.forSearchOperation(SEARCH_MASS_OPERATION.EdgeSplit);
+    private readonly cluePruneMass = this.mass.forSearchOperation(SEARCH_MASS_OPERATION.CluePrune);
+    private readonly probabilityFloorMass = this.mass.forSearchOperation(SEARCH_MASS_OPERATION.ProbabilityFloor);
+    private readonly overflowMass = this.mass.forSearchOperation(SEARCH_MASS_OPERATION.Overflow);
+    private readonly residueMass = this.mass.forSearchOperation(SEARCH_MASS_OPERATION.Residue);
 
     private readonly frontier = new FlexFrontier();
     private readonly forwardingResidues: Array<Map<number, BigUint64Array> | undefined> = [];
@@ -55,7 +63,15 @@ export class FlexCoordinator {
         this.assertGraph(graphId);
         if (mass === 0n) return;
         this.frontier.pushOrMerge(graphId, nodeId, mass);
-        this.mass.record('pending', mass);
+        this.seedMass.record(SEARCH_MASS_BUCKET.Pending, mass);
+    }
+
+    public recordSeedClueIncompatible(mass: bigint): void {
+        this.seedMass.record(SEARCH_MASS_BUCKET.ClueIncompatible, mass);
+    }
+
+    public recordSeedRounding(mass: bigint): void {
+        this.seedMass.record(SEARCH_MASS_BUCKET.Rounding, mass);
     }
 
     public searchToCheckpoint(request: FlexCheckpointRequest = {}): FlexRunSnapshot {
@@ -83,6 +99,7 @@ export class FlexCoordinator {
         return Object.freeze({
             results: new Map(this.results),
             mass: this.mass.toPublic(),
+            massDetails: this.mass.toPublicDetails(),
             iterations: this._iterations,
             lastExpandedMass: this._lastExpandedMass,
             pendingCount: this.frontier.size,
@@ -171,7 +188,7 @@ export class FlexCoordinator {
         const current: FlexWorkItem = { graphId: 0, nodeId: 0 as FlexNodeId, mass: 0n };
         if (!this.frontier.pop(current)) return false;
 
-        this.mass.subtract('pending', current.mass);
+        this.frontierMass.subtract(SEARCH_MASS_BUCKET.Pending, current.mass);
         this._lastExpandedMass = current.mass;
         this.expand(current, criteria.probabilityFloor);
         this._iterations++;
@@ -192,7 +209,7 @@ export class FlexCoordinator {
 
         if (probForward === 0n) return;
         if (expansion.terminalReason === 'overflow') {
-            this.mass.record('overflow', probForward);
+            this.overflowMass.record(SEARCH_MASS_BUCKET.Overflow, probForward);
             return;
         }
 
@@ -202,7 +219,7 @@ export class FlexCoordinator {
         }
 
         if (expansion.node.count > 0 && probabilityFloor > 0n && probForward < probabilityFloor) {
-            this.mass.record('sieved', probForward);
+            this.probabilityFloorMass.record(SEARCH_MASS_BUCKET.Sieved, probForward);
             return;
         }
 
@@ -253,7 +270,7 @@ export class FlexCoordinator {
             hasResidue ||= edgeResidue !== 0n;
             assigned += childMass;
             standaloneAssigned += (mass * weight) / totalWeight;
-            this.mass.record('clueIncompatible', childMass);
+            this.cluePruneMass.record(SEARCH_MASS_BUCKET.ClueIncompatible, childMass);
         }
 
         const newResidueMass = nextResidueNumerator / totalWeight;
@@ -269,13 +286,13 @@ export class FlexCoordinator {
     private recordResolved(programId: FlexProgramId, mass: bigint): void {
         if (mass === 0n) return;
         this.results.set(programId, (this.results.get(programId) ?? 0n) + mass);
-        this.mass.record('resolved', mass);
+        this.resolveMass.record(SEARCH_MASS_BUCKET.Resolved, mass);
     }
 
     private pushPending(graphId: number, nodeId: FlexNodeId, mass: bigint): void {
         if (mass === 0n) return;
         this.frontier.pushOrMerge(graphId, nodeId, mass);
-        this.mass.record('pending', mass);
+        this.frontierMass.record(SEARCH_MASS_BUCKET.Pending, mass);
     }
 
     private getPendingEntries(): FlexPendingEntry[] {
@@ -318,17 +335,17 @@ export class FlexCoordinator {
 
     private recordResidueDelta(oldResidue: bigint, newResidue: bigint): void {
         if (newResidue > oldResidue) {
-            this.mass.record('rounding', newResidue - oldResidue);
+            this.edgeSplitMass.record(SEARCH_MASS_BUCKET.Rounding, newResidue - oldResidue);
             return;
         }
 
         if (oldResidue > newResidue) {
-            this.mass.subtract('rounding', oldResidue - newResidue);
+            this.edgeSplitMass.subtract(SEARCH_MASS_BUCKET.Rounding, oldResidue - newResidue);
         }
     }
 
     private recordResiduePromotion(promotedMass: bigint): void {
-        if (promotedMass > 0n) this.mass.record('recoveredRounding', promotedMass);
+        if (promotedMass > 0n) this.residueMass.record(SEARCH_MASS_BUCKET.RecoveredRounding, promotedMass);
     }
 
     private getForwardingResidues(graphId: number, nodeId: FlexNodeId): BigUint64Array | undefined {
