@@ -2,7 +2,7 @@ import { ENGINE_FRONTIER_KIND, createFactorizedEngineFrontier, type ComboMassAgg
 import { ProbabilityMassAccountant, PROJECTION_MASS_BUCKET, PROJECTION_MASS_OPERATION } from '#engine/search/ProbabilityMassAccountant.js';
 import { PACKING_CONSTANTS } from '#constants/engine.js';
 import type { MassAccountingBreakdown, MassAccountingDetailBucket, MassAccountingDetails, MassAccountingOperationDetails, MassAccountingStageDetails } from '#types/mass.js';
-import { RESULT_COMBO_MODE, type PackedCombo, type PackedEnchant, type ResultComboMode } from '#types/index.js';
+import { type PackedCombo, type PackedEnchant } from '#types/index.js';
 import { ComboUtils, ProbUtils } from '#utils/index.js';
 import type { FlexCoordinator } from '#lib/search/flex/FlexCoordinator.js';
 import type { FlexProgramId, FlexRunState } from '#lib/search/flex/FlexTypes.js';
@@ -22,10 +22,6 @@ interface ProjectionTotals {
     projectionLoss: bigint;
 }
 
-export interface FlexNativeSnapshotOptions {
-    readonly resultComboMode?: ResultComboMode | undefined;
-}
-
 export interface FlexNativeCheckpoint {
     readonly snapshot: EngineSearchSnapshot;
     readonly resolvedProjectionLoss: bigint;
@@ -37,17 +33,10 @@ export interface FlexNativeCheckpoint {
 }
 
 export class FlexSnapshotBuilder {
-    private readonly aggregateProjectedMasses = new Map<FlexProgramId, bigint>();
-    private readonly comboProjectedMasses = new Map<FlexProgramId, bigint>();
+    private readonly projectedMasses = new Map<FlexProgramId, bigint>();
     private readonly comboRows = new Map<PackedCombo, bigint>();
     private readonly resolvedAggregates = createMutableComboMassAggregates();
-    private readonly aggregateTotals: ProjectionTotals = {
-        sourceMass: 0n,
-        projectedMass: 0n,
-        clueIncompatible: 0n,
-        projectionLoss: 0n
-    };
-    private readonly comboTotals: ProjectionTotals = {
+    private readonly resolvedTotals: ProjectionTotals = {
         sourceMass: 0n,
         projectedMass: 0n,
         clueIncompatible: 0n,
@@ -61,18 +50,16 @@ export class FlexSnapshotBuilder {
         private readonly getTargetClueReachable: (graphId: number, nodeId: number) => boolean | undefined
     ) {}
 
-    public build(state: FlexRunState, options: FlexNativeSnapshotOptions = {}): FlexNativeCheckpoint {
-        const resultComboMode = options.resultComboMode ?? RESULT_COMBO_MODE.EXACT;
-        const includeCombos = resultComboMode === RESULT_COMBO_MODE.EXACT;
-        this.refreshResolvedProjection(state.results, includeCombos);
+    public build(state: FlexRunState): FlexNativeCheckpoint {
+        this.refreshResolvedProjection(state.results);
 
         const pending = this.projectPending();
-        const mass = this.createMass(state, this.aggregateTotals, pending);
+        const mass = this.createMass(state, this.resolvedTotals, pending);
         const pendingAggregates = state.pendingCount > 0 ? pending.pendingAggregates : undefined;
         const frontier = pendingAggregates
             ? createFactorizedEngineFrontier(pending.entries, pendingAggregates, state.pendingCount)
             : Object.freeze({ kind: ENGINE_FRONTIER_KIND.EMPTY } as const);
-        const results = includeCombos ? new Map(this.comboRows) : new Map<PackedCombo, bigint>();
+        const results = new Map(this.comboRows);
         const resolvedAggregates = freezeComboMassAggregates(this.resolvedAggregates);
 
         return Object.freeze({
@@ -101,50 +88,33 @@ export class FlexSnapshotBuilder {
                     avoidedPendingEntries: 0
                 })
             }),
-            resolvedProjectionLoss: this.aggregateTotals.projectionLoss,
+            resolvedProjectionLoss: this.resolvedTotals.projectionLoss,
             pendingProjectionLoss: pending.projectionLoss,
-            projectionLoss: this.aggregateTotals.projectionLoss + pending.projectionLoss,
-            resolvedClueIncompatible: this.aggregateTotals.clueIncompatible,
+            projectionLoss: this.resolvedTotals.projectionLoss + pending.projectionLoss,
+            resolvedClueIncompatible: this.resolvedTotals.clueIncompatible,
             pendingClueIncompatible: pending.clueIncompatible,
-            projectionClueIncompatible: this.aggregateTotals.clueIncompatible + pending.clueIncompatible
+            projectionClueIncompatible: this.resolvedTotals.clueIncompatible + pending.clueIncompatible
         });
     }
 
-    private refreshResolvedProjection(results: ReadonlyMap<FlexProgramId, bigint>, includeCombos: boolean): void {
+    private refreshResolvedProjection(results: ReadonlyMap<FlexProgramId, bigint>): void {
         for (const [programId, mass] of results) {
-            const aggregatePrevious = this.aggregateProjectedMasses.get(programId) ?? 0n;
-            const comboPrevious = includeCombos ? this.comboProjectedMasses.get(programId) ?? 0n : undefined;
-
-            if (includeCombos && comboPrevious === aggregatePrevious) {
-                this.projectResultProgramDelta(programId, aggregatePrevious, mass, true, true);
-                this.aggregateProjectedMasses.set(programId, mass);
-                this.comboProjectedMasses.set(programId, mass);
-                continue;
-            }
-
-            this.projectResultProgramDelta(programId, aggregatePrevious, mass, true, false);
-            this.aggregateProjectedMasses.set(programId, mass);
-
-            if (includeCombos && comboPrevious !== undefined) {
-                this.projectResultProgramDelta(programId, comboPrevious, mass, false, true);
-                this.comboProjectedMasses.set(programId, mass);
-            }
+            const previous = this.projectedMasses.get(programId) ?? 0n;
+            this.projectResultProgramDelta(programId, previous, mass);
+            this.projectedMasses.set(programId, mass);
         }
     }
 
     private projectResultProgramDelta(
         programId: FlexProgramId,
         previousMass: bigint,
-        currentMass: bigint,
-        updateAggregates: boolean,
-        updateCombos: boolean
+        currentMass: bigint
     ): void {
         if (previousMass === currentMass) return;
 
-        const totals = updateAggregates ? this.aggregateTotals : this.comboTotals;
         const sourceDelta = currentMass - previousMass;
         let assignedDelta = 0n;
-        totals.sourceMass += sourceDelta;
+        this.resolvedTotals.sourceMass += sourceDelta;
 
         this.projector.visitResultProgramFactors(programId, (combo, count, numerator, denominator, matchesTargetClue) => {
             const currentShare = (currentMass * numerator) / denominator;
@@ -154,16 +124,16 @@ export class FlexSnapshotBuilder {
             if (shareDelta === 0n) return;
 
             if (!this.isClueCompatible(matchesTargetClue)) {
-                totals.clueIncompatible += shareDelta;
+                this.resolvedTotals.clueIncompatible += shareDelta;
                 return;
             }
 
-            totals.projectedMass += shareDelta;
-            if (updateAggregates) addComboAggregate(this.resolvedAggregates, combo, count, shareDelta, this.indexToEnchant);
-            if (updateCombos && combo !== 0) addMapMass(this.comboRows, combo, shareDelta);
+            this.resolvedTotals.projectedMass += shareDelta;
+            addComboAggregate(this.resolvedAggregates, combo, count, shareDelta, this.indexToEnchant);
+            if (combo !== 0) addMapMass(this.comboRows, combo, shareDelta);
         });
 
-        totals.projectionLoss += sourceDelta - assignedDelta;
+        this.resolvedTotals.projectionLoss += sourceDelta - assignedDelta;
     }
 
     private projectPending(): PendingProjection {

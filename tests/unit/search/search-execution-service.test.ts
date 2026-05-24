@@ -10,8 +10,7 @@ import { getRegistryVersionBoundaries } from '#core/version-resolution.js';
 import { SearchExecutionService } from '#lib/search/SearchExecutionService.js';
 import { ENGINE_FRONTIER_KIND } from '#lib/search/SearchRun.js';
 import { FLEX_CACHE_LIMITS } from '#lib/search/flex/FlexConstants.js';
-import { CheckpointSearchRequest, EnchantStats, EngineInstrumentation, RESULT_COMBO_MODE, SearchResult } from '#types/index.js';
-import { SummaryService } from '#services/SummaryService.js';
+import { CheckpointSearchRequest, EnchantStats, EngineInstrumentation, SearchResult } from '#types/index.js';
 import { PRECISION } from '#utils/index.js';
 
 const MASS_UNIT_TOLERANCE = 1_000n;
@@ -236,116 +235,6 @@ describe('Search execution service', () => {
         assert.strictEqual(
             result.snapshot.frontier.summary.shownClueDistribution.get(result.snapshot.frontier.summary.clueJoint.targetClueId),
             result.snapshot.frontier.summary.clueJoint.knownSpace
-        );
-    });
-
-    it('lets Flex omit resolved combo rows while preserving exact aggregate summaries', async () => {
-        const engine = EngineFactory.createForVersion('1.21.11');
-        const request = {
-            item: 'book',
-            material: 'book',
-            xp: 30,
-            threshold: 0,
-            maxIterations: 2_000,
-            probabilityFloor: 0n,
-            searchBackend: 'flex' as const,
-            useCache: false
-        };
-
-        const exact = await engine.searchToCheckpoint({
-            ...request,
-            resultComboMode: RESULT_COMBO_MODE.EXACT
-        });
-        const omit = await engine.searchToCheckpoint({
-            ...request,
-            resultComboMode: RESULT_COMBO_MODE.OMIT
-        });
-
-        assert.ok(exact.combos.size > 0);
-        assert.strictEqual(omit.combos.size, 0);
-        assert.strictEqual(omit.snapshot.results.size, 0);
-        assert.ok(omit.snapshot.resolvedAggregates);
-        assert.ok((omit.snapshot.resolvedAggregates.count.reduce((sum, mass) => sum + mass, 0n)) > 0n);
-        assert.strictEqual(omit.snapshot.frontier.kind, ENGINE_FRONTIER_KIND.FACTORIZED);
-        if (omit.snapshot.frontier.kind !== ENGINE_FRONTIER_KIND.FACTORIZED) {
-            throw new Error('Expected factorized Flex frontier');
-        }
-        assert.strictEqual(omit.snapshot.frontier.entries.length, 0);
-        assert.strictEqual(omit.snapshot.pendingEntries.length, 0);
-        assertAccountingUnitsEqual(
-            'omit combo mode accounting',
-            getPublicAccountingUnits(omit, 'omit combo mode'),
-            getPublicAccountingUnits(exact, 'exact combo mode')
-        );
-
-        const exactStats = SummaryService.summarize({
-            combos: exact.combos,
-            snapshot: exact.snapshot,
-            indexToEnchant: engine.registry.indexToEnchant,
-            isBook: true,
-            uncappedResults: true
-        });
-        const omitStats = SummaryService.summarize({
-            combos: omit.combos,
-            snapshot: omit.snapshot,
-            indexToEnchant: engine.registry.indexToEnchant,
-            isBook: true,
-            uncappedResults: true
-        });
-
-        assert.deepStrictEqual(omitStats.any, exactStats.any);
-        assert.deepStrictEqual(omitStats.ranks, exactStats.ranks);
-        assert.deepStrictEqual(omitStats.count, exactStats.count);
-        assert.deepStrictEqual(omitStats.shownClueDistribution, exactStats.shownClueDistribution);
-        assert.deepStrictEqual(omitStats.accounting.units, exactStats.accounting.units);
-    });
-
-    it('can switch Flex sequential checkpoints from omitted combos back to exact combos', async () => {
-        const engine = EngineFactory.createForVersion('1.21.11');
-        const checkpoints = [
-            { threshold: 0, limit: 20, resultComboMode: RESULT_COMBO_MODE.OMIT },
-            { threshold: 0, limit: 80, resultComboMode: RESULT_COMBO_MODE.EXACT }
-        ];
-        const updates: SearchResult[] = [];
-
-        const final = await engine.searchSequentialCheckpoints({
-            item: 'book',
-            material: 'book',
-            xp: 30,
-            checkpoints,
-            searchBackend: 'flex',
-            probabilityFloor: 0n,
-            useCache: false,
-            onCheckpointComplete: result => updates.push(result)
-        });
-        const fresh = await EngineFactory.createForVersion('1.21.11').searchToCheckpoint({
-            item: 'book',
-            material: 'book',
-            xp: 30,
-            threshold: 0,
-            maxIterations: 80,
-            searchBackend: 'flex',
-            probabilityFloor: 0n,
-            useCache: false
-        });
-
-        assert.strictEqual(updates.length, 2);
-        assert.strictEqual(updates[0]!.combos.size, 0);
-        assert.ok(updates[0]!.snapshot.resolvedAggregates);
-        assert.ok(updates[0]!.snapshot.pendingAggregates);
-        const firstPendingCountMass = updates[0]!.snapshot.pendingAggregates.count.reduce((sum, mass) => sum + mass, 0n);
-        assert.ok(firstPendingCountMass > 0n, 'earlier lazy pending summary should remain readable after later checkpoints');
-        assert.strictEqual(
-            updates[0]!.snapshot.pendingAggregates.count,
-            updates[0]!.snapshot.pendingAggregates.count,
-            'earlier lazy pending summary should reuse its cached buckets'
-        );
-        assert.ok(updates[1]!.combos.size > 0);
-        assert.deepStrictEqual(final.combos, fresh.combos);
-        assertAccountingUnitsEqual(
-            'sequential exact after omit accounting',
-            getPublicAccountingUnits(final, 'sequential final'),
-            getPublicAccountingUnits(fresh, 'fresh exact')
         );
     });
 
