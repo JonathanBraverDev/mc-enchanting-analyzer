@@ -103,7 +103,7 @@ export interface FlexGraphMemoryStats {
     readonly preparedChoiceEmissionCount: number;
     readonly preparedChoiceAlternativeCount: number;
     readonly lazyChoiceEmissionScanCount: number;
-    readonly lazyChoiceEmissionCandidateCheckCount: number;
+    readonly lazyChoiceEmissionMemberVisitCount: number;
     readonly shapePreparedEmissionAppendCount: number;
     readonly nodeIndexGrowCount: number;
 }
