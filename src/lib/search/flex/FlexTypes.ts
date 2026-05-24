@@ -94,6 +94,7 @@ export interface FlexGraphMemoryStats {
     readonly groupingBuildCount: number;
     readonly groupedEdgeCount: number;
     readonly groupedAlternativeCount: number;
+    readonly collectedAlternativeDetailCount: number;
     readonly singletonGroupCount: number;
     readonly choiceGroupCount: number;
     readonly nodeCreateCount: number;
@@ -101,6 +102,8 @@ export interface FlexGraphMemoryStats {
     readonly preparedFixedEmissionCount: number;
     readonly preparedChoiceEmissionCount: number;
     readonly preparedChoiceAlternativeCount: number;
+    readonly lazyChoiceEmissionScanCount: number;
+    readonly lazyChoiceEmissionCandidateCheckCount: number;
     readonly shapePreparedEmissionAppendCount: number;
     readonly nodeIndexGrowCount: number;
 }

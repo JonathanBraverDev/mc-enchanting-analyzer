@@ -178,6 +178,8 @@ export class GroupedFlexGraph implements FlexGraph {
     private readonly shapeCache = new Map<bigint, GroupedExpansionShape>();
     private readonly scratchGroupMasks: bigint[] = [];
     private readonly scratchGroupWeights: number[] = [];
+    private readonly scratchGroupAlternativeCounts: number[] = [];
+    private readonly scratchGroupFirstPackedEnchants: number[] = [];
     private readonly scratchGroupPackedEnchants: number[][] = [];
     private readonly scratchGroupAlternativeWeights: number[][] = [];
     private scratchEdgeWeights = EMPTY_EDGE_WEIGHTS;
@@ -208,6 +210,7 @@ export class GroupedFlexGraph implements FlexGraph {
     private groupingBuildCount = 0;
     private groupedEdgeCount = 0;
     private groupedAlternativeCount = 0;
+    private collectedAlternativeDetailCount = 0;
     private singletonGroupCount = 0;
     private choiceGroupCount = 0;
     private nodeCreateCount = 0;
@@ -215,6 +218,8 @@ export class GroupedFlexGraph implements FlexGraph {
     private preparedFixedEmissionCount = 0;
     private preparedChoiceEmissionCount = 0;
     private preparedChoiceAlternativeCount = 0;
+    private lazyChoiceEmissionScanCount = 0;
+    private lazyChoiceEmissionCandidateCheckCount = 0;
     private shapePreparedEmissionAppendCount = 0;
     private debugExpansionCount = 0;
 
@@ -316,6 +321,7 @@ export class GroupedFlexGraph implements FlexGraph {
             groupingBuildCount: this.groupingBuildCount,
             groupedEdgeCount: this.groupedEdgeCount,
             groupedAlternativeCount: this.groupedAlternativeCount,
+            collectedAlternativeDetailCount: this.collectedAlternativeDetailCount,
             singletonGroupCount: this.singletonGroupCount,
             choiceGroupCount: this.choiceGroupCount,
             nodeCreateCount: this.nodeCreateCount,
@@ -323,6 +329,8 @@ export class GroupedFlexGraph implements FlexGraph {
             preparedFixedEmissionCount: this.preparedFixedEmissionCount,
             preparedChoiceEmissionCount: this.preparedChoiceEmissionCount,
             preparedChoiceAlternativeCount: this.preparedChoiceAlternativeCount,
+            lazyChoiceEmissionScanCount: this.lazyChoiceEmissionScanCount,
+            lazyChoiceEmissionCandidateCheckCount: this.lazyChoiceEmissionCandidateCheckCount,
             shapePreparedEmissionAppendCount: this.shapePreparedEmissionAppendCount,
             nodeIndexGrowCount: this.nodeIndex.growCount
         };
@@ -492,7 +500,8 @@ export class GroupedFlexGraph implements FlexGraph {
         parentNodeIndex: number,
         clueRestricted: boolean
     ): FlexSearchExpansion {
-        const { totalWeight, clueIncompatibleWeight } = this.buildScratchGroups(parentExclusionMask, clueRestricted);
+        const collectAlternatives = this.stateIdentityMode !== 'reduced';
+        const { totalWeight, clueIncompatibleWeight } = this.buildScratchGroups(parentExclusionMask, clueRestricted, collectAlternatives);
         const edgeWeights = useScratch
             ? this.getScratchEdgeWeights(this.groupCount)
             : new Uint32Array(this.groupCount);
@@ -501,9 +510,16 @@ export class GroupedFlexGraph implements FlexGraph {
             : new Int32Array(this.groupCount);
 
         for (let groupIndex = 0; groupIndex < this.groupCount; groupIndex++) {
-            this.sortScratchAlternatives(groupIndex);
             edgeWeights[groupIndex] = this.scratchGroupWeights[groupIndex]!;
-            edgeChildIds[groupIndex] = this.createGroupedChildIdFromScratch(groupIndex, parentNodeIndex, childLevel, childCount) as number;
+            edgeChildIds[groupIndex] = this.createGroupedChildIdFromScratch(
+                groupIndex,
+                parentNodeIndex,
+                childLevel,
+                childCount,
+                parentExclusionMask,
+                clueRestricted,
+                collectAlternatives
+            ) as number;
         }
         sortEdgeArrays(edgeWeights, edgeChildIds, this.groupCount);
 
@@ -525,12 +541,11 @@ export class GroupedFlexGraph implements FlexGraph {
     }
 
     private buildGroupedExpansionShape(parentExclusionMask: bigint, clueRestricted: boolean): GroupedExpansionShape {
-        const { totalWeight, clueIncompatibleWeight } = this.buildScratchGroups(parentExclusionMask, clueRestricted);
+        const { totalWeight, clueIncompatibleWeight } = this.buildScratchGroups(parentExclusionMask, clueRestricted, true);
         const childExclusionMasks = new BigUint64Array(this.groupCount);
         const edgeWeights = new Uint32Array(this.groupCount);
         const emissions = new Array<FlexEmission>(this.groupCount);
         for (let groupIndex = 0; groupIndex < this.groupCount; groupIndex++) {
-            this.sortScratchAlternatives(groupIndex);
             childExclusionMasks[groupIndex] = this.scratchGroupMasks[groupIndex]!;
             edgeWeights[groupIndex] = this.scratchGroupWeights[groupIndex]!;
             emissions[groupIndex] = this.createPreparedGroupEmission(groupIndex);
@@ -546,7 +561,7 @@ export class GroupedFlexGraph implements FlexGraph {
         };
     }
 
-    private buildScratchGroups(parentExclusionMask: bigint, clueRestricted: boolean): {
+    private buildScratchGroups(parentExclusionMask: bigint, clueRestricted: boolean, collectAlternatives: boolean): {
         readonly totalWeight: number;
         readonly clueIncompatibleWeight: number;
     } {
@@ -567,14 +582,20 @@ export class GroupedFlexGraph implements FlexGraph {
             }
 
             const childExclusionMask = parentExclusionMask | entry.blocksBitset;
-            const groupIndex = this.getOrCreateScratchGroup(childExclusionMask);
-            this.addScratchAlternative(groupIndex, entry.packedEnchant, entry.weight);
+            const groupIndex = this.getOrCreateScratchGroup(childExclusionMask, collectAlternatives);
+            if (collectAlternatives) {
+                this.addScratchAlternative(groupIndex, entry.packedEnchant, entry.weight);
+            } else {
+                this.addScratchAlternativeSummary(groupIndex, entry.packedEnchant);
+            }
             this.scratchGroupWeights[groupIndex] = (this.scratchGroupWeights[groupIndex] ?? 0) + entry.weight;
         }
 
         this.groupedEdgeCount += this.groupCount;
         for (let groupIndex = 0; groupIndex < this.groupCount; groupIndex++) {
-            const alternativeCount = this.scratchGroupPackedEnchants[groupIndex]?.length ?? 0;
+            const alternativeCount = collectAlternatives
+                ? this.scratchGroupPackedEnchants[groupIndex]?.length ?? 0
+                : this.scratchGroupAlternativeCounts[groupIndex] ?? 0;
             if (alternativeCount === 1) this.singletonGroupCount++;
             else if (alternativeCount > 1) this.choiceGroupCount++;
         }
@@ -582,6 +603,7 @@ export class GroupedFlexGraph implements FlexGraph {
     }
 
     private createPreparedGroupEmission(groupIndex: number): FlexEmission {
+        this.sortScratchAlternatives(groupIndex);
         const alternatives = this.scratchGroupPackedEnchants[groupIndex]!;
         const alternativeWeights = this.scratchGroupAlternativeWeights[groupIndex]!;
         if (alternatives.length === 1) {
@@ -594,11 +616,50 @@ export class GroupedFlexGraph implements FlexGraph {
         return this.programs.prepareCanonicalChoiceFromArrays(alternatives, alternativeWeights, alternatives.length);
     }
 
+    private createPreparedGroupEmissionFromScratch(
+        groupIndex: number,
+        parentExclusionMask: bigint,
+        clueRestricted: boolean,
+        alternativesCollected: boolean
+    ): FlexEmission {
+        if (alternativesCollected) return this.createPreparedGroupEmission(groupIndex);
+
+        const alternativeCount = this.scratchGroupAlternativeCounts[groupIndex] ?? 0;
+        if (alternativeCount === 1) {
+            this.preparedFixedEmissionCount++;
+            return this.programs.prepareFixedEmission(this.scratchGroupFirstPackedEnchants[groupIndex]! as PackedEnchant);
+        }
+
+        this.lazyChoiceEmissionScanCount++;
+        this.collectScratchAlternativesForGroup(groupIndex, parentExclusionMask, clueRestricted);
+        return this.createPreparedGroupEmission(groupIndex);
+    }
+
+    private collectScratchAlternativesForGroup(
+        groupIndex: number,
+        parentExclusionMask: bigint,
+        clueRestricted: boolean
+    ): void {
+        const childExclusionMask = this.scratchGroupMasks[groupIndex]!;
+        this.resetScratchAlternativeDetails(groupIndex);
+
+        for (const entry of this.pool.entries) {
+            this.lazyChoiceEmissionCandidateCheckCount++;
+            if ((parentExclusionMask & entry.idBit) !== 0n) continue;
+            if (clueRestricted && !this.canSelectBeforeTargetClue(entry)) continue;
+            if ((parentExclusionMask | entry.blocksBitset) !== childExclusionMask) continue;
+            this.addScratchAlternative(groupIndex, entry.packedEnchant, entry.weight, false);
+        }
+    }
+
     private createGroupedChildIdFromScratch(
         groupIndex: number,
         parentNodeIndex: number,
         childLevel: number,
-        childCount: number
+        childCount: number,
+        parentExclusionMask: bigint,
+        clueRestricted: boolean,
+        alternativesCollected: boolean
     ): FlexNodeId {
         const childExclusionMask = this.scratchGroupMasks[groupIndex]!;
         if (this.stateIdentityMode === 'reduced') {
@@ -610,12 +671,18 @@ export class GroupedFlexGraph implements FlexGraph {
                 return existing;
             }
             const parentProgramId = this.programIds[parentNodeIndex]!;
-            const childProgramId = this.programs.appendPreparedEmission(parentProgramId, this.createPreparedGroupEmission(groupIndex));
+            const childProgramId = this.programs.appendPreparedEmission(
+                parentProgramId,
+                this.createPreparedGroupEmissionFromScratch(groupIndex, parentExclusionMask, clueRestricted, alternativesCollected)
+            );
             return this.createNodeId(childExclusionMask, childLevel, childCount, childProgramId, identityProgramId);
         }
 
         const parentProgramId = this.programIds[parentNodeIndex]!;
-        const childProgramId = this.programs.appendPreparedEmission(parentProgramId, this.createPreparedGroupEmission(groupIndex));
+        const childProgramId = this.programs.appendPreparedEmission(
+            parentProgramId,
+            this.createPreparedGroupEmissionFromScratch(groupIndex, parentExclusionMask, clueRestricted, alternativesCollected)
+        );
         return this.getOrCreateNodeId(
             childExclusionMask,
             childLevel,
@@ -740,7 +807,7 @@ export class GroupedFlexGraph implements FlexGraph {
         this.groupCount = 0;
     }
 
-    private getOrCreateScratchGroup(childExclusionMask: bigint): number {
+    private getOrCreateScratchGroup(childExclusionMask: bigint, collectAlternatives: boolean): number {
         for (let groupIndex = 0; groupIndex < this.groupCount; groupIndex++) {
             if (this.scratchGroupMasks[groupIndex] === childExclusionMask) return groupIndex;
         }
@@ -748,14 +815,33 @@ export class GroupedFlexGraph implements FlexGraph {
         const groupIndex = this.groupCount++;
         this.scratchGroupMasks[groupIndex] = childExclusionMask;
         this.scratchGroupWeights[groupIndex] = 0;
+        this.scratchGroupAlternativeCounts[groupIndex] = 0;
+        this.scratchGroupFirstPackedEnchants[groupIndex] = 0;
+        if (collectAlternatives) this.resetScratchAlternativeDetails(groupIndex);
+        return groupIndex;
+    }
+
+    private resetScratchAlternativeDetails(groupIndex: number): void {
         this.scratchGroupPackedEnchants[groupIndex] ??= [];
         this.scratchGroupAlternativeWeights[groupIndex] ??= [];
         this.scratchGroupPackedEnchants[groupIndex]!.length = 0;
         this.scratchGroupAlternativeWeights[groupIndex]!.length = 0;
-        return groupIndex;
     }
 
-    private addScratchAlternative(groupIndex: number, packedEnchant: PackedEnchant, weight: number): void {
+    private addScratchAlternativeSummary(groupIndex: number, packedEnchant: PackedEnchant): void {
+        if ((this.scratchGroupAlternativeCounts[groupIndex] ?? 0) === 0) {
+            this.scratchGroupFirstPackedEnchants[groupIndex] = packedEnchant;
+        }
+        this.scratchGroupAlternativeCounts[groupIndex] = (this.scratchGroupAlternativeCounts[groupIndex] ?? 0) + 1;
+        this.groupedAlternativeCount++;
+    }
+
+    private addScratchAlternative(
+        groupIndex: number,
+        packedEnchant: PackedEnchant,
+        weight: number,
+        countDiscovery = true
+    ): void {
         const packedEnchants = this.scratchGroupPackedEnchants[groupIndex]!;
         const weights = this.scratchGroupAlternativeWeights[groupIndex]!;
         for (let index = 0; index < packedEnchants.length; index++) {
@@ -766,7 +852,8 @@ export class GroupedFlexGraph implements FlexGraph {
 
         packedEnchants.push(packedEnchant);
         weights.push(weight);
-        this.groupedAlternativeCount++;
+        this.collectedAlternativeDetailCount++;
+        if (countDiscovery) this.groupedAlternativeCount++;
     }
 
     private sortScratchAlternatives(groupIndex: number): void {
