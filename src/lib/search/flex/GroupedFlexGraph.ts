@@ -22,6 +22,7 @@ import { FLEX_HASH_CONSTANTS, FLEX_INDEX_LIMITS, FLEX_INDEX_SENTINELS } from '#l
 const FLEX_NODE_STATE_COUNT_STRIDE = ENGINE_LIMITS.MAX_ENCHANTS_PER_ITEM + 1;
 const EMPTY_EDGE_WEIGHTS = new Uint32Array(0);
 const EMPTY_EDGE_CHILD_IDS = new Int32Array(0);
+const SCRATCH_ENTRY_INDEX_NONE = -1;
 
 interface GroupedExpansionShape {
     readonly totalWeight: number;
@@ -180,8 +181,11 @@ export class GroupedFlexGraph implements FlexGraph {
     private readonly scratchGroupWeights: number[] = [];
     private readonly scratchGroupAlternativeCounts: number[] = [];
     private readonly scratchGroupFirstPackedEnchants: number[] = [];
+    private readonly scratchGroupFirstEntryIndexes: number[] = [];
+    private readonly scratchGroupLastEntryIndexes: number[] = [];
     private readonly scratchGroupPackedEnchants: number[][] = [];
     private readonly scratchGroupAlternativeWeights: number[][] = [];
+    private scratchEntryNextIndexes = new Int32Array(0);
     private scratchEdgeWeights = EMPTY_EDGE_WEIGHTS;
     private scratchEdgeChildIds = EMPTY_EDGE_CHILD_IDS;
     private readonly scratchExpansion: MutableFlexSearchExpansion = {
@@ -219,7 +223,7 @@ export class GroupedFlexGraph implements FlexGraph {
     private preparedChoiceEmissionCount = 0;
     private preparedChoiceAlternativeCount = 0;
     private lazyChoiceEmissionScanCount = 0;
-    private lazyChoiceEmissionCandidateCheckCount = 0;
+    private lazyChoiceEmissionMemberVisitCount = 0;
     private shapePreparedEmissionAppendCount = 0;
     private debugExpansionCount = 0;
 
@@ -330,7 +334,7 @@ export class GroupedFlexGraph implements FlexGraph {
             preparedChoiceEmissionCount: this.preparedChoiceEmissionCount,
             preparedChoiceAlternativeCount: this.preparedChoiceAlternativeCount,
             lazyChoiceEmissionScanCount: this.lazyChoiceEmissionScanCount,
-            lazyChoiceEmissionCandidateCheckCount: this.lazyChoiceEmissionCandidateCheckCount,
+            lazyChoiceEmissionMemberVisitCount: this.lazyChoiceEmissionMemberVisitCount,
             shapePreparedEmissionAppendCount: this.shapePreparedEmissionAppendCount,
             nodeIndexGrowCount: this.nodeIndex.growCount
         };
@@ -516,8 +520,6 @@ export class GroupedFlexGraph implements FlexGraph {
                 parentNodeIndex,
                 childLevel,
                 childCount,
-                parentExclusionMask,
-                clueRestricted,
                 collectAlternatives
             ) as number;
         }
@@ -571,6 +573,7 @@ export class GroupedFlexGraph implements FlexGraph {
         this.groupingBuildCount++;
 
         const entries = this.pool.entries;
+        const scratchEntryNextIndexes = this.getScratchEntryNextIndexes();
         for (let entryIndex = 0; entryIndex < entries.length; entryIndex++) {
             const entry = entries[entryIndex]!;
             if ((parentExclusionMask & entry.idBit) !== 0n) continue;
@@ -583,6 +586,7 @@ export class GroupedFlexGraph implements FlexGraph {
 
             const childExclusionMask = parentExclusionMask | entry.blocksBitset;
             const groupIndex = this.getOrCreateScratchGroup(childExclusionMask, collectAlternatives);
+            this.addScratchGroupMember(groupIndex, entryIndex, scratchEntryNextIndexes);
             if (collectAlternatives) {
                 this.addScratchAlternative(groupIndex, entry.packedEnchant, entry.weight);
             } else {
@@ -618,8 +622,6 @@ export class GroupedFlexGraph implements FlexGraph {
 
     private createPreparedGroupEmissionFromScratch(
         groupIndex: number,
-        parentExclusionMask: bigint,
-        clueRestricted: boolean,
         alternativesCollected: boolean
     ): FlexEmission {
         if (alternativesCollected) return this.createPreparedGroupEmission(groupIndex);
@@ -631,24 +633,21 @@ export class GroupedFlexGraph implements FlexGraph {
         }
 
         this.lazyChoiceEmissionScanCount++;
-        this.collectScratchAlternativesForGroup(groupIndex, parentExclusionMask, clueRestricted);
+        this.collectScratchAlternativesForGroup(groupIndex);
         return this.createPreparedGroupEmission(groupIndex);
     }
 
-    private collectScratchAlternativesForGroup(
-        groupIndex: number,
-        parentExclusionMask: bigint,
-        clueRestricted: boolean
-    ): void {
-        const childExclusionMask = this.scratchGroupMasks[groupIndex]!;
+    private collectScratchAlternativesForGroup(groupIndex: number): void {
         this.resetScratchAlternativeDetails(groupIndex);
 
-        for (const entry of this.pool.entries) {
-            this.lazyChoiceEmissionCandidateCheckCount++;
-            if ((parentExclusionMask & entry.idBit) !== 0n) continue;
-            if (clueRestricted && !this.canSelectBeforeTargetClue(entry)) continue;
-            if ((parentExclusionMask | entry.blocksBitset) !== childExclusionMask) continue;
+        const entries = this.pool.entries;
+        const nextIndexes = this.scratchEntryNextIndexes;
+        let entryIndex = this.scratchGroupFirstEntryIndexes[groupIndex] ?? SCRATCH_ENTRY_INDEX_NONE;
+        while (entryIndex !== SCRATCH_ENTRY_INDEX_NONE) {
+            this.lazyChoiceEmissionMemberVisitCount++;
+            const entry = entries[entryIndex]!;
             this.addScratchAlternative(groupIndex, entry.packedEnchant, entry.weight, false);
+            entryIndex = nextIndexes[entryIndex] ?? SCRATCH_ENTRY_INDEX_NONE;
         }
     }
 
@@ -657,8 +656,6 @@ export class GroupedFlexGraph implements FlexGraph {
         parentNodeIndex: number,
         childLevel: number,
         childCount: number,
-        parentExclusionMask: bigint,
-        clueRestricted: boolean,
         alternativesCollected: boolean
     ): FlexNodeId {
         const childExclusionMask = this.scratchGroupMasks[groupIndex]!;
@@ -673,7 +670,7 @@ export class GroupedFlexGraph implements FlexGraph {
             const parentProgramId = this.programIds[parentNodeIndex]!;
             const childProgramId = this.programs.appendPreparedEmission(
                 parentProgramId,
-                this.createPreparedGroupEmissionFromScratch(groupIndex, parentExclusionMask, clueRestricted, alternativesCollected)
+                this.createPreparedGroupEmissionFromScratch(groupIndex, alternativesCollected)
             );
             return this.createNodeId(childExclusionMask, childLevel, childCount, childProgramId, identityProgramId);
         }
@@ -681,7 +678,7 @@ export class GroupedFlexGraph implements FlexGraph {
         const parentProgramId = this.programIds[parentNodeIndex]!;
         const childProgramId = this.programs.appendPreparedEmission(
             parentProgramId,
-            this.createPreparedGroupEmissionFromScratch(groupIndex, parentExclusionMask, clueRestricted, alternativesCollected)
+            this.createPreparedGroupEmissionFromScratch(groupIndex, alternativesCollected)
         );
         return this.getOrCreateNodeId(
             childExclusionMask,
@@ -817,8 +814,30 @@ export class GroupedFlexGraph implements FlexGraph {
         this.scratchGroupWeights[groupIndex] = 0;
         this.scratchGroupAlternativeCounts[groupIndex] = 0;
         this.scratchGroupFirstPackedEnchants[groupIndex] = 0;
+        this.scratchGroupFirstEntryIndexes[groupIndex] = SCRATCH_ENTRY_INDEX_NONE;
+        this.scratchGroupLastEntryIndexes[groupIndex] = SCRATCH_ENTRY_INDEX_NONE;
         if (collectAlternatives) this.resetScratchAlternativeDetails(groupIndex);
         return groupIndex;
+    }
+
+    private addScratchGroupMember(groupIndex: number, entryIndex: number, nextIndexes: Int32Array): void {
+        nextIndexes[entryIndex] = SCRATCH_ENTRY_INDEX_NONE;
+
+        const lastEntryIndex = this.scratchGroupLastEntryIndexes[groupIndex] ?? SCRATCH_ENTRY_INDEX_NONE;
+        if (lastEntryIndex === SCRATCH_ENTRY_INDEX_NONE) {
+            this.scratchGroupFirstEntryIndexes[groupIndex] = entryIndex;
+        } else {
+            nextIndexes[lastEntryIndex] = entryIndex;
+        }
+        this.scratchGroupLastEntryIndexes[groupIndex] = entryIndex;
+    }
+
+    private getScratchEntryNextIndexes(): Int32Array {
+        const required = this.pool.entries.length;
+        if (this.scratchEntryNextIndexes.length < required) {
+            this.scratchEntryNextIndexes = new Int32Array(required);
+        }
+        return this.scratchEntryNextIndexes;
     }
 
     private resetScratchAlternativeDetails(groupIndex: number): void {
