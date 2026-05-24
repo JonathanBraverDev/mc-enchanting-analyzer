@@ -75,7 +75,6 @@ export interface FlexExpansion {
 
 export interface FlexGraph {
     getExpansion(nodeId: FlexNodeId): FlexExpansion;
-    getSearchExpansion?(nodeId: FlexNodeId): FlexSearchExpansion;
     withSearchExpansion?<T>(nodeId: FlexNodeId, consumer: FlexSearchExpansionConsumer<T>): T;
     getProgramId?(nodeId: FlexNodeId): FlexProgramId;
     getNodeCount?(nodeId: FlexNodeId): number;
