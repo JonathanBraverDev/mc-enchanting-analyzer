@@ -169,7 +169,7 @@ export class FlexSnapshotBuilder {
 
     private projectPending(materializeEntries: boolean): PendingProjection {
         const entries: FactorizedFrontierEntry[] = [];
-        const projected = this.projector.projectPendingAggregatesFromCursor(visitor => {
+        const projected = this.projector.projectPendingLazyAggregatesFromCursor(visitor => {
             this.coordinator.forEachPending((graphId, nodeId, programId, mass, count, nodeKind) => {
                 const targetClueReachable = this.getTargetClueReachable(graphId, nodeId as number);
                 visitor(programId, mass, count, targetClueReachable);

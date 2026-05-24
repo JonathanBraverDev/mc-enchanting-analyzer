@@ -332,6 +332,14 @@ describe('Search execution service', () => {
         assert.strictEqual(updates.length, 2);
         assert.strictEqual(updates[0]!.combos.size, 0);
         assert.ok(updates[0]!.snapshot.resolvedAggregates);
+        assert.ok(updates[0]!.snapshot.pendingAggregates);
+        const firstPendingCountMass = updates[0]!.snapshot.pendingAggregates.count.reduce((sum, mass) => sum + mass, 0n);
+        assert.ok(firstPendingCountMass > 0n, 'earlier lazy pending summary should remain readable after later checkpoints');
+        assert.strictEqual(
+            updates[0]!.snapshot.pendingAggregates.count,
+            updates[0]!.snapshot.pendingAggregates.count,
+            'earlier lazy pending summary should reuse its cached buckets'
+        );
         assert.ok(updates[1]!.combos.size > 0);
         assert.deepStrictEqual(final.combos, fresh.combos);
         assertAccountingUnitsEqual(

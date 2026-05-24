@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { PackedCombo, PackedEnchant } from '#types/index.js';
+import type { PendingFrontierAggregates } from '#lib/search/SearchRun.js';
 import { ComboUtils } from '#utils/index.js';
 import {
     FlexProgramStore,
@@ -473,4 +474,120 @@ describe('FlexProjector', () => {
         assert.strictEqual(projected.projectionLoss, 0n);
         assert.strictEqual(projected.projectedMass + projected.clueIncompatible + projected.projectionLoss, projected.sourceMass);
     });
+
+    it('builds lazy pending aggregate buckets only when read and reuses them', () => {
+        const store = new FlexProgramStore();
+        const projector = new FlexProjector(store, enchantToIndex, { applyBookRemoval: true });
+        const fixed = store.appendFixed(store.empty, sharpness);
+        const program = store.appendChoice(fixed, [
+            { packedEnchant: smite, weight: 1 },
+            { packedEnchant: looting, weight: 3 }
+        ]);
+        const pending: FlexPendingEntry[] = [
+            {
+                graphId: 0,
+                nodeId: nodeId(18),
+                programId: program,
+                mass: 24n,
+                count: 2,
+                nodeKind: 'plex'
+            },
+            {
+                graphId: 0,
+                nodeId: nodeId(19),
+                programId: fixed,
+                mass: 5n,
+                count: 1,
+                nodeKind: 'solid'
+            }
+        ];
+
+        const eager = projector.projectPendingAggregates(pending);
+        let buildCount = 0;
+        const lazy = projector.projectPendingLazyAggregatesFromCursor(visitor => {
+            for (const entry of pending) visitor(entry.programId, entry.mass, entry.count, entry.targetClueReachable);
+        }, {
+            onBuild: () => { buildCount++; }
+        });
+
+        assert.strictEqual(lazy.sourceMass, eager.sourceMass);
+        assert.strictEqual(lazy.projectedMass, eager.projectedMass);
+        assert.strictEqual(lazy.clueIncompatible, eager.clueIncompatible);
+        assert.strictEqual(lazy.projectionLoss, eager.projectionLoss);
+        assert.strictEqual(buildCount, 0);
+        assert.deepStrictEqual(Object.keys(lazy.pendingAggregates), ['any', 'ranks', 'count', 'shownClueDistribution']);
+
+        assertAggregatesEqual(lazy.pendingAggregates, eager.pendingAggregates);
+        assert.strictEqual(buildCount, 1);
+        assert.strictEqual(lazy.pendingAggregates.any, lazy.pendingAggregates.any);
+        assert.strictEqual(lazy.pendingAggregates.shownClueDistribution, lazy.pendingAggregates.shownClueDistribution);
+        assert.strictEqual(buildCount, 1);
+    });
+
+    it('keeps lazy clue pending aggregates exact and snapshot-stable', () => {
+        const store = new FlexProgramStore();
+        const projector = new FlexProjector(store, enchantToIndex, { targetClueId: sharpness });
+        const fixed = store.appendFixed(store.empty, looting);
+        const program = store.appendChoice(fixed, [
+            { packedEnchant: sharpness, weight: 2 },
+            { packedEnchant: smite, weight: 1 }
+        ]);
+        const pending: FlexPendingEntry[] = [{
+            graphId: 0,
+            nodeId: nodeId(20),
+            programId: program,
+            mass: 13n,
+            count: 2,
+            nodeKind: 'plex',
+            targetClueReachable: false
+        }];
+
+        const eager = projector.projectPendingAggregates(pending);
+        let buildCount = 0;
+        const lazy = projector.projectPendingLazyAggregatesFromCursor(visitor => {
+            for (const entry of pending) visitor(entry.programId, entry.mass, entry.count, entry.targetClueReachable);
+        }, {
+            onBuild: () => { buildCount++; }
+        });
+        pending[0] = { ...pending[0]!, mass: 999n };
+
+        assert.strictEqual(buildCount, 0);
+        assert.deepStrictEqual(Object.keys(lazy.pendingAggregates), ['any', 'ranks', 'count', 'shownClueDistribution', 'clueJoint']);
+        assertAggregatesEqual(lazy.pendingAggregates, eager.pendingAggregates);
+        assert.strictEqual(buildCount, 1);
+        assert.strictEqual(lazy.pendingAggregates.clueJoint, lazy.pendingAggregates.clueJoint);
+        assert.strictEqual(buildCount, 1);
+    });
 });
+
+function assertAggregatesEqual(
+    actual: PendingFrontierAggregates,
+    expected: PendingFrontierAggregates
+): void {
+    assert.deepStrictEqual(toDenseRecord(actual.any), toDenseRecord(expected.any));
+    assert.deepStrictEqual(toDenseRecord(actual.ranks), toDenseRecord(expected.ranks));
+    assert.deepStrictEqual(toDenseRecord(actual.count), toDenseRecord(expected.count));
+    assert.deepStrictEqual(toMapRecord(actual.shownClueDistribution), toMapRecord(expected.shownClueDistribution));
+    assert.strictEqual(actual.clueJoint?.targetClueId, expected.clueJoint?.targetClueId);
+    assert.strictEqual(actual.clueJoint?.knownSpace, expected.clueJoint?.knownSpace);
+    assert.deepStrictEqual(toDenseRecord(actual.clueJoint?.any ?? []), toDenseRecord(expected.clueJoint?.any ?? []));
+    assert.deepStrictEqual(toDenseRecord(actual.clueJoint?.ranks ?? []), toDenseRecord(expected.clueJoint?.ranks ?? []));
+    assert.deepStrictEqual(toDenseRecord(actual.clueJoint?.count ?? []), toDenseRecord(expected.clueJoint?.count ?? []));
+}
+
+function toDenseRecord(source: readonly bigint[]): Record<string, string> {
+    const result: Record<string, string> = {};
+    for (let index = 0; index < source.length; index++) {
+        const mass = source[index];
+        if (mass !== undefined && mass !== 0n) result[index] = mass.toString();
+    }
+    return result;
+}
+
+function toMapRecord(source: ReadonlyMap<number, bigint>): Record<string, string> {
+    const result: Record<string, string> = {};
+    for (const [key, mass] of source) {
+        if (mass !== 0n) result[key] = mass.toString();
+    }
+    return result;
+}
