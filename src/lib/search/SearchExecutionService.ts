@@ -1,5 +1,5 @@
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
-import { SearchResult, SequentialCheckpointSearchContext, CheckpointSearchContext, EngineInstrumentation, SearchTiming, SearchBackend, RegistryState, MutatedRegistryState, RESULT_COMBO_MODE, type ResultComboMode } from '#types/index.js';
+import { SearchResult, SequentialCheckpointSearchContext, CheckpointSearchContext, EngineInstrumentation, SearchTiming, SearchBackend, RegistryState, MutatedRegistryState } from '#types/index.js';
 import { RegistryKernel } from '#lib/search/registry/RegistryKernel.js';
 import { SearchRun, type SearchRunSnapshot } from '#lib/search/SearchRun.js';
 import { GroupedFlexSearchRun, checkFlexReducedKeyInvariant, type FlexNativeCheckpoint, type FlexReducedKeyInvariantResult, type FlexRunState, type FlexStateIdentityMode } from '#lib/search/flex/index.js';
@@ -51,9 +51,7 @@ export class SearchExecutionService {
                 probabilityFloor: request.probabilityFloor,
                 signal: request.signal
             });
-            const checkpoint = run.buildEngineSnapshot(flexState, {
-                resultComboMode: this.getResultComboMode(request)
-            });
+            const checkpoint = run.buildEngineSnapshot(flexState);
             this.finishTiming(request.timing, timingStart, 0);
             return this.toFlexSearchResult(checkpoint, flexState, flexStateIdentityMode, request.exhaustive ? 0n : request.threshold ?? 0n, request.targetClassifiedMass, request.instrumentation, request.timing);
         }
@@ -144,9 +142,7 @@ export class SearchExecutionService {
                 if (request.signal?.aborted && lastResult) return lastResult;
                 throw error;
             }
-            const nativeCheckpoint = run.buildEngineSnapshot(flexState, {
-                resultComboMode: this.getResultComboMode(request, checkpoint)
-            });
+            const nativeCheckpoint = run.buildEngineSnapshot(flexState);
             recordedSearchMs = this.finishTiming(request.timing, timingStart, recordedSearchMs);
             lastResult = this.toFlexSearchResult(nativeCheckpoint, flexState, flexStateIdentityMode, checkpoint.threshold, checkpoint.targetClassifiedMass, request.instrumentation, request.timing);
             request.onCheckpointComplete(lastResult, checkpointIndex);
@@ -156,9 +152,7 @@ export class SearchExecutionService {
 
         this.finishTiming(request.timing, timingStart, recordedSearchMs);
         const flexState = run.state();
-        const checkpoint = run.buildEngineSnapshot(flexState, {
-            resultComboMode: this.getResultComboMode(request)
-        });
+        const checkpoint = run.buildEngineSnapshot(flexState);
         return this.toFlexSearchResult(checkpoint, flexState, flexStateIdentityMode, 0, undefined, request.instrumentation, request.timing);
     }
 
@@ -228,13 +222,6 @@ export class SearchExecutionService {
         }
 
         return result.ok ? 'reduced' : 'program';
-    }
-
-    private getResultComboMode(
-        request: CheckpointSearchContext,
-        checkpoint?: { readonly resultComboMode?: ResultComboMode | undefined } | undefined
-    ): ResultComboMode {
-        return checkpoint?.resultComboMode ?? request.resultComboMode ?? RESULT_COMBO_MODE.EXACT;
     }
 
     private createKernel(request: CheckpointSearchContext): RegistryKernel {

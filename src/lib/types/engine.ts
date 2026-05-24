@@ -55,8 +55,6 @@ export interface SearchCheckpoint {
   limit: number;
   /** Optional classified-mass target for this checkpoint. Search may still stop earlier on threshold/limit. */
   targetClassifiedMass?: number | bigint | undefined;
-  /** Optional per-checkpoint override for resolved combo-row materialization. */
-  resultComboMode?: ResultComboMode | undefined;
 }
 
 export interface ExploredMassSample {
@@ -268,13 +266,6 @@ export type PackedEnchant = number & { __brand: "PackedEnchant" };
 export type PackedCombo = number & { __brand: "PackedCombo" };
 export type ProbabilityValue = bigint & { __brand: "ProbabilityValue" };
 
-export const RESULT_COMBO_MODE = Object.freeze({
-    EXACT: 'exact',
-    OMIT: 'omit'
-} as const);
-
-export type ResultComboMode = typeof RESULT_COMBO_MODE[keyof typeof RESULT_COMBO_MODE];
-
 export interface SearchConfig {
     /** The observed enchantment clue (e.g. "Sharpness IV"). Trigger Bayesian conditioning if set. */
     clue?: string | null | undefined;
@@ -327,11 +318,6 @@ export interface SearchConfig {
     summaryLimit?: number | undefined;
     /** Explicitly allow summarized presentation output to include every combo result. Does not affect search work. */
     uncappedResults?: boolean | undefined;
-    /**
-     * Controls whether engine snapshots must include exact resolved combo rows.
-     * Defaults to `exact`; `omit` keeps exact aggregate stats and accounting but skips row materialization.
-     */
-    resultComboMode?: ResultComboMode | undefined;
     useCache?: boolean | undefined;
     instrumentation?: EngineInstrumentation | undefined;
     timing?: SearchTiming | undefined;
