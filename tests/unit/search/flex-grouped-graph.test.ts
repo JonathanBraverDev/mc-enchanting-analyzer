@@ -19,6 +19,7 @@ import {
     type FlexEdge,
     type FlexEmission,
     type FlexFixedEmission,
+    type FlexNativeCheckpoint,
     type FlexRunSnapshot
 } from '#lib/search/flex/index.js';
 
@@ -244,23 +245,26 @@ describe('GroupedFlexSearchRun', () => {
         groupedRun.seedXp(30);
         const concrete = concreteRun.searchToCheckpoint(request);
         const flex = groupedRun.searchToCheckpoint(request);
-        const projected = groupedRun.projectSnapshot(flex);
+        const native = groupedRun.buildEngineSnapshot(flex);
 
         assert.strictEqual(concrete.fullyResolved, true);
         assert.strictEqual(flex.fullyResolved, true);
         assert.strictEqual(flex.iterations, concrete.iterations);
-        assertProjectedRowsApproximatelyEqual(projected.results, concrete.results);
+        assertProjectedRowsApproximatelyEqual(native.snapshot.results, concrete.results);
         assert.ok(BigInt(flex.mass.units!.clueIncompatible) > 0n);
-        assert.ok(projected.clueIncompatible > 0n);
-        assert.strictEqual(projected.projectedMass + projected.clueIncompatible + projected.projectionLoss, projected.sourceMass);
-        assert.strictEqual(projected.results.has(0 as PackedCombo), false);
-        for (const combo of projected.results.keys()) {
+        assert.ok(native.resolvedClueIncompatible > 0n);
+        assert.strictEqual(
+            BigInt(native.snapshot.mass.units!.resolved) + native.resolvedClueIncompatible + native.resolvedProjectionLoss,
+            BigInt(flex.mass.units!.resolved)
+        );
+        assert.strictEqual(native.snapshot.results.has(0 as PackedCombo), false);
+        for (const combo of native.snapshot.results.keys()) {
             assert.ok(comboContainsExactEnchant(combo, targetClueId, registry.indexToEnchant));
         }
     });
 
     it('produces a bounded XP 30 checkpoint with PlexNode programs and conserved resolved source mass', () => {
-        const { run, flex, projected } = runConcreteAndGrouped('1.21.11', 'sword', 'diamond', 30, {
+        const { run, flex, native } = runConcreteAndGrouped('1.21.11', 'sword', 'diamond', 30, {
             threshold: 0n,
             maxIterations: 500,
             probabilityFloor: 0n
@@ -268,9 +272,12 @@ describe('GroupedFlexSearchRun', () => {
 
         assert.strictEqual(flex.exitReason, 'iterations');
         assert.ok(flex.pendingEntries.length > 0);
-        assert.ok(projected.pendingEntries.length > 0);
-        assert.strictEqual(projected.projectedMass + projected.projectionLoss, projected.sourceMass);
-        assert.strictEqual(projected.results.has(0 as PackedCombo), false);
+        assert.ok(native.snapshot.pendingAggregates);
+        assert.strictEqual(
+            BigInt(native.snapshot.mass.units!.resolved) + native.resolvedClueIncompatible + native.resolvedProjectionLoss,
+            BigInt(flex.mass.units!.resolved)
+        );
+        assert.strictEqual(native.snapshot.results.has(0 as PackedCombo), false);
         assert.ok(hasPlexSourceProgram(run, flex), 'checkpoint should include at least one PlexNode source program');
     });
 
@@ -311,7 +318,7 @@ describe('GroupedFlexSearchRun', () => {
             threshold: 0n,
             maxIterations: 100_000
         });
-        const projected = groupedRun.projectSnapshot(flex);
+        const native = groupedRun.buildEngineSnapshot(flex);
 
         assert.strictEqual(concrete.fullyResolved, true);
         assert.strictEqual(flex.fullyResolved, true);
@@ -320,9 +327,12 @@ describe('GroupedFlexSearchRun', () => {
         assertBigintApproximatelyEqual(BigInt(flex.mass.units!.resolved), BigInt(concrete.mass.units!.resolved), 'resolved mass', FLOOR_MASS_TOLERANCE);
         assertBigintApproximatelyEqual(BigInt(flex.mass.units!.sieved), BigInt(concrete.mass.units!.sieved), 'sieved mass', FLOOR_MASS_TOLERANCE);
         assertBigintApproximatelyEqual(BigInt(flex.mass.units!.rounding), BigInt(concrete.mass.units!.rounding), 'rounding mass', FLOOR_MASS_TOLERANCE);
-        assertProjectedRowsApproximatelyEqual(projected.results, concrete.results, FLOOR_MASS_TOLERANCE);
-        assert.strictEqual(projected.projectedMass + projected.projectionLoss, BigInt(flex.mass.units!.resolved));
-        assert.strictEqual(projected.results.has(0 as PackedCombo), false);
+        assertProjectedRowsApproximatelyEqual(native.snapshot.results, concrete.results, FLOOR_MASS_TOLERANCE);
+        assert.strictEqual(
+            BigInt(native.snapshot.mass.units!.resolved) + native.resolvedClueIncompatible + native.resolvedProjectionLoss,
+            BigInt(flex.mass.units!.resolved)
+        );
+        assert.strictEqual(native.snapshot.results.has(0 as PackedCombo), false);
         assert.ok(hasPlexSourceProgram(groupedRun, flex), 'floor fixture should exercise PlexNode source programs');
     });
 });
@@ -347,7 +357,7 @@ function captureHotExpansion(
     nodeId: ReturnType<GroupedFlexGraph['getRootNode']>['id']
 ): HotExpansionSnapshot {
     let captured: HotExpansionSnapshot | undefined;
-    graph.withSearchExpansion!(nodeId, expansion => {
+    graph.withSearchExpansion(nodeId, expansion => {
         captured = {
             nodeId: expansion.nodeId,
             programId: expansion.programId,
@@ -451,13 +461,16 @@ function assertExhaustiveProjectedParity(
     xp: number,
     requirePlexSource: boolean
 ): void {
-    const { run, flex, concrete, projected } = runConcreteAndGrouped(version, item, material, xp, { exhaustive: true });
+    const { run, flex, concrete, native } = runConcreteAndGrouped(version, item, material, xp, { exhaustive: true });
 
     assert.strictEqual(concrete.fullyResolved, true);
     assert.strictEqual(flex.fullyResolved, true);
-    assertProjectedRowsApproximatelyEqual(projected.results, concrete.results);
-    assert.strictEqual(projected.projectedMass + projected.projectionLoss, projected.sourceMass);
-    assert.strictEqual(projected.results.has(0 as PackedCombo), false);
+    assertProjectedRowsApproximatelyEqual(native.snapshot.results, concrete.results);
+    assert.strictEqual(
+        BigInt(native.snapshot.mass.units!.resolved) + native.resolvedClueIncompatible + native.resolvedProjectionLoss,
+        BigInt(flex.mass.units!.resolved)
+    );
+    assert.strictEqual(native.snapshot.results.has(0 as PackedCombo), false);
     if (requirePlexSource) {
         assert.ok(hasPlexSourceProgram(run, flex), `${version} ${item}/${material} XP ${String(xp)} should exercise PlexNode programs`);
     }
@@ -473,7 +486,7 @@ function runConcreteAndGrouped(
     run: GroupedFlexSearchRun;
     concrete: SearchRunSnapshot;
     flex: FlexRunSnapshot;
-    projected: ReturnType<GroupedFlexSearchRun['projectSnapshot']>;
+    native: FlexNativeCheckpoint;
 } {
     const registry = RegistryFactory.build(version);
     const kernel = new RegistryKernel({ registry, item, material });
@@ -489,7 +502,7 @@ function runConcreteAndGrouped(
         run: groupedRun,
         concrete,
         flex,
-        projected: groupedRun.projectSnapshot(flex)
+        native: groupedRun.buildEngineSnapshot(flex)
     };
 }
 
