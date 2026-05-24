@@ -201,9 +201,21 @@ export class GroupedFlexGraph implements FlexGraph {
     private readonly targetClueConflictBitset: bigint;
     private searchExpansionCount = 0;
     private groupCount = 0;
+    private shapeCacheHitCount = 0;
+    private shapeCacheMissCount = 0;
+    private directExpansionBuildCount = 0;
+    private shapedExpansionBuildCount = 0;
     private groupingBuildCount = 0;
     private groupedEdgeCount = 0;
     private groupedAlternativeCount = 0;
+    private singletonGroupCount = 0;
+    private choiceGroupCount = 0;
+    private nodeCreateCount = 0;
+    private nodeReuseCount = 0;
+    private preparedFixedEmissionCount = 0;
+    private preparedChoiceEmissionCount = 0;
+    private preparedChoiceAlternativeCount = 0;
+    private shapePreparedEmissionAppendCount = 0;
     private debugExpansionCount = 0;
 
     public constructor(
@@ -297,9 +309,21 @@ export class GroupedFlexGraph implements FlexGraph {
             nodeCount: this.size,
             searchExpansionCount: this.searchExpansionCount,
             debugExpansionCount: this.debugExpansionCount,
+            shapeCacheHitCount: this.shapeCacheHitCount,
+            shapeCacheMissCount: this.shapeCacheMissCount,
+            directExpansionBuildCount: this.directExpansionBuildCount,
+            shapedExpansionBuildCount: this.shapedExpansionBuildCount,
             groupingBuildCount: this.groupingBuildCount,
             groupedEdgeCount: this.groupedEdgeCount,
             groupedAlternativeCount: this.groupedAlternativeCount,
+            singletonGroupCount: this.singletonGroupCount,
+            choiceGroupCount: this.choiceGroupCount,
+            nodeCreateCount: this.nodeCreateCount,
+            nodeReuseCount: this.nodeReuseCount,
+            preparedFixedEmissionCount: this.preparedFixedEmissionCount,
+            preparedChoiceEmissionCount: this.preparedChoiceEmissionCount,
+            preparedChoiceAlternativeCount: this.preparedChoiceAlternativeCount,
+            shapePreparedEmissionAppendCount: this.shapePreparedEmissionAppendCount,
             nodeIndexGrowCount: this.nodeIndex.growCount
         };
     }
@@ -376,6 +400,8 @@ export class GroupedFlexGraph implements FlexGraph {
         const shapeKey = this.createGroupedExpansionShapeKey(parentExclusionMask, clueRestricted);
         const cached = this.shapeCache.get(shapeKey);
         if (cached) {
+            this.shapeCacheHitCount++;
+            this.shapedExpansionBuildCount++;
             return this.createGroupedSearchExpansionFromShape(
                 nodeId,
                 probContinue,
@@ -387,8 +413,10 @@ export class GroupedFlexGraph implements FlexGraph {
                 cached
             );
         }
+        this.shapeCacheMissCount++;
 
         if (parentExclusionMask !== 0n) {
+            this.directExpansionBuildCount++;
             return this.createDirectGroupedSearchExpansion(
                 nodeId,
                 probContinue,
@@ -404,6 +432,7 @@ export class GroupedFlexGraph implements FlexGraph {
 
         const shape = this.buildGroupedExpansionShape(parentExclusionMask, clueRestricted);
         this.shapeCache.set(shapeKey, shape);
+        this.shapedExpansionBuildCount++;
         return this.createGroupedSearchExpansionFromShape(
             nodeId,
             probContinue,
@@ -544,15 +573,25 @@ export class GroupedFlexGraph implements FlexGraph {
         }
 
         this.groupedEdgeCount += this.groupCount;
+        for (let groupIndex = 0; groupIndex < this.groupCount; groupIndex++) {
+            const alternativeCount = this.scratchGroupPackedEnchants[groupIndex]?.length ?? 0;
+            if (alternativeCount === 1) this.singletonGroupCount++;
+            else if (alternativeCount > 1) this.choiceGroupCount++;
+        }
         return { totalWeight, clueIncompatibleWeight };
     }
 
     private createPreparedGroupEmission(groupIndex: number): FlexEmission {
         const alternatives = this.scratchGroupPackedEnchants[groupIndex]!;
         const alternativeWeights = this.scratchGroupAlternativeWeights[groupIndex]!;
-        return alternatives.length === 1
-            ? this.programs.prepareFixedEmission(alternatives[0]! as PackedEnchant)
-            : this.programs.prepareCanonicalChoiceFromArrays(alternatives, alternativeWeights, alternatives.length);
+        if (alternatives.length === 1) {
+            this.preparedFixedEmissionCount++;
+            return this.programs.prepareFixedEmission(alternatives[0]! as PackedEnchant);
+        }
+
+        this.preparedChoiceEmissionCount++;
+        this.preparedChoiceAlternativeCount += alternatives.length;
+        return this.programs.prepareCanonicalChoiceFromArrays(alternatives, alternativeWeights, alternatives.length);
     }
 
     private createGroupedChildIdFromScratch(
@@ -566,7 +605,10 @@ export class GroupedFlexGraph implements FlexGraph {
             const identityProgramId = 0 as FlexProgramId;
             const stateKey = this.createNodeStateKey(childLevel, childCount);
             const existing = this.nodeIndex.get(childExclusionMask, stateKey, identityProgramId);
-            if (existing !== undefined) return existing;
+            if (existing !== undefined) {
+                this.nodeReuseCount++;
+                return existing;
+            }
             const parentProgramId = this.programIds[parentNodeIndex]!;
             const childProgramId = this.programs.appendPreparedEmission(parentProgramId, this.createPreparedGroupEmission(groupIndex));
             return this.createNodeId(childExclusionMask, childLevel, childCount, childProgramId, identityProgramId);
@@ -594,13 +636,18 @@ export class GroupedFlexGraph implements FlexGraph {
             const identityProgramId = 0 as FlexProgramId;
             const stateKey = this.createNodeStateKey(childLevel, childCount);
             const existing = this.nodeIndex.get(childExclusionMask, stateKey, identityProgramId);
-            if (existing !== undefined) return existing;
+            if (existing !== undefined) {
+                this.nodeReuseCount++;
+                return existing;
+            }
             const parentProgramId = this.programIds[parentNodeIndex]!;
+            this.shapePreparedEmissionAppendCount++;
             const childProgramId = this.programs.appendPreparedEmission(parentProgramId, shape.emissions[groupIndex]!);
             return this.createNodeId(childExclusionMask, childLevel, childCount, childProgramId, identityProgramId);
         }
 
         const parentProgramId = this.programIds[parentNodeIndex]!;
+        this.shapePreparedEmissionAppendCount++;
         const childProgramId = this.programs.appendPreparedEmission(parentProgramId, shape.emissions[groupIndex]!);
         const childId = this.getOrCreateNodeId(
             childExclusionMask,
@@ -767,7 +814,10 @@ export class GroupedFlexGraph implements FlexGraph {
         const stateKey = this.createNodeStateKey(currentLevel, count);
         const identityProgramId = this.getIdentityProgramId(programId);
         const existing = this.nodeIndex.get(exclusionMask, stateKey, identityProgramId);
-        if (existing !== undefined) return existing;
+        if (existing !== undefined) {
+            this.nodeReuseCount++;
+            return existing;
+        }
 
         return this.createNodeId(exclusionMask, currentLevel, count, programId, identityProgramId);
     }
@@ -781,6 +831,7 @@ export class GroupedFlexGraph implements FlexGraph {
     ): FlexNodeId {
         const stateKey = this.createNodeStateKey(currentLevel, count);
         const id = this.counts.length as FlexNodeId;
+        this.nodeCreateCount++;
         this.exclusionMasks.push(exclusionMask);
         this.currentLevels.push(currentLevel);
         this.counts.push(count);

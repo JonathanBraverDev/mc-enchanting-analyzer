@@ -87,9 +87,21 @@ export interface FlexGraphMemoryStats {
     readonly nodeCount: number;
     readonly searchExpansionCount: number;
     readonly debugExpansionCount: number;
+    readonly shapeCacheHitCount: number;
+    readonly shapeCacheMissCount: number;
+    readonly directExpansionBuildCount: number;
+    readonly shapedExpansionBuildCount: number;
     readonly groupingBuildCount: number;
     readonly groupedEdgeCount: number;
     readonly groupedAlternativeCount: number;
+    readonly singletonGroupCount: number;
+    readonly choiceGroupCount: number;
+    readonly nodeCreateCount: number;
+    readonly nodeReuseCount: number;
+    readonly preparedFixedEmissionCount: number;
+    readonly preparedChoiceEmissionCount: number;
+    readonly preparedChoiceAlternativeCount: number;
+    readonly shapePreparedEmissionAppendCount: number;
     readonly nodeIndexGrowCount: number;
 }
 
