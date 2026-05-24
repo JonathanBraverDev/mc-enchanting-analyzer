@@ -422,7 +422,7 @@ function formatRun(summary: RunSummary): string {
     const allocationMiB = summary.sampledAllocationBytes / 1024 / 1024;
     const perIterationKiB = summary.allocationBytesPerIteration / 1024;
     const flex = summary.flexMemory
-        ? ` programs=${summary.flexMemory.programs.programCount} graphNodes=${sum(summary.flexMemory.graphs.map(graph => graph.nodeCount))} expansionBuilds=${sum(summary.flexMemory.graphs.map(graph => graph.searchExpansionCount))} residueArrays=${summary.flexMemory.coordinator.residueArrayAllocationCount} frontierGrows=${summary.flexMemory.coordinator.frontierGrowCount}/${summary.flexMemory.coordinator.frontierIndexGrowCount}`
+        ? ` programs=${summary.flexMemory.programs.programCount} graphNodes=${sum(summary.flexMemory.graphs.map(graph => graph.nodeCount))} nodeTypes=${sum(summary.flexMemory.graphs.map(graph => graph.solidNodeCount))}/${sum(summary.flexMemory.graphs.map(graph => graph.plexNodeCount))} expanded=${summary.flexMemory.coordinator.expandedSolidNodeCount}/${summary.flexMemory.coordinator.expandedPlexNodeCount} expansionBuilds=${sum(summary.flexMemory.graphs.map(graph => graph.searchExpansionCount))} residueArrays=${summary.flexMemory.coordinator.residueArrayAllocationCount} frontierGrows=${summary.flexMemory.coordinator.frontierGrowCount}/${summary.flexMemory.coordinator.frontierIndexGrowCount}`
         : '';
     return [
         `${summary.backend}: ${Math.round(summary.ms)}ms`,
