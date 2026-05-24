@@ -24,7 +24,6 @@ interface ProjectionTotals {
 
 export interface FlexNativeSnapshotOptions {
     readonly resultComboMode?: ResultComboMode | undefined;
-    readonly materializeFactorizedFrontierEntries?: boolean | undefined;
 }
 
 export interface FlexNativeCheckpoint {
@@ -67,7 +66,7 @@ export class FlexSnapshotBuilder {
         const includeCombos = resultComboMode === RESULT_COMBO_MODE.EXACT;
         this.refreshResolvedProjection(state.results, includeCombos);
 
-        const pending = this.projectPending(options.materializeFactorizedFrontierEntries === true);
+        const pending = this.projectPending();
         const mass = this.createMass(state, this.aggregateTotals, pending);
         const pendingAggregates = state.pendingCount > 0 ? pending.pendingAggregates : undefined;
         const frontier = pendingAggregates
@@ -167,29 +166,17 @@ export class FlexSnapshotBuilder {
         totals.projectionLoss += sourceDelta - assignedDelta;
     }
 
-    private projectPending(materializeEntries: boolean): PendingProjection {
-        const entries: FactorizedFrontierEntry[] = [];
+    private projectPending(): PendingProjection {
         const projected = this.projector.projectPendingLazyAggregatesFromCursor(visitor => {
-            this.coordinator.forEachPending((graphId, nodeId, programId, mass, count, nodeKind) => {
+            this.coordinator.forEachPending((graphId, nodeId, programId, mass, count, _nodeKind) => {
                 const targetClueReachable = this.getTargetClueReachable(graphId, nodeId as number);
                 visitor(programId, mass, count, targetClueReachable);
-                if (materializeEntries) {
-                    entries.push(Object.freeze({
-                        graphId,
-                        nodeId: nodeId as number,
-                        programId,
-                        mass,
-                        count,
-                        nodeKind,
-                        ...(targetClueReachable !== undefined ? { targetClueReachable } : {})
-                    }));
-                }
             });
         });
 
         return {
             ...projected,
-            entries: Object.freeze(entries)
+            entries: EMPTY_FACTORIZED_FRONTIER_ENTRIES
         };
     }
 
@@ -243,6 +230,8 @@ interface PendingProjection {
     readonly clueIncompatible: bigint;
     readonly projectionLoss: bigint;
 }
+
+const EMPTY_FACTORIZED_FRONTIER_ENTRIES: readonly FactorizedFrontierEntry[] = Object.freeze([]);
 
 function createMutableComboMassAggregates(): MutableComboMassAggregates {
     return {

@@ -444,10 +444,7 @@ export class FlexCoordinator {
     ): T {
         const graph = this.getGraph(graphId);
         if (graph.withSearchExpansion) return graph.withSearchExpansion(nodeId, consumer);
-        const expansion = graph.getSearchExpansion
-            ? graph.getSearchExpansion(nodeId)
-            : createSearchExpansionAdapter(graph.getExpansion(nodeId));
-        return consumer(expansion);
+        return consumer(createSearchExpansionAdapter(graph.getExpansion(nodeId)));
     }
 
     private validateMaxIterations(maxIterations: number): void {
