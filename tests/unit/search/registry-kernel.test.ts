@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { RegistryFactory, RegistryKernel } from '#lib/index.js';
+import { RegistryFactory } from '#core/factory.js';
+import { RegistryKernel } from '#lib/search/index.js';
 import type { SearchPool } from '#lib/search/index.js';
 
 describe('RegistryKernel', () => {

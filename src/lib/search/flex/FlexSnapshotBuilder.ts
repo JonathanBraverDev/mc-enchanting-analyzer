@@ -1,4 +1,4 @@
-import { ENGINE_FRONTIER_KIND, createFactorizedEngineFrontier, type ComboMassAggregates, type EngineSearchSnapshot, type FactorizedFrontierEntry, type PendingFrontierAggregates } from '#lib/search/SearchRun.js';
+import { ENGINE_FRONTIER_KIND, createFactorizedEngineFrontier, type ComboMassAggregates, type EngineSearchSnapshot, type FactorizedFrontierEntry, type PendingFrontierAggregates } from '#lib/search/SearchSnapshot.js';
 import { ProbabilityMassAccountant, PROJECTION_MASS_BUCKET, PROJECTION_MASS_OPERATION } from '#engine/search/ProbabilityMassAccountant.js';
 import { PACKING_CONSTANTS } from '#constants/engine.js';
 import type { MassAccountingBreakdown, MassAccountingDetailBucket, MassAccountingDetails, MassAccountingOperationDetails, MassAccountingStageDetails } from '#types/mass.js';

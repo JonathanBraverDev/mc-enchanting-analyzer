@@ -5,10 +5,9 @@ import { describe, it, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { RegistryFactory } from '#core/factory.js';
 import { EngineFactory } from '#engine/factory.js';
-import { CacheManager } from '#engine/cache/CacheManager.js';
 import { SummaryService } from '#services/SummaryService.js';
 import { TEST_DATA } from '#tests/infra/test-data.js';
-import { CacheConfig, SearchResult } from '#types/index.js';
+import { SearchResult } from '#types/index.js';
 
 const ITEM = TEST_DATA.ITEMS.SWORD;
 const XP = 30;
@@ -16,16 +15,12 @@ const MATERIAL = TEST_DATA.MATERIALS.DIAMOND;
 const VERSION = TEST_DATA.VERSIONS.MODERN;
 
 describe('EnchantEngine: sequential checkpoint aggregation', () => {
-    const cacheConfig: CacheConfig = { comboOtherSize: 1000, comboBookSize: 1000, poolSize: 1000 };
-    let cache: CacheManager;
-
     function createEngine() {
-        cache = new CacheManager(cacheConfig);
-        return EngineFactory.create(RegistryFactory.build(VERSION), { cache });
+        return EngineFactory.create(RegistryFactory.build(VERSION));
     }
 
     afterEach(() => {
-        cache.clearAll();
+        createEngine().resetCaches();
     });
 
     it('sequential checkpoints produce same final result as single checkpoint search', async () => {

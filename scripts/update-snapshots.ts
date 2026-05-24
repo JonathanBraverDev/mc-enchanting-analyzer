@@ -3,7 +3,8 @@ import { SnapshotUtils } from '#tests/infra/test-utils.js';
 import { TEST_DEFAULTS } from '#constants/testing.js';
 import { ClueValidator } from '#core/clue.js';
 import { SummaryService } from '#services/SummaryService.js';
-import { RegistryKernel, SearchRun } from '#lib/search/index.js';
+import { RegistryKernel } from '#lib/search/index.js';
+import { SearchRun } from '#lib/search/SearchRun.js';
 import { EnchantStats } from '#types/index.js';
 
 interface SnapshotCase {

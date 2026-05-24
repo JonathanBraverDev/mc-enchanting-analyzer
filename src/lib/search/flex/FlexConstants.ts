@@ -1,6 +1,6 @@
-/** Flex-owned LRU capacities. Keep these separate from V7 SearchStateCache. */
+/** V8 grouped-runtime LRU capacities. Keep these separate from legacy diagnostic caches. */
 export const FLEX_CACHE_LIMITS = Object.freeze({
-    /** Resumable Flex XP-cell runs. Mirrors V7 run-cache budgets for fair comparison. */
+    /** Resumable XP-cell runs. */
     RUNS: 128,
     /** Mutated-registry reduced-key checks are small and cheap enough to retain more broadly. */
     REDUCED_KEY_INVARIANTS: 256

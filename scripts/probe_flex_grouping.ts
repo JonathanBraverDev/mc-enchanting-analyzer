@@ -1,6 +1,7 @@
 import { performance } from 'node:perf_hooks';
 import { ClueValidator } from '#core/clue.js';
-import { RegistryFactory, RegistryKernel } from '#lib/index.js';
+import { RegistryFactory } from '#core/factory.js';
+import { RegistryKernel } from '#lib/search/index.js';
 import { GroupedFlexSearchRun, type FlexRunMemoryStats } from '#lib/search/flex/index.js';
 
 interface CliOptions {

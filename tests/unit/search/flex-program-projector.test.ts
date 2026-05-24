@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { PackedCombo, PackedEnchant } from '#types/index.js';
-import type { PendingFrontierAggregates } from '#lib/search/SearchRun.js';
+import type { PendingFrontierAggregates } from '#lib/search/SearchSnapshot.js';
 import { ComboUtils } from '#utils/index.js';
 import {
     FlexProgramStore,

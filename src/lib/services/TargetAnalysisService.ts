@@ -7,7 +7,7 @@ import type {
     TargetAnalysisResult,
     TargetRequirementInput
 } from '#types/index.js';
-import type { PendingFrontierEntry } from '#lib/search/SearchRun.js';
+import type { PendingFrontierEntry } from '#lib/search/SearchSnapshot.js';
 import { ComboUtils } from '#utils/index.js';
 
 export interface TargetAnalysisRequest {

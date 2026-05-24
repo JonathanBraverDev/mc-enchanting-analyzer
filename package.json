@@ -2,6 +2,7 @@
   "name": "mc-enchanting-analyzer",
   "version": "7.4.8",
   "devDependencies": {
+    "@microsoft/api-extractor": "^7.58.7",
     "@playwright/test": "^1.58.2",
     "@types/chart.js": "^2.9.41",
     "@types/node": "^25.5.0",
@@ -27,7 +28,7 @@
     "build:bundle": "node scripts/bundle-worker.js",
     "build:standalone": "npm run build && node scripts/inline-assets.js",
     "test": "npm run test:all",
-    "test:all": "npm run build && npm run lint && npm run lint:imports && npm run test:release-policy && npm run test:engine && npm run test:ui",
+    "test:all": "npm run build && npm run lint && npm run lint:imports && npm run api:check && npm run test:release-policy && npm run test:engine && npm run test:ui",
     "test:engine": "node scripts/run-engine-tests.cjs",
     "test:engine:check": "node scripts/run-engine-tests.cjs --check",
     "test:snapshots": "NODE_OPTIONS=--max-old-space-size=8192 tsx --test tests/unit/engine/engine.snapshots.test.ts tests/unit/engine/engine-modern-book-snapshot.test.ts",
@@ -42,7 +43,10 @@
     "lint": "tsc --noEmit",
     "lint:imports": "tsx scripts/lint-imports.ts",
     "release": "npm run test:all && npm run build:standalone",
-    "test:release-policy": "node --test tests/unit/release-changelog-policy.test.cjs"
+    "test:release-policy": "node --test tests/unit/release-changelog-policy.test.cjs",
+    "api:types": "tsc -p tsconfig.api.json",
+    "api:check": "npm run api:types && api-extractor run",
+    "api:update": "npm run api:types && api-extractor run --local"
   },
   "imports": {
     "#lib/*": "./src/lib/*",

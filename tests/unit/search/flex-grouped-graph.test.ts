@@ -1,14 +1,12 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import {
-    RegistryFactory,
-    RegistryKernel,
-    SearchGraph,
-    SearchRun,
-    type PackedCombo
-} from '#lib/index.js';
+import { RegistryFactory } from '#core/factory.js';
+import { RegistryKernel } from '#lib/search/index.js';
+import { SearchGraph } from '#lib/search/SearchGraph.js';
+import { SearchRun } from '#lib/search/SearchRun.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
-import type { SearchRunSnapshot } from '#lib/search/SearchRun.js';
+import type { SearchRunSnapshot } from '#lib/search/SearchSnapshot.js';
+import { type PackedCombo } from '#types/index.js';
 import { ComboUtils, PRECISION, ProbUtils } from '#utils/index.js';
 import type { RegistryState } from '#types/index.js';
 import {

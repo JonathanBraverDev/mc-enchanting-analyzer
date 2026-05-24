@@ -10,7 +10,7 @@ import type {
     TargetLevelClueAdvisorView,
     TargetLevelClueRecommendationView
 } from '#types/index.js';
-import type { PendingFrontierEntry } from '#lib/search/SearchRun.js';
+import type { PendingFrontierEntry } from '#lib/search/SearchSnapshot.js';
 import { ComboUtils, PRECISION, ProbUtils } from '#utils/index.js';
 
 export interface TargetClueAdvisorRequest {

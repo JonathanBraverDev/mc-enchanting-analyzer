@@ -24,7 +24,7 @@ import { SummaryAggregationService } from '#services/SummaryAggregationService.j
 import { TargetAnalysisService } from '#services/TargetAnalysisService.js';
 import { TargetClueAdvisorService } from '#services/TargetClueAdvisorService.js';
 import { ClueSignalAdvisorService } from '#services/ClueSignalAdvisorService.js';
-import { getMaterializedFrontierEntries, type EngineSearchSnapshot } from '#lib/search/SearchRun.js';
+import { getMaterializedFrontierEntries, type EngineSearchSnapshot } from '#lib/search/SearchSnapshot.js';
 
 
 export class SnapshotService {

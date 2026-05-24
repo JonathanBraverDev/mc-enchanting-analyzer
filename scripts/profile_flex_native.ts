@@ -3,7 +3,7 @@ import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import inspector from 'node:inspector';
 import { EngineFactory } from '#engine/factory.js';
-import { ENGINE_FRONTIER_KIND } from '#lib/search/SearchRun.js';
+import { ENGINE_FRONTIER_KIND } from '#lib/search/SearchSnapshot.js';
 import type { EngineInstrumentation, SearchResult } from '#types/index.js';
 
 type Backend = 'concrete' | 'flex';
@@ -183,7 +183,7 @@ function postInspector<T = Record<string, unknown>>(
     });
 }
 
-async function runSearch(options: CliOptions, backend: Backend): Promise<SearchResult> {
+async function runSearch(options: CliOptions, _backend: Backend): Promise<SearchResult> {
     const engine = EngineFactory.createForVersion(options.version);
     return engine.searchToCheckpoint({
         item: options.item,
@@ -193,8 +193,7 @@ async function runSearch(options: CliOptions, backend: Backend): Promise<SearchR
         targetClassifiedMass: options.targetClassifiedMass,
         probabilityFloor: 0n,
         useCache: false,
-        instrumentation: createInstrumentation(),
-        ...(backend === 'flex' ? { searchBackend: 'flex' as const } : {})
+        instrumentation: createInstrumentation()
     });
 }
 

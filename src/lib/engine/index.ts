@@ -12,11 +12,28 @@ import { getDefaultStatsCheckpoint } from '#core/config.js';
 export { EngineFactory } from './factory.js';
 
 /**
- * Core math and logic engine for Minecraft Enchanting.
- * Orchestrates distribution calculation, best-first search, and statistics aggregation.
- * Optimized for high-speed calculation via Dependency Injection.
+ * Public engine contract returned by `EngineFactory`.
+ *
+ * @public
  */
-export class EnchantEngine {
+export interface EnchantEngine {
+    readonly registry: BuiltRegistryState;
+    resetCaches(): void;
+    getCacheMetrics(): { distCache: { hits: number; misses: number }; poolCache: { hits: number; misses: number } };
+    destroy(): void;
+    getModifiedLevelDist(xp: number, enchantability: number, instrumentation?: EngineInstrumentation): { [level: number]: bigint };
+    getAvailablePool(item: string, level: number, bitset?: bigint): number[];
+    searchSequentialCheckpoints(request: SequentialCheckpointSearchRequest): Promise<SearchResult>;
+    searchToCheckpoint(request: CheckpointSearchRequest): Promise<SearchResult>;
+    getStats(request: CheckpointSearchRequest): Promise<EnchantStats>;
+}
+
+/**
+ * Concrete engine implementation wired by `EngineFactory`.
+ *
+ * @internal
+ */
+export class DefaultEnchantEngine implements EnchantEngine {
     private readonly _registry: BuiltRegistryState;
     get registry(): BuiltRegistryState { return this._registry; }
 

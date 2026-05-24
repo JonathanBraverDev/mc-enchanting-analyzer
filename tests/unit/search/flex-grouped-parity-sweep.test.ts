@@ -4,8 +4,10 @@ import { DATA } from '#data/index.js';
 import { RegistryFactory } from '#core/factory.js';
 import { getEligibleMaterials } from '#core/registry.js';
 import { getRegistryVersionBoundaries } from '#core/version-resolution.js';
-import { RegistryKernel, SearchRun, type PackedCombo } from '#lib/index.js';
+import { RegistryKernel } from '#lib/search/index.js';
+import { SearchRun } from '#lib/search/SearchRun.js';
 import { GroupedFlexSearchRun } from '#lib/search/flex/index.js';
+import { type PackedCombo } from '#types/index.js';
 
 const MASS_TOLERANCE = 1_000n;
 
