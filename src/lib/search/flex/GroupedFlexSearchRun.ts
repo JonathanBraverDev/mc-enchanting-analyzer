@@ -15,7 +15,7 @@ import { FlexCoordinator } from '#lib/search/flex/FlexCoordinator.js';
 import { FlexProgramStore } from '#lib/search/flex/FlexProgramStore.js';
 import { FlexProjector } from '#lib/search/flex/FlexProjector.js';
 import { GroupedFlexGraph } from '#lib/search/flex/GroupedFlexGraph.js';
-import { FlexSnapshotBuilder, type FlexNativeCheckpoint, type FlexNativeSnapshotOptions } from '#lib/search/flex/FlexSnapshotBuilder.js';
+import { FlexSnapshotBuilder, type FlexNativeCheckpoint } from '#lib/search/flex/FlexSnapshotBuilder.js';
 
 interface GroupedFlexGraphRecord {
     readonly id: number;
@@ -140,11 +140,8 @@ export class GroupedFlexSearchRun {
         return this.coordinator.scanActiveResidueStatsForDiagnostics();
     }
 
-    public buildEngineSnapshot(
-        state: FlexRunState = this.coordinator.state(),
-        options: FlexNativeSnapshotOptions = {}
-    ): FlexNativeCheckpoint {
-        return this.snapshotBuilder.build(state, options);
+    public buildEngineSnapshot(state: FlexRunState = this.coordinator.state()): FlexNativeCheckpoint {
+        return this.snapshotBuilder.build(state);
     }
 
     public getGraph(graphId: number): GroupedFlexGraph {
