@@ -60,6 +60,8 @@ export class FlexCoordinator {
     private activeResidueMass = 0n;
     private activeResidueRecordCount = 0;
     private residueArrayAllocationCount = 0;
+    private expandedSolidNodeCount = 0;
+    private expandedPlexNodeCount = 0;
     private _iterations = 0;
     private _lastExpandedMass = 0n;
     private _exitReason: EngineExitReason | undefined;
@@ -159,7 +161,9 @@ export class FlexCoordinator {
             frontierGrowCount: this.frontier.growCount,
             frontierIndexGrowCount: this.frontier.positionIndexGrowCount,
             residueArrayAllocationCount: this.residueArrayAllocationCount,
-            activeResidueRecordCount: this.activeResidueRecordCount
+            activeResidueRecordCount: this.activeResidueRecordCount,
+            expandedSolidNodeCount: this.expandedSolidNodeCount,
+            expandedPlexNodeCount: this.expandedPlexNodeCount
         };
     }
 
@@ -266,6 +270,12 @@ export class FlexCoordinator {
 
     private expand(current: FlexWorkItem, probabilityFloor: bigint): void {
         this.withSearchExpansion(current.graphId, current.nodeId, expansion => {
+            if (expansion.nodeKind === 'solid') {
+                this.expandedSolidNodeCount++;
+            } else {
+                this.expandedPlexNodeCount++;
+            }
+
             if (expansion.count === 0 && (expansion.totalWeight <= 0 || expansion.edgeCount === 0)) {
                 this.recordResolved(expansion.programId, current.mass);
                 return;

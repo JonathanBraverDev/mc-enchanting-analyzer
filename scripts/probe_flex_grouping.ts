@@ -18,7 +18,11 @@ interface SummedFlexGroupingStats {
     readonly cachedProgramCount: number;
     readonly graphCount: number;
     readonly graphNodeCount: number;
+    readonly solidNodeCount: number;
+    readonly plexNodeCount: number;
     readonly searchExpansionCount: number;
+    readonly expandedSolidNodeCount: number;
+    readonly expandedPlexNodeCount: number;
     readonly shapeCacheHitCount: number;
     readonly shapeCacheMissCount: number;
     readonly directExpansionBuildCount: number;
@@ -174,7 +178,11 @@ function sumStats(memory: FlexRunMemoryStats): SummedFlexGroupingStats {
         cachedProgramCount: memory.programs.cachedProgramCount,
         graphCount: memory.graphs.length,
         graphNodeCount: sum(memory.graphs.map(graph => graph.nodeCount)),
+        solidNodeCount: sum(memory.graphs.map(graph => graph.solidNodeCount)),
+        plexNodeCount: sum(memory.graphs.map(graph => graph.plexNodeCount)),
         searchExpansionCount: sum(memory.graphs.map(graph => graph.searchExpansionCount)),
+        expandedSolidNodeCount: memory.coordinator.expandedSolidNodeCount,
+        expandedPlexNodeCount: memory.coordinator.expandedPlexNodeCount,
         shapeCacheHitCount: sum(memory.graphs.map(graph => graph.shapeCacheHitCount)),
         shapeCacheMissCount: sum(memory.graphs.map(graph => graph.shapeCacheMissCount)),
         directExpansionBuildCount: sum(memory.graphs.map(graph => graph.directExpansionBuildCount)),
@@ -204,7 +212,11 @@ function printableStats(phase: string, stats: SummedFlexGroupingStats): Record<s
         programs: stats.programCount,
         cachedPrograms: stats.cachedProgramCount,
         graphNodes: stats.graphNodeCount,
+        solidNodes: stats.solidNodeCount,
+        plexNodes: stats.plexNodeCount,
         expansions: stats.searchExpansionCount,
+        expandedSolid: stats.expandedSolidNodeCount,
+        expandedPlex: stats.expandedPlexNodeCount,
         groupingBuilds: stats.groupingBuildCount,
         directBuilds: stats.directExpansionBuildCount,
         shapedBuilds: stats.shapedExpansionBuildCount,

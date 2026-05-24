@@ -77,6 +77,32 @@ describe('FlexCoordinator', () => {
         assert.strictEqual(snapshot.lastExpandedMass, 75n);
     });
 
+    it('counts expanded Solid and Plex nodes for diagnostics', () => {
+        const store = new FlexProgramStore();
+        const choiceProgram = store.appendChoice(store.empty, [
+            { packedEnchant: packed(1), weight: 1 },
+            { packedEnchant: packed(2), weight: 1 }
+        ]);
+        const graph = new TestFlexGraph();
+        graph.set(nodeId(0), Object.freeze({
+            node: store.createNode(nodeId(0), store.empty),
+            probContinue: PRECISION,
+            totalWeight: 1,
+            edges: Object.freeze([{ weight: 1, childId: nodeId(1) }]),
+            terminalReason: null
+        }));
+        graph.set(nodeId(1), terminalExpansion(store, nodeId(1), choiceProgram));
+
+        const run = new FlexCoordinator([graph]);
+        run.seedPending(0, nodeId(0), 100n);
+        const snapshot = run.searchToCheckpoint({ maxIterations: 2 });
+        const stats = run.getMemoryStats();
+
+        assert.strictEqual(snapshot.iterations, 2);
+        assert.strictEqual(stats.expandedSolidNodeCount, 1);
+        assert.strictEqual(stats.expandedPlexNodeCount, 1);
+    });
+
     it('can drain the equal-mass frontier band after an iteration cap', () => {
         const store = new FlexProgramStore();
         const firstProgram = store.appendFixed(store.empty, packed(1));

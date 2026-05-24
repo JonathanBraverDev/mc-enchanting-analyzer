@@ -225,6 +225,8 @@ export class GroupedFlexGraph implements FlexGraph {
     private lazyChoiceEmissionMemberVisitCount = 0;
     private shapePreparedEmissionAppendCount = 0;
     private debugExpansionCount = 0;
+    private solidNodeCount = 0;
+    private plexNodeCount = 0;
 
     public constructor(
         private readonly kernel: RegistryKernel,
@@ -305,6 +307,8 @@ export class GroupedFlexGraph implements FlexGraph {
     public getMemoryStats(): FlexGraphMemoryStats {
         return {
             nodeCount: this.size,
+            solidNodeCount: this.solidNodeCount,
+            plexNodeCount: this.plexNodeCount,
             searchExpansionCount: this.searchExpansionCount,
             debugExpansionCount: this.debugExpansionCount,
             shapeCacheHitCount: this.shapeCacheHitCount,
@@ -894,6 +898,11 @@ export class GroupedFlexGraph implements FlexGraph {
         this.programIds.push(programId);
         this.debugExpansionCache.push(undefined);
         this.nodeIndex.set(exclusionMask, stateKey, identityProgramId, id);
+        if (this.programs.hasChoice(programId)) {
+            this.plexNodeCount++;
+        } else {
+            this.solidNodeCount++;
+        }
         return id;
     }
 
