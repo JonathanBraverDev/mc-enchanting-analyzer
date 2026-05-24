@@ -15,6 +15,7 @@ scripts/v5-report-output/
 
 # Scratch / temporary analysis files
 scratch/
+tmp/
 
 # Profiling Artifacts
 /*.cpuprofile
