@@ -1,4 +1,4 @@
-import type { EngineExitReason, PackedCombo, PackedEnchant } from '#types/index.js';
+import type { EngineExitReason, PackedEnchant } from '#types/index.js';
 import type { MassAccountingBreakdown, MassAccountingDetails } from '#types/mass.js';
 import type { PendingFrontierAggregates } from '#lib/search/SearchRun.js';
 
@@ -75,10 +75,10 @@ export interface FlexExpansion {
 
 export interface FlexGraph {
     getExpansion(nodeId: FlexNodeId): FlexExpansion;
-    withSearchExpansion?<T>(nodeId: FlexNodeId, consumer: FlexSearchExpansionConsumer<T>): T;
-    getProgramId?(nodeId: FlexNodeId): FlexProgramId;
-    getNodeCount?(nodeId: FlexNodeId): number;
-    getNodeKind?(nodeId: FlexNodeId): FlexNode['kind'];
+    withSearchExpansion<T>(nodeId: FlexNodeId, consumer: FlexSearchExpansionConsumer<T>): T;
+    getProgramId(nodeId: FlexNodeId): FlexProgramId;
+    getNodeCount(nodeId: FlexNodeId): number;
+    getNodeKind(nodeId: FlexNodeId): FlexNode['kind'];
     getNode(nodeId: FlexNodeId): FlexNode;
 }
 
@@ -181,30 +181,6 @@ export interface FlexRunState {
 
 export interface FlexRunSnapshot extends FlexRunState {
     readonly pendingEntries: readonly FlexPendingEntry[];
-}
-
-export interface FlexProjectedResults {
-    readonly results: ReadonlyMap<PackedCombo, bigint>;
-    readonly projectionLoss: bigint;
-    readonly clueIncompatible: bigint;
-    readonly projectedMass: bigint;
-    readonly sourceMass: bigint;
-}
-
-export interface FlexProjectedPendingEntry {
-    readonly graphId: number;
-    readonly nodeId: FlexNodeId;
-    readonly mass: bigint;
-    readonly combo: PackedCombo;
-    readonly count: number;
-}
-
-export interface FlexProjectedPendingResults {
-    readonly pendingEntries: readonly FlexProjectedPendingEntry[];
-    readonly projectionLoss: bigint;
-    readonly clueIncompatible: bigint;
-    readonly projectedMass: bigint;
-    readonly sourceMass: bigint;
 }
 
 export interface FlexProjectedPendingAggregateResults {

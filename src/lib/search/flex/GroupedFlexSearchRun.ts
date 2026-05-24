@@ -6,9 +6,6 @@ import { PRECISION } from '#utils/index.js';
 import type {
     FlexCheckpointRequest,
     FlexNodeId,
-    FlexPendingEntry,
-    FlexProjectedPendingEntry,
-    FlexProjectedResults,
     FlexRunState,
     FlexRunSnapshot,
     FlexRunMemoryStats,
@@ -23,14 +20,6 @@ import { FlexSnapshotBuilder, type FlexNativeCheckpoint, type FlexNativeSnapshot
 interface GroupedFlexGraphRecord {
     readonly id: number;
     readonly graph: GroupedFlexGraph;
-}
-
-export interface GroupedFlexProjectedCheckpoint extends FlexProjectedResults {
-    readonly pendingEntries: readonly FlexProjectedPendingEntry[];
-    readonly projectedPendingMass: bigint;
-    readonly projectedPendingSourceMass: bigint;
-    readonly pendingProjectionLoss: bigint;
-    readonly pendingClueIncompatible: bigint;
 }
 
 export interface GroupedFlexSearchRunOptions {
@@ -158,21 +147,6 @@ export class GroupedFlexSearchRun {
         return this.snapshotBuilder.build(state, options);
     }
 
-    public projectSnapshot(snapshot: FlexRunSnapshot = this.snapshot()): GroupedFlexProjectedCheckpoint {
-        const projectedResults = this.projector.projectResults(snapshot.results);
-        const pendingEntries = this.withPendingClueReachability(snapshot.pendingEntries);
-        const projectedPending = this.projector.projectPendingWithDiagnostics(pendingEntries);
-
-        return Object.freeze({
-            ...projectedResults,
-            pendingEntries: projectedPending.pendingEntries,
-            projectedPendingMass: projectedPending.projectedMass,
-            projectedPendingSourceMass: projectedPending.sourceMass,
-            pendingProjectionLoss: projectedPending.projectionLoss,
-            pendingClueIncompatible: projectedPending.clueIncompatible
-        });
-    }
-
     public getGraph(graphId: number): GroupedFlexGraph {
         const graph = this.graphs[graphId];
         if (!graph) throw new Error(`Unknown GroupedFlex graph ID ${graphId}.`);
@@ -193,19 +167,6 @@ export class GroupedFlexSearchRun {
         this.graphs.push(record.graph);
         this.graphsBySignature.set(pool.signature, record);
         return record;
-    }
-
-    private withPendingClueReachability(entries: readonly FlexPendingEntry[]): readonly FlexPendingEntry[] {
-        if (this.targetClueId === undefined) return entries;
-
-        return Object.freeze(entries.map(entry => Object.freeze({
-            ...entry,
-            targetClueReachable: this.isTargetClueReachable(entry)
-        })));
-    }
-
-    private isTargetClueReachable(entry: FlexPendingEntry): boolean {
-        return this.isTargetClueReachableById(entry.graphId, entry.nodeId as number) === true;
     }
 
     private isTargetClueReachableById(graphId: number, nodeId: number): boolean | undefined {

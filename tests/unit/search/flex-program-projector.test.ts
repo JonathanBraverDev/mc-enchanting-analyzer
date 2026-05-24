@@ -270,55 +270,6 @@ describe('FlexProjector', () => {
         assert.strictEqual(projected.projectedMass, 5n);
     });
 
-    it('projects pending factorized programs into concrete-compatible pending rows', () => {
-        const store = new FlexProgramStore();
-        const projector = new FlexProjector(store, enchantToIndex);
-        const program = store.appendChoice(store.empty, [
-            { packedEnchant: sharpness, weight: 1 },
-            { packedEnchant: smite, weight: 2 }
-        ]);
-        const pending: FlexPendingEntry[] = [{
-            graphId: 0,
-            nodeId: nodeId(7),
-            programId: program,
-            mass: 10n,
-            count: 1,
-            nodeKind: 'plex'
-        }];
-
-        const projected = projector.projectPending(pending);
-
-        assert.deepStrictEqual(
-            projected.map(entry => ({ combo: entry.combo, mass: entry.mass, count: entry.count })),
-            [
-                { combo: combo(sharpness), mass: 3n, count: 1 },
-                { combo: combo(smite), mass: 6n, count: 1 }
-            ]
-        );
-    });
-
-    it('keeps pending projection pre-book-removal', () => {
-        const store = new FlexProgramStore();
-        const projector = new FlexProjector(store, enchantToIndex, { applyBookRemoval: true });
-        const first = store.appendFixed(store.empty, sharpness);
-        const program = store.appendFixed(first, smite);
-        const pending: FlexPendingEntry[] = [{
-            graphId: 0,
-            nodeId: nodeId(11),
-            programId: program,
-            mass: 10n,
-            count: 2,
-            nodeKind: 'solid'
-        }];
-
-        const projected = projector.projectPending(pending);
-
-        assert.deepStrictEqual(
-            projected.map(entry => ({ combo: entry.combo, mass: entry.mass, count: entry.count })),
-            [{ combo: combo(sharpness, smite), mass: 10n, count: 2 }]
-        );
-    });
-
     it('harvests aggregate pending stats without materializing pending rows', () => {
         const store = new FlexProgramStore();
         const projector = new FlexProjector(store, enchantToIndex);
@@ -435,18 +386,16 @@ describe('FlexProjector', () => {
             nodeKind: 'plex'
         }];
 
-        const projected = projector.projectPendingWithDiagnostics(pending);
+        const projected = projector.projectPendingAggregates(pending);
+        const clueJoint = projected.pendingAggregates.clueJoint;
 
-        assert.deepStrictEqual(
-            projected.pendingEntries.map(entry => ({ combo: entry.combo, mass: entry.mass, count: entry.count })),
-            [
-                { combo: combo(sharpness, looting), mass: 8n, count: 2 }
-            ]
-        );
         assert.strictEqual(projected.projectedMass, 8n);
         assert.strictEqual(projected.clueIncompatible, 4n);
         assert.strictEqual(projected.projectionLoss, 0n);
         assert.strictEqual(projected.projectedMass + projected.clueIncompatible + projected.projectionLoss, projected.sourceMass);
+        assert.strictEqual(projected.pendingAggregates.shownClueDistribution.get(sharpness), 4n);
+        assert.ok(clueJoint);
+        assert.strictEqual(clueJoint.knownSpace, 4n);
     });
 
     it('keeps pending branches that can still reach the exact clue', () => {
@@ -463,12 +412,8 @@ describe('FlexProjector', () => {
             targetClueReachable: true
         }];
 
-        const projected = projector.projectPendingWithDiagnostics(pending);
+        const projected = projector.projectPendingAggregates(pending);
 
-        assert.deepStrictEqual(
-            projected.pendingEntries.map(entry => ({ combo: entry.combo, mass: entry.mass, count: entry.count })),
-            [{ combo: combo(looting), mass: 10n, count: 1 }]
-        );
         assert.strictEqual(projected.projectedMass, 10n);
         assert.strictEqual(projected.clueIncompatible, 0n);
         assert.strictEqual(projected.projectionLoss, 0n);
