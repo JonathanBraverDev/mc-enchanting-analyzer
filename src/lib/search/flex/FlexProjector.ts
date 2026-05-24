@@ -5,9 +5,6 @@ import type {
     FlexPendingEntry,
     FlexProgram,
     FlexProjectedPendingAggregateResults,
-    FlexProjectedPendingEntry,
-    FlexProjectedPendingResults,
-    FlexProjectedResults,
     FlexProgramId
 } from '#lib/search/flex/FlexTypes.js';
 import { FlexProgramStore } from '#lib/search/flex/FlexProgramStore.js';
@@ -47,7 +44,13 @@ export class FlexProjector {
 
     private readonly pendingProgramScratch: FlexProgram[number][] = [];
 
-    public projectResults(results: ReadonlyMap<FlexProgramId, bigint>): FlexProjectedResults {
+    public projectResults(results: ReadonlyMap<FlexProgramId, bigint>): {
+        readonly results: ReadonlyMap<PackedCombo, bigint>;
+        readonly projectionLoss: bigint;
+        readonly clueIncompatible: bigint;
+        readonly projectedMass: bigint;
+        readonly sourceMass: bigint;
+    } {
         const projected = new Map<PackedCombo, bigint>();
         let sourceMass = 0n;
         let projectedMass = 0n;
@@ -78,53 +81,6 @@ export class FlexProjector {
 
         return Object.freeze({
             results: new Map(projected),
-            projectionLoss,
-            clueIncompatible,
-            projectedMass,
-            sourceMass
-        });
-    }
-
-    public projectPending(entries: readonly FlexPendingEntry[]): readonly FlexProjectedPendingEntry[] {
-        return this.projectPendingWithDiagnostics(entries).pendingEntries;
-    }
-
-    public projectPendingWithDiagnostics(entries: readonly FlexPendingEntry[]): FlexProjectedPendingResults {
-        const pendingEntries: FlexProjectedPendingEntry[] = [];
-        let sourceMass = 0n;
-        let projectedMass = 0n;
-        let projectionLoss = 0n;
-        let clueIncompatible = 0n;
-
-        for (const entry of entries) {
-            const program = this.programs.getProgram(entry.programId);
-            sourceMass += entry.mass;
-
-            let assigned = 0n;
-            this.visitProgramFactors(program, (combo, count, numerator, denominator, matchesTargetClue) => {
-                const share = (entry.mass * numerator) / denominator;
-                assigned += share;
-                if (share === 0n) return;
-
-                if (!this.isPendingClueCompatible(matchesTargetClue, entry.targetClueReachable)) {
-                    clueIncompatible += share;
-                    return;
-                }
-
-                projectedMass += share;
-                pendingEntries.push({
-                    graphId: entry.graphId,
-                    nodeId: entry.nodeId,
-                    mass: share,
-                    combo,
-                    count
-                });
-            });
-            projectionLoss += entry.mass - assigned;
-        }
-
-        return Object.freeze({
-            pendingEntries: Object.freeze(pendingEntries),
             projectionLoss,
             clueIncompatible,
             projectedMass,
@@ -335,10 +291,6 @@ export class FlexProjector {
 
     private isClueCompatible(matchesTargetClue: boolean): boolean {
         return this.options.targetClueId === undefined || matchesTargetClue;
-    }
-
-    private isPendingClueCompatible(matchesTargetClue: boolean, targetClueReachable: boolean | undefined): boolean {
-        return this.options.targetClueId === undefined || matchesTargetClue || targetClueReachable === true;
     }
 
     private visitProgramFactors(

@@ -58,17 +58,17 @@ function assertGroupedFlexParity(testCase: GroupedFlexParityCase): void {
     const request = { exhaustive: true } as const;
     const concrete = concreteRun.searchToCheckpoint(request);
     const flex = groupedRun.searchToCheckpoint(request);
-    const projected = groupedRun.projectSnapshot(flex);
+    const native = groupedRun.buildEngineSnapshot(flex);
 
     assert.strictEqual(concrete.fullyResolved, true, label(testCase, 'concrete fully resolved'));
     assert.strictEqual(flex.fullyResolved, true, label(testCase, 'Flex fully resolved'));
-    assert.strictEqual(projected.results.has(0 as PackedCombo), false, label(testCase, 'no combo row 0'));
+    assert.strictEqual(native.snapshot.results.has(0 as PackedCombo), false, label(testCase, 'no combo row 0'));
     assert.strictEqual(
-        projected.projectedMass + projected.projectionLoss,
-        projected.sourceMass,
+        BigInt(native.snapshot.mass.units!.resolved) + native.resolvedClueIncompatible + native.resolvedProjectionLoss,
+        BigInt(flex.mass.units!.resolved),
         label(testCase, 'projected mass conservation')
     );
-    assertProjectedRowsApproximatelyEqual(projected.results, concrete.results, testCase);
+    assertProjectedRowsApproximatelyEqual(native.snapshot.results, concrete.results, testCase);
 }
 
 function assertProjectedRowsApproximatelyEqual(

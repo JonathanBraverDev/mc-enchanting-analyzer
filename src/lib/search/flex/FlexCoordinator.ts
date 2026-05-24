@@ -5,7 +5,6 @@ import { AsyncUtils, PRECISION, ProbUtils } from '#utils/index.js';
 import type {
     FlexCheckpointRequest,
     FlexCoordinatorMemoryStats,
-    FlexExpansion,
     FlexGraph,
     FlexNodeId,
     FlexPendingEntry,
@@ -452,9 +451,7 @@ export class FlexCoordinator {
         nodeId: FlexNodeId,
         consumer: (expansion: FlexSearchExpansion) => T
     ): T {
-        const graph = this.getGraph(graphId);
-        if (graph.withSearchExpansion) return graph.withSearchExpansion(nodeId, consumer);
-        return consumer(createSearchExpansionAdapter(graph.getExpansion(nodeId)));
+        return this.getGraph(graphId).withSearchExpansion(nodeId, consumer);
     }
 
     private validateMaxIterations(maxIterations: number): void {
@@ -477,15 +474,15 @@ export class FlexCoordinator {
     }
 
     private getNodeProgramId(graph: FlexGraph, nodeId: FlexNodeId): FlexProgramId {
-        return graph.getProgramId?.(nodeId) ?? graph.getNode(nodeId).programId;
+        return graph.getProgramId(nodeId);
     }
 
     private getNodeCount(graph: FlexGraph, nodeId: FlexNodeId): number {
-        return graph.getNodeCount?.(nodeId) ?? graph.getNode(nodeId).count;
+        return graph.getNodeCount(nodeId);
     }
 
     private getNodeKind(graph: FlexGraph, nodeId: FlexNodeId): 'solid' | 'plex' {
-        return graph.getNodeKind?.(nodeId) ?? graph.getNode(nodeId).kind;
+        return graph.getNodeKind(nodeId);
     }
 
     private assertGraph(graphId: number): void {
@@ -784,28 +781,4 @@ class FlexFrontierPositionIndex {
         while (size < value) size <<= 1;
         return size;
     }
-}
-
-function createSearchExpansionAdapter(expansion: FlexExpansion): FlexSearchExpansion {
-    const edgeWeights = new Array<number>(expansion.edges.length);
-    const edgeChildIds = new Array<number>(expansion.edges.length);
-    for (let edgeIndex = 0; edgeIndex < expansion.edges.length; edgeIndex++) {
-        const edge = expansion.edges[edgeIndex]!;
-        edgeWeights[edgeIndex] = edge.weight;
-        edgeChildIds[edgeIndex] = edge.childId as number;
-    }
-
-    return {
-        nodeId: expansion.node.id,
-        programId: expansion.node.programId,
-        nodeKind: expansion.node.kind,
-        count: expansion.node.count,
-        probContinue: expansion.probContinue,
-        totalWeight: expansion.totalWeight,
-        edgeCount: expansion.edges.length,
-        edgeWeights,
-        edgeChildIds,
-        clueIncompatibleWeight: expansion.clueIncompatibleWeight,
-        terminalReason: expansion.terminalReason
-    };
 }

@@ -8,7 +8,8 @@ import {
     FlexProgramStore,
     type FlexExpansion,
     type FlexGraph,
-    type FlexNodeId
+    type FlexNodeId,
+    type FlexSearchExpansion
 } from '#lib/search/flex/index.js';
 
 const packed = (id: number, rank = 1): PackedEnchant => ((id << 8) | rank) as PackedEnchant;
@@ -29,8 +30,37 @@ class TestFlexGraph implements FlexGraph {
         return expansion;
     }
 
+    public withSearchExpansion<T>(nodeIdValue: FlexNodeId, consumer: (expansion: FlexSearchExpansion) => T): T {
+        const expansion = this.getExpansion(nodeIdValue);
+        return consumer({
+            nodeId: expansion.node.id,
+            programId: expansion.node.programId,
+            nodeKind: expansion.node.kind,
+            count: expansion.node.count,
+            probContinue: expansion.probContinue,
+            totalWeight: expansion.totalWeight,
+            edgeCount: expansion.edges.length,
+            edgeWeights: expansion.edges.map(edge => edge.weight),
+            edgeChildIds: expansion.edges.map(edge => edge.childId as number),
+            clueIncompatibleWeight: expansion.clueIncompatibleWeight,
+            terminalReason: expansion.terminalReason
+        });
+    }
+
     public getNode(nodeIdValue: FlexNodeId): FlexExpansion['node'] {
         return this.getExpansion(nodeIdValue).node;
+    }
+
+    public getProgramId(nodeIdValue: FlexNodeId): FlexExpansion['node']['programId'] {
+        return this.getNode(nodeIdValue).programId;
+    }
+
+    public getNodeCount(nodeIdValue: FlexNodeId): number {
+        return this.getNode(nodeIdValue).count;
+    }
+
+    public getNodeKind(nodeIdValue: FlexNodeId): FlexExpansion['node']['kind'] {
+        return this.getNode(nodeIdValue).kind;
     }
 }
 

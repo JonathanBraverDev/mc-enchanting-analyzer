@@ -45,8 +45,6 @@ const DEFAULT_TOP = 15;
 
 const flexProjectionFunctions = new Set([
     'projectResults',
-    'projectSnapshot',
-    'projectPendingWithDiagnostics',
     'projectPendingAggregates',
     'getPendingClueSplit',
     'addPendingProgramAggregate',
@@ -58,15 +56,10 @@ const flexProjectionFunctions = new Set([
     'createPendingClueJointAggregates',
     'freezePendingClueJointAggregates',
     'addPendingAggregateContribution',
-    'addMaterializedPendingContribution',
     'addFrontierContribution',
-    'toCompatibleFlexSearchRunSnapshot',
-    'toCompatibleFlexMass',
-    'toCompatibleFlexMassDetails',
     'createFactorizedEngineFrontier',
     'createMaterializedEngineFrontier',
     'visitProgramFactors',
-    'materializeBookFactors',
     'visit',
     'pack'
 ]);
