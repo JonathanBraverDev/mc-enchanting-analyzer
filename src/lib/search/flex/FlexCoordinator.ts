@@ -35,7 +35,7 @@ interface FlexWorkItem {
 }
 
 interface FlexForwardingResidueRecord {
-    readonly residues: BigUint64Array;
+    readonly residues: Uint32Array;
     readonly denominator: bigint;
     readonly residueMass: bigint;
     readonly nonZeroCount: number;
@@ -134,8 +134,15 @@ export class FlexCoordinator {
 
     public forEachPending(callback: FlexPendingEntryVisitor): void {
         this.frontier.forEach((graphId, nodeId, mass) => {
-            const node = this.getGraph(graphId).getNode(nodeId);
-            callback(graphId, nodeId, node.programId, mass, node.count, node.kind);
+            const graph = this.getGraph(graphId);
+            callback(
+                graphId,
+                nodeId,
+                this.getNodeProgramId(graph, nodeId),
+                mass,
+                this.getNodeCount(graph, nodeId),
+                this.getNodeKind(graph, nodeId)
+            );
         });
     }
 
@@ -165,9 +172,9 @@ export class FlexCoordinator {
                 let residueNumerator = 0n;
                 let nonZeroCount = 0;
                 for (const residue of record.residues) {
-                    if (residue === 0n) continue;
+                    if (residue === 0) continue;
                     nonZeroCount++;
-                    residueNumerator += residue;
+                    residueNumerator += BigInt(residue);
                 }
                 count += nonZeroCount;
                 mass += residueNumerator / record.denominator;
@@ -300,9 +307,8 @@ export class FlexCoordinator {
         const clueIncompatibleWeight = expansion.clueIncompatibleWeight ?? 0;
         const clueIncompatibleIndex = expansion.edgeCount;
         const residueLength = expansion.edgeCount + (clueIncompatibleWeight > 0 ? 1 : 0);
-        let nextResidues: BigUint64Array | undefined;
-        let assigned = 0n;
-        let standaloneAssigned = 0n;
+        let nextResidues: Uint32Array | undefined;
+        let promotedMass = 0n;
         let nextResidueNumerator = 0n;
         let nextResidueNonZeroCount = 0;
         let pendingMass = 0n;
@@ -312,34 +318,36 @@ export class FlexCoordinator {
             if (edgeWeight <= 0) continue;
 
             const weight = BigInt(edgeWeight);
-            const numerator = (mass * weight) + (oldResidues?.residues[edgeIndex] ?? 0n);
+            const baseNumerator = mass * weight;
+            const oldResidue = oldResidues ? BigInt(oldResidues.residues[edgeIndex] ?? 0) : 0n;
+            const numerator = baseNumerator + oldResidue;
             const childMass = numerator / totalWeight;
             const edgeResidue = numerator - (childMass * totalWeight);
             if (edgeResidue !== 0n) {
                 nextResidues ??= this.createResidueArray(residueLength);
-                nextResidues[edgeIndex] = edgeResidue;
+                nextResidues[edgeIndex] = Number(edgeResidue);
                 nextResidueNonZeroCount++;
             }
             nextResidueNumerator += edgeResidue;
-            assigned += childMass;
-            standaloneAssigned += (mass * BigInt(edgeWeight)) / totalWeight;
+            if (oldResidue !== 0n) promotedMass += childMass - (baseNumerator / totalWeight);
             pendingMass += childMass;
             this.pushPending(graphId, expansion.edgeChildIds[edgeIndex]! as FlexNodeId, childMass);
         }
 
         if (clueIncompatibleWeight > 0) {
             const weight = BigInt(clueIncompatibleWeight);
-            const numerator = (mass * weight) + (oldResidues?.residues[clueIncompatibleIndex] ?? 0n);
+            const baseNumerator = mass * weight;
+            const oldResidue = oldResidues ? BigInt(oldResidues.residues[clueIncompatibleIndex] ?? 0) : 0n;
+            const numerator = baseNumerator + oldResidue;
             const childMass = numerator / totalWeight;
             const edgeResidue = numerator - (childMass * totalWeight);
             if (edgeResidue !== 0n) {
                 nextResidues ??= this.createResidueArray(residueLength);
-                nextResidues[clueIncompatibleIndex] = edgeResidue;
+                nextResidues[clueIncompatibleIndex] = Number(edgeResidue);
                 nextResidueNonZeroCount++;
             }
             nextResidueNumerator += edgeResidue;
-            assigned += childMass;
-            standaloneAssigned += (mass * weight) / totalWeight;
+            if (oldResidue !== 0n) promotedMass += childMass - (baseNumerator / totalWeight);
             this.cluePruneMass.record(SEARCH_MASS_BUCKET.ClueIncompatible, childMass);
         }
 
@@ -349,7 +357,7 @@ export class FlexCoordinator {
             : undefined);
         if (pendingMass > 0n) this.frontierMass.record(SEARCH_MASS_BUCKET.Pending, pendingMass);
         this.recordResidueDelta(oldResidueMass, newResidueMass);
-        this.recordResiduePromotion(assigned - standaloneAssigned);
+        this.recordResiduePromotion(promotedMass);
     }
 
     private recordResolved(programId: FlexProgramId, mass: bigint): void {
@@ -366,14 +374,14 @@ export class FlexCoordinator {
     private getPendingEntries(): FlexPendingEntry[] {
         const entries: FlexPendingEntry[] = [];
         this.frontier.forEach((graphId, nodeId, mass) => {
-            const node = this.getGraph(graphId).getNode(nodeId);
+            const graph = this.getGraph(graphId);
             entries.push(Object.freeze({
                 graphId,
                 nodeId,
-                programId: node.programId,
+                programId: this.getNodeProgramId(graph, nodeId),
                 mass,
-                count: node.count,
-                nodeKind: node.kind
+                count: this.getNodeCount(graph, nodeId),
+                nodeKind: this.getNodeKind(graph, nodeId)
             }));
         });
         return entries;
@@ -424,9 +432,9 @@ export class FlexCoordinator {
         }
     }
 
-    private createResidueArray(length: number): BigUint64Array {
+    private createResidueArray(length: number): Uint32Array {
         this.residueArrayAllocationCount++;
-        return new BigUint64Array(length);
+        return new Uint32Array(length);
     }
 
     private withSearchExpansion<T>(
@@ -459,6 +467,18 @@ export class FlexCoordinator {
     private getGraph(graphId: number): FlexGraph {
         this.assertGraph(graphId);
         return this.graphs[graphId]!;
+    }
+
+    private getNodeProgramId(graph: FlexGraph, nodeId: FlexNodeId): FlexProgramId {
+        return graph.getProgramId?.(nodeId) ?? graph.getNode(nodeId).programId;
+    }
+
+    private getNodeCount(graph: FlexGraph, nodeId: FlexNodeId): number {
+        return graph.getNodeCount?.(nodeId) ?? graph.getNode(nodeId).count;
+    }
+
+    private getNodeKind(graph: FlexGraph, nodeId: FlexNodeId): 'solid' | 'plex' {
+        return graph.getNodeKind?.(nodeId) ?? graph.getNode(nodeId).kind;
     }
 
     private assertGraph(graphId: number): void {
