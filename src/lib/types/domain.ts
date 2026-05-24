@@ -1,4 +1,8 @@
-/** Maps rank display strings to numeric rank values. */
+/**
+ * Maps rank display strings to numeric rank values.
+ *
+ * @public
+ */
 export interface RomanMap {
   [key: string]: number;
 }
@@ -6,7 +10,11 @@ export interface RomanMap {
 /** Branded type for numeric enchantment packed values (id << 8 | rank). */
 export type NumericEnchant = number & { readonly __brand: unique symbol };
 
-/** Maps rank names to [minXP, maxXP] level ranges for an enchantment. */
+/**
+ * Maps rank names to [minXP, maxXP] level ranges for an enchantment.
+ *
+ * @public
+ */
 export interface EnchantmentLevels {
   [rank: string]: [number, number];
 }
@@ -17,6 +25,8 @@ export interface EnchantmentLevels {
  * @property levels Rank-to-level-range mappings.
  * @property valid_from First version where this enchantment is available, inclusive.
  * @property valid_until First version where this enchantment is no longer available, exclusive.
+ *
+ * @public
  */
 export interface Enchantment {
   weight: number;
@@ -30,6 +40,8 @@ export interface Enchantment {
  * Conflict rules are unordered pairs and are compiled into symmetric bitsets.
  * @property valid_from First version where this conflict applies, inclusive.
  * @property valid_until First version where this conflict no longer applies, exclusive.
+ *
+ * @public
  */
 export interface ConflictRule {
   enchants: [string, string];
@@ -41,6 +53,8 @@ export interface ConflictRule {
  * Version-ranged material rule.
  * @property valid_from First version where this material rule applies, inclusive.
  * @property valid_until First version where this material rule no longer applies, exclusive.
+ *
+ * @public
  */
 export interface MaterialRule {
   material: string;
@@ -53,6 +67,8 @@ export interface MaterialRule {
  * Active rules for the same group are unioned in declaration order.
  * @property valid_from First version where this membership rule applies, inclusive.
  * @property valid_until First version where this membership rule no longer applies, exclusive.
+ *
+ * @public
  */
 export interface EnchantmentGroupRule {
   group: string;
@@ -64,13 +80,17 @@ export interface EnchantmentGroupRule {
 /**
  * Named material aliases used by enchantable item rules.
  * Each entry expands to concrete material keys declared by material rules.
+ *
+ * @public
  */
 export interface MaterialSets {
   [set: string]: string[];
 }
 
+/** @public */
 export type EnchantabilityTable = 'tool' | 'armor' | 'other';
 
+/** @public */
 export interface MaterialValues {
   tool: { [material: string]: number };
   armor: { [material: string]: number };
@@ -85,6 +105,8 @@ export interface MaterialValues {
  * Enchantability selects the material-value table used by this item.
  * @property valid_from First version where this item rule applies, inclusive.
  * @property valid_until First version where this item rule no longer applies, exclusive.
+ *
+ * @public
  */
 export interface EnchantableItemRule {
   item: string;
@@ -95,15 +117,21 @@ export interface EnchantableItemRule {
   enchantability: EnchantabilityTable;
 }
 
+/** @public */
 export type ConflictRuleSelector = Pick<ConflictRule, 'enchants' | 'valid_from' | 'valid_until'>;
+/** @public */
 export type EnchantmentGroupRuleSelector = Pick<EnchantmentGroupRule, 'group' | 'valid_from' | 'valid_until'>;
+/** @public */
 export type MaterialRuleSelector = Pick<MaterialRule, 'material' | 'valid_from' | 'valid_until'>;
+/** @public */
 export type EnchantableItemRuleSelector = Pick<EnchantableItemRule, 'item' | 'valid_from' | 'valid_until'>;
 
 /**
  * Small vanilla-data mutations for vanilla registry variants.
  * These operate on version-ranged rule tables only and are applied to a cloned
  * vanilla data pack before the resolved registry is built.
+ *
+ * @public
  */
 export type RegistryMutation =
   | { type: 'patchEnchantment'; enchantment: string; patch: Partial<Enchantment> }
@@ -122,6 +150,8 @@ export type RegistryMutation =
  * @property random_bonus_range Range of random multiplier applied to base modified level.
  * @property xp_cost_type How XP costs are calculated (full or flat).
  * @property lapis_required Whether the enchantment requires lapis lazuli.
+ *
+ * @public
  */
 export interface VersionMechanics {
   enchantability_bonus_divisor?: number;
@@ -138,6 +168,8 @@ export interface VersionMechanics {
  * @property mechanics Game mechanics changes.
  * @property multi_enchant_books Whether enchanted books can have multiple enchantments.
  * @property overrides Partial enchantment definitions to override inherited values.
+ *
+ * @public
  */
 export interface VersionManifest {
   extends?: string;
@@ -152,6 +184,8 @@ export interface VersionManifest {
  * Complete enchantment dataset loaded from data files.
  * Includes global enchantment definitions, version-specific overrides,
  * material weights, constants, and cosmetics (colors, display tweaks).
+ *
+ * @public
  */
 export interface EnchantmentData {
   global_enchantments: {

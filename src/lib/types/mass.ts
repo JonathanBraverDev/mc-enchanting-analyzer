@@ -1,6 +1,8 @@
 /**
  * Detailed breakdown of probability mass categories for accuracy and diagnostic reporting.
  * All values are percentages (0.0 to 1.0).
+ *
+ * @public
  */
 export interface MassAccountingBreakdown {
   /** Nodes that explicitly reached a leaf state and contribute to reported result combos. */
@@ -29,6 +31,8 @@ export interface MassAccountingBreakdown {
 
 /**
  * High-precision BigInt representation of conserved probability mass buckets.
+ *
+ * @public
  */
 export interface MassBucketUnits {
     resolved: bigint;
@@ -42,6 +46,7 @@ export interface MassBucketUnits {
     recoveredSieved: bigint;
 }
 
+/** @public */
 export type MassBucketName = keyof MassBucketUnits;
 
 /**
@@ -50,25 +55,31 @@ export type MassBucketName = keyof MassBucketUnits;
  * Operation buckets may be signed deltas. For example, frontier expansion removes
  * mass from the pending public bucket, so that operation reports a negative
  * pending delta while the stage total still matches the public compatibility view.
+ *
+ * @public
  */
 export interface MassAccountingDetails {
     stages: Record<string, MassAccountingStageDetails>;
 }
 
+/** @public */
 export interface MassAccountingStageDetails {
     buckets: Record<string, MassAccountingDetailBucket>;
     operations: Record<string, MassAccountingOperationDetails>;
 }
 
+/** @public */
 export interface MassAccountingOperationDetails {
     buckets: Record<string, MassAccountingDetailBucket>;
 }
 
+/** @public */
 export interface MassAccountingDetailBucket {
     value: number;
     units: string;
 }
 
+/** @internal */
 export interface MassAccountingPhases {
     /** Engine/search-stage accounting. */
     engine: MassAccountingBreakdown;
@@ -82,6 +93,8 @@ export interface MassAccountingPhases {
  * These buckets describe compatibility-view materialization after search has produced
  * engine results. They intentionally have a separate invariant from engine mass:
  * `source = projected + clueIncompatible + loss`.
+ *
+ * @internal
  */
 export interface ProjectionAccountingBreakdown {
     /** Mass entering this projection stage, usually engine resolved mass. */
@@ -96,6 +109,7 @@ export interface ProjectionAccountingBreakdown {
     units?: ProjectionBucketUnits | undefined;
 }
 
+/** @internal */
 export interface ProjectionBucketUnits {
     source: string;
     projected: string;

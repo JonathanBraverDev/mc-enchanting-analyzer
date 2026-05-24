@@ -1,6 +1,6 @@
 import { PACKING_CONSTANTS } from '#constants/engine.js';
 import { PackedCombo } from '#types/index.js';
-import { ENGINE_FRONTIER_KIND, type ComboMassAggregates, type EngineFrontierView, type PendingFrontierAggregates, type PendingFrontierEntry } from '#lib/search/SearchRun.js';
+import { ENGINE_FRONTIER_KIND, type ComboMassAggregates, type EngineFrontierView, type PendingFrontierAggregates, type PendingFrontierEntry } from '#lib/search/SearchSnapshot.js';
 
 export interface SummaryAggregationRequest {
     combos: ReadonlyMap<PackedCombo, bigint>;

@@ -1,7 +1,7 @@
 import { performance } from 'node:perf_hooks';
 import { RegistryFactory } from '#core/factory.js';
 import { EngineFactory } from '#engine/factory.js';
-import { ENGINE_FRONTIER_KIND } from '#lib/search/SearchRun.js';
+import { ENGINE_FRONTIER_KIND } from '#lib/search/SearchSnapshot.js';
 import type { RegistryMutation } from '#types/domain.js';
 
 type Backend = 'flex' | 'concrete';
@@ -23,7 +23,7 @@ type BenchmarkCase = {
     readonly runs: number;
     readonly engine: () => Engine;
     readonly req: SearchRequest;
-    // Concrete SearchRun is the only semantic reference in this benchmark.
+    // Legacy concrete SearchRun is a diagnostic reference in this benchmark.
     readonly enforceConcreteClose?: boolean;
 };
 
@@ -196,10 +196,8 @@ function printableDelta(delta: Delta): Record<string, string | number> {
     };
 }
 
-async function runBackend(engine: Engine, backend: Backend, req: SearchRequest): Promise<RunResult> {
-    const request = backend === 'concrete'
-        ? { ...req, useCache: false, instrumentation: emptyInstrumentation() }
-        : { ...req, searchBackend: backend, useCache: false, instrumentation: emptyInstrumentation() };
+async function runBackend(engine: Engine, _backend: Backend, req: SearchRequest): Promise<RunResult> {
+    const request = { ...req, useCache: false, instrumentation: emptyInstrumentation() };
     const started = performance.now();
     const result = await engine.searchToCheckpoint(request);
     const ms = performance.now() - started;

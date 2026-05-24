@@ -3,7 +3,7 @@ import { ENGINE_LIMITS, SEARCH_CONSTANTS } from '#constants/engine.js';
 import { EnchantStats, ConditionedSummaryRequest, SummaryRequest } from '#types/index.js';
 import { ClueAnalysisService } from '#services/ClueAnalysisService.js';
 import { SummaryAggregationService } from '#services/SummaryAggregationService.js';
-import { getMaterializedFrontierEntries } from '#lib/search/SearchRun.js';
+import { getMaterializedFrontierEntries } from '#lib/search/SearchSnapshot.js';
 
 /**
  * Service for summarizing search results into a standard JSON format.

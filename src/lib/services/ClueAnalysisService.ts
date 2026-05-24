@@ -4,7 +4,7 @@ import {
     type EngineFrontierView,
     type PendingClueJointAggregates,
     type PendingFrontierEntry
-} from '#lib/search/SearchRun.js';
+} from '#lib/search/SearchSnapshot.js';
 import { ComboUtils, ProbUtils, PRECISION } from '#utils/index.js';
 import { SummaryAggregationService } from '#services/SummaryAggregationService.js';
 

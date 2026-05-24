@@ -1,6 +1,6 @@
 import type { EngineExitReason, PackedEnchant } from '#types/index.js';
 import type { MassAccountingBreakdown, MassAccountingDetails } from '#types/mass.js';
-import type { PendingFrontierAggregates } from '#lib/search/SearchRun.js';
+import type { PendingFrontierAggregates } from '#lib/search/SearchSnapshot.js';
 
 export type FlexNodeId = number & { readonly __brand: 'FlexNodeId' };
 export type FlexProgramId = number & { readonly __brand: 'FlexProgramId' };
@@ -137,7 +137,7 @@ export interface FlexCheckpointRequest {
     readonly targetClassifiedMass?: number | bigint | undefined;
     /**
      * Internal forward-mass floor. Omit to use Flex's default system floor for bounded searches;
-     * set to 0 for concrete-V7 parity diagnostics that must not sieve tail nodes early.
+     * set to 0 for legacy parity diagnostics that must not sieve tail nodes early.
      */
     readonly probabilityFloor?: number | bigint | undefined;
     readonly signal?: AbortSignal | undefined;

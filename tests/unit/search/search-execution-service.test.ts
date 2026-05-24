@@ -8,12 +8,11 @@ import { DATA } from '#data/index.js';
 import { getDefaultStatsCheckpoint, getSearchCheckpointForRefinement } from '#core/config.js';
 import { getRegistryVersionBoundaries } from '#core/version-resolution.js';
 import { SearchExecutionService } from '#lib/search/SearchExecutionService.js';
-import { ENGINE_FRONTIER_KIND } from '#lib/search/SearchRun.js';
+import { ENGINE_FRONTIER_KIND } from '#lib/search/SearchSnapshot.js';
 import { FLEX_CACHE_LIMITS } from '#lib/search/flex/FlexConstants.js';
 import { CheckpointSearchRequest, EnchantStats, EngineInstrumentation, SearchResult } from '#types/index.js';
 import { PRECISION } from '#utils/index.js';
 
-const MASS_UNIT_TOLERANCE = 1_000n;
 const ACCOUNTING_UNIT_BUCKETS = [
     'resolved',
     'clueIncompatible',
@@ -91,34 +90,17 @@ function assertAccountingUnitsEqual(label: string, actual: AccountingUnitBreakdo
     }
 }
 
-function assertAccountingUnitsApproximatelyEqual(
-    label: string,
-    actual: AccountingUnitBreakdown,
-    expected: AccountingUnitBreakdown,
-    tolerance: bigint = MASS_UNIT_TOLERANCE
-): void {
-    for (const bucket of ACCOUNTING_UNIT_BUCKETS) {
-        const delta = actual[bucket] > expected[bucket]
-            ? actual[bucket] - expected[bucket]
-            : expected[bucket] - actual[bucket];
-        assert.ok(
-            delta <= tolerance,
-            `${label}: ${bucket} expected ${String(expected[bucket])}, got ${String(actual[bucket])}, delta ${String(delta)}`
-        );
-    }
-}
-
-function assertPublicStatsMatchConcrete(label: string, concrete: EnchantStats, candidate: EnchantStats): void {
-    assert.strictEqual(candidate.threshold, concrete.threshold, `${label}: threshold`);
-    assert.strictEqual(candidate.accuracy, concrete.accuracy, `${label}: accuracy`);
-    assert.deepStrictEqual(candidate.combos, concrete.combos, `${label}: combos`);
-    assert.deepStrictEqual(candidate.any, concrete.any, `${label}: any`);
-    assert.deepStrictEqual(candidate.ranks, concrete.ranks, `${label}: ranks`);
-    assert.deepStrictEqual(candidate.count, concrete.count, `${label}: count`);
+function assertPublicStatsMatch(label: string, expected: EnchantStats, candidate: EnchantStats): void {
+    assert.strictEqual(candidate.threshold, expected.threshold, `${label}: threshold`);
+    assert.strictEqual(candidate.accuracy, expected.accuracy, `${label}: accuracy`);
+    assert.deepStrictEqual(candidate.combos, expected.combos, `${label}: combos`);
+    assert.deepStrictEqual(candidate.any, expected.any, `${label}: any`);
+    assert.deepStrictEqual(candidate.ranks, expected.ranks, `${label}: ranks`);
+    assert.deepStrictEqual(candidate.count, expected.count, `${label}: count`);
     const accountingBuckets = ['resolved', 'clueIncompatible', 'pending', 'sieved', 'overflow', 'capped', 'rounding'] as const;
     for (const bucket of accountingBuckets) {
         assert.ok(
-            Math.abs(candidate.accounting[bucket] - concrete.accounting[bucket]) <= 1e-12,
+            Math.abs(candidate.accounting[bucket] - expected.accounting[bucket]) <= 1e-12,
             `${label}: accounting.${bucket}`
         );
     }
@@ -149,7 +131,7 @@ interface SearchExecutionServiceInternals {
 }
 
 describe('Search execution service', () => {
-    it('keeps the concrete SearchRun backend as the default execution path', async () => {
+    it('uses the V8 grouped runtime as the default execution path', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
         const instrumentation = createInstrumentation();
 
@@ -162,30 +144,12 @@ describe('Search execution service', () => {
             instrumentation
         });
 
-        assert.strictEqual(result.instrumentation?.search?.backend, 'concrete');
-        assert.ok(result.snapshot.pendingEntries.length > 0);
-        assert.strictEqual(result.snapshot.frontier.kind, ENGINE_FRONTIER_KIND.MATERIALIZED);
+        assert.strictEqual(result.snapshot.pendingEntries.length, 0);
+        assert.strictEqual(result.snapshot.frontier.kind, ENGINE_FRONTIER_KIND.FACTORIZED);
+        assert.ok(result.snapshot.pendingAggregates);
     });
 
-    it('rejects unsupported backend selectors', async () => {
-        const engine = EngineFactory.createForVersion('1.21.11');
-
-        for (const searchBackend of ['plex', 'missing-backend']) {
-            await assert.rejects(
-                () => engine.searchToCheckpoint({
-                    item: 'book',
-                    material: 'book',
-                    xp: 30,
-                    threshold: 0,
-                    maxIterations: 1,
-                    searchBackend
-                } as any),
-                /Unsupported search backend ".+". Supported backends: "concrete", "flex"\./
-            );
-        }
-    });
-
-    it('routes checkpoint searches through Flex when explicitly requested', async () => {
+    it('records Flex diagnostics for checkpoint searches', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
         const instrumentation = createInstrumentation();
 
@@ -195,11 +159,9 @@ describe('Search execution service', () => {
             xp: 30,
             threshold: 0,
             maxIterations: 1,
-            searchBackend: 'flex',
             instrumentation
         });
 
-        assert.strictEqual(result.instrumentation?.search?.backend, 'flex');
         assert.strictEqual(result.instrumentation?.exitReason, 'iterations');
         assert.strictEqual(result.snapshot.frontier.kind, ENGINE_FRONTIER_KIND.FACTORIZED);
         if (result.snapshot.frontier.kind !== ENGINE_FRONTIER_KIND.FACTORIZED) {
@@ -209,7 +171,9 @@ describe('Search execution service', () => {
         assert.ok(result.snapshot.pendingAggregates);
         assert.strictEqual(result.snapshot.frontier.summary, result.snapshot.pendingAggregates);
         assert.ok(result.snapshot.pendingAggregates.count.reduce((sum, mass) => sum + mass, 0n) > 0n);
-        assert.strictEqual(result.instrumentation.search.pendingEntryCount, result.instrumentation.search.flexStructuralPendingEntryCount);
+        const search = result.instrumentation?.search;
+        assert.ok(search);
+        assert.strictEqual(search.pendingEntryCount, search.flexStructuralPendingEntryCount);
         assert.ok(Math.abs(snapshotAccountingTotal(result) - 1) < 1e-12);
     });
 
@@ -223,7 +187,6 @@ describe('Search execution service', () => {
             clue: 'Sharpness III',
             threshold: 0,
             maxIterations: 1,
-            searchBackend: 'flex'
         });
 
         assert.strictEqual(result.snapshot.frontier.kind, ENGINE_FRONTIER_KIND.FACTORIZED);
@@ -247,7 +210,6 @@ describe('Search execution service', () => {
             xp: 30,
             threshold: 0,
             maxIterations: 1,
-            searchBackend: 'flex'
         });
 
         assert.ok(result.snapshot.mass.details);
@@ -273,7 +235,7 @@ describe('Search execution service', () => {
         assert.ok(Math.abs(snapshotAccountingTotal(result) - 1) < 1e-12);
     });
 
-    it('folds Flex detailed mass accounting back to V7-compatible public buckets', async () => {
+    it('folds V8 detailed mass accounting back to public buckets', async () => {
         const cases: Array<{ readonly label: string; readonly request: CheckpointSearchRequest }> = [
             {
                 label: 'bounded book checkpoint',
@@ -310,13 +272,8 @@ describe('Search execution service', () => {
         ];
 
         for (const testCase of cases) {
-            const concrete = await EngineFactory.createForVersion('1.21.11').searchToCheckpoint({
-                ...testCase.request,
-                useCache: false
-            });
             const flex = await EngineFactory.createForVersion('1.21.11').searchToCheckpoint({
                 ...testCase.request,
-                searchBackend: 'flex',
                 useCache: false
             });
 
@@ -325,11 +282,6 @@ describe('Search execution service', () => {
                 `${testCase.label}: folded Flex details`,
                 foldFlexDetailUnits(flex, testCase.label),
                 flexPublic
-            );
-            assertAccountingUnitsApproximatelyEqual(
-                `${testCase.label}: concrete V7 public accounting`,
-                flexPublic,
-                getPublicAccountingUnits(concrete, testCase.label)
             );
         }
     });
@@ -344,7 +296,6 @@ describe('Search execution service', () => {
             xp: 30,
             threshold: 0,
             maxIterations: 50,
-            searchBackend: 'flex',
             instrumentation: createInstrumentation()
         });
         const resumed = await engine.searchToCheckpoint({
@@ -353,17 +304,15 @@ describe('Search execution service', () => {
             xp: 30,
             threshold: 0,
             maxIterations: 10,
-            searchBackend: 'flex',
             instrumentation: createInstrumentation()
         });
 
-        assert.strictEqual(first.instrumentation?.search?.backend, 'flex');
         assert.strictEqual(first.instrumentation?.totalIterations, 50);
         assert.strictEqual(resumed.instrumentation?.totalIterations, 50);
         assert.ok((resumed.instrumentation?.search?.runCacheHits ?? 0) >= 1);
     });
 
-    it('keeps Flex run cache bounded separately from the concrete SearchStateCache', async () => {
+    it('keeps the V8 run cache bounded', async () => {
         const service = new SearchExecutionService();
         const cases = createCacheFillCases(FLEX_CACHE_LIMITS.RUNS + 12);
 
@@ -376,7 +325,6 @@ describe('Search execution service', () => {
                 xp: testCase.xp,
                 threshold: 0,
                 maxIterations: 1,
-                searchBackend: 'flex'
             });
         }
 
@@ -397,21 +345,19 @@ describe('Search execution service', () => {
             threshold: 0,
             maxIterations: 250,
             summaryLimit: 10,
-            searchBackend: 'flex',
             instrumentation: createInstrumentation()
         });
 
-        assert.strictEqual(stats.instrumentation?.search?.backend, 'flex');
         assert.ok(Object.keys(stats.combos).length > 0);
         assert.ok(stats.accounting.pending > 0);
         assert.ok(Math.abs(accountingTotal(stats) - 1) < 1e-12);
     });
 
-    it('matches concrete public stats for a fully resolved Flex public API case', async () => {
+    it('matches explicit V8 stats to the default public API for a fully resolved case', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
         engine.resetCaches();
 
-        const [concrete, flex] = await Promise.all([
+        const [defaults, explicit] = await Promise.all([
             engine.getStats({
                 item: 'mace',
                 material: 'mace',
@@ -426,14 +372,12 @@ describe('Search execution service', () => {
                 xp: 1,
                 exhaustive: true,
                 summaryLimit: 100,
-                searchBackend: 'flex',
                 instrumentation: createInstrumentation(),
                 useCache: false
             })
         ]);
 
-        assert.strictEqual(flex.instrumentation?.search?.backend, 'flex');
-        assertPublicStatsMatchConcrete('Flex public stats', concrete, flex);
+        assertPublicStatsMatch('V8 public stats', defaults, explicit);
     });
 
     it('uses program-aware Flex identity when a mutated registry breaks the reduced-key invariant', async () => {
@@ -451,11 +395,9 @@ describe('Search execution service', () => {
             xp: 30,
             threshold: 0,
             maxIterations: 100,
-            searchBackend: 'flex',
             instrumentation
         });
 
-        assert.strictEqual(result.instrumentation?.search?.backend, 'flex');
         assert.strictEqual(result.instrumentation?.search?.flexStateIdentityMode, 'program');
         assert.ok(result.snapshot.mass.resolved + result.snapshot.mass.pending > 0);
     });
@@ -474,11 +416,9 @@ describe('Search execution service', () => {
             xp: 30,
             threshold: 0,
             maxIterations: 100,
-            searchBackend: 'flex',
             instrumentation
         });
 
-        assert.strictEqual(result.instrumentation?.search?.backend, 'flex');
         assert.strictEqual(result.instrumentation?.search?.flexStateIdentityMode, 'reduced');
         assert.ok(result.snapshot.mass.resolved + result.snapshot.mass.pending > 0);
     });
@@ -755,7 +695,7 @@ describe('Search execution service', () => {
         assert.ok(Object.keys(stats.combos).length > 0);
     });
 
-    it('projects pending frontier nodes and search instrumentation through the search execution service', async () => {
+    it('projects factorized pending frontier summaries and search instrumentation through the search execution service', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
         const instrumentation = {
             poolCache: { hits: 0, misses: 0 },
@@ -777,11 +717,13 @@ describe('Search execution service', () => {
             instrumentation
         });
 
-        assert.ok(result.snapshot.pendingEntries.length > 0);
+        assert.strictEqual(result.snapshot.frontier.kind, ENGINE_FRONTIER_KIND.FACTORIZED);
+        assert.strictEqual(result.snapshot.pendingEntries.length, 0);
+        assert.ok(result.snapshot.pendingAggregates);
         assert.ok(result.snapshot.mass.pending > 0);
         assert.ok(result.instrumentation?.search);
         assert.ok(result.instrumentation.search.graphCount > 0);
-        assert.strictEqual(result.instrumentation.search.pendingEntryCount, result.snapshot.pendingEntries.length);
+        assert.strictEqual(result.instrumentation.search.pendingEntryCount, result.snapshot.pendingCount);
         assert.ok(result.instrumentation.search.canImprove);
     });
 
@@ -812,7 +754,6 @@ describe('Search execution service', () => {
             material: 'book',
             xp: 30,
             exhaustive: true,
-            searchBackend: 'flex',
             signal: controller.signal
         });
         setTimeout(() => controller.abort(), 0);
@@ -889,31 +830,11 @@ describe('Search execution service', () => {
         assert.strictEqual(fresh.instrumentation?.totalIterations, 10);
     });
 
-    it('reuses structural graphs across fresh XP-cell runs', async () => {
+    it('does not expose legacy structural graph-cache counters on the V8 runtime', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
         engine.resetCaches();
 
-        const first = await engine.searchToCheckpoint({
-            item: 'sword',
-            material: 'diamond',
-            xp: 30,
-            threshold: 0,
-            maxIterations: 1,
-            useCache: false,
-            instrumentation: {
-                poolCache: { hits: 0, misses: 0 },
-                distCache: { hits: 0, misses: 0 },
-                        totalIterations: 0,
-                totalPrunedNodes: 0,
-                roundingErrorEvents: 0,
-                levelsProcessed: 0,
-                levelsFullyResolved: 0,
-                fullyResolved: false
-            }
-        });
-        const firstMisses = first.instrumentation?.search?.graphCacheMisses ?? 0;
-
-        const second = await engine.searchToCheckpoint({
+        const result = await engine.searchToCheckpoint({
             item: 'sword',
             material: 'diamond',
             xp: 30,
@@ -932,8 +853,8 @@ describe('Search execution service', () => {
             }
         });
 
-        assert.ok(firstMisses > 0);
-        assert.ok((second.instrumentation?.search?.graphCacheHits ?? 0) >= firstMisses);
+        assert.strictEqual(result.instrumentation?.search?.graphCacheHits, 0);
+        assert.strictEqual(result.instrumentation?.search?.graphCacheMisses, 0);
     });
 
 });
