@@ -26,6 +26,7 @@ interface SummedFlexGroupingStats {
     readonly groupingBuildCount: number;
     readonly groupedEdgeCount: number;
     readonly groupedAlternativeCount: number;
+    readonly collectedAlternativeDetailCount: number;
     readonly singletonGroupCount: number;
     readonly choiceGroupCount: number;
     readonly nodeCreateCount: number;
@@ -33,6 +34,8 @@ interface SummedFlexGroupingStats {
     readonly preparedFixedEmissionCount: number;
     readonly preparedChoiceEmissionCount: number;
     readonly preparedChoiceAlternativeCount: number;
+    readonly lazyChoiceEmissionScanCount: number;
+    readonly lazyChoiceEmissionCandidateCheckCount: number;
     readonly shapePreparedEmissionAppendCount: number;
     readonly nodeIndexGrowCount: number;
     readonly residueArrayAllocationCount: number;
@@ -179,6 +182,7 @@ function sumStats(memory: FlexRunMemoryStats): SummedFlexGroupingStats {
         groupingBuildCount: sum(memory.graphs.map(graph => graph.groupingBuildCount)),
         groupedEdgeCount: sum(memory.graphs.map(graph => graph.groupedEdgeCount)),
         groupedAlternativeCount: sum(memory.graphs.map(graph => graph.groupedAlternativeCount)),
+        collectedAlternativeDetailCount: sum(memory.graphs.map(graph => graph.collectedAlternativeDetailCount)),
         singletonGroupCount: sum(memory.graphs.map(graph => graph.singletonGroupCount)),
         choiceGroupCount: sum(memory.graphs.map(graph => graph.choiceGroupCount)),
         nodeCreateCount: sum(memory.graphs.map(graph => graph.nodeCreateCount)),
@@ -186,6 +190,8 @@ function sumStats(memory: FlexRunMemoryStats): SummedFlexGroupingStats {
         preparedFixedEmissionCount: sum(memory.graphs.map(graph => graph.preparedFixedEmissionCount)),
         preparedChoiceEmissionCount: sum(memory.graphs.map(graph => graph.preparedChoiceEmissionCount)),
         preparedChoiceAlternativeCount: sum(memory.graphs.map(graph => graph.preparedChoiceAlternativeCount)),
+        lazyChoiceEmissionScanCount: sum(memory.graphs.map(graph => graph.lazyChoiceEmissionScanCount)),
+        lazyChoiceEmissionCandidateCheckCount: sum(memory.graphs.map(graph => graph.lazyChoiceEmissionCandidateCheckCount)),
         shapePreparedEmissionAppendCount: sum(memory.graphs.map(graph => graph.shapePreparedEmissionAppendCount)),
         nodeIndexGrowCount: sum(memory.graphs.map(graph => graph.nodeIndexGrowCount)),
         residueArrayAllocationCount: memory.coordinator.residueArrayAllocationCount
@@ -208,14 +214,18 @@ function printableStats(phase: string, stats: SummedFlexGroupingStats): Record<s
         choiceGroups: stats.choiceGroupCount,
         groupedEdges: stats.groupedEdgeCount,
         groupedAlternatives: stats.groupedAlternativeCount,
+        collectedDetails: stats.collectedAlternativeDetailCount,
         preparedFixed: stats.preparedFixedEmissionCount,
         preparedChoices: stats.preparedChoiceEmissionCount,
         preparedChoiceAlts: stats.preparedChoiceAlternativeCount,
+        lazyChoiceScans: stats.lazyChoiceEmissionScanCount,
+        lazyChoiceChecks: stats.lazyChoiceEmissionCandidateCheckCount,
         shapeEmissionAppends: stats.shapePreparedEmissionAppendCount,
         nodeCreates: stats.nodeCreateCount,
         nodeReuses: stats.nodeReuseCount,
         reuseRate: formatRatio(stats.nodeReuseCount, stats.nodeCreateCount + stats.nodeReuseCount),
         groupingsPerExpansion: formatRatio(stats.groupingBuildCount, stats.searchExpansionCount),
+        detailCollectionRate: formatRatio(stats.collectedAlternativeDetailCount, stats.groupedAlternativeCount),
         choicesPreparedPerChoiceGroup: formatRatio(stats.preparedChoiceEmissionCount, stats.choiceGroupCount),
         residueArrays: stats.residueArrayAllocationCount,
         nodeIndexGrows: stats.nodeIndexGrowCount
