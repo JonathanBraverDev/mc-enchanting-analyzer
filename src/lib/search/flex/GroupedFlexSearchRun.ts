@@ -7,7 +7,6 @@ import type {
     FlexCheckpointRequest,
     FlexNodeId,
     FlexPendingEntry,
-    FlexProjectedPendingAggregateResults,
     FlexProjectedPendingEntry,
     FlexProjectedResults,
     FlexRunState,
@@ -15,7 +14,6 @@ import type {
     FlexRunMemoryStats,
     FlexStateIdentityMode
 } from '#lib/search/flex/FlexTypes.js';
-import type { PendingFrontierAggregates } from '#lib/search/SearchRun.js';
 import { FlexCoordinator } from '#lib/search/flex/FlexCoordinator.js';
 import { FlexProgramStore } from '#lib/search/flex/FlexProgramStore.js';
 import { FlexProjector } from '#lib/search/flex/FlexProjector.js';
@@ -29,17 +27,10 @@ interface GroupedFlexGraphRecord {
 
 export interface GroupedFlexProjectedCheckpoint extends FlexProjectedResults {
     readonly pendingEntries: readonly FlexProjectedPendingEntry[];
-    readonly pendingAggregates?: PendingFrontierAggregates | undefined;
     readonly projectedPendingMass: bigint;
     readonly projectedPendingSourceMass: bigint;
     readonly pendingProjectionLoss: bigint;
     readonly pendingClueIncompatible: bigint;
-}
-
-export type GroupedFlexPendingProjectionMode = 'rows' | 'aggregates';
-
-export interface GroupedFlexProjectionOptions {
-    readonly pendingMode?: GroupedFlexPendingProjectionMode | undefined;
 }
 
 export interface GroupedFlexSearchRunOptions {
@@ -167,26 +158,14 @@ export class GroupedFlexSearchRun {
         return this.snapshotBuilder.build(state, options);
     }
 
-    public projectSnapshot(
-        snapshot: FlexRunSnapshot = this.snapshot(),
-        options: GroupedFlexProjectionOptions = {}
-    ): GroupedFlexProjectedCheckpoint {
+    public projectSnapshot(snapshot: FlexRunSnapshot = this.snapshot()): GroupedFlexProjectedCheckpoint {
         const projectedResults = this.projector.projectResults(snapshot.results);
         const pendingEntries = this.withPendingClueReachability(snapshot.pendingEntries);
-        const projectedPending = options.pendingMode === 'aggregates'
-            ? this.projector.projectPendingAggregates(pendingEntries)
-            : this.projector.projectPendingWithDiagnostics(pendingEntries);
-
-        const compatibilityPendingEntries = isAggregatePendingProjection(projectedPending)
-            ? Object.freeze([]) as readonly FlexProjectedPendingEntry[]
-            : projectedPending.pendingEntries;
+        const projectedPending = this.projector.projectPendingWithDiagnostics(pendingEntries);
 
         return Object.freeze({
             ...projectedResults,
-            pendingEntries: compatibilityPendingEntries,
-            ...(isAggregatePendingProjection(projectedPending)
-                ? { pendingAggregates: projectedPending.pendingAggregates }
-                : {}),
+            pendingEntries: projectedPending.pendingEntries,
             projectedPendingMass: projectedPending.projectedMass,
             projectedPendingSourceMass: projectedPending.sourceMass,
             pendingProjectionLoss: projectedPending.projectionLoss,
@@ -236,10 +215,4 @@ export class GroupedFlexSearchRun {
         if (targetBit === undefined) return false;
         return (this.getGraph(graphId).getNodeExclusionMask(nodeId as FlexNodeId) & targetBit) === 0n;
     }
-}
-
-function isAggregatePendingProjection(
-    projected: FlexProjectedPendingAggregateResults | { readonly pendingEntries: readonly FlexProjectedPendingEntry[] }
-): projected is FlexProjectedPendingAggregateResults {
-    return 'pendingAggregates' in projected;
 }

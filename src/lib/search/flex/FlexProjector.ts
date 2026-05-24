@@ -205,8 +205,7 @@ export class FlexProjector {
         const captured: CapturedPendingAggregateEntries = {
             programIds: [],
             masses: [],
-            counts: [],
-            targetClueReachability: []
+            counts: []
         };
         const targetClueId = this.options.targetClueId;
         const clueKnownSpaces = targetClueId === undefined ? undefined : [] as bigint[];
@@ -221,7 +220,6 @@ export class FlexProjector {
             captured.programIds.push(programId);
             captured.masses.push(mass);
             captured.counts.push(count);
-            captured.targetClueReachability.push(encodeTargetClueReachability(targetClueReachable));
 
             sourceMass += mass;
             if (targetClueId === undefined) {
@@ -563,7 +561,6 @@ interface CapturedPendingAggregateEntries {
     readonly programIds: FlexProgramId[];
     readonly masses: bigint[];
     readonly counts: number[];
-    readonly targetClueReachability: number[];
     clueKnownSpaces?: bigint[] | undefined;
 }
 
@@ -683,9 +680,4 @@ function createLazyPendingAggregates(
             : {})
     });
     return Object.freeze(lazy) as PendingFrontierAggregates;
-}
-
-function encodeTargetClueReachability(value: boolean | undefined): number {
-    if (value === undefined) return -1;
-    return value ? 1 : 0;
 }
