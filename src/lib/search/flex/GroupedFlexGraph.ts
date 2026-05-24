@@ -277,6 +277,11 @@ export class GroupedFlexGraph implements FlexGraph {
         return this.counts[nodeId as number]!;
     }
 
+    public getNodeKind(nodeId: FlexNodeId): FlexNode['kind'] {
+        this.assertNode(nodeId);
+        return this.programs.hasChoice(this.programIds[nodeId as number]!) ? 'plex' : 'solid';
+    }
+
     public getNodeCurrentLevel(nodeId: FlexNodeId): number {
         this.assertNode(nodeId);
         return this.currentLevels[nodeId as number]!;
