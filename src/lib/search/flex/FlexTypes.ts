@@ -84,6 +84,8 @@ export interface FlexGraph {
 
 export interface FlexGraphMemoryStats {
     readonly nodeCount: number;
+    readonly solidNodeCount: number;
+    readonly plexNodeCount: number;
     readonly searchExpansionCount: number;
     readonly debugExpansionCount: number;
     readonly shapeCacheHitCount: number;
@@ -112,6 +114,8 @@ export interface FlexCoordinatorMemoryStats {
     readonly frontierIndexGrowCount: number;
     readonly residueArrayAllocationCount: number;
     readonly activeResidueRecordCount: number;
+    readonly expandedSolidNodeCount: number;
+    readonly expandedPlexNodeCount: number;
 }
 
 export interface FlexProgramStoreMemoryStats {

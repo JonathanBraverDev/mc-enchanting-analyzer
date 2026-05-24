@@ -167,6 +167,17 @@ describe('GroupedFlexGraph', () => {
         assert.strictEqual(getLastEmission(fixture, singletonEdge).kind, 'fixed');
     });
 
+    it('reports structural Solid and Plex node counts without scanning diagnostics', () => {
+        const fixture = createGraphFixture('sword', 'diamond', 30);
+        const root = fixture.graph.getRootNode(30);
+        fixture.graph.getExpansion(root.id);
+        const stats = fixture.graph.getMemoryStats();
+
+        assert.strictEqual(stats.nodeCount, stats.solidNodeCount + stats.plexNodeCount);
+        assert.ok(stats.solidNodeCount > 0, 'root and singleton transitions should count as Solid nodes');
+        assert.ok(stats.plexNodeCount > 0, 'grouped choice transitions should count as Plex nodes');
+    });
+
     it('expands non-root singleton children with halved level and concrete-equivalent total weight', () => {
         const fixture = createGraphFixture('sword', 'diamond', 30);
         const groupedRoot = fixture.graph.getExpansion(fixture.graph.getRootNode(30).id);
