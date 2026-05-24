@@ -29,6 +29,10 @@ export type FlexPendingAggregateVisitor = (
     targetClueReachable?: boolean | undefined
 ) => void;
 
+export interface FlexLazyPendingAggregateOptions {
+    readonly onBuild?: (() => void) | undefined;
+}
+
 export interface FlexProjectionOptions {
     readonly applyBookRemoval?: boolean | undefined;
     readonly targetClueId?: number | undefined;
@@ -187,6 +191,62 @@ export class FlexProjector {
 
         return Object.freeze({
             pendingAggregates: freezePendingAggregates(pendingAggregates, clueJoint),
+            projectionLoss,
+            clueIncompatible,
+            projectedMass,
+            sourceMass
+        });
+    }
+
+    public projectPendingLazyAggregatesFromCursor(
+        visitEntries: (visitor: FlexPendingAggregateVisitor) => void,
+        options: FlexLazyPendingAggregateOptions = {}
+    ): FlexProjectedPendingAggregateResults {
+        const captured: CapturedPendingAggregateEntries = {
+            programIds: [],
+            masses: [],
+            counts: [],
+            targetClueReachability: []
+        };
+        const targetClueId = this.options.targetClueId;
+        const clueKnownSpaces = targetClueId === undefined ? undefined : [] as bigint[];
+        if (clueKnownSpaces) captured.clueKnownSpaces = clueKnownSpaces;
+
+        let sourceMass = 0n;
+        let projectedMass = 0n;
+        let projectionLoss = 0n;
+        let clueIncompatible = 0n;
+
+        visitEntries((programId, mass, count, targetClueReachable) => {
+            captured.programIds.push(programId);
+            captured.masses.push(mass);
+            captured.counts.push(count);
+            captured.targetClueReachability.push(encodeTargetClueReachability(targetClueReachable));
+
+            sourceMass += mass;
+            if (targetClueId === undefined) {
+                projectedMass += mass;
+                return;
+            }
+
+            if (mass === 0n) {
+                clueKnownSpaces!.push(0n);
+                return;
+            }
+
+            const split = this.getPendingClueSplit(programId, mass, count, targetClueReachable);
+            projectedMass += split.projectedMass;
+            clueIncompatible += split.clueIncompatible;
+            projectionLoss += split.projectionLoss;
+            clueKnownSpaces!.push(split.clueKnownSpace);
+        });
+
+        return Object.freeze({
+            pendingAggregates: createLazyPendingAggregates(
+                () => this.buildCapturedPendingAggregates(captured),
+                targetClueId !== undefined,
+                options.onBuild
+            ),
             projectionLoss,
             clueIncompatible,
             projectedMass,
@@ -461,6 +521,50 @@ export class FlexProjector {
         addArrayMass(clueJoint.ranks, packedEnchant, aggregateMass);
     }
 
+    private buildCapturedPendingAggregates(captured: CapturedPendingAggregateEntries): PendingFrontierAggregates {
+        const pendingAggregates = createPendingAggregates();
+        const targetClueId = this.options.targetClueId;
+        const clueJoint = targetClueId === undefined
+            ? undefined
+            : createPendingClueJointAggregates(targetClueId);
+
+        for (let index = 0; index < captured.programIds.length; index++) {
+            const programId = captured.programIds[index]!;
+            const mass = captured.masses[index]!;
+            const count = captured.counts[index]!;
+            if (mass <= 0n) continue;
+
+            if (clueJoint) {
+                const clueKnownSpace = captured.clueKnownSpaces?.[index] ?? 0n;
+                if (clueKnownSpace > 0n) {
+                    pendingAggregates.shownClueDistribution.set(
+                        clueJoint.targetClueId,
+                        (pendingAggregates.shownClueDistribution.get(clueJoint.targetClueId) ?? 0n) + clueKnownSpace
+                    );
+                    this.addPendingClueJointAggregate(clueJoint, programId, clueKnownSpace, count);
+                }
+                continue;
+            }
+
+            this.addPendingProgramAggregate(
+                pendingAggregates,
+                programId,
+                mass,
+                count
+            );
+        }
+
+        return freezePendingAggregates(pendingAggregates, clueJoint);
+    }
+
+}
+
+interface CapturedPendingAggregateEntries {
+    readonly programIds: FlexProgramId[];
+    readonly masses: bigint[];
+    readonly counts: number[];
+    readonly targetClueReachability: number[];
+    clueKnownSpaces?: bigint[] | undefined;
 }
 
 function appendPackedComboIndex(combo: PackedCombo, packedIndex: number, count: number): PackedCombo {
@@ -536,4 +640,52 @@ function freezePendingClueJointAggregates(clueJoint: MutablePendingClueJointAggr
 
 function addArrayMass(target: bigint[], key: number, mass: bigint): void {
     target[key] = (target[key] ?? 0n) + mass;
+}
+
+function createLazyPendingAggregates(
+    build: () => PendingFrontierAggregates,
+    includeClueJoint: boolean,
+    onBuild?: (() => void) | undefined
+): PendingFrontierAggregates {
+    let cached: PendingFrontierAggregates | undefined;
+    const get = (): PendingFrontierAggregates => {
+        if (!cached) {
+            onBuild?.();
+            cached = build();
+        }
+        return cached;
+    };
+    const lazy: Partial<PendingFrontierAggregates> = {};
+    Object.defineProperties(lazy, {
+        any: {
+            enumerable: true,
+            get: () => get().any
+        },
+        ranks: {
+            enumerable: true,
+            get: () => get().ranks
+        },
+        count: {
+            enumerable: true,
+            get: () => get().count
+        },
+        shownClueDistribution: {
+            enumerable: true,
+            get: () => get().shownClueDistribution
+        },
+        ...(includeClueJoint
+            ? {
+                clueJoint: {
+                    enumerable: true,
+                    get: () => get().clueJoint
+                }
+            }
+            : {})
+    });
+    return Object.freeze(lazy) as PendingFrontierAggregates;
+}
+
+function encodeTargetClueReachability(value: boolean | undefined): number {
+    if (value === undefined) return -1;
+    return value ? 1 : 0;
 }
