@@ -17,7 +17,8 @@ import { RegistryFactory } from '#core/factory.js';
 import { getEnchantName } from '#core/registry.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
-import { RegistryKernel, SearchPool, SearchRun } from '#lib/search/index.js';
+import { RegistryKernel, type SearchPool } from '#lib/search/index.js';
+import { SearchRun } from '#lib/search/SearchRun.js';
 import { ProbUtils } from '#utils/index.js';
 
 const DEFAULT_VERSION = '1.21.11';

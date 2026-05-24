@@ -1,6 +1,6 @@
 import type { PackedCombo } from '#types/index.js';
 import { PACKING_CONSTANTS } from '#constants/engine.js';
-import type { PendingClueJointAggregates, PendingFrontierAggregates } from '#lib/search/SearchRun.js';
+import type { PendingClueJointAggregates, PendingFrontierAggregates } from '#lib/search/SearchSnapshot.js';
 import type {
     FlexPendingEntry,
     FlexProgram,

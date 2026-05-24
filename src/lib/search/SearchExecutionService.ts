@@ -1,10 +1,8 @@
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
-import { SearchResult, SequentialCheckpointSearchContext, CheckpointSearchContext, EngineInstrumentation, SearchTiming, SearchBackend, RegistryState, MutatedRegistryState } from '#types/index.js';
+import { SearchResult, SequentialCheckpointSearchContext, CheckpointSearchContext, EngineInstrumentation, SearchTiming, RegistryState, MutatedRegistryState } from '#types/index.js';
 import { RegistryKernel } from '#lib/search/registry/RegistryKernel.js';
-import { SearchRun, type SearchRunSnapshot } from '#lib/search/SearchRun.js';
 import { GroupedFlexSearchRun, checkFlexReducedKeyInvariant, type FlexNativeCheckpoint, type FlexReducedKeyInvariantResult, type FlexRunState, type FlexStateIdentityMode } from '#lib/search/flex/index.js';
 import { FLEX_CACHE_LIMITS, FLEX_INVARIANT_LIMITS } from '#lib/search/flex/FlexConstants.js';
-import { SearchStateCache } from '#lib/search/SearchStateCache.js';
 import { PRECISION, ProbUtils } from '#utils/index.js';
 import { LRUCache } from '#utils/collections/LRUCache.js';
 
@@ -12,7 +10,7 @@ import { LRUCache } from '#utils/collections/LRUCache.js';
  * Engine-facing service that advances shared search runs to checkpoint boundaries.
  *
  * It owns run lookup/resume, checkpoint sequencing, instrumentation, and timing.
- * Lower-level `SearchRun` owns probability flow; higher-level services own public
+ * The V8 grouped runtime owns probability flow; higher-level services own public
  * summary and UI projection.
  */
 export class SearchExecutionService {
@@ -22,13 +20,11 @@ export class SearchExecutionService {
     private flexRunCacheMisses = 0;
 
     public constructor(
-        private readonly distributionService: ModifiedLevelDistributionService = new ModifiedLevelDistributionService(),
-        private readonly cache: SearchStateCache = new SearchStateCache()
+        private readonly distributionService: ModifiedLevelDistributionService = new ModifiedLevelDistributionService()
     ) {}
 
-    /** Clears all cached structural graphs and resumable runs owned by this service. */
+    /** Clears all cached invariant checks and resumable runs owned by this service. */
     public clearCache(): void {
-        this.cache.clearAll();
         this.flexReducedKeyInvariantCache.clear();
         this.flexRunCache.clear();
         this.flexRunCacheHits = 0;
@@ -38,26 +34,10 @@ export class SearchExecutionService {
     /** Advances one request to its next checkpoint or final stop condition. */
     public async searchToCheckpoint(request: CheckpointSearchContext): Promise<SearchResult> {
         const timingStart = request.timing ? performance.now() : 0;
-        if (this.getBackend(request) === 'flex') {
-            this.throwIfAborted(request.signal);
-            const flexStateIdentityMode = this.getFlexStateIdentityMode(request);
-            const run = this.getFlexRun(request, flexStateIdentityMode);
-            const flexState = await run.searchToCheckpointStateAsync({
-                threshold: request.exhaustive ? 0n : request.threshold ?? 0n,
-                maxIterations: request.exhaustive ? undefined : request.maxIterations,
-                drainEqualMassBand: request.drainEqualMassBand,
-                exhaustive: request.exhaustive,
-                targetClassifiedMass: request.exhaustive ? undefined : request.targetClassifiedMass,
-                probabilityFloor: request.probabilityFloor,
-                signal: request.signal
-            });
-            const checkpoint = run.buildEngineSnapshot(flexState);
-            this.finishTiming(request.timing, timingStart, 0);
-            return this.toFlexSearchResult(checkpoint, flexState, flexStateIdentityMode, request.exhaustive ? 0n : request.threshold ?? 0n, request.targetClassifiedMass, request.instrumentation, request.timing);
-        }
-
-        const run = this.getRun(request);
-        const snapshot = await run.searchToCheckpointAsync({
+        this.throwIfAborted(request.signal);
+        const flexStateIdentityMode = this.getFlexStateIdentityMode(request);
+        const run = this.getFlexRun(request, flexStateIdentityMode);
+        const flexState = await run.searchToCheckpointStateAsync({
             threshold: request.exhaustive ? 0n : request.threshold ?? 0n,
             maxIterations: request.exhaustive ? undefined : request.maxIterations,
             drainEqualMassBand: request.drainEqualMassBand,
@@ -66,53 +46,15 @@ export class SearchExecutionService {
             probabilityFloor: request.probabilityFloor,
             signal: request.signal
         });
-
+        const checkpoint = run.buildEngineSnapshot(flexState);
         this.finishTiming(request.timing, timingStart, 0);
-        return this.toSearchResult(snapshot, request.exhaustive ? 0n : request.threshold ?? 0n, request.targetClassifiedMass, request.instrumentation, request.timing);
+        return this.toFlexSearchResult(checkpoint, flexState, flexStateIdentityMode, request.exhaustive ? 0n : request.threshold ?? 0n, request.targetClassifiedMass, request.instrumentation, request.timing);
     }
 
     /** Advances one run through an ordered checkpoint plan, streaming each completed boundary. */
     public async searchSequentialCheckpoints(request: SequentialCheckpointSearchContext): Promise<SearchResult> {
         const timingStart = request.timing ? performance.now() : 0;
-        let recordedSearchMs = 0;
-        if (this.getBackend(request) === 'flex') {
-            return this.searchSequentialFlexCheckpoints(request, timingStart);
-        }
-
-        const run = this.getRun(request);
-        let lastResult: SearchResult | undefined;
-
-        for (let checkpointIndex = 0; checkpointIndex < request.checkpoints.length; checkpointIndex++) {
-            if (request.signal?.aborted) break;
-
-            const checkpoint = request.checkpoints[checkpointIndex];
-            if (!checkpoint) continue;
-
-            let snapshot: SearchRunSnapshot;
-            try {
-                snapshot = await run.searchToCheckpointAsync({
-                    threshold: checkpoint.threshold,
-                    maxIterations: checkpoint.limit,
-                    drainEqualMassBand: request.drainEqualMassBand,
-                    targetClassifiedMass: checkpoint.targetClassifiedMass,
-                    probabilityFloor: request.probabilityFloor,
-                    signal: request.signal
-                });
-            } catch (error) {
-                if (request.signal?.aborted && lastResult) return lastResult;
-                throw error;
-            }
-
-            recordedSearchMs = this.finishTiming(request.timing, timingStart, recordedSearchMs);
-            lastResult = this.toSearchResult(snapshot, checkpoint.threshold, checkpoint.targetClassifiedMass, request.instrumentation, request.timing);
-            request.onCheckpointComplete(lastResult, checkpointIndex);
-        }
-
-        if (lastResult) return lastResult;
-
-        this.finishTiming(request.timing, timingStart, recordedSearchMs);
-        const emptySnapshot = run.snapshot();
-        return this.toSearchResult(emptySnapshot, 0, undefined, request.instrumentation, request.timing);
+        return this.searchSequentialFlexCheckpoints(request, timingStart);
     }
 
     private async searchSequentialFlexCheckpoints(request: SequentialCheckpointSearchContext, timingStart: number): Promise<SearchResult> {
@@ -156,18 +98,6 @@ export class SearchExecutionService {
         return this.toFlexSearchResult(checkpoint, flexState, flexStateIdentityMode, 0, undefined, request.instrumentation, request.timing);
     }
 
-    private getBackend(request: CheckpointSearchContext): SearchBackend {
-        const backend = (request as { readonly searchBackend?: string }).searchBackend ?? 'concrete';
-        if (backend === 'concrete' || backend === 'flex') return backend;
-        throw new Error(`Unsupported search backend "${String(backend)}". Supported backends: "concrete", "flex".`);
-    }
-
-    private getRun(request: CheckpointSearchContext): SearchRun {
-        const create = () => this.createRun(request);
-        if (request.useCache === false) return create();
-        return this.cache.getOrCreateRun(this.createRunCacheKey(request), create);
-    }
-
     private getFlexRun(request: CheckpointSearchContext, stateIdentityMode: FlexStateIdentityMode): GroupedFlexSearchRun {
         const create = () => this.createFlexRun(request, stateIdentityMode);
         if (request.useCache === false) return create();
@@ -182,17 +112,6 @@ export class SearchExecutionService {
         this.flexRunCacheMisses++;
         const run = create();
         this.flexRunCache.set(key, run);
-        return run;
-    }
-
-    private createRun(request: CheckpointSearchContext): SearchRun {
-        const kernel = this.createKernel(request);
-        const run = new SearchRun(kernel, {
-            distributionService: this.distributionService,
-            targetClueId: request.targetClueId,
-            graphCache: this.cache
-        });
-        run.seedXp(request.xp);
         return run;
     }
 
@@ -243,7 +162,6 @@ export class SearchExecutionService {
             material: request.material,
             xp: request.xp,
             targetClueId: request.targetClueId ?? null,
-            backend: this.getBackend(request),
             flexStateIdentityMode: flexStateIdentityMode ?? null
         });
     }
@@ -257,69 +175,6 @@ export class SearchExecutionService {
             xp: request.xp,
             mutations: isMutatedRegistry(request.registry) ? request.registry.mutations : null
         });
-    }
-
-    private toSearchResult(
-        snapshot: SearchRunSnapshot,
-        threshold: number | bigint | undefined,
-        targetClassifiedMass?: number | bigint | undefined,
-        instrumentation?: EngineInstrumentation | undefined,
-        timing?: SearchTiming | undefined
-    ): SearchResult {
-        const thresholdUnits = ProbUtils.toBigInt(threshold ?? 0);
-        const targetClassifiedMassUnits = targetClassifiedMass === undefined
-            ? undefined
-            : ProbUtils.toBigInt(targetClassifiedMass);
-        const pendingUnits = BigInt(snapshot.mass.units?.pending ?? 0);
-        const classifiedMassUnits = PRECISION - pendingUnits;
-
-        if (instrumentation) {
-            const cacheMetrics = this.cache.getMetrics();
-            instrumentation.totalIterations = snapshot.iterations;
-            instrumentation.totalPrunedNodes = 0;
-            instrumentation.roundingErrorEvents = snapshot.mass.rounding > 0 ? 1 : 0;
-            instrumentation.levelsProcessed = snapshot.seededLevelCount;
-            instrumentation.levelsFullyResolved = snapshot.fullyResolved ? snapshot.seededLevelCount : 0;
-            instrumentation.fullyResolved = snapshot.fullyResolved;
-            instrumentation.resultsSize = snapshot.results.size;
-            instrumentation.queueSize = snapshot.pendingCount;
-            instrumentation.exitReason = snapshot.fullyResolved
-                ? 'empty'
-                : targetClassifiedMassUnits !== undefined && classifiedMassUnits >= targetClassifiedMassUnits
-                    ? 'mass'
-                    : snapshot.largestPendingMass < thresholdUnits ? 'threshold' : 'iterations';
-            instrumentation.poolCache = instrumentation.poolCache ?? { hits: 0, misses: 0 };
-            instrumentation.distCache = instrumentation.distCache ?? { hits: 0, misses: 0 };
-            instrumentation.search = {
-                backend: 'concrete',
-                graphCount: snapshot.graphCount,
-                seededLevelCount: snapshot.seededLevelCount,
-                pendingEntryCount: snapshot.pendingCount,
-                largestPendingMass: ProbUtils.toNumber(snapshot.largestPendingMass),
-                lastExpandedMass: ProbUtils.toNumber(snapshot.lastExpandedMass),
-                activeResidueCount: snapshot.activeResidueCount,
-                activeResidueMass: ProbUtils.toNumber(snapshot.activeResidueMass),
-                canImprove: !snapshot.fullyResolved && snapshot.largestPendingMass >= thresholdUnits,
-                graphCacheHits: cacheMetrics.graphs.hits,
-                graphCacheMisses: cacheMetrics.graphs.misses,
-                runCacheHits: cacheMetrics.runs.hits,
-                runCacheMisses: cacheMetrics.runs.misses,
-                suffixMergingEnabled: snapshot.suffixMerging.enabled,
-                suffixMergeCanonicalEntryCount: snapshot.suffixMerging.canonicalEntryCount,
-                suffixMergeHits: snapshot.suffixMerging.hits,
-                suffixMergeMisses: snapshot.suffixMerging.misses,
-                suffixMergedPendingMass: ProbUtils.toNumber(snapshot.suffixMerging.mergedPendingMass),
-                suffixAvoidedPendingEntries: snapshot.suffixMerging.avoidedPendingEntries
-            };
-        }
-
-        return {
-            snapshot,
-            combos: new Map(snapshot.results),
-            instrumentation: instrumentation ? { ...instrumentation } : undefined,
-            timing: timing ? { ...timing } : undefined,
-            threshold: ProbUtils.toNumber(threshold ?? 0)
-        };
     }
 
     private toFlexSearchResult(
@@ -356,7 +211,6 @@ export class SearchExecutionService {
             instrumentation.poolCache = instrumentation.poolCache ?? { hits: 0, misses: 0 };
             instrumentation.distCache = instrumentation.distCache ?? { hits: 0, misses: 0 };
             instrumentation.search = {
-                backend: 'flex',
                 graphCount: snapshot.graphCount,
                 seededLevelCount: snapshot.graphCount,
                 pendingEntryCount: snapshot.pendingCount,

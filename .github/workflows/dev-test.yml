@@ -22,6 +22,8 @@ jobs:
     - run: npm ci
     - name: Run Type Check (Lint)
       run: npm run lint
+    - name: Run API Extractor
+      run: npm run api:check
 
   test:
     name: Unit & UI Tests

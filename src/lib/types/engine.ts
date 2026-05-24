@@ -1,10 +1,12 @@
 import { Enchantment, MaterialValues, RegistryMutation, RomanMap } from '#types/domain.js';
-import type { EngineSearchSnapshot } from '#lib/search/SearchRun.js';
+import type { EngineSearchSnapshot } from '#lib/search/SearchSnapshot.js';
 
 import { MassAccountingBreakdown } from '#types/mass.js';
 
 /**
  * Presented enchant stats from the search engine.
+ *
+ * @public
  */
 export interface EnchantStats {
   /** Map of enchantment rank IDs to their total cumulative probability. Key is (enchantId << 8 | rank). */
@@ -35,8 +37,10 @@ export interface EnchantStats {
   timing?: SearchTiming | undefined;
 }
 
+/** @public */
 export type LevelDistribution = { [level: number]: bigint };
 
+/** @public */
 export interface CacheStats {
   hits: number;
   misses: number;
@@ -48,6 +52,7 @@ export interface CacheConfig {
   poolSize: number;
 }
 
+/** @public */
 export interface SearchCheckpoint {
   /** Stop when the largest pending node mass falls below this value. Use 0 to disable the threshold stop. */
   threshold: number;
@@ -57,6 +62,7 @@ export interface SearchCheckpoint {
   targetClassifiedMass?: number | bigint | undefined;
 }
 
+/** @public */
 export interface ExploredMassSample {
   modLevel: number;
   targetMass: number;
@@ -66,6 +72,7 @@ export interface ExploredMassSample {
   totalIterations: number;
 }
 
+/** @public */
 export interface SearchTiming {
   /** Reported engine time, including search and post-processing phases. */
   totalMs: number;
@@ -75,14 +82,10 @@ export interface SearchTiming {
   postProcessingMs?: number | undefined;
 }
 
+/** @public */
 export type EngineExitReason = 'threshold' | 'iterations' | 'mass' | 'aborted' | 'empty' | 'exhausted';
 
-/**
- * Internal search implementation selector. Defaults to the concrete V7 SearchRun path.
- * `flex` is the active experimental/diagnostic backend.
- */
-export type SearchBackend = 'concrete' | 'flex';
-
+/** @public */
 export interface EngineInstrumentation {
   /** Eligible-pool registry cache metrics. */
   poolCache: CacheStats;
@@ -124,9 +127,8 @@ export interface EngineInstrumentation {
   search?: SearchInstrumentation | undefined;
 }
 
+/** @public */
 export interface SearchInstrumentation {
-  /** Search implementation that produced this checkpoint. */
-  backend?: SearchBackend | undefined;
   /** Number of structural search graphs currently used by the run. */
   graphCount: number;
   /** Number of modified levels seeded into the run. */
@@ -143,13 +145,13 @@ export interface SearchInstrumentation {
   activeResidueMass: number;
   /** Whether this snapshot can still improve under a lower threshold or higher iteration cap. */
   canImprove: boolean;
-  /** Cumulative structural SearchGraph cache hits for this engine instance. */
+  /** Cumulative structural graph cache hits for this engine instance. */
   graphCacheHits?: number | undefined;
-  /** Cumulative structural SearchGraph cache misses for this engine instance. */
+  /** Cumulative structural graph cache misses for this engine instance. */
   graphCacheMisses?: number | undefined;
-  /** Cumulative resumable SearchRun cache hits for this engine instance. */
+  /** Cumulative resumable search-run cache hits for this engine instance. */
   runCacheHits?: number | undefined;
-  /** Cumulative resumable SearchRun cache misses for this engine instance. */
+  /** Cumulative resumable search-run cache misses for this engine instance. */
   runCacheMisses?: number | undefined;
   /** Whether run-local suffix canonicalization was enabled for this snapshot. */
   suffixMergingEnabled?: boolean | undefined;
@@ -163,38 +165,45 @@ export interface SearchInstrumentation {
   suffixMergedPendingMass?: number | undefined;
   /** Estimated number of pending entries avoided by suffix canonicalization. */
   suffixAvoidedPendingEntries?: number | undefined;
-  /** Flex-only: structural state identity mode used by this run. */
+  /** Internal grouped-runtime: structural state identity mode used by this run. */
   flexStateIdentityMode?: 'reduced' | 'program' | undefined;
-  /** Flex-only: structural pending buckets before compatibility projection expands program factors. */
+  /** Internal grouped-runtime: structural pending buckets before compatibility projection expands program factors. */
   flexStructuralPendingEntryCount?: number | undefined;
-  /** Flex-only: concrete-view materialization loss recorded as compatibility rounding in public accounting. */
+  /** Internal grouped-runtime: expanded-row materialization loss recorded as compatibility rounding in public accounting. */
   flexProjectionLoss?: number | undefined;
-  /** Flex-only: projection-stage mass classified as incompatible with the requested clue. */
+  /** Internal grouped-runtime: projection-stage mass classified as incompatible with the requested clue. */
   flexProjectionClueIncompatible?: number | undefined;
 }
 
+/** @public */
 export interface ResolvedRegistry {
   [enchantment: string]: Enchantment;
 }
 
+/** @public */
 export interface ItemPools {
   [item: string]: string[];
 }
 
+/** @public */
 export interface MergedOverrides {
   [enchantment: string]: Partial<Enchantment>;
 }
 
+/** @public */
 export interface ItemMaterials {
   [item: string]: string[];
 }
 
+/** @public */
 export interface ItemEnchantabilityTables {
   [item: string]: import('./domain.js').EnchantabilityTable;
 }
 
 /**
  * Packed representation of a search node to minimize object and array overhead.
+ *
+ * @internal
  */
 export interface PackedNode {
     packedChosen: number;
@@ -204,6 +213,8 @@ export interface PackedNode {
 
 /**
  * Blueprint caching for already-expanded nodes.
+ *
+ * @internal
  */
 export interface ExpansionBlueprint {
     probContinue: bigint;
@@ -216,6 +227,8 @@ export interface ExpansionBlueprint {
 
 /**
  * Internal state of a Registry, containing pre-computed mapping and conflict data.
+ *
+ * @public
  */
 export interface RegistryState {
     version: string;
@@ -242,7 +255,11 @@ export interface RegistryState {
     indexToEnchant: number[];
 }
 
-/** Runtime rank interval after invalid declared ranges are dropped and higher ranks shadow lower ranks. */
+/**
+ * Runtime rank interval after invalid declared ranges are dropped and higher ranks shadow lower ranks.
+ *
+ * @public
+ */
 export interface EffectiveRankInterval {
     min: number;
     max: number;
@@ -251,21 +268,28 @@ export interface EffectiveRankInterval {
     packedEnchant: PackedEnchant;
 }
 
+/** @public */
 export interface VanillaRegistryState extends RegistryState {
     readonly source: 'vanilla';
 }
 
+/** @public */
 export interface MutatedRegistryState extends RegistryState {
     readonly source: 'mutated';
     readonly mutations: readonly RegistryMutation[];
 }
 
+/** @public */
 export type BuiltRegistryState = VanillaRegistryState | MutatedRegistryState;
 
+/** @public */
 export type PackedEnchant = number & { __brand: "PackedEnchant" };
+/** @public */
 export type PackedCombo = number & { __brand: "PackedCombo" };
+/** @internal */
 export type ProbabilityValue = bigint & { __brand: "ProbabilityValue" };
 
+/** @public */
 export interface SearchConfig {
     /** The observed enchantment clue (e.g. "Sharpness IV"). Trigger Bayesian conditioning if set. */
     clue?: string | null | undefined;
@@ -283,8 +307,8 @@ export interface SearchConfig {
      */
     targetClassifiedMass?: number | bigint | undefined;
     /**
-     * Internal/experimental forward-mass floor. Omit to use each backend's default; set to 0
-     * for parity diagnostics that compare Flex against concrete V7 without early tail sieving.
+     * Internal/experimental forward-mass floor. Omit to use the engine default; set to 0
+     * for diagnostics that compare against historical concrete searches without early tail sieving.
      */
     probabilityFloor?: number | bigint | undefined;
     signal?: AbortSignal | undefined;
@@ -300,8 +324,8 @@ export interface SearchConfig {
     /**
      * Opt-in diagnostics/parity mode for iteration-capped checkpoints: after the iteration cap is
      * reached, continue expanding any frontier entries whose mass is at least the last expanded
-     * mass. This avoids stopping midway through a same-mass frontier band when comparing backends
-     * with different tie-breakers. It is intentionally off by default because it can exceed the
+     * mass. This avoids stopping midway through a same-mass frontier band when comparing diagnostic
+     * runs with different tie-breakers. It is intentionally off by default because it can exceed the
      * requested work cap.
      */
     drainEqualMassBand?: boolean | undefined;
@@ -321,29 +345,27 @@ export interface SearchConfig {
     useCache?: boolean | undefined;
     instrumentation?: EngineInstrumentation | undefined;
     timing?: SearchTiming | undefined;
-    /**
-     * Internal/experimental search implementation selector.
-     * Omit for the supported/default concrete V7 SearchRun path. Use `flex` only
-     * for diagnostics, parity checks, and staged engine-internal migration work.
-     */
-    searchBackend?: SearchBackend | undefined;
 }
 
+/** @public */
 export interface ItemSelectionRequest {
     item: string;
     material: string;
 }
 
+/** @public */
 export type CheckpointSearchRequest = SearchConfig & ItemSelectionRequest & {
     xp: number;
 };
 
+/** @public */
 export type SequentialCheckpointSearchRequest = SearchConfig & ItemSelectionRequest & {
     xp: number;
     checkpoints: SearchCheckpoint[];
     onCheckpointComplete: (result: SearchResult, checkpointIndex: number) => void;
 };
 
+/** @internal */
 export interface SummaryRequest {
     combos: ReadonlyMap<PackedCombo, bigint>;
     snapshot: EngineSearchSnapshot;
@@ -356,12 +378,15 @@ export interface SummaryRequest {
     isBook?: boolean | undefined;
 }
 
+/** @internal */
 export interface ConditionedSummaryRequest extends SummaryRequest {
     targetClueId: number;
 }
 
 /**
  * Lightweight progress update from the engine.
+ *
+ * @public
  */
 export interface ProgressUpdate {
   /** Number of modified levels or units processed. */
@@ -374,12 +399,18 @@ export interface ProgressUpdate {
 
 /**
  * Interface for reporting search progress to external consumers.
+ *
+ * @public
  */
 export interface ProgressReporter {
   onProgress(update: ProgressUpdate): void;
 }
 
-/** Search results before presentation summarization. */
+/**
+ * Search results before presentation summarization.
+ *
+ * @public
+ */
 export interface SearchResult {
     snapshot: EngineSearchSnapshot;
     combos: ReadonlyMap<PackedCombo, bigint>;

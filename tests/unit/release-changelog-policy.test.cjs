@@ -10,19 +10,21 @@ const {
   releaseBump,
 } = require('../../scripts/release-changelog-policy.cjs');
 
-function entryFor(sections) {
+function entryFor(sections, options = {}) {
+  const releaseNameSection = options.releaseName ? [`### ${options.releaseName}`, ''] : [];
   return [
     '## [v2.0.0]',
     '',
+    ...releaseNameSection,
     ...sections.flatMap((section) => [`### ${section}`, '- Fixture item.', '']),
   ].join('\n');
 }
 
-function policyIssue(bump, sections) {
+function policyIssue(bump, sections, options = {}) {
   return analyzeChangelogSections({
     bump,
     tag: 'v2.0.0',
-    entry: entryFor(sections),
+    entry: entryFor(sections, options),
   }).issue?.validatorMessage ?? null;
 }
 
@@ -81,10 +83,16 @@ describe('release changelog section policy', () => {
   });
 
   it('requires Breaking only for major releases', () => {
-    assert.equal(policyIssue('major', ['Breaking']), null);
-    assert.match(policyIssue('major', ['Added']), /Major releases must include/);
+    assert.equal(policyIssue('major', ['Breaking'], { releaseName: 'The "Fixture" Update' }), null);
+    assert.match(policyIssue('major', ['Added'], { releaseName: 'The "Fixture" Update' }), /Major releases must include/);
     assert.match(policyIssue('minor', ['Breaking']), /requires a major release/);
     assert.match(policyIssue('patch', ['Breaking']), /requires a major release/);
+  });
+
+  it('requires a human-readable name for major releases', () => {
+    assert.match(policyIssue('major', ['Breaking']), /human-readable release name/);
+    assert.match(policyIssue('minor', ['Added'], { releaseName: 'The "Fixture" Update' }), /reserved for major releases/);
+    assert.match(policyIssue('patch', ['Fixed'], { releaseName: 'The "Fixture" Update' }), /reserved for major releases/);
   });
 
   it('rejects empty or unknown sections', () => {
@@ -130,6 +138,95 @@ describe('release PR body validation', () => {
         ['scripts/validate-release-pr-body.cjs', 'v2.0.0', bodyPath, changelogPath],
         { cwd: path.resolve(__dirname, '../..') }
       );
+    });
+  });
+});
+
+describe('release API documentation validation', () => {
+  function git(cwd, args) {
+    return execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
+  }
+
+  function writeFixtureFile(root, file, content) {
+    const fullPath = path.join(root, file);
+    fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+    fs.writeFileSync(fullPath, content);
+  }
+
+  function createReleaseRepo() {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'release-api-doc-check-'));
+    git(tmpDir, ['init', '-q']);
+    git(tmpDir, ['config', 'user.email', 'test@example.com']);
+    git(tmpDir, ['config', 'user.name', 'Test User']);
+
+    writeFixtureFile(tmpDir, 'package.json', JSON.stringify({ version: '1.2.3' }, null, 2));
+    writeFixtureFile(tmpDir, 'package-lock.json', JSON.stringify({
+      version: '1.2.3',
+      packages: { '': { version: '1.2.3' } }
+    }, null, 2));
+    writeFixtureFile(tmpDir, 'CHANGELOG.md', [
+      '# Changelog',
+      '',
+      '## v1.2.3',
+      '',
+      '### Fixed',
+      '- Previous fixture.'
+    ].join('\n'));
+    writeFixtureFile(tmpDir, 'ARCHITECTURE.md', '# Architecture\n');
+    writeFixtureFile(tmpDir, 'docs/public-api.md', '# Public API\n');
+    git(tmpDir, ['add', '.']);
+    git(tmpDir, ['commit', '-qm', 'initial']);
+    git(tmpDir, ['tag', 'v1.2.3']);
+    git(tmpDir, ['branch', 'base']);
+    return tmpDir;
+  }
+
+  function writeReleaseMetadata(root, version, { updatePublicApi = false } = {}) {
+    writeFixtureFile(root, 'package.json', JSON.stringify({ version }, null, 2));
+    writeFixtureFile(root, 'package-lock.json', JSON.stringify({
+      version,
+      packages: { '': { version } }
+    }, null, 2));
+    writeFixtureFile(root, 'CHANGELOG.md', [
+      '# Changelog',
+      '',
+      `## v${version}`,
+      '',
+      '### Added',
+      '- Fixture feature.',
+      '',
+      '## v1.2.3',
+      '',
+      '### Fixed',
+      '- Previous fixture.'
+    ].join('\n'));
+    if (updatePublicApi) {
+      writeFixtureFile(root, 'docs/public-api.md', `# Public API\n\nReviewed for v${version}.\n`);
+    }
+    git(root, ['add', '.']);
+    git(root, ['commit', '-qm', `chore(release): prepare v${version}`]);
+  }
+
+  it('requires public API docs in minor release metadata commits', () => {
+    const tmpDir = createReleaseRepo();
+    const scriptPath = path.resolve(__dirname, '../../scripts/validate-release-head-commit.cjs');
+
+    writeReleaseMetadata(tmpDir, '1.3.0');
+
+    assert.throws(
+      () => execFileSync(process.execPath, [scriptPath, 'v1.3.0', 'HEAD', 'base'], { cwd: tmpDir, stdio: 'pipe' }),
+      /docs\/public-api\.md/
+    );
+  });
+
+  it('accepts minor release metadata commits that update public API docs', () => {
+    const tmpDir = createReleaseRepo();
+    const scriptPath = path.resolve(__dirname, '../../scripts/validate-release-head-commit.cjs');
+
+    writeReleaseMetadata(tmpDir, '1.3.0', { updatePublicApi: true });
+
+    assert.doesNotThrow(() => {
+      execFileSync(process.execPath, [scriptPath, 'v1.3.0', 'HEAD', 'base'], { cwd: tmpDir, stdio: 'pipe' });
     });
   });
 });

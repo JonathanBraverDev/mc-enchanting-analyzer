@@ -1,6 +1,6 @@
 import { PRECISION } from '#utils/index.js';
 import type { PackedCombo } from '#types/index.js';
-import { createMaterializedEngineFrontier, type PendingFrontierEntry, type SearchRunSnapshot } from '#lib/search/SearchRun.js';
+import { createMaterializedEngineFrontier, type PendingFrontierEntry, type SearchRunSnapshot } from '#lib/search/SearchSnapshot.js';
 import type { MassAccountingBreakdown } from '#types/mass.js';
 
 type UnitOverrides = Partial<Record<keyof NonNullable<MassAccountingBreakdown['units']>, bigint>>;

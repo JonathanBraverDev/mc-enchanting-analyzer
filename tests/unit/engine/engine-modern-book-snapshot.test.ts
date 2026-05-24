@@ -5,7 +5,8 @@ import { TEST_DEFAULTS } from '#constants/testing.js';
 import { TEST_DATA } from '#tests/infra/test-data.js';
 import { SnapshotUtils } from '#tests/infra/test-utils.js';
 import { SummaryService } from '#services/SummaryService.js';
-import { RegistryKernel, SearchRun } from '#lib/search/index.js';
+import { RegistryKernel } from '#lib/search/index.js';
+import { SearchRun } from '#lib/search/SearchRun.js';
 
 // Polyfill for requestAnimationFrame in Node (Sync version for tests)
 if (typeof (globalThis as any).requestAnimationFrame !== 'function') {

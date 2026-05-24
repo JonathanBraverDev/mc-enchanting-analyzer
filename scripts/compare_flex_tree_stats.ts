@@ -2,7 +2,9 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { ClueValidator } from '#core/clue.js';
-import { RegistryFactory, RegistryKernel, SearchRun } from '#lib/index.js';
+import { RegistryFactory } from '#core/factory.js';
+import { RegistryKernel } from '#lib/search/index.js';
+import { SearchRun } from '#lib/search/SearchRun.js';
 import {
     GroupedFlexSearchRun,
     type FlexNodeId,

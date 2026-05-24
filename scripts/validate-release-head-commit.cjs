@@ -16,8 +16,10 @@ const KNOWN_RELEASE_DOCS = new Set([
   'README.md',
   'MASS_HANDLING.md',
   'CONTRIBUTING.md',
+  'docs/public-api.md',
 ]);
 const REQUIRED_RELEASE_FILES = ['CHANGELOG.md', 'package.json', 'package-lock.json'];
+const REQUIRED_MINOR_PLUS_API_DOC = 'docs/public-api.md';
 const ALLOWED_HEAD_FILES = new Set([...REQUIRED_RELEASE_FILES, ...KNOWN_RELEASE_DOCS]);
 const SNAPSHOT_PATH_PATTERN = /^tests\/snapshots\//;
 
@@ -197,8 +199,8 @@ if (bump === 'major' && !lastCommitFiles.includes('ARCHITECTURE.md')) {
   fail('Major releases must update ARCHITECTURE.md in the final release metadata commit.');
 }
 
-if (bump === 'minor' && !changedFiles.some((file) => KNOWN_RELEASE_DOCS.has(file))) {
-  warn('Minor releases should update project docs when behavior, architecture, workflows, or user-facing capabilities changed.');
+if ((bump === 'major' || bump === 'minor') && !lastCommitFiles.includes(REQUIRED_MINOR_PLUS_API_DOC)) {
+  fail(`Minor and major releases must update ${REQUIRED_MINOR_PLUS_API_DOC} in the final release metadata commit so supported API policy stays current.`);
 }
 
 console.log(`Final release PR commit bumps package metadata and adds the ${tag} changelog entry.`);

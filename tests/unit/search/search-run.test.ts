@@ -1,6 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { RegistryFactory, RegistryKernel, SearchRun } from '#lib/index.js';
+import { RegistryFactory } from '#core/factory.js';
+import { RegistryKernel } from '#lib/search/index.js';
+import { SearchRun } from '#lib/search/SearchRun.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { ClueSearchPolicy } from '#engine/search/ClueSearchPolicy.js';
 import { ClueValidator } from '#core/clue.js';

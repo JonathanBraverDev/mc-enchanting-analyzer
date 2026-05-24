@@ -33,10 +33,9 @@ export interface GroupedFlexSearchRunOptions {
 }
 
 /**
- * Flex runner backed by grouped registry graphs.
+ * Current V8 runner backed by grouped registry graphs.
  *
- * This is the first PlexNode-capable Flex runner. It remains selected only by
- * explicit internal `searchBackend: 'flex'` requests while parity is being proven.
+ * The `flex` name is retained for internal implementation modules and node types.
  */
 export class GroupedFlexSearchRun {
     public readonly programs: FlexProgramStore;
