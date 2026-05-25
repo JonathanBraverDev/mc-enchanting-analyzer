@@ -14,7 +14,7 @@ import { LRUCache } from '#utils/collections/LRUCache.js';
  * summary and UI projection.
  */
 export class SearchExecutionService {
-    private readonly flexReducedKeyInvariantCache = new LRUCache<string, FlexReducedKeyInvariantResult>(FLEX_RUN_CACHE_LIMITS.REDUCED_KEY_INVARIANTS);
+    private readonly flexReducedKeyInvariantCache = new LRUCache<string, FlexReducedKeyInvariantResult>(FLEX_RUN_CACHE_LIMITS.REDUCED_KEY_INVARIANT_CHECKS);
     private readonly flexRunCache = new LRUCache<string, GroupedFlexSearchRun>(FLEX_RUN_CACHE_LIMITS.RUNS);
     private flexRunCacheHits = 0;
     private flexRunCacheMisses = 0;
@@ -135,7 +135,7 @@ export class SearchExecutionService {
                 kernel: this.createKernel(request),
                 xp: request.xp,
                 distributionService: this.distributionService,
-                maxConflicts: FLEX_REDUCED_KEY_INVARIANT_LIMITS.MIN_CONFLICTS
+                maxConflicts: FLEX_REDUCED_KEY_INVARIANT_LIMITS.MIN_REPORTED_CONFLICTS
             });
             this.flexReducedKeyInvariantCache.set(key, result);
         }

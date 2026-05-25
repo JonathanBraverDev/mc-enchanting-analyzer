@@ -23,13 +23,13 @@ const FLEX_NODE_STATE_COUNT_STRIDE = ENGINE_LIMITS.MAX_ENCHANTS_PER_ITEM + 1;
 const EMPTY_EDGE_WEIGHTS = new Uint32Array(0);
 const EMPTY_EDGE_CHILD_IDS = new Int32Array(0);
 const REDUCED_IDENTITY_PROGRAM_ID = 0 as FlexProgramId;
-const INITIAL_FLEX_NODE_ID = 0 as FlexNodeId;
-const INITIAL_FLEX_PROGRAM_ID = REDUCED_IDENTITY_PROGRAM_ID;
+const INITIAL_EXPANSION_NODE_ID = 0 as FlexNodeId;
+const INITIAL_EXPANSION_PROGRAM_ID = REDUCED_IDENTITY_PROGRAM_ID;
 const INITIAL_EXPANSION_PROB_CONTINUE = 0n;
 const INITIAL_EXPANSION_TOTAL_WEIGHT = 0;
 const INITIAL_EXPANSION_EDGE_COUNT = 0;
 const INITIAL_EXPANSION_CLUE_INCOMPATIBLE_WEIGHT = 0;
-const SCRATCH_ENTRY_INDEX_NONE = FLEX_INDEX_SENTINELS.MISSING_VALUE;
+const SCRATCH_ENTRY_INDEX_NONE = FLEX_INDEX_SENTINELS.MISSING_INDEX;
 
 interface GroupedExpansionShape {
     readonly totalWeight: number;
@@ -76,7 +76,7 @@ class FlexNodeIndex {
         this.stateKeys = new Int32Array(size);
         this.programIds = new Int32Array(size);
         this.values = new Int32Array(size);
-        this.values.fill(FLEX_INDEX_SENTINELS.MISSING_VALUE);
+        this.values.fill(FLEX_INDEX_SENTINELS.MISSING_INDEX);
         this.used = new Uint8Array(size);
         this.mask = size - 1;
         this.resizeAt = Math.floor(size * FLEX_GRAPH_INDEX_CONFIG.MAX_LOAD_FACTOR);
@@ -96,7 +96,7 @@ class FlexNodeIndex {
                 && this.exclusionMaskHighs[index] === maskHigh
             ) {
                 const value = this.values[index]!;
-                return value === FLEX_INDEX_SENTINELS.MISSING_VALUE ? undefined : value as FlexNodeId;
+                return value === FLEX_INDEX_SENTINELS.MISSING_INDEX ? undefined : value as FlexNodeId;
             }
             index = (index + 1) & this.mask;
         }
@@ -172,7 +172,7 @@ class FlexNodeIndex {
         this.stateKeys = new Int32Array(nextSize);
         this.programIds = new Int32Array(nextSize);
         this.values = new Int32Array(nextSize);
-        this.values.fill(FLEX_INDEX_SENTINELS.MISSING_VALUE);
+        this.values.fill(FLEX_INDEX_SENTINELS.MISSING_INDEX);
         this.used = new Uint8Array(nextSize);
         this.mask = nextSize - 1;
         this.resizeAt = Math.floor(nextSize * FLEX_GRAPH_INDEX_CONFIG.MAX_LOAD_FACTOR);
@@ -248,8 +248,8 @@ export class GroupedFlexGraph implements FlexGraph {
     private scratchEdgeWeights = EMPTY_EDGE_WEIGHTS;
     private scratchEdgeChildIds = EMPTY_EDGE_CHILD_IDS;
     private readonly scratchExpansion: MutableFlexSearchExpansion = {
-        nodeId: INITIAL_FLEX_NODE_ID,
-        programId: INITIAL_FLEX_PROGRAM_ID,
+        nodeId: INITIAL_EXPANSION_NODE_ID,
+        programId: INITIAL_EXPANSION_PROGRAM_ID,
         nodeKind: 'solid',
         count: FLEX_GRAPH_TRAVERSAL.ROOT_ENCHANT_COUNT,
         probContinue: INITIAL_EXPANSION_PROB_CONTINUE,
@@ -411,7 +411,7 @@ export class GroupedFlexGraph implements FlexGraph {
             PRECISION,
             FLEX_GRAPH_TRAVERSAL.ROOT_EXCLUSION_MASK,
             currentLevel,
-            FLEX_GRAPH_TRAVERSAL.FIRST_CHILD_ENCHANT_COUNT,
+            FLEX_GRAPH_TRAVERSAL.ENCHANT_COUNT_INCREMENT,
             null
         );
     }
@@ -439,8 +439,8 @@ export class GroupedFlexGraph implements FlexGraph {
             );
         }
 
-        const childLevel = Math.floor(currentLevel / FLEX_GRAPH_TRAVERSAL.LEVEL_DECAY_DIVISOR);
-        const childCount = count + FLEX_GRAPH_TRAVERSAL.FIRST_CHILD_ENCHANT_COUNT;
+        const childLevel = Math.floor(currentLevel / this.kernel.additionalEnchantmentLevelDivisor);
+        const childCount = count + FLEX_GRAPH_TRAVERSAL.ENCHANT_COUNT_INCREMENT;
         return this.createGroupedSearchExpansion(nodeId, probContinue, exclusionMask, childLevel, childCount, null);
     }
 
@@ -1042,7 +1042,7 @@ export class GroupedFlexGraph implements FlexGraph {
     }
 
     private getTerminalReason(count: number): 'max-enchants' | 'single-book' | null {
-        if (this.kernel.item === 'book' && !this.kernel.multiEnchantBooks && count >= FLEX_GRAPH_TRAVERSAL.SINGLE_ENCHANT_BOOK_MAX_COUNT) {
+        if (this.kernel.item === 'book' && !this.kernel.multiEnchantBooks && count >= FLEX_GRAPH_TRAVERSAL.SINGLE_ENCHANT_BOOK_TERMINAL_COUNT) {
             return 'single-book';
         }
         if (count >= ENGINE_LIMITS.MAX_ENCHANTS_PER_ITEM) {
@@ -1060,11 +1060,11 @@ export class GroupedFlexGraph implements FlexGraph {
 }
 
 function exclusionMaskLow(exclusionMask: bigint): number {
-    return Number(exclusionMask & FLEX_HASH_CONFIG.U32_MASK) >>> 0;
+    return Number(exclusionMask & FLEX_HASH_CONFIG.LOW_32_BITS_MASK) >>> 0;
 }
 
 function exclusionMaskHigh(exclusionMask: bigint): number {
-    return Number((exclusionMask >> FLEX_HASH_CONFIG.U32_SHIFT) & FLEX_HASH_CONFIG.U32_MASK) >>> 0;
+    return Number((exclusionMask >> FLEX_HASH_CONFIG.HIGH_32_BITS_SHIFT) & FLEX_HASH_CONFIG.LOW_32_BITS_MASK) >>> 0;
 }
 
 function sortEdgeArrays(edgeWeights: Uint32Array, edgeChildIds: Int32Array, edgeCount: number): void {

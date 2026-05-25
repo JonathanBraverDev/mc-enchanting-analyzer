@@ -3,22 +3,21 @@ export const FLEX_RUN_CACHE_LIMITS = Object.freeze({
     /** Resumable XP-cell runs. */
     RUNS: 128,
     /** Mutated-registry reduced-key checks are small and cheap enough to retain more broadly. */
-    REDUCED_KEY_INVARIANTS: 256
+    REDUCED_KEY_INVARIANT_CHECKS: 256
 });
 
 /** Bounds for reduced-key invariant checks used to decide Flex state identity mode. */
 export const FLEX_REDUCED_KEY_INVARIANT_LIMITS = Object.freeze({
-    MIN_CONFLICTS: 1,
-    DEFAULT_MAX_CONFLICTS: 10
+    MIN_REPORTED_CONFLICTS: 1,
+    DEFAULT_MAX_REPORTED_CONFLICTS: 10
 });
 
 /** Shared grouped-graph traversal values that mirror vanilla enchanting state transitions. */
 export const FLEX_GRAPH_TRAVERSAL = Object.freeze({
     ROOT_EXCLUSION_MASK: 0n,
     ROOT_ENCHANT_COUNT: 0,
-    FIRST_CHILD_ENCHANT_COUNT: 1,
-    LEVEL_DECAY_DIVISOR: 2,
-    SINGLE_ENCHANT_BOOK_MAX_COUNT: 1
+    ENCHANT_COUNT_INCREMENT: 1,
+    SINGLE_ENCHANT_BOOK_TERMINAL_COUNT: 1
 });
 
 /** Sizing policy for the grouped graph node lookup table. */
@@ -41,14 +40,14 @@ export const FLEX_FRONTIER_CONFIG = Object.freeze({
 export const FLEX_INDEX_SENTINELS = Object.freeze({
     EMPTY_SLOT: 0,
     OCCUPIED_SLOT: 1,
-    DELETED_SLOT: 2,
-    MISSING_VALUE: -1
+    TOMBSTONE_SLOT: 2,
+    MISSING_INDEX: -1
 });
 
 /** Hash mixing constants used by Flex numeric indexes. */
 export const FLEX_HASH_CONFIG = Object.freeze({
-    U32_MASK: 0xffffffffn,
-    U32_SHIFT: 32n,
+    LOW_32_BITS_MASK: 0xffffffffn,
+    HIGH_32_BITS_SHIFT: 32n,
     GOLDEN_RATIO_32: 0x9E3779B1,
     STATE_KEY_MULTIPLIER: 0x85EBCA6B,
     PROGRAM_KEY_MULTIPLIER: 0xC2B2AE35,
