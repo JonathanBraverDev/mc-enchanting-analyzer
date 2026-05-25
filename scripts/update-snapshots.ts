@@ -21,7 +21,10 @@ const SNAPSHOT_CASES: SnapshotCase[] = [
     { name: '1.21.11_spear_30_diamond', version: '1.21.11', item: 'spear', xp: 30, material: 'diamond' },
     { name: '1.21_sword_30_diamond_clue_sharpness', version: '1.21', item: 'sword', xp: 30, material: 'diamond', clue: 'Sharpness IV' },
     { name: '1.8_bow_30_bow_clue_power', version: '1.8', item: 'bow', xp: 30, material: 'bow', clue: 'Power IV' },
+    { name: '1.4.6_book_30_book', version: '1.4.6', item: 'book', xp: 30, material: 'book' },
     { name: '1.7.2_book_30_book', version: '1.7.2', item: 'book', xp: 30, material: 'book' },
+    { name: '1.14_chestplate_30_diamond', version: '1.14', item: 'chestplate', xp: 30, material: 'diamond' },
+    { name: '1.14.3_chestplate_30_diamond', version: '1.14.3', item: 'chestplate', xp: 30, material: 'diamond' },
     {
         name: '1.21.11_book_30_book',
         version: '1.21.11',

@@ -45,6 +45,16 @@ describe('RegistryKernel', () => {
             item: 'sword',
             material: 'diamond'
         });
+        const multiBookLegacy = new RegistryKernel({
+            registry: RegistryFactory.build('1.7.2'),
+            item: 'book',
+            material: 'book'
+        });
+        const lapisPivot = new RegistryKernel({
+            registry: RegistryFactory.build('1.8'),
+            item: 'sword',
+            material: 'diamond'
+        });
         const modern = new RegistryKernel({
             registry: RegistryFactory.build('1.21.11'),
             item: 'sword',
@@ -52,6 +62,8 @@ describe('RegistryKernel', () => {
         });
 
         assert.strictEqual(legacy.additionalEnchantmentLevelDivisor, 4);
+        assert.strictEqual(multiBookLegacy.additionalEnchantmentLevelDivisor, 4);
+        assert.strictEqual(lapisPivot.additionalEnchantmentLevelDivisor, 2);
         assert.strictEqual(modern.additionalEnchantmentLevelDivisor, 2);
     });
 
