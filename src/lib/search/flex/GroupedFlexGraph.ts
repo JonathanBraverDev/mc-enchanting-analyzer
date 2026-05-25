@@ -17,12 +17,19 @@ import type {
     FlexStateIdentityMode
 } from '#lib/search/flex/FlexTypes.js';
 import { FlexProgramStore } from '#lib/search/flex/FlexProgramStore.js';
-import { FLEX_HASH_CONSTANTS, FLEX_INDEX_LIMITS, FLEX_INDEX_SENTINELS } from '#lib/search/flex/FlexConstants.js';
+import { FLEX_GRAPH_INDEX_CONFIG, FLEX_GRAPH_TRAVERSAL, FLEX_HASH_CONFIG, FLEX_INDEX_SENTINELS } from '#lib/search/flex/FlexConstants.js';
 
 const FLEX_NODE_STATE_COUNT_STRIDE = ENGINE_LIMITS.MAX_ENCHANTS_PER_ITEM + 1;
 const EMPTY_EDGE_WEIGHTS = new Uint32Array(0);
 const EMPTY_EDGE_CHILD_IDS = new Int32Array(0);
-const SCRATCH_ENTRY_INDEX_NONE = -1;
+const REDUCED_IDENTITY_PROGRAM_ID = 0 as FlexProgramId;
+const INITIAL_FLEX_NODE_ID = 0 as FlexNodeId;
+const INITIAL_FLEX_PROGRAM_ID = REDUCED_IDENTITY_PROGRAM_ID;
+const INITIAL_EXPANSION_PROB_CONTINUE = 0n;
+const INITIAL_EXPANSION_TOTAL_WEIGHT = 0;
+const INITIAL_EXPANSION_EDGE_COUNT = 0;
+const INITIAL_EXPANSION_CLUE_INCOMPATIBLE_WEIGHT = 0;
+const SCRATCH_ENTRY_INDEX_NONE = FLEX_INDEX_SENTINELS.MISSING_VALUE;
 
 interface GroupedExpansionShape {
     readonly totalWeight: number;
@@ -62,7 +69,7 @@ class FlexNodeIndex {
     private count = 0;
     private _growCount = 0;
 
-    public constructor(capacity: number = FLEX_INDEX_LIMITS.GRAPH_INITIAL_CAPACITY) {
+    public constructor(capacity: number = FLEX_GRAPH_INDEX_CONFIG.INITIAL_CAPACITY) {
         const size = FlexNodeIndex.nextPowerOfTwo(capacity);
         this.exclusionMaskLows = new Uint32Array(size);
         this.exclusionMaskHighs = new Uint32Array(size);
@@ -72,7 +79,7 @@ class FlexNodeIndex {
         this.values.fill(FLEX_INDEX_SENTINELS.MISSING_VALUE);
         this.used = new Uint8Array(size);
         this.mask = size - 1;
-        this.resizeAt = Math.floor(size * FLEX_INDEX_LIMITS.GRAPH_MAX_LOAD_FACTOR);
+        this.resizeAt = Math.floor(size * FLEX_GRAPH_INDEX_CONFIG.MAX_LOAD_FACTOR);
     }
 
     public get(exclusionMask: bigint, stateKey: number, programId: FlexProgramId): FlexNodeId | undefined {
@@ -157,7 +164,7 @@ class FlexNodeIndex {
         const oldProgramIds = this.programIds;
         const oldValues = this.values;
         const oldUsed = this.used;
-        const nextSize = oldStateKeys.length * FLEX_INDEX_LIMITS.GROWTH_FACTOR;
+        const nextSize = oldStateKeys.length * FLEX_GRAPH_INDEX_CONFIG.GROWTH_FACTOR;
 
         this.exclusionMasks = [];
         this.exclusionMaskLows = new Uint32Array(nextSize);
@@ -168,7 +175,7 @@ class FlexNodeIndex {
         this.values.fill(FLEX_INDEX_SENTINELS.MISSING_VALUE);
         this.used = new Uint8Array(nextSize);
         this.mask = nextSize - 1;
-        this.resizeAt = Math.floor(nextSize * FLEX_INDEX_LIMITS.GRAPH_MAX_LOAD_FACTOR);
+        this.resizeAt = Math.floor(nextSize * FLEX_GRAPH_INDEX_CONFIG.MAX_LOAD_FACTOR);
         this.count = 0;
 
         for (let i = 0; i < oldStateKeys.length; i++) {
@@ -187,14 +194,14 @@ class FlexNodeIndex {
 
     private hashParts(maskLow: number, maskHigh: number, stateKey: number, programId: FlexProgramId): number {
         let h = (maskLow
-            ^ Math.imul(maskHigh, FLEX_HASH_CONSTANTS.GOLDEN_RATIO_32)
-            ^ Math.imul(stateKey, FLEX_HASH_CONSTANTS.STATE_KEY_MULTIPLIER)
-            ^ Math.imul(programId, FLEX_HASH_CONSTANTS.PROGRAM_KEY_MULTIPLIER)) >>> 0;
-        h ^= h >>> FLEX_HASH_CONSTANTS.AVALANCHE_SHIFT_1;
-        h = Math.imul(h, FLEX_HASH_CONSTANTS.AVALANCHE_MULTIPLIER_1) >>> 0;
-        h ^= h >>> FLEX_HASH_CONSTANTS.AVALANCHE_SHIFT_2;
-        h = Math.imul(h, FLEX_HASH_CONSTANTS.AVALANCHE_MULTIPLIER_2) >>> 0;
-        return (h ^ (h >>> FLEX_HASH_CONSTANTS.AVALANCHE_SHIFT_1)) >>> 0;
+            ^ Math.imul(maskHigh, FLEX_HASH_CONFIG.GOLDEN_RATIO_32)
+            ^ Math.imul(stateKey, FLEX_HASH_CONFIG.STATE_KEY_MULTIPLIER)
+            ^ Math.imul(programId, FLEX_HASH_CONFIG.PROGRAM_KEY_MULTIPLIER)) >>> 0;
+        h ^= h >>> FLEX_HASH_CONFIG.AVALANCHE_SHIFT_1;
+        h = Math.imul(h, FLEX_HASH_CONFIG.AVALANCHE_MULTIPLIER_1) >>> 0;
+        h ^= h >>> FLEX_HASH_CONFIG.AVALANCHE_SHIFT_2;
+        h = Math.imul(h, FLEX_HASH_CONFIG.AVALANCHE_MULTIPLIER_2) >>> 0;
+        return (h ^ (h >>> FLEX_HASH_CONFIG.AVALANCHE_SHIFT_1)) >>> 0;
     }
 
     private static nextPowerOfTwo(value: number): number {
@@ -241,16 +248,16 @@ export class GroupedFlexGraph implements FlexGraph {
     private scratchEdgeWeights = EMPTY_EDGE_WEIGHTS;
     private scratchEdgeChildIds = EMPTY_EDGE_CHILD_IDS;
     private readonly scratchExpansion: MutableFlexSearchExpansion = {
-        nodeId: 0 as FlexNodeId,
-        programId: 0 as FlexProgramId,
+        nodeId: INITIAL_FLEX_NODE_ID,
+        programId: INITIAL_FLEX_PROGRAM_ID,
         nodeKind: 'solid',
-        count: 0,
-        probContinue: 0n,
-        totalWeight: 0,
-        edgeCount: 0,
+        count: FLEX_GRAPH_TRAVERSAL.ROOT_ENCHANT_COUNT,
+        probContinue: INITIAL_EXPANSION_PROB_CONTINUE,
+        totalWeight: INITIAL_EXPANSION_TOTAL_WEIGHT,
+        edgeCount: INITIAL_EXPANSION_EDGE_COUNT,
         edgeWeights: EMPTY_EDGE_WEIGHTS,
         edgeChildIds: EMPTY_EDGE_CHILD_IDS,
-        clueIncompatibleWeight: 0,
+        clueIncompatibleWeight: INITIAL_EXPANSION_CLUE_INCOMPATIBLE_WEIGHT,
         terminalReason: null
     };
     private readonly stateIdentityMode: FlexStateIdentityMode;
@@ -304,9 +311,9 @@ export class GroupedFlexGraph implements FlexGraph {
 
     public getRootNode(initialLevel: number): FlexNode {
         return this.createNode(this.getOrCreateNodeId(
-            0n,
+            FLEX_GRAPH_TRAVERSAL.ROOT_EXCLUSION_MASK,
             initialLevel,
-            0,
+            FLEX_GRAPH_TRAVERSAL.ROOT_ENCHANT_COUNT,
             this.programs.empty
         ));
     }
@@ -391,7 +398,7 @@ export class GroupedFlexGraph implements FlexGraph {
     }
 
     private createSearchExpansionForNode(nodeId: FlexNodeId): FlexSearchExpansion {
-        return this.counts[nodeId as number] === 0
+        return this.counts[nodeId as number] === FLEX_GRAPH_TRAVERSAL.ROOT_ENCHANT_COUNT
             ? this.createRootSearchExpansion(nodeId)
             : this.createNonRootSearchExpansion(nodeId);
     }
@@ -402,9 +409,9 @@ export class GroupedFlexGraph implements FlexGraph {
         return this.createGroupedSearchExpansion(
             nodeId,
             PRECISION,
-            0n,
+            FLEX_GRAPH_TRAVERSAL.ROOT_EXCLUSION_MASK,
             currentLevel,
-            1,
+            FLEX_GRAPH_TRAVERSAL.FIRST_CHILD_ENCHANT_COUNT,
             null
         );
     }
@@ -432,8 +439,8 @@ export class GroupedFlexGraph implements FlexGraph {
             );
         }
 
-        const childLevel = Math.floor(currentLevel / 2);
-        const childCount = count + 1;
+        const childLevel = Math.floor(currentLevel / FLEX_GRAPH_TRAVERSAL.LEVEL_DECAY_DIVISOR);
+        const childCount = count + FLEX_GRAPH_TRAVERSAL.FIRST_CHILD_ENCHANT_COUNT;
         return this.createGroupedSearchExpansion(nodeId, probContinue, exclusionMask, childLevel, childCount, null);
     }
 
@@ -692,7 +699,7 @@ export class GroupedFlexGraph implements FlexGraph {
         const childExclusionMaskLow = this.scratchGroupMaskLows[groupIndex]!;
         const childExclusionMaskHigh = this.scratchGroupMaskHighs[groupIndex]!;
         if (this.stateIdentityMode === 'reduced') {
-            const identityProgramId = 0 as FlexProgramId;
+            const identityProgramId = REDUCED_IDENTITY_PROGRAM_ID;
             const stateKey = this.createNodeStateKey(childLevel, childCount);
             const existing = this.nodeIndex.getParts(childExclusionMaskLow, childExclusionMaskHigh, stateKey, identityProgramId);
             if (existing !== undefined) {
@@ -741,7 +748,7 @@ export class GroupedFlexGraph implements FlexGraph {
         const childExclusionMaskLow = shape.childExclusionMaskLows[groupIndex]!;
         const childExclusionMaskHigh = shape.childExclusionMaskHighs[groupIndex]!;
         if (this.stateIdentityMode === 'reduced') {
-            const identityProgramId = 0 as FlexProgramId;
+            const identityProgramId = REDUCED_IDENTITY_PROGRAM_ID;
             const stateKey = this.createNodeStateKey(childLevel, childCount);
             const existing = this.nodeIndex.getParts(childExclusionMaskLow, childExclusionMaskHigh, stateKey, identityProgramId);
             if (existing !== undefined) {
@@ -1031,11 +1038,11 @@ export class GroupedFlexGraph implements FlexGraph {
     }
 
     private getIdentityProgramId(programId: FlexProgramId): FlexProgramId {
-        return this.stateIdentityMode === 'reduced' ? 0 as FlexProgramId : programId;
+        return this.stateIdentityMode === 'reduced' ? REDUCED_IDENTITY_PROGRAM_ID : programId;
     }
 
     private getTerminalReason(count: number): 'max-enchants' | 'single-book' | null {
-        if (this.kernel.item === 'book' && !this.kernel.multiEnchantBooks && count >= 1) {
+        if (this.kernel.item === 'book' && !this.kernel.multiEnchantBooks && count >= FLEX_GRAPH_TRAVERSAL.SINGLE_ENCHANT_BOOK_MAX_COUNT) {
             return 'single-book';
         }
         if (count >= ENGINE_LIMITS.MAX_ENCHANTS_PER_ITEM) {
@@ -1053,11 +1060,11 @@ export class GroupedFlexGraph implements FlexGraph {
 }
 
 function exclusionMaskLow(exclusionMask: bigint): number {
-    return Number(exclusionMask & FLEX_HASH_CONSTANTS.U32_MASK) >>> 0;
+    return Number(exclusionMask & FLEX_HASH_CONFIG.U32_MASK) >>> 0;
 }
 
 function exclusionMaskHigh(exclusionMask: bigint): number {
-    return Number((exclusionMask >> FLEX_HASH_CONSTANTS.U32_SHIFT) & FLEX_HASH_CONSTANTS.U32_MASK) >>> 0;
+    return Number((exclusionMask >> FLEX_HASH_CONFIG.U32_SHIFT) & FLEX_HASH_CONFIG.U32_MASK) >>> 0;
 }
 
 function sortEdgeArrays(edgeWeights: Uint32Array, edgeChildIds: Int32Array, edgeCount: number): void {
