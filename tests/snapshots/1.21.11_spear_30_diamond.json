@@ -470,25 +470,163 @@
   },
   "accuracy": 0.999991349342,
   "accounting": {
-    "resolved": 0.9999913493422377,
+    "resolved": 0.9999913493422383,
     "clueIncompatible": 0,
     "pending": 0,
     "sieved": 0,
-    "overflow": 0.000008650657760707683,
+    "overflow": 0.000008650657760711153,
     "capped": 0,
-    "rounding": 1.6453852169640015e-15,
-    "recoveredRounding": 3.2959746043559335e-16,
+    "rounding": 9.445569326693715e-16,
+    "recoveredRounding": 2.645453300864631e-16,
     "recoveredSieved": 0,
     "units": {
-      "resolved": "1152911531077483765",
+      "resolved": "1152911531077484569",
       "clueIncompatible": "0",
       "pending": "0",
       "sieved": "0",
-      "overflow": "9973529361314",
+      "overflow": "9973529361318",
       "capped": "0",
-      "rounding": "1897",
-      "recoveredRounding": "380",
+      "rounding": "1089",
+      "recoveredRounding": "305",
       "recoveredSieved": "0"
+    },
+    "details": {
+      "stages": {
+        "search": {
+          "buckets": {
+            "resolved": {
+              "value": 0.9999913493422385,
+              "units": "1152911531077484748"
+            },
+            "overflow": {
+              "value": 0.000008650657760711153,
+              "units": "9973529361318"
+            },
+            "rounding": {
+              "value": 7.892991815694472e-16,
+              "units": "910"
+            },
+            "recoveredRounding": {
+              "value": 2.645453300864631e-16,
+              "units": "305"
+            }
+          },
+          "operations": {
+            "seed": {
+              "buckets": {
+                "pending": {
+                  "value": 1,
+                  "units": "1152921504606846976"
+                }
+              }
+            },
+            "frontier": {
+              "buckets": {
+                "pending": {
+                  "value": -1,
+                  "units": "-1152921504606846976"
+                }
+              }
+            },
+            "resolve": {
+              "buckets": {
+                "resolved": {
+                  "value": 0.9999913493422385,
+                  "units": "1152911531077484748"
+                }
+              }
+            },
+            "edgeSplit": {
+              "buckets": {
+                "rounding": {
+                  "value": 7.892991815694472e-16,
+                  "units": "910"
+                }
+              }
+            },
+            "overflow": {
+              "buckets": {
+                "overflow": {
+                  "value": 0.000008650657760711153,
+                  "units": "9973529361318"
+                }
+              }
+            },
+            "residue": {
+              "buckets": {
+                "recoveredRounding": {
+                  "value": 2.645453300864631e-16,
+                  "units": "305"
+                }
+              }
+            }
+          }
+        },
+        "projection": {
+          "buckets": {
+            "source": {
+              "value": 0.9999913493422385,
+              "units": "1152911531077484748"
+            },
+            "projected": {
+              "value": 0.9999913493422383,
+              "units": "1152911531077484569"
+            },
+            "loss": {
+              "value": 1.5525775109992423e-16,
+              "units": "179"
+            }
+          },
+          "operations": {
+            "results": {
+              "buckets": {
+                "source": {
+                  "value": 0.9999913493422385,
+                  "units": "1152911531077484748"
+                },
+                "projected": {
+                  "value": 0.9999913493422383,
+                  "units": "1152911531077484569"
+                },
+                "loss": {
+                  "value": 1.5525775109992423e-16,
+                  "units": "179"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "diagnostics": {
+    "engine": {
+      "totalIterations": 1003,
+      "roundingErrorEvents": 1,
+      "levelsProcessed": 6,
+      "levelsFullyResolved": 6,
+      "fullyResolved": true,
+      "resultsSize": 415,
+      "queueSize": 0,
+      "exitReason": "empty"
+    },
+    "search": {
+      "graphCount": 6,
+      "seededLevelCount": 6,
+      "pendingEntryCount": 0,
+      "largestPendingMass": 0,
+      "lastExpandedMass": 1.67e-10,
+      "activeResidueCount": 1908,
+      "activeResidueMass": 0,
+      "canImprove": false,
+      "flexStateIdentityMode": "reduced",
+      "flexSolidNodeCount": 347,
+      "flexPlexNodeCount": 292,
+      "flexExpandedSolidNodeCount": 374,
+      "flexExpandedPlexNodeCount": 629,
+      "flexStructuralPendingEntryCount": 0,
+      "flexProjectionLoss": 0,
+      "flexProjectionClueIncompatible": 0
     }
   }
 }
