@@ -78,15 +78,7 @@ export class FlexSnapshotBuilder {
                 seededLevelCount: state.graphCount,
                 activeResidueCount: state.activeResidueCount,
                 activeResidueMass: state.activeResidueMass,
-                fullyResolved: state.fullyResolved,
-                suffixMerging: Object.freeze({
-                    enabled: false,
-                    canonicalEntryCount: 0,
-                    hits: 0,
-                    misses: 0,
-                    mergedPendingMass: 0n,
-                    avoidedPendingEntries: 0
-                })
+                fullyResolved: state.fullyResolved
             }),
             resolvedProjectionLoss: this.resolvedTotals.projectionLoss,
             pendingProjectionLoss: pending.projectionLoss,
