@@ -2,7 +2,7 @@ import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedL
 import { SearchResult, SequentialCheckpointSearchContext, CheckpointSearchContext, EngineInstrumentation, SearchTiming, RegistryState, MutatedRegistryState } from '#types/index.js';
 import { RegistryKernel } from '#lib/search/registry/RegistryKernel.js';
 import { GroupedFlexSearchRun, checkFlexReducedKeyInvariant, type FlexNativeCheckpoint, type FlexReducedKeyInvariantResult, type FlexRunMemoryStats, type FlexRunState, type FlexStateIdentityMode } from '#lib/search/flex/index.js';
-import { FLEX_CACHE_LIMITS, FLEX_INVARIANT_LIMITS } from '#lib/search/flex/FlexConstants.js';
+import { FLEX_REDUCED_KEY_INVARIANT_LIMITS, FLEX_RUN_CACHE_LIMITS } from '#lib/search/flex/FlexConstants.js';
 import { PRECISION, ProbUtils } from '#utils/index.js';
 import { LRUCache } from '#utils/collections/LRUCache.js';
 
@@ -14,8 +14,8 @@ import { LRUCache } from '#utils/collections/LRUCache.js';
  * summary and UI projection.
  */
 export class SearchExecutionService {
-    private readonly flexReducedKeyInvariantCache = new LRUCache<string, FlexReducedKeyInvariantResult>(FLEX_CACHE_LIMITS.REDUCED_KEY_INVARIANTS);
-    private readonly flexRunCache = new LRUCache<string, GroupedFlexSearchRun>(FLEX_CACHE_LIMITS.RUNS);
+    private readonly flexReducedKeyInvariantCache = new LRUCache<string, FlexReducedKeyInvariantResult>(FLEX_RUN_CACHE_LIMITS.REDUCED_KEY_INVARIANTS);
+    private readonly flexRunCache = new LRUCache<string, GroupedFlexSearchRun>(FLEX_RUN_CACHE_LIMITS.RUNS);
     private flexRunCacheHits = 0;
     private flexRunCacheMisses = 0;
 
@@ -135,7 +135,7 @@ export class SearchExecutionService {
                 kernel: this.createKernel(request),
                 xp: request.xp,
                 distributionService: this.distributionService,
-                maxConflicts: FLEX_INVARIANT_LIMITS.MIN_CONFLICTS
+                maxConflicts: FLEX_REDUCED_KEY_INVARIANT_LIMITS.MIN_CONFLICTS
             });
             this.flexReducedKeyInvariantCache.set(key, result);
         }

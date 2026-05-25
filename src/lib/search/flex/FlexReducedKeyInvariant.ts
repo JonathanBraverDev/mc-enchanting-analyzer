@@ -2,7 +2,7 @@ import { ENGINE_LIMITS } from '#constants/engine.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import type { FlexAlternative, FlexEmission, FlexProgram, FlexProgramId } from '#lib/search/flex/FlexTypes.js';
 import { FlexProgramStore } from '#lib/search/flex/FlexProgramStore.js';
-import { FLEX_INVARIANT_LIMITS } from '#lib/search/flex/FlexConstants.js';
+import { FLEX_GRAPH_TRAVERSAL, FLEX_REDUCED_KEY_INVARIANT_LIMITS } from '#lib/search/flex/FlexConstants.js';
 import { RegistryKernel, type SearchPool, type SearchPoolEntry, type SearchPoolSignature } from '#lib/search/registry/RegistryKernel.js';
 
 export interface FlexReducedKeyInvariantRequest {
@@ -65,8 +65,8 @@ export function checkFlexReducedKeyInvariant(request: FlexReducedKeyInvariantReq
     const stack: FlexInvariantWorkItem[] = [];
     const conflicts: FlexReducedKeyInvariantConflict[] = [];
     const maxConflicts = Math.max(
-        FLEX_INVARIANT_LIMITS.MIN_CONFLICTS,
-        request.maxConflicts ?? FLEX_INVARIANT_LIMITS.DEFAULT_MAX_CONFLICTS
+        FLEX_REDUCED_KEY_INVARIANT_LIMITS.MIN_CONFLICTS,
+        request.maxConflicts ?? FLEX_REDUCED_KEY_INVARIANT_LIMITS.DEFAULT_MAX_CONFLICTS
     );
     let transitionCount = 0;
 
@@ -83,9 +83,9 @@ export function checkFlexReducedKeyInvariant(request: FlexReducedKeyInvariantReq
         stack.push(Object.freeze({
             graphId: graph.id,
             pool: graph.pool,
-            exclusionMask: 0n,
+            exclusionMask: FLEX_GRAPH_TRAVERSAL.ROOT_EXCLUSION_MASK,
             currentLevel: level,
-            count: 0,
+            count: FLEX_GRAPH_TRAVERSAL.ROOT_ENCHANT_COUNT,
             programId: programs.empty
         }));
     }
@@ -110,13 +110,15 @@ export function checkFlexReducedKeyInvariant(request: FlexReducedKeyInvariantReq
 
         if (isTerminalState(request.kernel, current.count)) continue;
 
-        const entries = current.count === 0
+        const entries = current.count === FLEX_GRAPH_TRAVERSAL.ROOT_ENCHANT_COUNT
             ? current.pool.entries
             : current.pool.entries.filter(entry => (current.exclusionMask & entry.idBit) === 0n);
         if (entries.length === 0) continue;
 
-        const childLevel = current.count === 0 ? current.currentLevel : Math.floor(current.currentLevel / 2);
-        const childCount = current.count + 1;
+        const childLevel = current.count === FLEX_GRAPH_TRAVERSAL.ROOT_ENCHANT_COUNT
+            ? current.currentLevel
+            : Math.floor(current.currentLevel / FLEX_GRAPH_TRAVERSAL.LEVEL_DECAY_DIVISOR);
+        const childCount = current.count + FLEX_GRAPH_TRAVERSAL.FIRST_CHILD_ENCHANT_COUNT;
         const groupedEdges = buildGroupedEdges(entries, current.exclusionMask);
 
         for (const edge of groupedEdges) {
@@ -198,7 +200,7 @@ function addAlternative(group: PendingGroupedEdge, entry: SearchPoolEntry): void
 }
 
 function isTerminalState(kernel: RegistryKernel, count: number): boolean {
-    if (kernel.item === 'book' && !kernel.multiEnchantBooks && count >= 1) return true;
+    if (kernel.item === 'book' && !kernel.multiEnchantBooks && count >= FLEX_GRAPH_TRAVERSAL.SINGLE_ENCHANT_BOOK_MAX_COUNT) return true;
     return count >= ENGINE_LIMITS.MAX_ENCHANTS_PER_ITEM;
 }
 
