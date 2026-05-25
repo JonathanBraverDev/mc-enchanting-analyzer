@@ -14,9 +14,15 @@ import type {
     FlexRunSnapshot,
     FlexSearchExpansion
 } from '#lib/search/flex/FlexTypes.js';
-import { FLEX_HASH_CONSTANTS, FLEX_INDEX_LIMITS, FLEX_INDEX_SENTINELS } from '#lib/search/flex/FlexConstants.js';
+import { FLEX_FRONTIER_CONFIG, FLEX_HASH_CONFIG, FLEX_INDEX_SENTINELS } from '#lib/search/flex/FlexConstants.js';
 
 const SYSTEM_PROBABILITY_FLOOR = ProbUtils.toBigInt(ENGINE_LIMITS.SYSTEM_THRESHOLD_FLOOR);
+const INITIAL_WORK_ITEM_GRAPH_ID = 0;
+const INITIAL_WORK_ITEM_NODE_ID = 0 as FlexNodeId;
+const INITIAL_WORK_ITEM_MASS = 0n;
+const EMPTY_FRONTIER_MASS = 0n;
+const MIN_PROBABILITY_INPUT = 0;
+const MAX_PROBABILITY_INPUT = 1.0;
 
 interface FlexAdvanceCriteria {
     readonly threshold: bigint;
@@ -53,7 +59,11 @@ export class FlexCoordinator {
     private readonly residueMass = this.mass.forSearchOperation(SEARCH_MASS_OPERATION.Residue);
 
     private readonly frontier = new FlexFrontier();
-    private readonly workItem: FlexWorkItem = { graphId: 0, nodeId: 0 as FlexNodeId, mass: 0n };
+    private readonly workItem: FlexWorkItem = {
+        graphId: INITIAL_WORK_ITEM_GRAPH_ID,
+        nodeId: INITIAL_WORK_ITEM_NODE_ID,
+        mass: INITIAL_WORK_ITEM_MASS
+    };
     private readonly forwardingResidues: Array<Map<number, FlexForwardingResidueRecord> | undefined> = [];
     private activeResidueCount = 0;
     private activeResidueMass = 0n;
@@ -101,7 +111,7 @@ export class FlexCoordinator {
     public async searchToCheckpointStateAsync(request: FlexCheckpointRequest = {}): Promise<FlexRunState> {
         const criteria = this.createAdvanceCriteria(request);
         const chunkIterations = Math.max(
-            1,
+            FLEX_FRONTIER_CONFIG.MIN_ASYNC_CHUNK_ITERATIONS,
             request.yieldEveryIterations ?? ENGINE_LIMITS.ASYNC_SEARCH_CHUNK_ITERATIONS
         );
 
@@ -463,7 +473,7 @@ export class FlexCoordinator {
     private validateProbabilityInput(value: number | bigint | undefined, label: string, requirement: string): void {
         if (value === undefined) return;
         const normalized = ProbUtils.toNumber(value);
-        if (!Number.isFinite(normalized) || normalized < 0 || normalized > 1.0) {
+        if (!Number.isFinite(normalized) || normalized < MIN_PROBABILITY_INPUT || normalized > MAX_PROBABILITY_INPUT) {
             throw new Error(`Invalid ${label}: ${normalized}. ${requirement}`);
         }
     }
@@ -500,11 +510,11 @@ class FlexFrontier {
     private length = 0;
     private _growCount = 0;
 
-    public constructor(capacity: number = FLEX_INDEX_LIMITS.FRONTIER_INITIAL_CAPACITY) {
+    public constructor(capacity: number = FLEX_FRONTIER_CONFIG.INITIAL_CAPACITY) {
         const size = FlexFrontier.nextPowerOfTwo(capacity);
         this.heapGraphIds = new Int32Array(size);
         this.heapNodeIds = new Int32Array(size);
-        this.heapMasses = new Array<bigint>(size).fill(0n);
+        this.heapMasses = new Array<bigint>(size).fill(EMPTY_FRONTIER_MASS);
     }
 
     public get size(): number {
@@ -545,7 +555,7 @@ class FlexFrontier {
     }
 
     public peekMass(): bigint {
-        return this.length === 0 ? 0n : this.heapMasses[0]!;
+        return this.length === 0 ? EMPTY_FRONTIER_MASS : this.heapMasses[0]!;
     }
 
     public forEach(callback: (graphId: number, nodeId: FlexNodeId, mass: bigint) => void): void {
@@ -571,7 +581,7 @@ class FlexFrontier {
         const lastGraphId = this.heapGraphIds[this.length]!;
         const lastNodeId = this.heapNodeIds[this.length]!;
         const lastMass = this.heapMasses[this.length]!;
-        this.heapMasses[this.length] = 0n;
+        this.heapMasses[this.length] = EMPTY_FRONTIER_MASS;
         if (this.length > 0) {
             this.heapGraphIds[0] = lastGraphId;
             this.heapNodeIds[0] = lastNodeId;
@@ -640,7 +650,7 @@ class FlexFrontier {
         if (!positions) {
             positions = new FlexFrontierPositionIndex(Math.max(
                 this.heapNodeIds.length,
-                FLEX_INDEX_LIMITS.FRONTIER_GRAPH_POSITION_INITIAL_CAPACITY
+                FLEX_FRONTIER_CONFIG.POSITION_INDEX_INITIAL_CAPACITY
             ));
             this.positionsByGraph[graphId] = positions;
         }
@@ -650,10 +660,10 @@ class FlexFrontier {
     private ensureCapacity(required: number): void {
         if (required <= this.heapNodeIds.length) return;
         this._growCount++;
-        const nextSize = this.heapNodeIds.length * FLEX_INDEX_LIMITS.GROWTH_FACTOR;
+        const nextSize = this.heapNodeIds.length * FLEX_FRONTIER_CONFIG.GROWTH_FACTOR;
         const graphIds = new Int32Array(nextSize);
         const nodeIds = new Int32Array(nextSize);
-        const masses = new Array<bigint>(nextSize).fill(0n);
+        const masses = new Array<bigint>(nextSize).fill(EMPTY_FRONTIER_MASS);
         graphIds.set(this.heapGraphIds);
         nodeIds.set(this.heapNodeIds);
         for (let index = 0; index < this.length; index++) masses[index] = this.heapMasses[index]!;
@@ -679,14 +689,14 @@ class FlexFrontierPositionIndex {
     private used = 0;
     private _growCount = 0;
 
-    public constructor(capacity: number = FLEX_INDEX_LIMITS.FRONTIER_INITIAL_CAPACITY) {
+    public constructor(capacity: number = FLEX_FRONTIER_CONFIG.INITIAL_CAPACITY) {
         const size = FlexFrontierPositionIndex.nextPowerOfTwo(capacity);
         this.keys = new Int32Array(size);
         this.values = new Int32Array(size);
         this.values.fill(FLEX_INDEX_SENTINELS.MISSING_VALUE);
         this.states = new Uint8Array(size);
         this.mask = size - 1;
-        this.resizeAt = Math.floor(size * FLEX_INDEX_LIMITS.FRONTIER_MAX_LOAD_FACTOR);
+        this.resizeAt = Math.floor(size * FLEX_FRONTIER_CONFIG.POSITION_INDEX_MAX_LOAD_FACTOR);
     }
 
     public get(key: number): number | undefined {
@@ -750,7 +760,7 @@ class FlexFrontierPositionIndex {
         const oldValues = this.values;
         const oldStates = this.states;
         const nextSize = this.occupied >= this.resizeAt
-            ? oldKeys.length * FLEX_INDEX_LIMITS.GROWTH_FACTOR
+            ? oldKeys.length * FLEX_FRONTIER_CONFIG.GROWTH_FACTOR
             : oldKeys.length;
 
         this.keys = new Int32Array(nextSize);
@@ -758,7 +768,7 @@ class FlexFrontierPositionIndex {
         this.values.fill(FLEX_INDEX_SENTINELS.MISSING_VALUE);
         this.states = new Uint8Array(nextSize);
         this.mask = nextSize - 1;
-        this.resizeAt = Math.floor(nextSize * FLEX_INDEX_LIMITS.FRONTIER_MAX_LOAD_FACTOR);
+        this.resizeAt = Math.floor(nextSize * FLEX_FRONTIER_CONFIG.POSITION_INDEX_MAX_LOAD_FACTOR);
         this.occupied = 0;
         this.used = 0;
 
@@ -768,12 +778,12 @@ class FlexFrontierPositionIndex {
     }
 
     private hash(key: number): number {
-        let h = Math.imul(key >>> 0, FLEX_HASH_CONSTANTS.GOLDEN_RATIO_32) >>> 0;
-        h ^= h >>> FLEX_HASH_CONSTANTS.AVALANCHE_SHIFT_1;
-        h = Math.imul(h, FLEX_HASH_CONSTANTS.AVALANCHE_MULTIPLIER_1) >>> 0;
-        h ^= h >>> FLEX_HASH_CONSTANTS.AVALANCHE_SHIFT_2;
-        h = Math.imul(h, FLEX_HASH_CONSTANTS.AVALANCHE_MULTIPLIER_2) >>> 0;
-        return (h ^ (h >>> FLEX_HASH_CONSTANTS.AVALANCHE_SHIFT_1)) >>> 0;
+        let h = Math.imul(key >>> 0, FLEX_HASH_CONFIG.GOLDEN_RATIO_32) >>> 0;
+        h ^= h >>> FLEX_HASH_CONFIG.AVALANCHE_SHIFT_1;
+        h = Math.imul(h, FLEX_HASH_CONFIG.AVALANCHE_MULTIPLIER_1) >>> 0;
+        h ^= h >>> FLEX_HASH_CONFIG.AVALANCHE_SHIFT_2;
+        h = Math.imul(h, FLEX_HASH_CONFIG.AVALANCHE_MULTIPLIER_2) >>> 0;
+        return (h ^ (h >>> FLEX_HASH_CONFIG.AVALANCHE_SHIFT_1)) >>> 0;
     }
 
     private static nextPowerOfTwo(value: number): number {

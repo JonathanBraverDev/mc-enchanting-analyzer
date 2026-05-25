@@ -1,23 +1,39 @@
 /** Flex grouped-runtime LRU capacities. Keep these separate from legacy diagnostic caches. */
-export const FLEX_CACHE_LIMITS = Object.freeze({
+export const FLEX_RUN_CACHE_LIMITS = Object.freeze({
     /** Resumable XP-cell runs. */
     RUNS: 128,
     /** Mutated-registry reduced-key checks are small and cheap enough to retain more broadly. */
     REDUCED_KEY_INVARIANTS: 256
 });
 
-export const FLEX_INVARIANT_LIMITS = Object.freeze({
+/** Bounds for reduced-key invariant checks used to decide Flex state identity mode. */
+export const FLEX_REDUCED_KEY_INVARIANT_LIMITS = Object.freeze({
     MIN_CONFLICTS: 1,
     DEFAULT_MAX_CONFLICTS: 10
 });
 
-/** Initial sizing and load factors for Flex's open-addressed hot-path indexes. */
-export const FLEX_INDEX_LIMITS = Object.freeze({
-    GRAPH_INITIAL_CAPACITY: 4096,
-    FRONTIER_INITIAL_CAPACITY: 8192,
-    FRONTIER_GRAPH_POSITION_INITIAL_CAPACITY: 32768,
-    GRAPH_MAX_LOAD_FACTOR: 0.7,
-    FRONTIER_MAX_LOAD_FACTOR: 0.7,
+/** Shared grouped-graph traversal values that mirror vanilla enchanting state transitions. */
+export const FLEX_GRAPH_TRAVERSAL = Object.freeze({
+    ROOT_EXCLUSION_MASK: 0n,
+    ROOT_ENCHANT_COUNT: 0,
+    FIRST_CHILD_ENCHANT_COUNT: 1,
+    LEVEL_DECAY_DIVISOR: 2,
+    SINGLE_ENCHANT_BOOK_MAX_COUNT: 1
+});
+
+/** Sizing policy for the grouped graph node lookup table. */
+export const FLEX_GRAPH_INDEX_CONFIG = Object.freeze({
+    INITIAL_CAPACITY: 4096,
+    MAX_LOAD_FACTOR: 0.7,
+    GROWTH_FACTOR: 2
+});
+
+/** Sizing policy for the checkpoint frontier heap and per-graph position lookup tables. */
+export const FLEX_FRONTIER_CONFIG = Object.freeze({
+    INITIAL_CAPACITY: 8192,
+    POSITION_INDEX_INITIAL_CAPACITY: 32768,
+    POSITION_INDEX_MAX_LOAD_FACTOR: 0.7,
+    MIN_ASYNC_CHUNK_ITERATIONS: 1,
     GROWTH_FACTOR: 2
 });
 
@@ -30,7 +46,7 @@ export const FLEX_INDEX_SENTINELS = Object.freeze({
 });
 
 /** Hash mixing constants used by Flex numeric indexes. */
-export const FLEX_HASH_CONSTANTS = Object.freeze({
+export const FLEX_HASH_CONFIG = Object.freeze({
     U32_MASK: 0xffffffffn,
     U32_SHIFT: 32n,
     GOLDEN_RATIO_32: 0x9E3779B1,
