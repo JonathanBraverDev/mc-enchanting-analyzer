@@ -2,7 +2,7 @@
 
 ## Common Description
 
-This document defines the supported library surface for application and tool callers. The V8 search implementation can change underneath this boundary without requiring product callers to change how they create engines or request results.
+This document defines the supported library surface for application and tool callers. The search implementation can change underneath this boundary without requiring product callers to change how they create engines or request results.
 
 The short version:
 
@@ -102,16 +102,16 @@ The project may replace the internal search runtime in a minor release when the 
 - public probabilities and accounting stay semantically equivalent;
 - internal engine names, diagnostic selectors, and direct search classes may change.
 
-The current search implementation should remain behind the supported API, not become a new product-facing API.
+The active search implementation should remain behind the supported API, not become a new product-facing API.
 
 ## Release Policy
 
 Minor and major releases must update this file in the final release metadata commit. That update can be a no-op review note when the boundary did not change, but the file should still be touched so reviewers explicitly confirm whether the supported API changed, stayed stable, or reclassified previously experimental surface.
 
-Major releases must also have a human-readable changelog name, using the historical `### The "..." Update` style. The next search-centered major should use a name that describes the model shift, such as `### The "Folded Frontier" Update`.
+Major releases must also have a human-readable changelog name, using the established `### The "..." Update` style.
 
 ## References
 
 - [`ARCHITECTURE.md`](../ARCHITECTURE.md) for high-level engine and worker flow.
 - [`MASS_HANDLING.md`](../MASS_HANDLING.md) for probability conservation and accounting.
-- [`docs/v8-search-engine.md`](v8-search-engine.md) for active search behavior, factorized-tree design, and invariants.
+- [`docs/search-engine.md`](search-engine.md) for search behavior, factorized-tree design, and invariants.

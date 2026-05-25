@@ -34,13 +34,13 @@ To build your own standalone version, use: `npm run build:standalone`. The resul
 
 ## 🧠 The Engine
 
-This tool uses the V8 search engine: a checkpoint-capable search engine that searches a globally weighted frontier across modified levels, reports useful intermediate checkpoints to the UI, and keeps every probability bucket accounted for while deeper searches continue. The bundled registry models only enchantments reachable through the enchanting table, so treasure-only enchantments are excluded from the active search space.
+This tool uses a checkpoint-capable search engine that searches a globally weighted frontier across modified levels, reports useful intermediate checkpoints to the UI, and keeps every probability bucket accounted for while deeper searches continue. The bundled registry models only enchantments reachable through the enchanting table, so treasure-only enchantments are excluded from the active search space.
 
 For implementation details, see `docs/README.md` for the documentation map, or jump directly to:
 - `docs/public-api.md` for the supported library API boundary.
 - `ARCHITECTURE.md` for the engine, worker, and checkpoint flow.
 - `MASS_HANDLING.md` for probability conservation and accounting.
-- `docs/v8-search-engine.md` for the deeper V8 search design, factorized-tree model, and current optimization notes.
+- `docs/search-engine.md` for the deeper search design, factorized-tree model, and optimization notes.
 
 ---
 Created by **Jonathan Braver**

@@ -2,7 +2,7 @@
 
 ## Common Description
 
-This document is the current probability-accounting reference for the V8 search engine. It explains how the engine preserves every fixed-point unit of probability mass while searching a globally weighted frontier across modified levels.
+This document is the probability-accounting reference for the search engine. It explains how the engine preserves every fixed-point unit of probability mass while searching a globally weighted frontier across modified levels.
 
 ## Table of Contents
 
@@ -11,7 +11,7 @@ This document is the current probability-accounting reference for the V8 search 
 - [Active Mass Buckets](#active-mass-buckets)
 - [Diagnostic Recovery Buckets](#diagnostic-recovery-buckets)
 - [Fixed-Point Probability Units](#fixed-point-probability-units)
-- [V8 Weighted Search Accounting](#v8-weighted-search-accounting)
+- [Weighted Search Accounting](#weighted-search-accounting)
 - [Remainder and Residue Handling](#remainder-and-residue-handling)
 - [Book Redistribution](#book-redistribution)
 - [Clue-Conditioned Searches](#clue-conditioned-searches)
@@ -24,7 +24,7 @@ This document is the current probability-accounting reference for the V8 search 
 
 ## Purpose / Scope
 
-This document covers engine-internal probability conservation for V8. It does not describe every Minecraft rule, UI projection, or chart rendering path.
+This document covers engine-internal probability conservation. It does not describe every Minecraft rule, UI projection, or chart rendering path.
 
 Use this file when changing:
 
@@ -35,7 +35,7 @@ Use this file when changing:
 - book redistribution,
 - summary or snapshot interpretation of pending mass.
 
-For broader architecture and search identity details, see `ARCHITECTURE.md` and `docs/v8-search-engine.md`.
+For broader architecture and search identity details, see `ARCHITECTURE.md` and `docs/search-engine.md`.
 
 ## Honest Accounting Principle
 
@@ -83,7 +83,7 @@ Diagnostic recovery buckets are non-additive. They answer "how much did the resi
 
 ## Fixed-Point Probability Units
 
-V8 uses `bigint` probability units scaled to `PRECISION = 2^60`.
+The engine uses `bigint` probability units scaled to `PRECISION = 2^60`.
 
 Rules:
 
@@ -94,9 +94,9 @@ Rules:
 
 This avoids floating-point drift and keeps conservation tests exact.
 
-## V8 Weighted Search Accounting
+## Weighted Search Accounting
 
-V8 seeds a single coordinator with the modified-level distribution for one XP cell:
+The search runtime seeds a single coordinator with the modified-level distribution for one XP cell:
 
 ```text
 XP + enchantability -> modified level distribution
@@ -108,11 +108,11 @@ The coordinator stores all pending work in one globally weighted frontier. Each 
 This differs from the older naive model:
 
 ```text
-old model: search each modified level separately, then scale results by P(L)
-V8 model: scale at root, merge equivalent future mass during search
+local model: search each modified level separately, then scale results by P(L)
+shared-frontier model: scale at root, merge equivalent future mass during search
 ```
 
-The V8 model gives a more meaningful checkpoint frontier: the largest pending entries are globally largest contributors to remaining uncertainty.
+The shared-frontier model gives a more meaningful checkpoint frontier: the largest pending entries are globally largest contributors to remaining uncertainty.
 
 ## Remainder and Residue Handling
 
@@ -136,7 +136,7 @@ This may leave tiny active `rounding` mass, but it preserves exact accounting wi
 
 ## Book Redistribution
 
-Modern enchanted books can generate multiple enchantments and then remove one selected enchantment. V8 handles this after a generated result program resolves:
+Modern enchanted books can generate multiple enchantments and then remove one selected enchantment. The engine handles this after a generated result program resolves:
 
 1. Search resolves the generated multi-enchant book program.
 2. Projection enumerates the possible post-removal combos.
@@ -168,7 +168,7 @@ Important separations:
 - `summaryLimit` and `comboLimit` control export size, not search work.
 - Target combo filters are projections over the snapshot, not separate search modes.
 - Chart cells and top results consume the same snapshot semantics.
-- Pending frontier entries are meaningful data, but V8 can summarize factorized pending state without exposing every internal node/program detail to product callers.
+- Pending frontier entries are meaningful data, but the engine can summarize factorized pending state without exposing every internal node/program detail to product callers.
 - Projection-stage loss must fold back into public `rounding` exactly.
 
 ## Optimization Guardrails
@@ -196,13 +196,13 @@ Never merge by visible combo alone. Visible output can match while future eligib
 ## References / Related Docs
 
 - `ARCHITECTURE.md` - engine and worker flow map.
-- `docs/v8-search-engine.md` - V8 search behavior, factorized-tree design, and invariants.
+- `docs/search-engine.md` - search behavior, factorized-tree design, and invariants.
 - `src/lib/search/flex/` - internal coordinator, graph, projection, and snapshot implementation.
 
 ## Owner / Maintainer
 
-Jonathan Braver / V8 search engine maintainers.
+Jonathan Braver / search engine maintainers.
 
 ## Last Updated
 
-2026-05-24
+2026-05-25

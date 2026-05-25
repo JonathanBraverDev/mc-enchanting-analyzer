@@ -2,9 +2,9 @@
 
 ## Common Description
 
-This document maps the current engine, worker, registry, search, and reporting architecture for Minecraft Enchantment Analyzer. Use `docs/v8-search-engine.md` for the deeper explanation of how the current search engine works.
+This document maps the engine, worker, registry, search, and reporting architecture for Minecraft Enchantment Analyzer. Use `docs/search-engine.md` for the deeper explanation of how the search engine works.
 
-Release-reviewed for v7.1.2: the public engine surface is `getStats(...)` for summarized probabilities plus checkpoint APIs for raw or streaming search results. For the current supported API boundary, see [`docs/public-api.md`](docs/public-api.md).
+The public engine surface is `getStats(...)` for summarized probabilities plus checkpoint APIs for raw or streaming search results. For the supported API boundary, see [`docs/public-api.md`](docs/public-api.md).
 
 ## Table of Contents
 
@@ -70,11 +70,11 @@ scripts/           Build, profiling, reporting, and snapshot tools
 
 Dependency direction is intentionally one way: data and types sit at the bottom, engine code owns search behavior, services translate engine output into UI/reporting shapes, workers isolate long-running calculations, and the UI consumes worker responses.
 
-The bundled enchantment registry models the active enchanting-table space. Treasure-only or otherwise table-impossible enchantments are intentionally excluded from `global_enchantments` instead of being carried through the registry behind per-item filters. V8 constructs runtime engines from resolved `RegistryState` objects; normal vanilla callers build those states by version, while vanilla-plus-mutation registries are an explicit advanced path.
+The bundled enchantment registry models the active enchanting-table space. Treasure-only or otherwise table-impossible enchantments are intentionally excluded from `global_enchantments` instead of being carried through the registry behind per-item filters. Runtime engines are constructed from resolved `RegistryState` objects; normal vanilla callers build those states by version, while vanilla-plus-mutation registries are an explicit advanced path.
 
 ## Checkpoint Search Flow
 
-V8 centers the engine around checkpoint-capable shared searches. A normal stats call searches to the default stats checkpoint and summarizes the final result. UI refinement can instead search a sequence of checkpoints and stream a completed result each time a checkpoint is crossed. Search scheduling is global: modified-level mass is seeded into one weighted frontier, so the highest-probability pending state is expanded next regardless of which modified level produced it.
+The engine is centered around checkpoint-capable shared searches. A normal stats call searches to the default stats checkpoint and summarizes the final result. UI refinement can instead search a sequence of checkpoints and stream a completed result each time a checkpoint is crossed. Search scheduling is global: modified-level mass is seeded into one weighted frontier, so the highest-probability pending state is expanded next regardless of which modified level produced it.
 
 ```text
 UI input
@@ -103,7 +103,7 @@ UI input
 | `getModifiedLevelDist(xp, enchantability, instrumentation?)` | Returns the BigInt distribution over modified levels |
 | `getAvailablePool(item, level, bitset?)` | Returns packed eligible enchant/rank IDs for an item and level |
 
-The public calls use request objects so callers can pass optional search, instrumentation, timing, clue, and abort options without positional argument drift. Use `getStats(...)` when a caller wants usable presented probabilities; use checkpoint calls when a caller needs raw search state or streaming checkpoint control. `getStats(...)` fills missing threshold/iteration settings from the default stats checkpoint (`DEFAULT_STATS_REFINEMENT_LEVEL`, currently `standard`) so simple callers and tests share one reliable baseline. V8 uses `item` and `material` consistently across engine calls, workers, UI code, tests, and scripts.
+The public calls use request objects so callers can pass optional search, instrumentation, timing, clue, and abort options without positional argument drift. Use `getStats(...)` when a caller wants usable presented probabilities; use checkpoint calls when a caller needs raw search state or streaming checkpoint control. `getStats(...)` fills missing threshold/iteration settings from the default stats checkpoint (`DEFAULT_STATS_REFINEMENT_LEVEL`, currently `standard`) so simple callers and tests share one reliable baseline. The engine uses `item` and `material` consistently across engine calls, workers, UI code, tests, and scripts.
 
 ## Registry Construction
 
@@ -116,7 +116,7 @@ The public calls use request objects so callers can pass optional search, instru
 
 Runtime registry state contains projected lookup data such as active item pools, item/material compatibility, enchantability tables, conflict bitsets, material values, and rank maps. Raw registry data remains in the data/factory layer rather than being carried on each engine registry object.
 
-V8 intentionally keeps custom registry support narrow: the supported extension point is vanilla plus explicit mutations. Full custom data-pack construction is not part of the public runtime surface.
+Custom registry support is intentionally narrow: the supported extension point is vanilla plus explicit mutations. Full custom data-pack construction is not part of the public runtime surface.
 
 ## Registry Rule Model
 
@@ -137,7 +137,7 @@ Missing `groups` on an enchantable item rule means “all active table enchantme
 |---|---|
 | `EnchantEngine` | Validates requests, owns registry access, cache lookups, and public orchestration |
 | `SearchExecutionService` | Coordinates shared search runs, checkpoint aggregation, instrumentation, and cache reuse |
-| `GroupedFlexSearchRun` / `FlexCoordinator` / `GroupedFlexGraph` | Runs the globally weighted best-first expansion loop, grouped graph expansion, fixed/choice result programs, mass accounting, residue forwarding, and checkpoint exits. See `docs/v8-search-engine.md`. |
+| `GroupedFlexSearchRun` / `FlexCoordinator` / `GroupedFlexGraph` | Runs the globally weighted best-first expansion loop, grouped graph expansion, fixed/choice result programs, mass accounting, residue forwarding, and checkpoint exits. See `docs/search-engine.md`. |
 | `FlexProgramStore` | Stores fixed and choice emissions for exact result projection without expanding every concrete combo in the search loop |
 | `FlexSnapshotBuilder` / `FlexProjector` | Builds checkpoint snapshots, exact result combos, pending aggregates, and book/clue projection views |
 | `ProbabilityMassAccountant` | Records resolved, clue-incompatible, pending, sieved, capped, overflow, and rounding mass |
@@ -161,7 +161,7 @@ interface SearchResult {
 }
 ```
 
-`SearchExecutionService` searches or resumes the current V8 run for the request signature. Unsupported backend selector values fail through the shared unsupported-backend path. The engine keeps the factorized-tree boundary internal: graph construction can emit fixed or choice factors, while the runtime remains a mostly generic best-first mass-flow loop and the checkpoint result stays public-compatible. The selected run seeds each modified level as weighted root mass, expands the highest-probability pending graph node globally, and snapshots the completed checkpoint state. The checkpoint result owns:
+`SearchExecutionService` searches or resumes the run for the request signature. Unsupported backend selector values fail through the shared unsupported-backend path. The engine keeps the factorized-tree boundary internal: graph construction can emit fixed or choice factors, while the runtime remains a mostly generic best-first mass-flow loop and the checkpoint result stays public-compatible. The selected run seeds each modified level as weighted root mass, expands the highest-probability pending graph node globally, and snapshots the completed checkpoint state. The checkpoint result owns:
 
 - global combo mass
 - mass accounting buckets
@@ -180,7 +180,7 @@ Target combo filtering is a reporting projection, not a search mode. The UI send
 
 ## Shared Frontier Model
 
-The V8 search path separates graph node identity from weighted frontier priority:
+The search path separates graph node identity from weighted frontier priority:
 
 - `GroupedFlexGraph` assigns each canonical future state a dense `nodeId`.
 - `RegistryKernel` groups modified levels by `SearchPoolSignature`, so levels with the same eligible enchant pool reuse the same structural graph.
@@ -212,12 +212,12 @@ The browser uses two dedicated workers:
 |---|---|
 | distribution cache | Modified-level distributions by version/xp/enchantability |
 | pool cache | Eligible enchant pools by version/item/level; material is intentionally absent because it affects modified-level distribution, not per-level eligibility |
-| search run cache | Reusable V8 runs keyed by version/item/material/xp/clue/request signature |
+| search run cache | Reusable search runs keyed by version/item/material/xp/clue/request signature |
 | grouped graph cache | Reusable grouped graphs keyed by pool signature and search policy |
 
 The registry rule model declares item/material compatibility together, but the engine cache keys still follow the computation they cache. Pool entries only depend on the fixed enchantable item pool at a modified level. Search run entries include material because material changes enchantability, which changes the modified-level distribution and therefore the weighted search state. Threshold-aware reads can reuse more precise cached state when it already satisfies the requested checkpoint.
 
-Grouped graph caching preserves exact search behavior while reducing repeated candidate checks. The internal implementation is behind the stable engine API, not a separate public engine. Program construction happens during graph building, while checkpoint projection hides the internal representation from UI/reporting callers. The obsolete Plex prototype was removed after the current implementation covered the same diagnostic role with better alignment and cleaner clue behavior.
+Grouped graph caching preserves exact search behavior while reducing repeated candidate checks. The internal implementation is behind the stable engine API, not a separate public engine. Program construction happens during graph building, while checkpoint projection hides the internal representation from UI/reporting callers.
 
 ## Release Documentation Rule
 
@@ -227,13 +227,13 @@ Major releases are expected to update this architecture map. Minor releases shou
 
 - `README.md` — product overview and setup.
 - `docs/README.md` — documentation map.
-- `MASS_HANDLING.md` — V8 probability accounting and residue rules.
-- `docs/v8-search-engine.md` — deep V8 search and factorized-tree design reference.
+- `MASS_HANDLING.md` — probability accounting and residue rules.
+- `docs/search-engine.md` — deep search and factorized-tree design reference.
 
 ## Owner / Maintainer
 
-Jonathan Braver / V8 search engine maintainers.
+Jonathan Braver / search engine maintainers.
 
 ## Last Updated
 
-2026-05-24
+2026-05-25

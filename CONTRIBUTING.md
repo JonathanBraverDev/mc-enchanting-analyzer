@@ -188,14 +188,14 @@ Snapshot fixture updates must be isolated in their own commits. A commit that to
 
 ## Performance Profiling
 
-Performance is critical for the "Standalone HTML" version. We use dedicated benchmark and profiling scripts to track V8/Flex grouped-tree search, snapshot projection, and product-engine timing.
+Performance is critical for the "Standalone HTML" version. We use dedicated benchmark and profiling scripts to track grouped-tree search, snapshot projection, and product-engine timing.
 
 ### Running the Benchmarks
 ```bash
 npm run benchmark
 ```
 
-The default benchmark runs `scripts/probe_flex_grouping.ts`, which measures the V8 grouped runtime on a representative modern book target-mass case and reports grouped graph, Solid/Plex, shape-cache, projection, and residue counters.
+The default benchmark runs `scripts/probe_flex_grouping.ts`, which measures the grouped runtime on a representative modern book target-mass case and reports grouped graph, Solid/Plex, shape-cache, projection, and residue counters.
 
 For CPU profiles of the grouped runtime benchmark, use:
 ```bash
@@ -223,7 +223,7 @@ These scripts report tree shape, throughput, result counts, active search time, 
 - Keep Minecraft rule lookup in the registry/core layer, structural graph work in `GroupedFlexGraph`, and weighted probability movement in `FlexCoordinator`.
 - Avoid object allocation in hot loops such as graph expansion, weighted fanout, frontier push/pop, and summary aggregation.
 - Prefer dense graph node IDs, packed combos, typed arrays, precomputed `SearchPoolEntry` metadata, and reusable grouped expansion shapes over repeated map/key reconstruction.
-- Measure wall-clock runtime, not only iteration counts. Suffix merging is the current example where fewer frontier pops can still be slower because canonicalization overhead dominates.
+- Measure wall-clock runtime, not only iteration counts. Fewer frontier pops can still be slower if canonicalization, projection, or cache bookkeeping overhead dominates.
 
 ## Mass Conservation Invariants
 
@@ -266,7 +266,7 @@ The engine maintains a system of "buckets" to track every atom of probability:
 - `.github/workflows/release.yml`
 - `docs/README.md`
 - `docs/public-api.md`
-- `docs/v8-search-engine.md`
+- `docs/search-engine.md`
 
 ## Owner / Maintainer
 
@@ -274,4 +274,4 @@ JonathanBraverDev maintains this project.
 
 ## Last Updated
 
-2026-05-18
+2026-05-25

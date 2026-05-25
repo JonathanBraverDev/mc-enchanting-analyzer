@@ -1,18 +1,18 @@
-# V8 Search Engine Deep Dive
+# Search Engine Deep Dive
 
 ## Common Description
 
-This document is the canonical reference for search behavior in V8. V8 searches one globally weighted frontier across registry-derived grouped graphs, keeps probability mass in fixed-point accounting buckets, and produces checkpoint snapshots that the UI and reporting services can consume directly.
+This document is the maintained reference for search behavior. The engine searches one globally weighted frontier across registry-derived grouped graphs, keeps probability mass in fixed-point accounting buckets, and produces checkpoint snapshots that the UI and reporting services can consume directly.
 
 The implementation still uses the internal `flex` namespace for code that can represent both singleton paths and factorized choice paths. That name is an implementation detail, not a separate product engine.
 
 ## Table of Contents
 
 - [Purpose / Scope](#purpose--scope)
-- [Current Invariants](#current-invariants)
+- [Runtime Invariants](#runtime-invariants)
 - [Engine Flow](#engine-flow)
-- [Current Implementation](#current-implementation)
-- [Current Architecture](#current-architecture)
+- [Implementation Shape](#implementation-shape)
+- [Component Responsibilities](#component-responsibilities)
 - [Factorized Tree Model](#factorized-tree-model)
 - [Projection and Snapshot Boundary](#projection-and-snapshot-boundary)
 - [Search Identity](#search-identity)
@@ -32,7 +32,7 @@ The implementation still uses the internal `flex` namespace for code that can re
 
 ## Purpose / Scope
 
-V8 is the current engine path for probability search, checkpointing, reporting, and worker-facing refinement. It keeps the most important V7 idea, one weighted search over shared future state, and refines the representation so identical future eligibility can be searched once even when multiple enchantment choices lead there.
+The search engine handles probability search, checkpointing, reporting, and worker-facing refinement. It searches one weighted frontier over shared future state, and represents identical future eligibility once even when multiple enchantment choices lead there.
 
 The core model is:
 
@@ -40,11 +40,11 @@ The core model is:
 weighted modified-level roots -> grouped registry graph -> global frontier -> checkpoint snapshot
 ```
 
-This document describes current behavior and invariants. It intentionally avoids prototype narratives except where an old lesson explains a current rule. Historical V7/Plex details belong in git history or release notes, not in the active engine reference.
+This document describes behavior and invariants that should remain useful across release labels.
 
-## Current Invariants
+## Runtime Invariants
 
-- V8 is the current search engine and the source of truth for product behavior.
+- The grouped search runtime defines product search behavior.
 - Search scheduling is global: the highest-weight pending state expands next across the whole request/cell.
 - `RegistryKernel` owns immutable registry projection and exact pool construction.
 - `GroupedFlexGraph` owns registry-derived structural graph state.
@@ -54,7 +54,7 @@ This document describes current behavior and invariants. It intentionally avoids
 - `PlexNode` represents a multiplexed enchantment choice whose alternatives share future eligibility.
 - Public checkpoint outputs remain exact: `SearchResult`, combo maps, snapshots, summary aggregates, and accounting keep their supported meanings.
 - Factorized pending frontier state is allowed internally; resolved user-facing combo rows remain exact.
-- Canonical golden snapshots should use exhaustive V8 searches when the case can bottom out within practical runtime/heap limits.
+- Canonical golden snapshots should use exhaustive searches when the case can bottom out within practical runtime/heap limits.
 - Product and regression flows may use bounded checkpoints or `targetClassifiedMass` for large cases, especially modern books.
 - The iteration counter is a global request budget, not a per-modified-level budget.
 - Performance claims should compare classified mass, wall-clock time, and engine diagnostics, not raw iteration count alone.
@@ -77,11 +77,11 @@ UI / caller request
 
 The search starts by computing the modified-level distribution for the requested XP, item, material, and version mechanics. Each modified level is mapped to an eligible registry pool. Pools with equivalent future behavior share graph structure through `SearchPoolSignature`, so adjacent levels can converge after level halving instead of repeating the same suffix independently.
 
-V8 then seeds each modified-level root with its weighted probability mass and advances one global frontier. Each expansion chooses the largest pending `(graphId, nodeId)` entry, forwards mass through weighted edges, records resolved/terminal mass, and updates fixed-point accounting. A checkpoint snapshot is built only at requested boundaries.
+The engine then seeds each modified-level root with its weighted probability mass and advances one global frontier. Each expansion chooses the largest pending `(graphId, nodeId)` entry, forwards mass through weighted edges, records resolved/terminal mass, and updates fixed-point accounting. A checkpoint snapshot is built only at requested boundaries.
 
-## Current Implementation
+## Implementation Shape
 
-Implemented V8 behavior:
+Implemented search behavior:
 
 - `RegistryKernel` projects resolved registry state into immutable runtime lookup structures.
 - `SearchPoolSignature` groups modified levels that can reuse the same exact graph.
@@ -101,14 +101,14 @@ Implemented V8 behavior:
 - `exhaustive: true` forces threshold `0`, bypasses the normal iteration safety cap, and remains abortable.
 - Unsupported backend selector values fail through the shared unsupported-backend path.
 
-Current non-goals:
+Non-goals:
 
 - No second production search runtime.
-- No serialized cross-worker resume snapshot yet; live run caching is the current resume mechanism.
-- No engine-owned chart matrix scheduler yet; the chart worker owns matrix orchestration and uses XP-cell run caching.
+- No serialized cross-worker resume snapshot; live run caching owns resume behavior.
+- No engine-owned chart matrix scheduler; the chart worker owns matrix orchestration and uses XP-cell run caching.
 - No compatibility promise for internal `flex` classes, graph IDs, node IDs, or diagnostic-only scripts.
 
-## Current Architecture
+## Component Responsibilities
 
 ### RegistryKernel
 
@@ -198,7 +198,7 @@ Changing display targets or summary limits should not rerun search when the unde
 
 ## Factorized Tree Model
 
-V8 separates future search identity from generated result identity.
+The engine separates future search identity from generated result identity.
 
 ```text
 SolidNode
@@ -212,7 +212,7 @@ PlexNode
 
 A `PlexNode` is valid only when every alternative in its choice group has the same future eligibility after conflicts and selected enchant exclusions are applied. For example, several sword damage alternatives may all block the same damage group and therefore lead to the same future search state. They can share one child node while keeping their distinct result weights in the program.
 
-This is why V8 can explore fewer frontier entries than a concrete selected-prefix tree without weakening final output. The search loop moves mass through future behavior. Snapshot construction expands the program factors back into exact user-facing combos when rows are requested.
+This is why the grouped runtime can explore fewer frontier entries than a concrete selected-prefix tree without weakening final output. The search loop moves mass through future behavior. Snapshot construction expands the program factors back into exact user-facing combos when rows are requested.
 
 The graph stores nodes by reduced identity when safe:
 
@@ -220,7 +220,7 @@ The graph stores nodes by reduced identity when safe:
 (exclusionMask, currentLevel, count)
 ```
 
-For mutated registries that break the reduced-key invariant, V8 falls back to program-aware identity so different histories do not accidentally share unsafe future state.
+For mutated registries that break the reduced-key invariant, the engine falls back to program-aware identity so different histories do not accidentally share unsafe future state.
 
 ## Projection and Snapshot Boundary
 
@@ -228,7 +228,7 @@ Resolved result mass and pending frontier mass have different needs:
 
 - Resolved result rows are user-facing and must be exact by default.
 - Resolved aggregate buckets are also exact.
-- Pending rows are unfinished by definition; V8 exposes exact aggregate summaries without materializing every concrete pending row unless a diagnostic path asks for it.
+- Pending rows are unfinished by definition; the engine exposes exact aggregate summaries without materializing every concrete pending row unless a diagnostic path asks for it.
 
 ## Search Identity
 
@@ -295,7 +295,7 @@ Result export caps are separate from search caps. `summaryLimit` and `comboLimit
 
 ## Mass Accounting
 
-V8 keeps BigInt fixed-point probability mass in explicit buckets:
+The engine keeps BigInt fixed-point probability mass in explicit buckets:
 
 - resolved
 - clue incompatible
@@ -328,7 +328,7 @@ public.rounding          = search.rounding + projection.loss
 
 The detailed view is diagnostic. The public accounting view remains the stable compatibility surface.
 
-V8 applies modified-level probability before graph expansion:
+The engine applies modified-level probability before graph expansion:
 
 ```text
 seed each modified-level root with P(modifiedLevel)
@@ -341,7 +341,7 @@ That can move rounding/recovery compared with older local-search aggregation mod
 
 Enchanted books have a post-processing rule: after generation, one generated enchantment slot is removed uniformly when two or more slots were produced.
 
-V8 models search normally, then applies book removal at the projection/snapshot boundary:
+The engine models search normally, then applies book removal at the projection/snapshot boundary:
 
 - A fixed emission is one generated slot.
 - A choice emission is also one generated slot; removing it drops the whole choice slot before alternatives are expanded.
@@ -354,14 +354,14 @@ This keeps the hot search loop focused on future eligibility and leaves display/
 
 A table clue is exact evidence. If the user observed `Sharpness III`, the result space is conditioned on that shown clue.
 
-V8 treats clue-conditioned search as a probability split:
+The engine treats clue-conditioned search as a probability split:
 
 - mass that cannot show the clue moves to `clueIncompatible`;
 - mass that can show the clue remains in the searchable/pending or resolved space;
 - pending summaries expose the known clue space and clue-joint aggregate buckets;
 - resolved summaries use the same evidence when reporting clue-conditioned stats.
 
-For a factorized choice slot, V8 does not need to expand every concrete combo just to know the clue mass. It can split by the target clue weight inside that choice and leave the remainder as non-clue or projection loss according to fixed-point rounding.
+For a factorized choice slot, the engine does not need to expand every concrete combo just to know the clue mass. It can split by the target clue weight inside that choice and leave the remainder as non-clue or projection loss according to fixed-point rounding.
 
 The displayed clue is not the same thing as optional result filtering. Optional result filters may use level-as-minimum semantics in UI/reporting views; they are not engine clue conditioning.
 
@@ -381,7 +381,7 @@ version + item + modifiedLevel -> eligible pool + poolSignature
 
 Material is intentionally absent because material affects modified-level distribution, not per-level pool eligibility.
 
-### V8 Run Cache
+### Search Run Cache
 
 ```text
 version + item + material + xp + clue + registry mutations + identity mode -> GroupedFlexSearchRun
@@ -416,16 +416,16 @@ Abort behavior:
 
 ## Remainder and Equivalence Rules
 
-Fixed-point division creates remainders. V8 uses local residue rules:
+Fixed-point division creates remainders. The engine uses local residue rules:
 
 - Split residue belongs to the source expansion that created it.
 - Residue can be recovered only when later mass reaches the same source expansion and edge denominator.
 - Residue diagnostics are tracked separately from active conservation buckets.
 - Projection loss belongs to projection, not search.
 
-Two searches are semantically equivalent when public rows, summaries, and public mass buckets match within the tolerance explicitly owned by the test. Exhaustive V8 self-comparisons should be exact.
+Two searches are semantically equivalent when public rows, summaries, and public mass buckets match within the tolerance explicitly owned by the test. Exhaustive self-comparisons should be exact.
 
-For non-exhaustive checkpoints, raw iteration counts are not a semantic metric. V8 and older concrete trees explore different node shapes. Compare classified mass, public outputs, pending mass, and accounting buckets before comparing iteration counts.
+For non-exhaustive checkpoints, raw iteration counts are not a semantic metric. Different tree shapes explore different node shapes. Compare classified mass, public outputs, pending mass, and accounting buckets before comparing iteration counts.
 
 ## Optimization Layers
 
@@ -467,8 +467,6 @@ Validation should cover both exact public behavior and internal accounting shape
 - resolved aggregate parity between exact and omitted-row snapshots;
 - factorized pending summaries remaining stable after later checkpoints.
 
-While old comparison code exists in tests/scripts, it is diagnostic only. V8 is the product runtime.
-
 ## API and Migration Policy
 
 Supported product callers should use:
@@ -486,7 +484,6 @@ Internal search modules are not part of the stable caller API:
 - `FlexProgramStore`
 - direct graph/node/program IDs
 - debug/profiling scripts
-- historical comparison code
 
 ## References / Related Docs
 
@@ -497,8 +494,8 @@ Internal search modules are not part of the stable caller API:
 
 ## Owner / Maintainer
 
-Jonathan Braver / V8 search engine maintainers.
+Jonathan Braver / search engine maintainers.
 
 ## Last Updated
 
-2026-05-24
+2026-05-25
