@@ -115,17 +115,3 @@ export const SEARCH_CONSTANTS = {
     FALLBACK_LIMIT_LOW_RES: 10000,
     MAX_RESULTS_SUMMARY_OPTIMIZED_THRESHOLD: 250
 };
-
-/**
- * UI and display constants.
- */
-export const UI_CONSTANTS = {
-    /** How often to fire progress callbacks during search (every N levels). */
-    PROGRESS_UPDATE_FREQUENCY: 3,
-
-    /** Decimal places for percentage formatting. */
-    PERCENT_DECIMAL_PLACES: 1,
-
-    /** Default max entries for generic LRU caches. */
-    DEFAULT_LRU_MAX_ENTRIES: 500
-};

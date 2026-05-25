@@ -118,7 +118,6 @@ export interface EngineSearchSnapshot {
     readonly activeResidueCount: number;
     readonly activeResidueMass: bigint;
     readonly fullyResolved: boolean;
-    readonly suffixMerging: SearchSuffixMergeDiagnostics;
 }
 
 /**
@@ -130,16 +129,6 @@ export interface MaterializedSearchSnapshot extends EngineSearchSnapshot {
     readonly pendingEntries: readonly PendingFrontierEntry[];
     readonly pendingAggregates?: undefined;
     readonly frontier: EmptyEngineFrontier | MaterializedEngineFrontier;
-}
-
-/** @public */
-export interface SearchSuffixMergeDiagnostics {
-    readonly enabled: boolean;
-    readonly canonicalEntryCount: number;
-    readonly hits: number;
-    readonly misses: number;
-    readonly mergedPendingMass: bigint;
-    readonly avoidedPendingEntries: number;
 }
 
 /** @internal */

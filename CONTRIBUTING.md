@@ -217,7 +217,7 @@ For the repeatable book clue/no-clue perf cases, use:
 npx tsx scripts/profile_perf_cases.ts
 ```
 
-These scripts report tree shape, throughput, result counts, active search time, post-processing time, and total engine time. `scripts/benchmark_engine.ts` remains available for simple cold/warm cache smoke checks.
+These scripts report tree shape, throughput, result counts, active search time, post-processing time, and total engine time.
 
 ### Optimizing the Search
 - Keep Minecraft rule lookup in the registry/core layer, structural graph work in `GroupedFlexGraph`, and weighted probability movement in `FlexCoordinator`.
