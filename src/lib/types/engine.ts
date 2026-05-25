@@ -167,6 +167,14 @@ export interface SearchInstrumentation {
   suffixAvoidedPendingEntries?: number | undefined;
   /** Internal grouped-runtime: structural state identity mode used by this run. */
   flexStateIdentityMode?: 'reduced' | 'program' | undefined;
+  /** Internal grouped-runtime: SolidNode count across structural graphs. */
+  flexSolidNodeCount?: number | undefined;
+  /** Internal grouped-runtime: PlexNode count across structural graphs. */
+  flexPlexNodeCount?: number | undefined;
+  /** Internal grouped-runtime: expanded SolidNode count in the coordinator. */
+  flexExpandedSolidNodeCount?: number | undefined;
+  /** Internal grouped-runtime: expanded PlexNode count in the coordinator. */
+  flexExpandedPlexNodeCount?: number | undefined;
   /** Internal grouped-runtime: structural pending buckets before compatibility projection expands program factors. */
   flexStructuralPendingEntryCount?: number | undefined;
   /** Internal grouped-runtime: expanded-row materialization loss recorded as compatibility rounding in public accounting. */
@@ -308,7 +316,7 @@ export interface SearchConfig {
     targetClassifiedMass?: number | bigint | undefined;
     /**
      * Internal/experimental forward-mass floor. Omit to use the engine default; set to 0
-     * for diagnostics that compare against historical concrete searches without early tail sieving.
+     * for diagnostics that compare searches without early tail sieving.
      */
     probabilityFloor?: number | bigint | undefined;
     signal?: AbortSignal | undefined;

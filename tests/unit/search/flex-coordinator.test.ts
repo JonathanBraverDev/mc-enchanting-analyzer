@@ -206,7 +206,7 @@ describe('FlexCoordinator', () => {
         assert.strictEqual(snapshot.pendingCount, 0);
     });
 
-    it('forwards edge residues with V7 rounding and recovered-rounding semantics', () => {
+    it('forwards edge residues with exact rounding and recovered-rounding semantics', () => {
         const store = new FlexProgramStore();
         const graph = new TestFlexGraph();
         graph.set(nodeId(0), Object.freeze({

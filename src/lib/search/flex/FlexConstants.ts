@@ -1,4 +1,4 @@
-/** V8 grouped-runtime LRU capacities. Keep these separate from legacy diagnostic caches. */
+/** Flex grouped-runtime LRU capacities. Keep these separate from legacy diagnostic caches. */
 export const FLEX_CACHE_LIMITS = Object.freeze({
     /** Resumable XP-cell runs. */
     RUNS: 128,

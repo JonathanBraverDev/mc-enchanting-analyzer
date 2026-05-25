@@ -131,7 +131,7 @@ interface SearchExecutionServiceInternals {
 }
 
 describe('Search execution service', () => {
-    it('uses the V8 grouped runtime as the default execution path', async () => {
+    it('uses the grouped Flex runtime as the default execution path', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
         const instrumentation = createInstrumentation();
 
@@ -235,7 +235,7 @@ describe('Search execution service', () => {
         assert.ok(Math.abs(snapshotAccountingTotal(result) - 1) < 1e-12);
     });
 
-    it('folds V8 detailed mass accounting back to public buckets', async () => {
+    it('folds detailed Flex mass accounting back to public buckets', async () => {
         const cases: Array<{ readonly label: string; readonly request: CheckpointSearchRequest }> = [
             {
                 label: 'bounded book checkpoint',
@@ -312,7 +312,7 @@ describe('Search execution service', () => {
         assert.ok((resumed.instrumentation?.search?.runCacheHits ?? 0) >= 1);
     });
 
-    it('keeps the V8 run cache bounded', async () => {
+    it('keeps the Flex run cache bounded', async () => {
         const service = new SearchExecutionService();
         const cases = createCacheFillCases(FLEX_CACHE_LIMITS.RUNS + 12);
 
@@ -353,7 +353,7 @@ describe('Search execution service', () => {
         assert.ok(Math.abs(accountingTotal(stats) - 1) < 1e-12);
     });
 
-    it('matches explicit V8 stats to the default public API for a fully resolved case', async () => {
+    it('matches explicit Flex stats to the default public API for a fully resolved case', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
         engine.resetCaches();
 
@@ -377,7 +377,7 @@ describe('Search execution service', () => {
             })
         ]);
 
-        assertPublicStatsMatch('V8 public stats', defaults, explicit);
+        assertPublicStatsMatch('Flex public stats', defaults, explicit);
     });
 
     it('uses program-aware Flex identity when a mutated registry breaks the reduced-key invariant', async () => {
@@ -830,7 +830,7 @@ describe('Search execution service', () => {
         assert.strictEqual(fresh.instrumentation?.totalIterations, 10);
     });
 
-    it('does not expose legacy structural graph-cache counters on the V8 runtime', async () => {
+    it('does not expose legacy structural graph-cache counters on the Flex runtime', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
         engine.resetCaches();
 
