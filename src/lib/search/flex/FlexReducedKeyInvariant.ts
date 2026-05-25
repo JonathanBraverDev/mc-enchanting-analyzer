@@ -65,8 +65,8 @@ export function checkFlexReducedKeyInvariant(request: FlexReducedKeyInvariantReq
     const stack: FlexInvariantWorkItem[] = [];
     const conflicts: FlexReducedKeyInvariantConflict[] = [];
     const maxConflicts = Math.max(
-        FLEX_REDUCED_KEY_INVARIANT_LIMITS.MIN_CONFLICTS,
-        request.maxConflicts ?? FLEX_REDUCED_KEY_INVARIANT_LIMITS.DEFAULT_MAX_CONFLICTS
+        FLEX_REDUCED_KEY_INVARIANT_LIMITS.MIN_REPORTED_CONFLICTS,
+        request.maxConflicts ?? FLEX_REDUCED_KEY_INVARIANT_LIMITS.DEFAULT_MAX_REPORTED_CONFLICTS
     );
     let transitionCount = 0;
 
@@ -117,8 +117,8 @@ export function checkFlexReducedKeyInvariant(request: FlexReducedKeyInvariantReq
 
         const childLevel = current.count === FLEX_GRAPH_TRAVERSAL.ROOT_ENCHANT_COUNT
             ? current.currentLevel
-            : Math.floor(current.currentLevel / FLEX_GRAPH_TRAVERSAL.LEVEL_DECAY_DIVISOR);
-        const childCount = current.count + FLEX_GRAPH_TRAVERSAL.FIRST_CHILD_ENCHANT_COUNT;
+            : Math.floor(current.currentLevel / request.kernel.additionalEnchantmentLevelDivisor);
+        const childCount = current.count + FLEX_GRAPH_TRAVERSAL.ENCHANT_COUNT_INCREMENT;
         const groupedEdges = buildGroupedEdges(entries, current.exclusionMask);
 
         for (const edge of groupedEdges) {
@@ -200,7 +200,7 @@ function addAlternative(group: PendingGroupedEdge, entry: SearchPoolEntry): void
 }
 
 function isTerminalState(kernel: RegistryKernel, count: number): boolean {
-    if (kernel.item === 'book' && !kernel.multiEnchantBooks && count >= FLEX_GRAPH_TRAVERSAL.SINGLE_ENCHANT_BOOK_MAX_COUNT) return true;
+    if (kernel.item === 'book' && !kernel.multiEnchantBooks && count >= FLEX_GRAPH_TRAVERSAL.SINGLE_ENCHANT_BOOK_TERMINAL_COUNT) return true;
     return count >= ENGINE_LIMITS.MAX_ENCHANTS_PER_ITEM;
 }
 

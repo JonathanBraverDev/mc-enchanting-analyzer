@@ -17,9 +17,9 @@ import type {
 import { FLEX_FRONTIER_CONFIG, FLEX_HASH_CONFIG, FLEX_INDEX_SENTINELS } from '#lib/search/flex/FlexConstants.js';
 
 const SYSTEM_PROBABILITY_FLOOR = ProbUtils.toBigInt(ENGINE_LIMITS.SYSTEM_THRESHOLD_FLOOR);
-const INITIAL_WORK_ITEM_GRAPH_ID = 0;
-const INITIAL_WORK_ITEM_NODE_ID = 0 as FlexNodeId;
-const INITIAL_WORK_ITEM_MASS = 0n;
+const EMPTY_WORK_ITEM_GRAPH_ID = 0;
+const EMPTY_WORK_ITEM_NODE_ID = 0 as FlexNodeId;
+const EMPTY_WORK_ITEM_MASS = 0n;
 const EMPTY_FRONTIER_MASS = 0n;
 const MIN_PROBABILITY_INPUT = 0;
 const MAX_PROBABILITY_INPUT = 1.0;
@@ -60,9 +60,9 @@ export class FlexCoordinator {
 
     private readonly frontier = new FlexFrontier();
     private readonly workItem: FlexWorkItem = {
-        graphId: INITIAL_WORK_ITEM_GRAPH_ID,
-        nodeId: INITIAL_WORK_ITEM_NODE_ID,
-        mass: INITIAL_WORK_ITEM_MASS
+        graphId: EMPTY_WORK_ITEM_GRAPH_ID,
+        nodeId: EMPTY_WORK_ITEM_NODE_ID,
+        mass: EMPTY_WORK_ITEM_MASS
     };
     private readonly forwardingResidues: Array<Map<number, FlexForwardingResidueRecord> | undefined> = [];
     private activeResidueCount = 0;
@@ -693,7 +693,7 @@ class FlexFrontierPositionIndex {
         const size = FlexFrontierPositionIndex.nextPowerOfTwo(capacity);
         this.keys = new Int32Array(size);
         this.values = new Int32Array(size);
-        this.values.fill(FLEX_INDEX_SENTINELS.MISSING_VALUE);
+        this.values.fill(FLEX_INDEX_SENTINELS.MISSING_INDEX);
         this.states = new Uint8Array(size);
         this.mask = size - 1;
         this.resizeAt = Math.floor(size * FLEX_FRONTIER_CONFIG.POSITION_INDEX_MAX_LOAD_FACTOR);
@@ -704,7 +704,7 @@ class FlexFrontierPositionIndex {
         while (this.states[index] !== FLEX_INDEX_SENTINELS.EMPTY_SLOT) {
             if (this.states[index] === FLEX_INDEX_SENTINELS.OCCUPIED_SLOT && this.keys[index] === key) {
                 const value = this.values[index]!;
-                return value === FLEX_INDEX_SENTINELS.MISSING_VALUE ? undefined : value;
+                return value === FLEX_INDEX_SENTINELS.MISSING_INDEX ? undefined : value;
             }
             index = (index + 1) & this.mask;
         }
@@ -724,8 +724,8 @@ class FlexFrontierPositionIndex {
         let index = this.hash(key) & this.mask;
         while (this.states[index] !== FLEX_INDEX_SENTINELS.EMPTY_SLOT) {
             if (this.states[index] === FLEX_INDEX_SENTINELS.OCCUPIED_SLOT && this.keys[index] === key) {
-                this.states[index] = FLEX_INDEX_SENTINELS.DELETED_SLOT;
-                this.values[index] = FLEX_INDEX_SENTINELS.MISSING_VALUE;
+                this.states[index] = FLEX_INDEX_SENTINELS.TOMBSTONE_SLOT;
+                this.values[index] = FLEX_INDEX_SENTINELS.MISSING_INDEX;
                 this.occupied--;
                 return;
             }
@@ -735,18 +735,18 @@ class FlexFrontierPositionIndex {
 
     private insert(key: number, value: number): void {
         let index = this.hash(key) & this.mask;
-        let firstDeleted: number = FLEX_INDEX_SENTINELS.MISSING_VALUE;
+        let firstDeleted: number = FLEX_INDEX_SENTINELS.MISSING_INDEX;
 
         while (this.states[index] !== FLEX_INDEX_SENTINELS.EMPTY_SLOT) {
             if (this.states[index] === FLEX_INDEX_SENTINELS.OCCUPIED_SLOT && this.keys[index] === key) {
                 this.values[index] = value;
                 return;
             }
-            if (firstDeleted === FLEX_INDEX_SENTINELS.MISSING_VALUE && this.states[index] === FLEX_INDEX_SENTINELS.DELETED_SLOT) firstDeleted = index;
+            if (firstDeleted === FLEX_INDEX_SENTINELS.MISSING_INDEX && this.states[index] === FLEX_INDEX_SENTINELS.TOMBSTONE_SLOT) firstDeleted = index;
             index = (index + 1) & this.mask;
         }
 
-        const target = firstDeleted === FLEX_INDEX_SENTINELS.MISSING_VALUE ? index : firstDeleted;
+        const target = firstDeleted === FLEX_INDEX_SENTINELS.MISSING_INDEX ? index : firstDeleted;
         if (this.states[target] === FLEX_INDEX_SENTINELS.EMPTY_SLOT) this.used++;
         this.states[target] = FLEX_INDEX_SENTINELS.OCCUPIED_SLOT;
         this.keys[target] = key;
@@ -765,7 +765,7 @@ class FlexFrontierPositionIndex {
 
         this.keys = new Int32Array(nextSize);
         this.values = new Int32Array(nextSize);
-        this.values.fill(FLEX_INDEX_SENTINELS.MISSING_VALUE);
+        this.values.fill(FLEX_INDEX_SENTINELS.MISSING_INDEX);
         this.states = new Uint8Array(nextSize);
         this.mask = nextSize - 1;
         this.resizeAt = Math.floor(nextSize * FLEX_FRONTIER_CONFIG.POSITION_INDEX_MAX_LOAD_FACTOR);
