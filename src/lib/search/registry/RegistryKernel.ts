@@ -1,5 +1,6 @@
 import { getCandidatePool, getEnchantability } from '#core/registry.js';
 import { BIGINT_CONSTANTS, PACKING_CONSTANTS } from '#constants/engine.js';
+import { MINECRAFT_RULES } from '#constants/minecraft.js';
 import { PackedEnchant, RegistryState } from '#types/index.js';
 
 /** Stable fingerprint for all rules that affect a modified-level enchantment pool. */
@@ -58,6 +59,7 @@ export class RegistryKernel {
     public readonly material: string;
     public readonly enchantability: number;
     public readonly multiEnchantBooks: boolean;
+    public readonly additionalEnchantmentLevelDivisor: number;
 
     private readonly poolCache = new Map<number, SearchPool>();
 
@@ -68,6 +70,8 @@ export class RegistryKernel {
         this.material = request.material;
         this.enchantability = getEnchantability(request.registry, request.material, request.item);
         this.multiEnchantBooks = request.registry.multiEnchantBooks;
+        this.additionalEnchantmentLevelDivisor = request.registry.mechanics.additional_enchantment_level_divisor
+            ?? MINECRAFT_RULES.ADDITIONAL_ENCHANTMENT_LEVEL_DIVISOR_MODERN;
     }
 
     public getPool(level: number): SearchPool {

@@ -314,6 +314,8 @@ export interface VanillaRegistryState extends RegistryState {
 // @public
 export interface VersionMechanics {
     // (undocumented)
+    additional_enchantment_level_divisor?: number;
+    // (undocumented)
     enchantability_bonus_divisor?: number;
     // (undocumented)
     lapis_required?: boolean;

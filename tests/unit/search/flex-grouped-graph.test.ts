@@ -194,7 +194,7 @@ describe('GroupedFlexGraph', () => {
         assert.strictEqual(conflictFreeStats.choiceGroupCount, 0, 'conflict-free pools must not record grouped choices');
     });
 
-    it('expands non-root singleton children with halved child levels', () => {
+    it('expands non-root singleton children with modern child-level decay', () => {
         const fixture = createGraphFixture('sword', 'diamond', 30);
         const groupedRoot = fixture.graph.getExpansion(fixture.graph.getRootNode(30).id);
         const singletonEdge = groupedRoot.edges.find(edge => getLastEmission(fixture, edge).kind === 'fixed');
@@ -205,6 +205,19 @@ describe('GroupedFlexGraph', () => {
         assert.strictEqual(fixture.graph.getNodeCurrentLevel(singletonEdge.childId), 30);
         assert.ok(groupedChildExpansion.totalWeight > 0);
         assert.ok(groupedChildExpansion.edges.every(edge => fixture.graph.getNodeCurrentLevel(edge.childId) === 15));
+    });
+
+    it('uses legacy child-level decay from registry mechanics', () => {
+        const fixture = createGraphFixture('sword', 'diamond', 30, '1.0');
+        const groupedRoot = fixture.graph.getExpansion(fixture.graph.getRootNode(30).id);
+        const singletonEdge = groupedRoot.edges.find(edge => getLastEmission(fixture, edge).kind === 'fixed');
+        assert.ok(singletonEdge, 'legacy fixture should expose a singleton root transition');
+
+        const groupedChildExpansion = fixture.graph.getExpansion(singletonEdge.childId);
+
+        assert.strictEqual(fixture.kernel.additionalEnchantmentLevelDivisor, 4);
+        assert.ok(groupedChildExpansion.totalWeight > 0);
+        assert.ok(groupedChildExpansion.edges.every(edge => fixture.graph.getNodeCurrentLevel(edge.childId) === 7));
     });
 
     it('keeps no-eligible, single-book, and max-enchants terminal behavior explicit', () => {

@@ -4,6 +4,7 @@ export const versions = {
   "1.0": {
     "mechanics": {
       "enchantability_bonus_divisor": 2,
+      "additional_enchantment_level_divisor": 4,
       "random_bonus_range": 0.25,
       "xp_cap": 50,
       "xp_cost_type": "full",
@@ -14,6 +15,7 @@ export const versions = {
     "extends": "1.0",
     "mechanics": {
       "enchantability_bonus_divisor": 4,
+      "additional_enchantment_level_divisor": 2,
       "random_bonus_range": 0.15,
       "xp_cap": 30
     }

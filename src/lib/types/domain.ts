@@ -147,6 +147,7 @@ export type RegistryMutation =
 /**
  * Game mechanics configuration for a version.
  * @property enchantability_bonus_divisor Divisor for the enchantability stat (default 15).
+ * @property additional_enchantment_level_divisor Divisor applied to modified level before rolling additional enchantments.
  * @property random_bonus_range Range of random multiplier applied to base modified level.
  * @property xp_cost_type How XP costs are calculated (full or flat).
  * @property lapis_required Whether the enchantment requires lapis lazuli.
@@ -155,6 +156,7 @@ export type RegistryMutation =
  */
 export interface VersionMechanics {
   enchantability_bonus_divisor?: number;
+  additional_enchantment_level_divisor?: number;
   random_bonus_range?: number;
   xp_cost_type?: 'full' | 'flat';
   lapis_required?: boolean;

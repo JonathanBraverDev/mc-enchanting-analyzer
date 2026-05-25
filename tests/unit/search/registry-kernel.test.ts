@@ -39,6 +39,22 @@ describe('RegistryKernel', () => {
         assert.strictEqual(pair!.a.familySignature, pair!.b.familySignature);
     });
 
+    it('exposes version-specific additional enchantment level decay', () => {
+        const legacy = new RegistryKernel({
+            registry: RegistryFactory.build('1.0'),
+            item: 'sword',
+            material: 'diamond'
+        });
+        const modern = new RegistryKernel({
+            registry: RegistryFactory.build('1.21.11'),
+            item: 'sword',
+            material: 'diamond'
+        });
+
+        assert.strictEqual(legacy.additionalEnchantmentLevelDivisor, 4);
+        assert.strictEqual(modern.additionalEnchantmentLevelDivisor, 2);
+    });
+
     it('includes ordered base candidates in family signatures', () => {
         const forward = RegistryFactory.buildWithMutations('1.21.11', [
             { type: 'removeEnchantableItemRule', selector: { item: 'sword', valid_from: '1.0' } },
