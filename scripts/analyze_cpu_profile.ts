@@ -148,21 +148,6 @@ const flexAccountingFunctions = new Set([
     'toMassAccountingDetails'
 ]);
 
-const concreteFunctions = new Set([
-    'buildRootExpansion',
-    'buildSearchExpansion',
-    'getBlueprintLookupForNode',
-    'addExpansionEdge',
-    'getOrCreateNodeId',
-    'searchToCheckpoint',
-    'advanceUntilCheckpoint',
-    'expand',
-    'forwardMass',
-    'pushPending',
-    'pushOrMerge',
-    'popLargestPending'
-]);
-
 const phaseRules: readonly PhaseRule[] = [
     {
         name: 'flex/projection',
@@ -193,11 +178,6 @@ const phaseRules: readonly PhaseRule[] = [
     {
         name: 'flex/accounting',
         matches: frame => frame.url.includes('engine/search/ProbabilityMassAccountant.ts') && flexAccountingFunctions.has(frame.functionName)
-    },
-    {
-        name: 'concrete/v7-search',
-        matches: frame => (frame.url.includes('search/SearchRun.ts') || frame.url.includes('search/SearchGraph.ts') || frame.url.includes('search/SearchExpansionBlueprintCache.ts'))
-            && concreteFunctions.has(frame.functionName)
     }
 ];
 
@@ -256,7 +236,7 @@ function printUsage(): void {
     console.log([
         'Usage: tsx scripts/analyze_cpu_profile.ts [--top N] [--include-idle] [--include-profiler] <CPU.cpuprofile...>',
         '',
-        'Splits Node/V8 CPU profile samples into Flex/V7 phases using call-stack ancestry:',
+        'Splits Node/V8 CPU profile samples into Flex phases using call-stack ancestry:',
         '- flex/graph-grouping',
         '- flex/program-store',
         '- flex/frontier',
@@ -264,7 +244,6 @@ function printUsage(): void {
         '- flex/coordinator',
         '- flex/projection',
         '- flex/accounting',
-        '- concrete/v7-search',
         '- runtime/unattributed',
         '- shared/runtime/other',
         '',

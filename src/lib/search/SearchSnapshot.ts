@@ -102,7 +102,7 @@ export interface EngineSearchSnapshot {
     readonly pendingCount: number;
     readonly largestPendingMass: bigint;
     /**
-     * Compatibility materialized pending rows. The canonical V8 path normally exposes
+     * Compatibility materialized pending rows. The canonical Flex path normally exposes
      * factorized pending summaries; materialized rows remain for diagnostics and
      * consumers that explicitly need expanded frontier entries.
      */
@@ -126,7 +126,7 @@ export interface EngineSearchSnapshot {
  *
  * @internal
  */
-export interface SearchRunSnapshot extends EngineSearchSnapshot {
+export interface MaterializedSearchSnapshot extends EngineSearchSnapshot {
     readonly pendingEntries: readonly PendingFrontierEntry[];
     readonly pendingAggregates?: undefined;
     readonly frontier: EmptyEngineFrontier | MaterializedEngineFrontier;

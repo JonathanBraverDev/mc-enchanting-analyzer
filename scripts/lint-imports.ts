@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 
-const IGNORE_DIRS = ['node_modules', 'dist', '.git', 'scratch'];
+const IGNORE_DIRS = ['node_modules', 'dist', '.git', 'scratch', 'tmp'];
 const ALIASES = {
     '#lib/': 'src/lib/',
     '#core/': 'src/lib/core/',

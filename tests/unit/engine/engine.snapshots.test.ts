@@ -1,9 +1,11 @@
 import { describe, it } from 'node:test';
+import assert from 'node:assert';
 import { EngineFactory } from '#engine/factory.js';
 import { SnapshotUtils } from '#tests/infra/test-utils.js';
 import { TEST_DEFAULTS } from '#constants/testing.js';
 import { TEST_DATA } from '#tests/infra/test-data.js';
 import type { EnchantEngine } from '#engine/index.js';
+import type { EngineInstrumentation } from '#types/index.js';
 
 // Polyfill for requestAnimationFrame in Node (Sync version for tests)
 if (typeof (globalThis as any).requestAnimationFrame !== 'function') {
@@ -11,12 +13,27 @@ if (typeof (globalThis as any).requestAnimationFrame !== 'function') {
 }
 
 async function calculateSnapshot(engine: EnchantEngine, request: { item: string; xp: number; material: string; clue?: string }) {
+    const instrumentation = createSnapshotInstrumentation();
     return await engine.getStats({
         ...request,
         exhaustive: TEST_DEFAULTS.SNAPSHOT_EXHAUSTIVE,
         uncappedResults: true,
-        useCache: false
+        useCache: false,
+        instrumentation
     });
+}
+
+function createSnapshotInstrumentation(): EngineInstrumentation {
+    return {
+        poolCache: { hits: 0, misses: 0 },
+        distCache: { hits: 0, misses: 0 },
+        totalIterations: 0,
+        totalPrunedNodes: 0,
+        roundingErrorEvents: 0,
+        levelsProcessed: 0,
+        levelsFullyResolved: 0,
+        fullyResolved: false
+    };
 }
 
 describe('Enchantment Engine Exhaustive Regression Snapshots', () => {
@@ -56,5 +73,31 @@ describe('Enchantment Engine Exhaustive Regression Snapshots', () => {
         const engine = EngineFactory.createForVersion(TEST_DATA.VERSIONS.BOOK_MULTI_LIMIT);
         const stats = await calculateSnapshot(engine, { item: TEST_DATA.ITEMS.BOOK, xp: 30, material: TEST_DATA.MATERIALS.BOOK });
         await SnapshotUtils.assertSnapshot('1.7.2_book_30_book', stats, engine.registry);
+    });
+
+    it('Snapshot: 1.21.11 Book @ Level 30 (99.95% classified mass)', async () => {
+        const engine = EngineFactory.createForVersion('1.21.11');
+        engine.resetCaches();
+        const instrumentation = createSnapshotInstrumentation();
+
+        const stats = await engine.getStats({
+            item: TEST_DATA.ITEMS.BOOK,
+            material: TEST_DATA.MATERIALS.BOOK,
+            xp: 30,
+            maxIterations: TEST_DEFAULTS.MODERN_BOOK_SNAPSHOT_ITERATIONS,
+            targetClassifiedMass: TEST_DEFAULTS.MODERN_BOOK_SNAPSHOT_TARGET_CLASSIFIED_MASS,
+            threshold: 0,
+            uncappedResults: true,
+            useCache: false,
+            instrumentation
+        });
+
+        const classifiedMass = 1 - stats.accounting.pending;
+        assert.ok(
+            classifiedMass >= TEST_DEFAULTS.MODERN_BOOK_SNAPSHOT_TARGET_CLASSIFIED_MASS,
+            `Expected classified mass >= ${TEST_DEFAULTS.MODERN_BOOK_SNAPSHOT_TARGET_CLASSIFIED_MASS}, got ${classifiedMass}`
+        );
+
+        await SnapshotUtils.assertSnapshot('1.21.11_book_30_book', stats, engine.registry);
     });
 });
