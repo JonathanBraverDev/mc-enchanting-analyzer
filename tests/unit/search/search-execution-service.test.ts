@@ -830,7 +830,7 @@ describe('Search execution service', () => {
         assert.strictEqual(fresh.instrumentation?.totalIterations, 10);
     });
 
-    it('does not expose legacy structural graph-cache counters on the Flex runtime', async () => {
+    it('does not expose legacy structural graph-cache counters on the grouped runtime', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
         engine.resetCaches();
 
@@ -853,8 +853,8 @@ describe('Search execution service', () => {
             }
         });
 
-        assert.strictEqual(result.instrumentation?.search?.graphCacheHits, 0);
-        assert.strictEqual(result.instrumentation?.search?.graphCacheMisses, 0);
+        assert.strictEqual('graphCacheHits' in (result.instrumentation?.search ?? {}), false);
+        assert.strictEqual('graphCacheMisses' in (result.instrumentation?.search ?? {}), false);
     });
 
 });

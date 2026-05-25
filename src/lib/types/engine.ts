@@ -63,16 +63,6 @@ export interface SearchCheckpoint {
 }
 
 /** @public */
-export interface ExploredMassSample {
-  modLevel: number;
-  targetMass: number;
-  exploredMass: number;
-  frontierProbability: number;
-  iterations: number;
-  totalIterations: number;
-}
-
-/** @public */
 export interface SearchTiming {
   /** Reported engine time, including search and post-processing phases. */
   totalMs: number;
@@ -103,25 +93,7 @@ export interface EngineInstrumentation {
   resultsSize?: number | undefined;
   /** Current number of pending weighted graph nodes in the frontier heap. */
   queueSize?: number | undefined;
-  /** Current heap usage in MB */
-  memoryMB?: number | undefined;
-
-  /** Total unique results aggregated across all modified levels so far in this specific calculation */
-  globalResultsSize?: number | undefined;
-  /** Total nodes currently stored in engine-wide cached pending search state */
-  globalCacheNodes?: number | undefined;
-  /** Total results currently stored in engine-wide cached search state */
-  globalCacheResults?: number | undefined;
-
-  /** Optional script/diagnostic targets for recording explored mass crossings. */
-  exploredMassTargets?: number[] | undefined;
-  /** Diagnostic samples recorded when explored mass crosses configured targets. */
-  exploredMassSamples?: ExploredMassSample[] | undefined;
-
   exitReason?: EngineExitReason | undefined;
-
-  /** Optional: If true, perform expensive global heap scans for cache nodes/results */
-  trackGlobalMetrics?: boolean | undefined;
 
   /** Shared search diagnostics. Present when the engine records them. */
   search?: SearchInstrumentation | undefined;
@@ -145,26 +117,10 @@ export interface SearchInstrumentation {
   activeResidueMass: number;
   /** Whether this snapshot can still improve under a lower threshold or higher iteration cap. */
   canImprove: boolean;
-  /** Cumulative structural graph cache hits for this engine instance. */
-  graphCacheHits?: number | undefined;
-  /** Cumulative structural graph cache misses for this engine instance. */
-  graphCacheMisses?: number | undefined;
   /** Cumulative resumable search-run cache hits for this engine instance. */
   runCacheHits?: number | undefined;
   /** Cumulative resumable search-run cache misses for this engine instance. */
   runCacheMisses?: number | undefined;
-  /** Whether run-local suffix canonicalization was enabled for this snapshot. */
-  suffixMergingEnabled?: boolean | undefined;
-  /** Number of canonical suffix entries recorded by this run. */
-  suffixMergeCanonicalEntryCount?: number | undefined;
-  /** Number of pending arrivals redirected to an equivalent canonical suffix node. */
-  suffixMergeHits?: number | undefined;
-  /** Number of suffix identities first registered as canonical nodes. */
-  suffixMergeMisses?: number | undefined;
-  /** Probability mass redirected to canonical suffix nodes. */
-  suffixMergedPendingMass?: number | undefined;
-  /** Estimated number of pending entries avoided by suffix canonicalization. */
-  suffixAvoidedPendingEntries?: number | undefined;
   /** Internal grouped-runtime: structural state identity mode used by this run. */
   flexStateIdentityMode?: 'reduced' | 'program' | undefined;
   /** Internal grouped-runtime: SolidNode count across structural graphs. */

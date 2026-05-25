@@ -28,15 +28,7 @@ export function makeSearchSnapshot(options: {
         seededLevelCount: 1,
         activeResidueCount: 0,
         activeResidueMass: 0n,
-        fullyResolved: pendingEntries.length === 0,
-        suffixMerging: {
-            enabled: false,
-            canonicalEntryCount: 0,
-            hits: 0,
-            misses: 0,
-            mergedPendingMass: 0n,
-            avoidedPendingEntries: 0
-        }
+        fullyResolved: pendingEntries.length === 0
     });
 }
 
