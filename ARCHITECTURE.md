@@ -1,14 +1,15 @@
-# Architecture Map - Minecraft Enchantment Analyzer (V7)
+# Architecture Map - Minecraft Enchantment Analyzer
 
 ## Common Description
 
-This document maps the current V7 engine, worker, registry, search, and reporting architecture for Minecraft Enchantment Analyzer. It is the high-level reference for how the system is wired; use `docs/v7-shared-search-engine.md` for the deeper explanation of why V7 works this way.
+This document maps the current engine, worker, registry, search, and reporting architecture for Minecraft Enchantment Analyzer. Use `docs/v8-search-engine.md` for the deeper explanation of how the current search engine works.
 
-Release-reviewed for v7.1.2: the public engine surface is `getStats(...)` for summarized probabilities plus checkpoint APIs for raw or streaming search results.
+Release-reviewed for v7.1.2: the public engine surface is `getStats(...)` for summarized probabilities plus checkpoint APIs for raw or streaming search results. For the current supported API boundary, see [`docs/public-api.md`](docs/public-api.md).
 
 ## Table of Contents
 
 - [Entry Points](#entry-points)
+- [Supported API Boundary](#supported-api-boundary)
 - [Module Dependency Graph](#module-dependency-graph)
 - [Checkpoint Search Flow](#checkpoint-search-flow)
 - [Public Engine Calls](#public-engine-calls)
@@ -35,6 +36,19 @@ Release-reviewed for v7.1.2: the public engine surface is `getStats(...)` for su
 | `src/worker/chart-worker.ts` | Worker for XP sweep chart cells |
 | `src/worker/WorkerShell.ts` | Shared worker lifecycle, initialization, run cancellation, and error routing |
 
+## Supported API Boundary
+
+The supported library API is the engine and registry surface used by the UI and normal tool callers:
+
+- `EngineFactory.createForVersion(...)` and `EngineFactory.create(...)`;
+- `EnchantEngine.getStats(...)`;
+- `EnchantEngine.searchToCheckpoint(...)`;
+- `EnchantEngine.searchSequentialCheckpoints(...)`;
+- registry construction and metadata helpers needed to build valid requests;
+- returned `EnchantStats`, `SearchResult`, snapshot, timing, and accounting shapes.
+
+Direct search-engine classes, backend selectors such as `searchBackend`, and implementation-specific runners are internal diagnostics. They may change as the engine evolves. The product API should not require callers to know which internal runtime is active.
+
 ## Module Dependency Graph
 
 ```text
@@ -56,11 +70,11 @@ scripts/           Build, profiling, reporting, and snapshot tools
 
 Dependency direction is intentionally one way: data and types sit at the bottom, engine code owns search behavior, services translate engine output into UI/reporting shapes, workers isolate long-running calculations, and the UI consumes worker responses.
 
-The bundled enchantment registry models the active enchanting-table space. Treasure-only or otherwise table-impossible enchantments are intentionally excluded from `global_enchantments` instead of being carried through the registry behind per-item filters. V7 constructs runtime engines from resolved `RegistryState` objects; normal vanilla callers build those states by version, while vanilla-plus-mutation registries are an explicit advanced path.
+The bundled enchantment registry models the active enchanting-table space. Treasure-only or otherwise table-impossible enchantments are intentionally excluded from `global_enchantments` instead of being carried through the registry behind per-item filters. V8 constructs runtime engines from resolved `RegistryState` objects; normal vanilla callers build those states by version, while vanilla-plus-mutation registries are an explicit advanced path.
 
 ## Checkpoint Search Flow
 
-V7 centers the engine around checkpoint-capable shared searches. A normal stats call searches to the default stats checkpoint and summarizes the final result. UI refinement can instead search a sequence of checkpoints and stream a completed result each time a checkpoint is crossed. Search scheduling is global: modified-level mass is seeded into one weighted frontier, so the highest-probability pending state is expanded next regardless of which modified level produced it.
+V8 centers the engine around checkpoint-capable shared searches. A normal stats call searches to the default stats checkpoint and summarizes the final result. UI refinement can instead search a sequence of checkpoints and stream a completed result each time a checkpoint is crossed. Search scheduling is global: modified-level mass is seeded into one weighted frontier, so the highest-probability pending state is expanded next regardless of which modified level produced it.
 
 ```text
 UI input
@@ -69,10 +83,10 @@ UI input
   -> WorkerShell.dispatchEvent
   -> EnchantEngine.searchSequentialCheckpoints or searchToCheckpoint
   -> SearchExecutionService
-  -> SearchRun seeded with weighted modified-level root mass
-  -> SearchRunFrontier + SearchGraph best-first expansion
+  -> FlexCoordinator seeded with weighted modified-level root mass
+  -> GroupedFlexGraph best-first expansion
   -> ProbabilityMassAccountant
-  -> SearchRunSnapshot / SearchResult at each checkpoint
+  -> EngineSearchSnapshot / SearchResult at each checkpoint
   -> SummaryAggregationService
   -> SnapshotService / SummaryService
   -> worker response back to UI
@@ -89,7 +103,7 @@ UI input
 | `getModifiedLevelDist(xp, enchantability, instrumentation?)` | Returns the BigInt distribution over modified levels |
 | `getAvailablePool(item, level, bitset?)` | Returns packed eligible enchant/rank IDs for an item and level |
 
-The public calls use request objects so callers can pass optional search, instrumentation, timing, clue, and abort options without positional argument drift. Use `getStats(...)` when a caller wants usable presented probabilities; use checkpoint calls when a caller needs raw search state or streaming checkpoint control. `getStats(...)` fills missing threshold/iteration settings from the default stats checkpoint (`DEFAULT_STATS_REFINEMENT_LEVEL`, currently `standard`) so simple callers and tests share one reliable baseline. V7 uses `item` and `material` consistently across engine calls, workers, UI code, tests, and scripts.
+The public calls use request objects so callers can pass optional search, instrumentation, timing, clue, and abort options without positional argument drift. Use `getStats(...)` when a caller wants usable presented probabilities; use checkpoint calls when a caller needs raw search state or streaming checkpoint control. `getStats(...)` fills missing threshold/iteration settings from the default stats checkpoint (`DEFAULT_STATS_REFINEMENT_LEVEL`, currently `standard`) so simple callers and tests share one reliable baseline. V8 uses `item` and `material` consistently across engine calls, workers, UI code, tests, and scripts.
 
 ## Registry Construction
 
@@ -102,7 +116,7 @@ The public calls use request objects so callers can pass optional search, instru
 
 Runtime registry state contains projected lookup data such as active item pools, item/material compatibility, enchantability tables, conflict bitsets, material values, and rank maps. Raw registry data remains in the data/factory layer rather than being carried on each engine registry object.
 
-V7 intentionally keeps custom registry support narrow: the supported extension point is vanilla plus explicit mutations. Full custom data-pack construction is not part of the public runtime surface.
+V8 intentionally keeps custom registry support narrow: the supported extension point is vanilla plus explicit mutations. Full custom data-pack construction is not part of the public runtime surface.
 
 ## Registry Rule Model
 
@@ -123,10 +137,9 @@ Missing `groups` on an enchantable item rule means “all active table enchantme
 |---|---|
 | `EnchantEngine` | Validates requests, owns registry access, cache lookups, and public orchestration |
 | `SearchExecutionService` | Coordinates shared search runs, checkpoint aggregation, instrumentation, and cache reuse |
-| `SearchRun` | Runs the globally weighted best-first expansion loop, mass accounting, residue forwarding, and optional suffix merging until checkpoint or exhaustion |
-| `SearchRunFrontier` | Stores pending graph node IDs and weighted probability mass in best-first order |
-| `SearchGraph` | Owns canonical node identity, combo payloads, exact graph expansions, suffix identities, and graph-local expansion state |
-| `GroupedFlexSearchRun` / `FlexCoordinator` / `GroupedFlexGraph` | Active opt-in factorized runtime path selected with `searchBackend: 'flex'`. It uses fixed/choice result programs, V7-style mass flow, and concrete-compatible projection. See `docs/flex-factorized-tree.md`. |
+| `GroupedFlexSearchRun` / `FlexCoordinator` / `GroupedFlexGraph` | Runs the globally weighted best-first expansion loop, grouped graph expansion, fixed/choice result programs, mass accounting, residue forwarding, and checkpoint exits. See `docs/v8-search-engine.md`. |
+| `FlexProgramStore` | Stores fixed and choice emissions for exact result projection without expanding every concrete combo in the search loop |
+| `FlexSnapshotBuilder` / `FlexProjector` | Builds checkpoint snapshots, exact result combos, pending aggregates, and book/clue projection views |
 | `ProbabilityMassAccountant` | Records resolved, clue-incompatible, pending, sieved, capped, overflow, and rounding mass |
 | `ModifiedLevelDistributionService` | Computes the BigInt distribution of modified enchantment levels |
 | `SummaryAggregationService` | Scans resolved combos and pending frontiers once to derive shared any/rank/count/clue mass buckets |
@@ -140,7 +153,7 @@ Missing `groups` on an enchantable item rule means “all active table enchantme
 
 ```ts
 interface SearchResult {
-  snapshot: SearchRunSnapshot;
+  snapshot: EngineSearchSnapshot;
   combos: ReadonlyMap<PackedCombo, bigint>;
   instrumentation?: EngineInstrumentation;
   timing?: SearchTiming;
@@ -148,11 +161,11 @@ interface SearchResult {
 }
 ```
 
-`SearchExecutionService` searches or resumes the selected internal backend for the request signature. Concrete `SearchRun` remains the default and supported product path. Experimental callers can set `searchBackend: 'flex'` to run the same checkpoint service through a cached Flex run, which projects fixed/choice result programs back into the compatible checkpoint shape. Unsupported backend selector values now fail through the shared unsupported-backend path. The next V7 direction is to make the Flex projection/factorized-tree boundary internal to the default engine: graph construction can emit fixed or choice factors, while the runtime remains a mostly generic best-first mass-flow loop and the checkpoint result stays concrete-compatible. The selected run seeds each modified level as weighted root mass, expands the highest-probability pending graph node globally, and snapshots the completed checkpoint state. The checkpoint result owns:
+`SearchExecutionService` searches or resumes the current V8 run for the request signature. Unsupported backend selector values fail through the shared unsupported-backend path. The engine keeps the factorized-tree boundary internal: graph construction can emit fixed or choice factors, while the runtime remains a mostly generic best-first mass-flow loop and the checkpoint result stays public-compatible. The selected run seeds each modified level as weighted root mass, expands the highest-probability pending graph node globally, and snapshots the completed checkpoint state. The checkpoint result owns:
 
 - global combo mass
 - mass accounting buckets
-- a `SearchRunSnapshot` with pending entries for reporting and projections
+- an `EngineSearchSnapshot` with pending frontier data for reporting and projections
 - timing and instrumentation snapshots
 
 If a sequential checkpoint run is aborted before any modified level is processed for the active checkpoint, the service returns the last completed checkpoint instead of replacing it with an empty result.
@@ -167,19 +180,18 @@ Target combo filtering is a reporting projection, not a search mode. The UI send
 
 ## Shared Frontier Model
 
-The V7 search path separates graph node identity from weighted frontier priority:
+The V8 search path separates graph node identity from weighted frontier priority:
 
-- `SearchGraph` assigns each canonical `(enchant bitset << 8 | current level)` state a dense `nodeId`.
+- `GroupedFlexGraph` assigns each canonical future state a dense `nodeId`.
 - `RegistryKernel` groups modified levels by `SearchPoolSignature`, so levels with the same eligible enchant pool reuse the same structural graph.
-- `SearchGraph` stores canonical selected-enchant masks, current levels, packed combos, and enchant counts on dense node IDs.
+- Internal nodes store exclusion masks, current levels, enchant counts, and program IDs on dense node IDs.
 - `SearchPoolEntry` precomputes rank, weight, availability, combo index, id bit, and conflict metadata for each eligible enchant.
-- `SearchExpansionBlueprintCache` can reuse eligible-entry scans across rank-variant pools through `SearchPoolFamilySignature`; exact child nodes and combo payloads remain graph-local.
-- `SearchRunFrontier` stores `graphId`, `nodeId`, and pending weighted probability mass, using direct merge/heap lookups for best-first scheduling.
+- Same-future alternatives can collapse into a `PlexNode`, while singleton transitions remain `SolidNode`s.
+- The frontier stores `graphId`, `nodeId`, and pending weighted probability mass, using direct merge/heap lookups for best-first scheduling.
 - Forwarding residue is tracked by exact source expansion and outgoing edge, so fixed-point leftovers can recover only when later mass reaches the same equivalence point.
-- Suffix identity and suffix merging are implemented but opt-in; default product searches do not canonicalize pending suffix nodes because current profiling shows the overhead can outweigh the iteration savings.
-- Flex search is implemented as an opt-in internal backend selected through `SearchExecutionService` with `searchBackend: 'flex'`. It keeps structural mass flow separate from visible fixed/choice result programs, can project resolved and pending aggregate state back into concrete compatibility rows, and is still not selected for product/default requests. The current design target is to reuse Flex inside V7 itself: factorized tree nodes carry emitted result-program IDs, while traversal can stay dense/generic even after an earlier choice factor was emitted.
+- Mutated-registry safety can switch from reduced node identity to program-aware identity when reduced identity is not sufficient.
 
-This preserves best-first semantics while changing the scheduling scope: the highest-probability pending weighted node expands first across the whole XP search, not inside one modified level at a time. `meta` remains the canonical state identity. The scaling improvement comes from sharing graph identity and cache state across the weighted run instead of repeating independent per-modified-level searches.
+This preserves best-first semantics while changing the scheduling scope: the highest-probability pending weighted node expands first across the whole XP search, not inside one modified level at a time. The scaling improvement comes from sharing graph identity and cache state across the weighted run instead of repeating independent per-modified-level searches.
 
 ## Worker Model
 
@@ -200,12 +212,12 @@ The browser uses two dedicated workers:
 |---|---|
 | distribution cache | Modified-level distributions by version/xp/enchantability |
 | pool cache | Eligible enchant pools by version/item/level; material is intentionally absent because it affects modified-level distribution, not per-level eligibility |
-| search run cache | Reusable shared search runs keyed by version/item/material/xp/clue/request signature |
-| expansion blueprint cache | Reusable eligible-entry scans keyed by pool-family signature, selected mask, current level, and enchant count |
+| search run cache | Reusable V8 runs keyed by version/item/material/xp/clue/request signature |
+| grouped graph cache | Reusable grouped graphs keyed by pool signature and search policy |
 
 The registry rule model declares item/material compatibility together, but the engine cache keys still follow the computation they cache. Pool entries only depend on the fixed enchantable item pool at a modified level. Search run entries include material because material changes enchantability, which changes the modified-level distribution and therefore the weighted search state. Threshold-aware reads can reuse more precise cached state when it already satisfies the requested checkpoint.
 
-Expansion blueprint caching is enabled by default because it preserves exact graph edges while reducing repeated candidate checks. Suffix merging is implemented behind `useSuffixMerging` but remains off by default because lower iteration counts have not consistently translated into faster wall-clock runtime. Flex search is available as an opt-in `SearchExecutionService` backend for internal experiments, comparison tests, and refinement work, but remains outside the default execution path until broader parity, mutated-registry safety, and wall-clock evidence justify enabling it. The vNext performance thesis is not a separate public Flex engine; it is V7 running a better factorized tree where program construction happens during graph building and checkpoint projection hides the internal representation from UI/reporting callers. The obsolete Plex prototype was removed after Flex covered the same diagnostic role with better V7 alignment.
+Grouped graph caching preserves exact search behavior while reducing repeated candidate checks. The internal implementation is behind the stable engine API, not a separate public engine. Program construction happens during graph building, while checkpoint projection hides the internal representation from UI/reporting callers. The obsolete Plex prototype was removed after the current implementation covered the same diagnostic role with better alignment and cleaner clue behavior.
 
 ## Release Documentation Rule
 
@@ -214,15 +226,14 @@ Major releases are expected to update this architecture map. Minor releases shou
 ## References / Related Docs
 
 - `README.md` — product overview and setup.
-- `MASS_HANDLING.md` — V7 probability accounting and residue rules.
-- `docs/v7-shared-search-engine.md` — deep V7 current-state design reference.
-- `docs/flex-factorized-tree.md` — active Flex/factorized-tree design notes.
-- `docs/plex-factorized-tree.md` — historical Plex prototype notes.
+- `docs/README.md` — documentation map.
+- `MASS_HANDLING.md` — V8 probability accounting and residue rules.
+- `docs/v8-search-engine.md` — deep V8 search and factorized-tree design reference.
 
 ## Owner / Maintainer
 
-Jonathan Braver / V7 engine maintainers.
+Jonathan Braver / V8 search engine maintainers.
 
 ## Last Updated
 
-2026-05-23
+2026-05-24
