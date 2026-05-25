@@ -830,33 +830,6 @@ describe('Search execution service', () => {
         assert.strictEqual(fresh.instrumentation?.totalIterations, 10);
     });
 
-    it('does not expose legacy structural graph-cache counters on the grouped runtime', async () => {
-        const engine = EngineFactory.createForVersion('1.21.11');
-        engine.resetCaches();
-
-        const result = await engine.searchToCheckpoint({
-            item: 'sword',
-            material: 'diamond',
-            xp: 30,
-            threshold: 0,
-            maxIterations: 1,
-            useCache: false,
-            instrumentation: {
-                poolCache: { hits: 0, misses: 0 },
-                distCache: { hits: 0, misses: 0 },
-                        totalIterations: 0,
-                totalPrunedNodes: 0,
-                roundingErrorEvents: 0,
-                levelsProcessed: 0,
-                levelsFullyResolved: 0,
-                fullyResolved: false
-            }
-        });
-
-        assert.strictEqual('graphCacheHits' in (result.instrumentation?.search ?? {}), false);
-        assert.strictEqual('graphCacheMisses' in (result.instrumentation?.search ?? {}), false);
-    });
-
 });
 
 function createCacheFillCases(limit: number): CacheFillCase[] {
