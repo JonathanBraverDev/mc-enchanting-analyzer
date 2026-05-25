@@ -1,7 +1,7 @@
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { SearchResult, SequentialCheckpointSearchContext, CheckpointSearchContext, EngineInstrumentation, SearchTiming, RegistryState, MutatedRegistryState } from '#types/index.js';
 import { RegistryKernel } from '#lib/search/registry/RegistryKernel.js';
-import { GroupedFlexSearchRun, checkFlexReducedKeyInvariant, type FlexNativeCheckpoint, type FlexReducedKeyInvariantResult, type FlexRunState, type FlexStateIdentityMode } from '#lib/search/flex/index.js';
+import { GroupedFlexSearchRun, checkFlexReducedKeyInvariant, type FlexNativeCheckpoint, type FlexReducedKeyInvariantResult, type FlexRunMemoryStats, type FlexRunState, type FlexStateIdentityMode } from '#lib/search/flex/index.js';
 import { FLEX_CACHE_LIMITS, FLEX_INVARIANT_LIMITS } from '#lib/search/flex/FlexConstants.js';
 import { PRECISION, ProbUtils } from '#utils/index.js';
 import { LRUCache } from '#utils/collections/LRUCache.js';
@@ -10,7 +10,7 @@ import { LRUCache } from '#utils/collections/LRUCache.js';
  * Engine-facing service that advances shared search runs to checkpoint boundaries.
  *
  * It owns run lookup/resume, checkpoint sequencing, instrumentation, and timing.
- * The V8 grouped runtime owns probability flow; higher-level services own public
+ * The Flex grouped runtime owns probability flow; higher-level services own public
  * summary and UI projection.
  */
 export class SearchExecutionService {
@@ -48,7 +48,7 @@ export class SearchExecutionService {
         });
         const checkpoint = run.buildEngineSnapshot(flexState);
         this.finishTiming(request.timing, timingStart, 0);
-        return this.toFlexSearchResult(checkpoint, flexState, flexStateIdentityMode, request.exhaustive ? 0n : request.threshold ?? 0n, request.targetClassifiedMass, request.instrumentation, request.timing);
+        return this.toFlexSearchResult(checkpoint, flexState, flexStateIdentityMode, request.exhaustive ? 0n : request.threshold ?? 0n, request.targetClassifiedMass, request.instrumentation, request.timing, run.getMemoryStats());
     }
 
     /** Advances one run through an ordered checkpoint plan, streaming each completed boundary. */
@@ -86,7 +86,7 @@ export class SearchExecutionService {
             }
             const nativeCheckpoint = run.buildEngineSnapshot(flexState);
             recordedSearchMs = this.finishTiming(request.timing, timingStart, recordedSearchMs);
-            lastResult = this.toFlexSearchResult(nativeCheckpoint, flexState, flexStateIdentityMode, checkpoint.threshold, checkpoint.targetClassifiedMass, request.instrumentation, request.timing);
+            lastResult = this.toFlexSearchResult(nativeCheckpoint, flexState, flexStateIdentityMode, checkpoint.threshold, checkpoint.targetClassifiedMass, request.instrumentation, request.timing, run.getMemoryStats());
             request.onCheckpointComplete(lastResult, checkpointIndex);
         }
 
@@ -95,7 +95,7 @@ export class SearchExecutionService {
         this.finishTiming(request.timing, timingStart, recordedSearchMs);
         const flexState = run.state();
         const checkpoint = run.buildEngineSnapshot(flexState);
-        return this.toFlexSearchResult(checkpoint, flexState, flexStateIdentityMode, 0, undefined, request.instrumentation, request.timing);
+        return this.toFlexSearchResult(checkpoint, flexState, flexStateIdentityMode, 0, undefined, request.instrumentation, request.timing, run.getMemoryStats());
     }
 
     private getFlexRun(request: CheckpointSearchContext, stateIdentityMode: FlexStateIdentityMode): GroupedFlexSearchRun {
@@ -184,7 +184,8 @@ export class SearchExecutionService {
         threshold: number | bigint | undefined,
         targetClassifiedMass?: number | bigint | undefined,
         instrumentation?: EngineInstrumentation | undefined,
-        timing?: SearchTiming | undefined
+        timing?: SearchTiming | undefined,
+        memory?: FlexRunMemoryStats | undefined
     ): SearchResult {
         const snapshot = checkpoint.snapshot;
         const thresholdUnits = ProbUtils.toBigInt(threshold ?? 0);
@@ -210,6 +211,8 @@ export class SearchExecutionService {
                     : snapshot.largestPendingMass < thresholdUnits ? 'threshold' : 'iterations');
             instrumentation.poolCache = instrumentation.poolCache ?? { hits: 0, misses: 0 };
             instrumentation.distCache = instrumentation.distCache ?? { hits: 0, misses: 0 };
+            const flexSolidNodeCount = memory?.graphs.reduce((total, graph) => total + graph.solidNodeCount, 0);
+            const flexPlexNodeCount = memory?.graphs.reduce((total, graph) => total + graph.plexNodeCount, 0);
             instrumentation.search = {
                 graphCount: snapshot.graphCount,
                 seededLevelCount: snapshot.graphCount,
@@ -230,6 +233,10 @@ export class SearchExecutionService {
                 suffixMergedPendingMass: 0,
                 suffixAvoidedPendingEntries: 0,
                 flexStateIdentityMode,
+                flexSolidNodeCount,
+                flexPlexNodeCount,
+                flexExpandedSolidNodeCount: memory?.coordinator.expandedSolidNodeCount,
+                flexExpandedPlexNodeCount: memory?.coordinator.expandedPlexNodeCount,
                 flexStructuralPendingEntryCount: flexState.pendingCount,
                 flexProjectionLoss: ProbUtils.toNumber(checkpoint.projectionLoss),
                 flexProjectionClueIncompatible: ProbUtils.toNumber(checkpoint.projectionClueIncompatible)

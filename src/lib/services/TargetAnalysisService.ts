@@ -235,7 +235,7 @@ export class TargetAnalysisService {
 
         for (const output of redistributed) {
             // Preserve aggregate mass in diagnostics while keeping the same deterministic
-            // one-removal-per-slot model as SearchRun's book result projection.
+            // one-removal-per-slot model as the grouped book result projection.
             const outputMass = share + (residue > 0n ? 1n : 0n);
             if (residue > 0n) residue--;
             if (outputMass === 0n) continue;

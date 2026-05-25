@@ -33,7 +33,7 @@ export interface GroupedFlexSearchRunOptions {
 }
 
 /**
- * Current V8 runner backed by grouped registry graphs.
+ * Current Flex runner backed by grouped registry graphs.
  *
  * The `flex` name is retained for internal implementation modules and node types.
  */

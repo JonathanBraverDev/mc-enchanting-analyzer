@@ -114,12 +114,13 @@ export class FlexSnapshotBuilder {
 
         const sourceDelta = currentMass - previousMass;
         let assignedDelta = 0n;
+        const previousMassIsZero = previousMass === 0n;
         this.resolvedTotals.sourceMass += sourceDelta;
 
         this.projector.visitResultProgramFactors(programId, (combo, count, numerator, denominator, matchesTargetClue) => {
-            const currentShare = (currentMass * numerator) / denominator;
-            const previousShare = (previousMass * numerator) / denominator;
-            const shareDelta = currentShare - previousShare;
+            const shareDelta = previousMassIsZero
+                ? (currentMass * numerator) / denominator
+                : ((currentMass * numerator) / denominator) - ((previousMass * numerator) / denominator);
             assignedDelta += shareDelta;
             if (shareDelta === 0n) return;
 
