@@ -69,10 +69,28 @@ describe('Enchantment Engine Exhaustive Regression Snapshots', () => {
         await SnapshotUtils.assertSnapshot('1.8_bow_30_bow_clue_power', stats, engine.registry);
     });
 
+    it('Snapshot: 1.4.6 Single-Enchant Book @ Level 30', async () => {
+        const engine = EngineFactory.createForVersion(TEST_DATA.VERSIONS.LEGACY);
+        const stats = await calculateSnapshot(engine, { item: TEST_DATA.ITEMS.BOOK, xp: 30, material: TEST_DATA.MATERIALS.BOOK });
+        await SnapshotUtils.assertSnapshot('1.4.6_book_30_book', stats, engine.registry);
+    });
+
     it('Snapshot: 1.7.2 Multi-Enchant Book @ Level 30', async () => {
         const engine = EngineFactory.createForVersion(TEST_DATA.VERSIONS.BOOK_MULTI_LIMIT);
         const stats = await calculateSnapshot(engine, { item: TEST_DATA.ITEMS.BOOK, xp: 30, material: TEST_DATA.MATERIALS.BOOK });
         await SnapshotUtils.assertSnapshot('1.7.2_book_30_book', stats, engine.registry);
+    });
+
+    it('Snapshot: 1.14 Diamond Chestplate @ Level 30 (God Armor window)', async () => {
+        const engine = EngineFactory.createForVersion(TEST_DATA.GOD_ARMOR.START);
+        const stats = await calculateSnapshot(engine, { item: TEST_DATA.ITEMS.CHESTPLATE, xp: 30, material: TEST_DATA.MATERIALS.DIAMOND });
+        await SnapshotUtils.assertSnapshot('1.14_chestplate_30_diamond', stats, engine.registry);
+    });
+
+    it('Snapshot: 1.14.3 Diamond Chestplate @ Level 30 (post God Armor)', async () => {
+        const engine = EngineFactory.createForVersion(TEST_DATA.GOD_ARMOR.END);
+        const stats = await calculateSnapshot(engine, { item: TEST_DATA.ITEMS.CHESTPLATE, xp: 30, material: TEST_DATA.MATERIALS.DIAMOND });
+        await SnapshotUtils.assertSnapshot('1.14.3_chestplate_30_diamond', stats, engine.registry);
     });
 
     it('Snapshot: 1.21.11 Book @ Level 30 (99.95% classified mass)', async () => {
