@@ -68,6 +68,110 @@
       "rounding": "140",
       "recoveredRounding": "34",
       "recoveredSieved": "0"
+    },
+    "details": {
+      "stages": {
+        "search": {
+          "buckets": {
+            "resolved": {
+              "value": 0.5994999999999999,
+              "units": "691176442011804667"
+            },
+            "clueIncompatible": {
+              "value": 0.40049999999999997,
+              "units": "461745062595042169"
+            },
+            "rounding": {
+              "value": 1.214306433183765e-16,
+              "units": "140"
+            },
+            "recoveredRounding": {
+              "value": 2.949029909160572e-17,
+              "units": "34"
+            }
+          },
+          "operations": {
+            "seed": {
+              "buckets": {
+                "clueIncompatible": {
+                  "value": 0.40049999999999997,
+                  "units": "461745062595042169"
+                },
+                "pending": {
+                  "value": 0.5995,
+                  "units": "691176442011804807"
+                }
+              }
+            },
+            "frontier": {
+              "buckets": {
+                "pending": {
+                  "value": -0.5995,
+                  "units": "-691176442011804807"
+                }
+              }
+            },
+            "resolve": {
+              "buckets": {
+                "resolved": {
+                  "value": 0.5994999999999999,
+                  "units": "691176442011804667"
+                }
+              }
+            },
+            "edgeSplit": {
+              "buckets": {
+                "rounding": {
+                  "value": 1.214306433183765e-16,
+                  "units": "140"
+                }
+              }
+            },
+            "residue": {
+              "buckets": {
+                "recoveredRounding": {
+                  "value": 2.949029909160572e-17,
+                  "units": "34"
+                }
+              }
+            }
+          }
+        },
+        "projection": {
+          "buckets": {
+            "clueIncompatible": {
+              "value": 0.15812714054016552,
+              "units": "182308180790745988"
+            },
+            "source": {
+              "value": 0.5994999999999999,
+              "units": "691176442011804667"
+            },
+            "projected": {
+              "value": 0.4413728594598344,
+              "units": "508868261221058679"
+            }
+          },
+          "operations": {
+            "results": {
+              "buckets": {
+                "clueIncompatible": {
+                  "value": 0.15812714054016552,
+                  "units": "182308180790745988"
+                },
+                "source": {
+                  "value": 0.5994999999999999,
+                  "units": "691176442011804667"
+                },
+                "projected": {
+                  "value": 0.4413728594598344,
+                  "units": "508868261221058679"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "clue": {

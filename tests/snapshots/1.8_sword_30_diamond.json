@@ -258,25 +258,151 @@
   },
   "accuracy": 1,
   "accounting": {
-    "resolved": 0.9999999999999992,
+    "resolved": 0.9999999999999996,
     "clueIncompatible": 0,
     "pending": 0,
     "sieved": 0,
     "overflow": 0,
     "capped": 0,
-    "rounding": 7.407269242420966e-16,
-    "recoveredRounding": 9.8879238130678e-17,
+    "rounding": 4.397524011601206e-16,
+    "recoveredRounding": 1.0581813203458523e-16,
     "recoveredSieved": 0,
     "units": {
-      "resolved": "1152921504606846122",
+      "resolved": "1152921504606846469",
       "clueIncompatible": "0",
       "pending": "0",
       "sieved": "0",
       "overflow": "0",
       "capped": "0",
-      "rounding": "854",
-      "recoveredRounding": "114",
+      "rounding": "507",
+      "recoveredRounding": "122",
       "recoveredSieved": "0"
+    },
+    "details": {
+      "stages": {
+        "search": {
+          "buckets": {
+            "resolved": {
+              "value": 0.9999999999999997,
+              "units": "1152921504606846572"
+            },
+            "rounding": {
+              "value": 3.5041414214731503e-16,
+              "units": "404"
+            },
+            "recoveredRounding": {
+              "value": 1.0581813203458523e-16,
+              "units": "122"
+            }
+          },
+          "operations": {
+            "seed": {
+              "buckets": {
+                "pending": {
+                  "value": 1,
+                  "units": "1152921504606846976"
+                }
+              }
+            },
+            "frontier": {
+              "buckets": {
+                "pending": {
+                  "value": -1,
+                  "units": "-1152921504606846976"
+                }
+              }
+            },
+            "resolve": {
+              "buckets": {
+                "resolved": {
+                  "value": 0.9999999999999997,
+                  "units": "1152921504606846572"
+                }
+              }
+            },
+            "edgeSplit": {
+              "buckets": {
+                "rounding": {
+                  "value": 3.5041414214731503e-16,
+                  "units": "404"
+                }
+              }
+            },
+            "residue": {
+              "buckets": {
+                "recoveredRounding": {
+                  "value": 1.0581813203458523e-16,
+                  "units": "122"
+                }
+              }
+            }
+          }
+        },
+        "projection": {
+          "buckets": {
+            "source": {
+              "value": 0.9999999999999997,
+              "units": "1152921504606846572"
+            },
+            "projected": {
+              "value": 0.9999999999999996,
+              "units": "1152921504606846469"
+            },
+            "loss": {
+              "value": 8.933825901280557e-17,
+              "units": "103"
+            }
+          },
+          "operations": {
+            "results": {
+              "buckets": {
+                "source": {
+                  "value": 0.9999999999999997,
+                  "units": "1152921504606846572"
+                },
+                "projected": {
+                  "value": 0.9999999999999996,
+                  "units": "1152921504606846469"
+                },
+                "loss": {
+                  "value": 8.933825901280557e-17,
+                  "units": "103"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "diagnostics": {
+    "engine": {
+      "totalIterations": 537,
+      "roundingErrorEvents": 1,
+      "levelsProcessed": 6,
+      "levelsFullyResolved": 6,
+      "fullyResolved": true,
+      "resultsSize": 207,
+      "queueSize": 0,
+      "exitReason": "empty"
+    },
+    "search": {
+      "graphCount": 6,
+      "seededLevelCount": 6,
+      "pendingEntryCount": 0,
+      "largestPendingMass": 0,
+      "lastExpandedMass": 6.746e-9,
+      "activeResidueCount": 793,
+      "activeResidueMass": 0,
+      "canImprove": false,
+      "flexStateIdentityMode": "reduced",
+      "flexSolidNodeCount": 189,
+      "flexPlexNodeCount": 158,
+      "flexExpandedSolidNodeCount": 200,
+      "flexExpandedPlexNodeCount": 337,
+      "flexStructuralPendingEntryCount": 0,
+      "flexProjectionLoss": 0,
+      "flexProjectionClueIncompatible": 0
     }
   }
 }

@@ -16,7 +16,7 @@
     "2052": 0.087522078418,
     "2306": 0.022562747248,
     "2307": 0.007445851099,
-    "2561": 0.015004299173,
+    "2561": 0.015004299174,
     "2819": 0.053995982624,
     "2820": 0.087522078418,
     "3073": 0.017524316316,
@@ -42,7 +42,7 @@
     "8195": 0.007508884976
   },
   "any": {
-    "0": 0.128346108263,
+    "0": 0.128346108264,
     "1": 0.064173054132,
     "2": 0.064173054132,
     "3": 0.073851835747,
@@ -51,12 +51,12 @@
     "6": 0.073851835747,
     "8": 0.141518061042,
     "9": 0.030008598347,
-    "10": 0.015004299173,
+    "10": 0.015004299174,
     "11": 0.141518061042,
     "12": 0.030236275126,
     "13": 0.030236275126,
     "14": 0.015229862072,
-    "15": 0.132179832827,
+    "15": 0.132179832828,
     "16": 0.066089916414,
     "17": 0.026435966565,
     "18": 0.001825201385,
@@ -118485,7 +118485,7 @@
     "3329": 0.023752794599,
     "3585": 0.011940596496,
     "3843": 0.095803621983,
-    "3844": 0.011725807357,
+    "3844": 0.011725807358,
     "4099": 0.047901810991,
     "4100": 0.005862903679,
     "4355": 0.0021997126,
@@ -118502,27 +118502,165 @@
     "8194": 0.01805847127,
     "8195": 0.005694323329
   },
-  "accuracy": 0.999994771205,
+  "accuracy": 0.999994771206,
   "accounting": {
-    "resolved": 0.9999947712050942,
+    "resolved": 0.9999947712060019,
     "clueIncompatible": 0,
     "pending": 0,
     "sieved": 0,
-    "overflow": 0.000005228792579230028,
+    "overflow": 0.000005228792604989804,
     "capped": 0,
-    "rounding": 2.326646687811351e-12,
-    "recoveredRounding": 1.4159949254799464e-12,
+    "rounding": 1.3931755055152095e-12,
+    "recoveredRounding": 1.1628805557384325e-13,
     "recoveredSieved": 0,
     "units": {
-      "resolved": "1152915476216756812",
+      "resolved": "1152915476217803332",
       "clueIncompatible": "0",
       "pending": "0",
       "sieved": "0",
-      "overflow": "6028387407723",
+      "overflow": "6028387437422",
       "capped": "0",
-      "rounding": "2682441",
-      "recoveredRounding": "1632531",
+      "rounding": "1606222",
+      "recoveredRounding": "134071",
       "recoveredSieved": "0"
+    },
+    "details": {
+      "stages": {
+        "search": {
+          "buckets": {
+            "resolved": {
+              "value": 0.9999947712069346,
+              "units": "1152915476218878704"
+            },
+            "overflow": {
+              "value": 0.000005228792604989804,
+              "units": "6028387437422"
+            },
+            "rounding": {
+              "value": 4.60438978611144e-13,
+              "units": "530850"
+            },
+            "recoveredRounding": {
+              "value": 1.1628805557384325e-13,
+              "units": "134071"
+            }
+          },
+          "operations": {
+            "seed": {
+              "buckets": {
+                "pending": {
+                  "value": 1,
+                  "units": "1152921504606846976"
+                }
+              }
+            },
+            "frontier": {
+              "buckets": {
+                "pending": {
+                  "value": -1,
+                  "units": "-1152921504606846976"
+                }
+              }
+            },
+            "resolve": {
+              "buckets": {
+                "resolved": {
+                  "value": 0.9999947712069346,
+                  "units": "1152915476218878704"
+                }
+              }
+            },
+            "edgeSplit": {
+              "buckets": {
+                "rounding": {
+                  "value": 4.60438978611144e-13,
+                  "units": "530850"
+                }
+              }
+            },
+            "overflow": {
+              "buckets": {
+                "overflow": {
+                  "value": 0.000005228792604989804,
+                  "units": "6028387437422"
+                }
+              }
+            },
+            "residue": {
+              "buckets": {
+                "recoveredRounding": {
+                  "value": 1.1628805557384325e-13,
+                  "units": "134071"
+                }
+              }
+            }
+          }
+        },
+        "projection": {
+          "buckets": {
+            "source": {
+              "value": 0.9999947712069346,
+              "units": "1152915476218878704"
+            },
+            "projected": {
+              "value": 0.9999947712060019,
+              "units": "1152915476217803332"
+            },
+            "loss": {
+              "value": 9.327365269040655e-13,
+              "units": "1075372"
+            }
+          },
+          "operations": {
+            "results": {
+              "buckets": {
+                "source": {
+                  "value": 0.9999947712069346,
+                  "units": "1152915476218878704"
+                },
+                "projected": {
+                  "value": 0.9999947712060019,
+                  "units": "1152915476217803332"
+                },
+                "loss": {
+                  "value": 9.327365269040655e-13,
+                  "units": "1075372"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "diagnostics": {
+    "engine": {
+      "totalIterations": 254024,
+      "roundingErrorEvents": 1,
+      "levelsProcessed": 8,
+      "levelsFullyResolved": 8,
+      "fullyResolved": true,
+      "resultsSize": 118384,
+      "queueSize": 0,
+      "exitReason": "empty"
+    },
+    "search": {
+      "graphCount": 8,
+      "seededLevelCount": 8,
+      "pendingEntryCount": 0,
+      "largestPendingMass": 0,
+      "lastExpandedMass": 0,
+      "activeResidueCount": 1069052,
+      "activeResidueMass": 0,
+      "canImprove": false,
+      "flexStateIdentityMode": "reduced",
+      "flexSolidNodeCount": 62728,
+      "flexPlexNodeCount": 140573,
+      "flexExpandedSolidNodeCount": 77492,
+      "flexExpandedPlexNodeCount": 176532,
+      "flexStructuralPendingEntryCount": 0,
+      "flexProjectionLoss": 1e-12,
+      "flexProjectionClueIncompatible": 0
     }
   }
 }
