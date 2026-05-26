@@ -45,7 +45,6 @@ export type EnchantableItemRuleSelector = Pick<EnchantableItemRule, 'item' | 'va
 // @public
 export interface EnchantEngine {
     destroy(): void;
-    getAvailablePool(item: string, level: number, bitset?: bigint): number[];
     getCacheMetrics(): {
         distCache: {
             hits: number;
@@ -123,8 +122,10 @@ export interface EnchantStats {
 }
 
 // @public
-export interface EnchantStatsRequest extends ItemSelectionRequest {
+export interface EnchantStatsRequest {
     clue?: string | null | undefined;
+    item: string;
+    material: string;
     maxIterations?: number | undefined;
     onProgress?: ((update: ProgressUpdate) => void) | undefined;
     signal?: AbortSignal | undefined;
@@ -141,14 +142,6 @@ export class EngineFactory {
     static clearCaches(): void;
     static create(registry: BuiltRegistryState): EnchantEngine;
     static createForVersion(version: string): EnchantEngine;
-}
-
-// @public (undocumented)
-export interface ItemSelectionRequest {
-    // (undocumented)
-    item: string;
-    // (undocumented)
-    material: string;
 }
 
 // @public (undocumented)
