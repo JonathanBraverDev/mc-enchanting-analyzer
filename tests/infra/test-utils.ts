@@ -55,9 +55,11 @@ const SNAPSHOT_SEARCH_DIAGNOSTIC_KEYS = [
     'flexStateIdentityMode',
     'flexSolidNodeCount',
     'flexPlexNodeCount',
+    'flexSingletonGroupCount',
+    'flexChoiceGroupCount',
+    'flexGroupedAlternativeCount',
     'flexExpandedSolidNodeCount',
     'flexExpandedPlexNodeCount',
-    'flexStructuralPendingEntryCount',
     'flexProjectionLoss',
     'flexProjectionClueIncompatible'
 ];
