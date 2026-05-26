@@ -207,9 +207,11 @@
       "flexStateIdentityMode": "reduced",
       "flexSolidNodeCount": 54,
       "flexPlexNodeCount": 42,
+      "flexSingletonGroupCount": 115,
+      "flexChoiceGroupCount": 47,
+      "flexGroupedAlternativeCount": 253,
       "flexExpandedSolidNodeCount": 56,
       "flexExpandedPlexNodeCount": 90,
-      "flexStructuralPendingEntryCount": 0,
       "flexProjectionLoss": 0,
       "flexProjectionClueIncompatible": 0
     }
