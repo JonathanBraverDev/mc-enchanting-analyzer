@@ -8,7 +8,6 @@ import { RegistryFactory as RuntimeRegistryFactory } from '#core/factory.js';
 
 import type {
     BuiltRegistryState as RuntimeBuiltRegistryState,
-    ItemSelectionRequest,
     LevelDistribution,
     ProgressUpdate,
     RegistryMutation,
@@ -27,7 +26,6 @@ export type {
     EnchantmentGroupRule,
     EnchantmentGroupRuleSelector,
     EnchantmentLevels,
-    ItemSelectionRequest,
     LevelDistribution,
     MaterialRule,
     MaterialRuleSelector,
@@ -101,7 +99,11 @@ export type BuiltRegistryState = VanillaRegistryState | MutatedRegistryState;
  *
  * @public
  */
-export interface EnchantStatsRequest extends ItemSelectionRequest {
+export interface EnchantStatsRequest {
+    /** Item key, such as `sword`, `book`, or `pickaxe`. */
+    item: string;
+    /** Material key, such as `diamond`, `book`, or `bow`. */
+    material: string;
     /** Player XP level used by the enchanting-table roll. */
     xp: number;
     /** Optional exact displayed table clue, such as `Sharpness III`. */
@@ -176,8 +178,6 @@ export interface EnchantEngine {
     destroy(): void;
     /** Inspect the modified-level probability distribution for an XP/enchantability pair. */
     getModifiedLevelDist(xp: number, enchantability: number): LevelDistribution;
-    /** Inspect eligible packed enchantments for an item, level, and optional conflict bitset. */
-    getAvailablePool(item: string, level: number, bitset?: bigint): number[];
     /** Return summarized probabilities for product and tool callers. */
     getStats(request: EnchantStatsRequest): Promise<EnchantStats>;
 }
