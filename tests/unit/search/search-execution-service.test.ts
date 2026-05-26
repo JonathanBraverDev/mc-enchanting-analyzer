@@ -171,9 +171,7 @@ describe('Search execution service', () => {
         assert.ok(result.snapshot.pendingAggregates);
         assert.strictEqual(result.snapshot.frontier.summary, result.snapshot.pendingAggregates);
         assert.ok(result.snapshot.pendingAggregates.count.reduce((sum, mass) => sum + mass, 0n) > 0n);
-        const search = result.instrumentation?.search;
-        assert.ok(search);
-        assert.strictEqual(search.pendingEntryCount, search.flexStructuralPendingEntryCount);
+        assert.ok(result.instrumentation?.search);
         assert.ok(Math.abs(snapshotAccountingTotal(result) - 1) < 1e-12);
     });
 

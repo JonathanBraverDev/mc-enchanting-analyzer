@@ -127,12 +127,16 @@ export interface SearchInstrumentation {
   flexSolidNodeCount?: number | undefined;
   /** Internal grouped-runtime: PlexNode count across structural graphs. */
   flexPlexNodeCount?: number | undefined;
+  /** Internal grouped-runtime: singleton edge groups discovered while building structural graph expansions. */
+  flexSingletonGroupCount?: number | undefined;
+  /** Internal grouped-runtime: grouped-choice edge groups discovered while building structural graph expansions. */
+  flexChoiceGroupCount?: number | undefined;
+  /** Internal grouped-runtime: total grouped alternatives represented by discovered grouped-choice edge groups. */
+  flexGroupedAlternativeCount?: number | undefined;
   /** Internal grouped-runtime: expanded SolidNode count in the coordinator. */
   flexExpandedSolidNodeCount?: number | undefined;
   /** Internal grouped-runtime: expanded PlexNode count in the coordinator. */
   flexExpandedPlexNodeCount?: number | undefined;
-  /** Internal grouped-runtime: structural pending buckets before compatibility projection expands program factors. */
-  flexStructuralPendingEntryCount?: number | undefined;
   /** Internal grouped-runtime: expanded-row materialization loss recorded as compatibility rounding in public accounting. */
   flexProjectionLoss?: number | undefined;
   /** Internal grouped-runtime: projection-stage mass classified as incompatible with the requested clue. */

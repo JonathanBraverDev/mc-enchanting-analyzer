@@ -213,6 +213,9 @@ export class SearchExecutionService {
             instrumentation.distCache = instrumentation.distCache ?? { hits: 0, misses: 0 };
             const flexSolidNodeCount = memory?.graphs.reduce((total, graph) => total + graph.solidNodeCount, 0);
             const flexPlexNodeCount = memory?.graphs.reduce((total, graph) => total + graph.plexNodeCount, 0);
+            const flexSingletonGroupCount = memory?.graphs.reduce((total, graph) => total + graph.singletonGroupCount, 0);
+            const flexChoiceGroupCount = memory?.graphs.reduce((total, graph) => total + graph.choiceGroupCount, 0);
+            const flexGroupedAlternativeCount = memory?.graphs.reduce((total, graph) => total + graph.groupedAlternativeCount, 0);
             instrumentation.search = {
                 graphCount: snapshot.graphCount,
                 seededLevelCount: snapshot.graphCount,
@@ -227,9 +230,11 @@ export class SearchExecutionService {
                 flexStateIdentityMode,
                 flexSolidNodeCount,
                 flexPlexNodeCount,
+                flexSingletonGroupCount,
+                flexChoiceGroupCount,
+                flexGroupedAlternativeCount,
                 flexExpandedSolidNodeCount: memory?.coordinator.expandedSolidNodeCount,
                 flexExpandedPlexNodeCount: memory?.coordinator.expandedPlexNodeCount,
-                flexStructuralPendingEntryCount: flexState.pendingCount,
                 flexProjectionLoss: ProbUtils.toNumber(checkpoint.projectionLoss),
                 flexProjectionClueIncompatible: ProbUtils.toNumber(checkpoint.projectionClueIncompatible)
             };
