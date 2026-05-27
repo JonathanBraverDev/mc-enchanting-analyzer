@@ -385,8 +385,6 @@ export interface SearchInstrumentation {
     flexSolidNodeCount?: number | undefined;
     flexStateIdentityMode?: 'reduced' | 'program' | undefined;
     flexStructuralPendingEntryCount?: number | undefined;
-    graphCacheHits?: number | undefined;
-    graphCacheMisses?: number | undefined;
     graphCount: number;
     largestPendingMass: number;
     lastExpandedMass: number;
@@ -394,12 +392,6 @@ export interface SearchInstrumentation {
     runCacheHits?: number | undefined;
     runCacheMisses?: number | undefined;
     seededLevelCount: number;
-    suffixAvoidedPendingEntries?: number | undefined;
-    suffixMergeCanonicalEntryCount?: number | undefined;
-    suffixMergedPendingMass?: number | undefined;
-    suffixMergeHits?: number | undefined;
-    suffixMergeMisses?: number | undefined;
-    suffixMergingEnabled?: boolean | undefined;
 }
 
 // @public (undocumented)
