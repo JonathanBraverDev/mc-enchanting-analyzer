@@ -16,7 +16,6 @@ export const ENGINE_LIMITS = {
     /** Cooperative async search slice size. Yield points are scheduler boundaries, not result checkpoints. */
     ASYNC_SEARCH_CHUNK_ITERATIONS: 2048,
     DEFAULT_THRESHOLD: 0.0001,
-    DEFAULT_BUFFER_SIZE: 1024,
     MAX_COUNT_STATS: 8
 };
 
@@ -60,6 +59,9 @@ export const BIGINT_CONSTANTS = {
  * Shared memory pool and heap limits.
  */
 export const POOL_CONSTANTS = {
+    /** Default scratch buffer size for modified-level distribution calculations. */
+    DEFAULT_DISTRIBUTION_BUFFER_SIZE: 1024,
+
     /** Maximum depth for nested distribution calls. */
     DIST_POOL_DEPTH: 8,
 

@@ -56,6 +56,10 @@ Output:
 const SEARCH_PRESETS = new Set<AnalyzerSearchPreset>(['coarse', 'standard', 'deep', 'ultra', 'exhaustive']);
 const SORT_MODES = new Set<ResultSortMode>(['prob', 'count', 'rank']);
 const OUTPUT_FORMATS = new Set<OutputFormat>(['text', 'json', 'raw-json']);
+const TOP_ENCHANTMENT_COUNT = 10;
+const PERCENT_SCALE = 100;
+const TINY_PROBABILITY_THRESHOLD = 0.000001;
+const PERCENT_DECIMAL_PLACES = 4;
 
 async function main(argv: string[]): Promise<void> {
     const options = parseArgs(argv);
@@ -297,7 +301,7 @@ function writeText(options: CliOptions, insights: Awaited<ReturnType<EnchantingA
     const comboEntries = Object.entries(insights.combos);
     const anyEntries = Object.entries(insights.any)
         .sort((left, right) => right[1] - left[1])
-        .slice(0, 10);
+        .slice(0, TOP_ENCHANTMENT_COUNT);
 
     console.log('Minecraft Enchanting Analyzer');
     console.log(`${options.minecraftVersion} ${options.item}/${options.material} XP ${options.xp} search=${searchLabel}`);
@@ -322,9 +326,10 @@ function writeText(options: CliOptions, insights: Awaited<ReturnType<EnchantingA
 }
 
 function formatPercent(value: number): string {
-    if (value === 0) return '0.0000%';
-    if (Math.abs(value) < 0.000001) return `${(value * 100).toExponential(4)}%`;
-    return `${(value * 100).toFixed(4)}%`;
+    const percentage = value * PERCENT_SCALE;
+    if (value === 0) return `${percentage.toFixed(PERCENT_DECIMAL_PLACES)}%`;
+    if (Math.abs(value) < TINY_PROBABILITY_THRESHOLD) return `${percentage.toExponential(PERCENT_DECIMAL_PLACES)}%`;
+    return `${percentage.toFixed(PERCENT_DECIMAL_PLACES)}%`;
 }
 
 main(process.argv.slice(2)).catch(error => {
