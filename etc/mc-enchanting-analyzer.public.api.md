@@ -22,6 +22,32 @@ export interface AnalyzerOptions {
 }
 
 // @public
+export interface AnalyzerRawResult {
+    accounting: MassAccountingBreakdown;
+    accuracy: number;
+    any: {
+        [id: number]: number;
+    };
+    clue?: {
+        idAndRank: number;
+        knownSpace: number;
+    } | undefined;
+    combos: {
+        [packed: string]: number;
+    };
+    count: {
+        [count: number]: number;
+    };
+    ranks: {
+        [idAndRank: number]: number;
+    };
+    shownClueDistribution?: {
+        [idAndRank: number]: number;
+    } | undefined;
+    threshold: number;
+}
+
+// @public
 export interface AnalyzerRegistryInfo {
     readonly mechanics: VersionMechanics;
     readonly multiEnchantBooks: boolean;
@@ -32,14 +58,12 @@ export interface AnalyzerRegistryInfo {
 // @public
 export interface AnalyzerRequest {
     clue?: string | null | undefined;
-    instrumentation?: EngineInstrumentation | undefined;
     item: string;
     material: string;
     onProgress?: ((update: ProgressUpdate) => void) | undefined;
     search?: AnalyzerSearchMode | undefined;
     signal?: AbortSignal | undefined;
     summaryLimit?: number | undefined;
-    timing?: SearchTiming | undefined;
     uncappedResults?: boolean | undefined;
     xp: number;
 }
@@ -107,13 +131,13 @@ export type EnchantableItemRuleSelector = Pick<EnchantableItemRule, 'item' | 'va
 
 // @public
 export class EnchantingAnalyzer {
+    analyze(request: AnalyzerRequest, sortMode?: ResultSortMode): Promise<EnchantInsights>;
+    analyzeRaw(request: AnalyzerRequest): Promise<AnalyzerRawResult>;
     static forVersion(version: string, options?: AnalyzerOptions): EnchantingAnalyzer;
     getCacheMetrics(): AnalyzerCacheMetrics;
-    humanize(stats: EnchantStats, sortMode?: ResultSortMode): EnchantInsights;
-    insights(request: AnalyzerRequest, sortMode?: ResultSortMode): Promise<EnchantInsights>;
+    humanize(stats: AnalyzerRawResult, sortMode?: ResultSortMode): EnchantInsights;
     get registry(): AnalyzerRegistryInfo;
     resetCaches(): void;
-    stats(request: AnalyzerRequest): Promise<EnchantStats>;
     static withMutations(version: string, mutations: RegistryMutation | RegistryMutation[]): EnchantingAnalyzer;
 }
 
@@ -164,89 +188,6 @@ export interface EnchantmentLevels {
     // (undocumented)
     [rank: string]: [number, number];
 }
-
-// @public
-export interface EnchantStats {
-    accounting: MassAccountingBreakdown;
-    accuracy: number;
-    any: {
-        [id: number]: number;
-    };
-    clue?: {
-        idAndRank: number;
-        knownSpace: number;
-    } | undefined;
-    combos: {
-        [packed: string]: number;
-    };
-    count: {
-        [count: number]: number;
-    };
-    // (undocumented)
-    instrumentation?: EngineInstrumentation | undefined;
-    ranks: {
-        [idAndRank: number]: number;
-    };
-    shownClueDistribution?: {
-        [idAndRank: number]: number;
-    } | undefined;
-    threshold: number;
-    // (undocumented)
-    timing?: SearchTiming | undefined;
-}
-
-// @public (undocumented)
-export type EngineExitReason = 'threshold' | 'iterations' | 'mass' | 'aborted' | 'empty' | 'exhausted';
-
-// @public (undocumented)
-export interface EngineInstrumentation {
-    distCache: CacheStats;
-    // (undocumented)
-    exitReason?: EngineExitReason | undefined;
-    exploredMassSamples?: ExploredMassSample[] | undefined;
-    exploredMassTargets?: number[] | undefined;
-    fullyResolved: boolean;
-    globalCacheNodes?: number | undefined;
-    globalCacheResults?: number | undefined;
-    globalResultsSize?: number | undefined;
-    // (undocumented)
-    levelsFullyResolved: number;
-    // (undocumented)
-    levelsProcessed: number;
-    memoryMB?: number | undefined;
-    poolCache: CacheStats;
-    queueSize?: number | undefined;
-    resultsSize?: number | undefined;
-    // (undocumented)
-    roundingErrorEvents: number;
-    search?: SearchInstrumentation | undefined;
-    // (undocumented)
-    totalIterations: number;
-    // (undocumented)
-    totalPrunedNodes: number;
-    trackGlobalMetrics?: boolean | undefined;
-}
-
-// @public (undocumented)
-export interface ExploredMassSample {
-    // (undocumented)
-    exploredMass: number;
-    // (undocumented)
-    frontierProbability: number;
-    // (undocumented)
-    iterations: number;
-    // (undocumented)
-    modLevel: number;
-    // (undocumented)
-    targetMass: number;
-    // (undocumented)
-    totalIterations: number;
-}
-
-// @public (undocumented)
-export type LevelDistribution = {
-    [level: number]: bigint;
-};
 
 // @public
 export interface MassAccountingBreakdown {
@@ -371,35 +312,6 @@ export type RegistryMutation = {
 
 // @public
 export type ResultSortMode = 'prob' | 'count' | 'rank';
-
-// @public (undocumented)
-export interface SearchInstrumentation {
-    activeResidueCount: number;
-    activeResidueMass: number;
-    canImprove: boolean;
-    flexExpandedPlexNodeCount?: number | undefined;
-    flexExpandedSolidNodeCount?: number | undefined;
-    flexPlexNodeCount?: number | undefined;
-    flexProjectionClueIncompatible?: number | undefined;
-    flexProjectionLoss?: number | undefined;
-    flexSolidNodeCount?: number | undefined;
-    flexStateIdentityMode?: 'reduced' | 'program' | undefined;
-    flexStructuralPendingEntryCount?: number | undefined;
-    graphCount: number;
-    largestPendingMass: number;
-    lastExpandedMass: number;
-    pendingEntryCount: number;
-    runCacheHits?: number | undefined;
-    runCacheMisses?: number | undefined;
-    seededLevelCount: number;
-}
-
-// @public (undocumented)
-export interface SearchTiming {
-    postProcessingMs?: number | undefined;
-    searchMs: number;
-    totalMs: number;
-}
 
 // @public
 export interface VersionMechanics {

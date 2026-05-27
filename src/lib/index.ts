@@ -9,6 +9,7 @@ export type {
     AnalyzerCacheCounter,
     AnalyzerCacheMetrics,
     AnalyzerOptions,
+    AnalyzerRawResult,
     AnalyzerRegistryInfo,
     AnalyzerRequest,
     AnalyzerSearchControls,

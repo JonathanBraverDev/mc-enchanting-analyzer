@@ -11,10 +11,10 @@ import type {
 } from '#lib/index.js';
 
 describe('Public package API', () => {
-    it('returns human-readable insights from the analyzer facade', async () => {
+    it('returns human-readable analysis from the analyzer facade', async () => {
         const analyzer = EnchantingAnalyzer.forVersion('1.21');
 
-        const insights = await analyzer.insights({
+        const result = await analyzer.analyze({
             item: 'pickaxe',
             material: 'diamond',
             xp: 30,
@@ -22,20 +22,20 @@ describe('Public package API', () => {
             summaryLimit: 5
         });
 
-        assert.ok(Object.keys(insights.any).includes('Efficiency'));
+        assert.ok(Object.keys(result.any).includes('Efficiency'));
         assert.ok(
-            Object.keys(insights.combos).some(combo => combo.includes('Efficiency')),
+            Object.keys(result.combos).some(combo => combo.includes('Efficiency')),
             'expected display combo labels instead of packed hex-only keys'
         );
         assert.ok(
-            Object.keys(insights.combos).every(combo => !/^[0-9a-f]+$/i.test(combo)),
+            Object.keys(result.combos).every(combo => !/^[0-9a-f]+$/i.test(combo)),
             'human-readable combos should not expose raw packed hex keys'
         );
     });
 
-    it('humanizes already-computed raw stats without exposing registry internals', async () => {
+    it('humanizes an already-computed raw result without exposing registry internals', async () => {
         const analyzer = EnchantingAnalyzer.forVersion('1.21');
-        const stats = await analyzer.stats({
+        const rawResult = await analyzer.analyzeRaw({
             item: 'sword',
             material: 'diamond',
             xp: 30,
@@ -43,23 +43,37 @@ describe('Public package API', () => {
             summaryLimit: 5
         });
 
-        const insights = analyzer.humanize(stats, 'count');
+        const insights = analyzer.humanize(rawResult, 'count');
 
-        assert.deepStrictEqual(insights.accounting, stats.accounting);
+        assert.deepStrictEqual(insights.accounting, rawResult.accounting);
         assert.ok(Object.keys(insights.any).includes('Sharpness'));
     });
 
-    it('supports named presets and explicit advanced search controls', async () => {
+    it('keeps diagnostics off the public raw analysis result', async () => {
         const analyzer = EnchantingAnalyzer.forVersion('1.21');
-
-        const presetStats = await analyzer.stats({
+        const rawResult = await analyzer.analyzeRaw({
             item: 'sword',
             material: 'diamond',
             xp: 30,
             search: 'coarse',
             summaryLimit: 0
         });
-        const customStats = await analyzer.stats({
+
+        assert.ok(!Object.prototype.hasOwnProperty.call(rawResult, 'instrumentation'));
+        assert.ok(!Object.prototype.hasOwnProperty.call(rawResult, 'timing'));
+    });
+
+    it('supports named presets and explicit advanced search controls', async () => {
+        const analyzer = EnchantingAnalyzer.forVersion('1.21');
+
+        const presetStats = await analyzer.analyzeRaw({
+            item: 'sword',
+            material: 'diamond',
+            xp: 30,
+            search: 'coarse',
+            summaryLimit: 0
+        });
+        const customStats = await analyzer.analyzeRaw({
             item: 'sword',
             material: 'diamond',
             xp: 30,
@@ -79,7 +93,7 @@ describe('Public package API', () => {
     it('supports exhaustive mode through the facade for small searches', async () => {
         const analyzer = EnchantingAnalyzer.forVersion('1.21');
 
-        const stats = await analyzer.stats({
+        const result = await analyzer.analyzeRaw({
             item: 'sword',
             material: 'diamond',
             xp: 1,
@@ -87,7 +101,7 @@ describe('Public package API', () => {
             summaryLimit: 0
         });
 
-        assert.ok(stats.accuracy > 0.99);
+        assert.ok(result.accuracy > 0.99);
     });
 
     it('exports the rule types needed to build mutation-derived analyzers', async () => {

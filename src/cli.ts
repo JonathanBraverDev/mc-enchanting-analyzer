@@ -72,12 +72,12 @@ async function main(argv: string[]): Promise<void> {
     const analyzer = EnchantingAnalyzer.forVersion(options.minecraftVersion!);
 
     if (options.format === 'raw-json') {
-        const stats = await analyzer.stats(request);
+        const stats = await analyzer.analyzeRaw(request);
         writeJson(stats);
         return;
     }
 
-    const insights = await analyzer.insights(request, options.sortMode);
+    const insights = await analyzer.analyze(request, options.sortMode);
     if (options.format === 'json') {
         writeJson(insights);
         return;
@@ -296,7 +296,7 @@ function writeJson(value: unknown): void {
     console.log(JSON.stringify(value, null, 2));
 }
 
-function writeText(options: CliOptions, insights: Awaited<ReturnType<EnchantingAnalyzer['insights']>>): void {
+function writeText(options: CliOptions, insights: Awaited<ReturnType<EnchantingAnalyzer['analyze']>>): void {
     const searchLabel = options.searchPreset ?? (Object.keys(options.searchControls).length > 0 ? 'custom' : 'standard');
     const comboEntries = Object.entries(insights.combos);
     const anyEntries = Object.entries(insights.any)
