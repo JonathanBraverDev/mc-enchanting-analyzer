@@ -6,11 +6,10 @@ import type {
     CheckpointSearchRequest,
     EnchantInsights,
     EnchantStats,
-    EngineInstrumentation,
+    MassAccountingBreakdown,
     ProgressUpdate,
     RegistryMutation,
     ResultSortMode,
-    SearchTiming,
     VersionMechanics
 } from '#types/index.js';
 import type { EnchantEngine } from '#engine/index.js';
@@ -64,8 +63,8 @@ export interface AnalyzerSearchControls {
 }
 
 /**
- * Search mode accepted by {@link EnchantingAnalyzer.stats} and
- * {@link EnchantingAnalyzer.insights}.
+ * Search mode accepted by {@link EnchantingAnalyzer.analyze} and
+ * {@link EnchantingAnalyzer.analyzeRaw}.
  *
  * @remarks
  * Pass a string for a common preset, or pass an object when a caller needs to
@@ -76,7 +75,7 @@ export interface AnalyzerSearchControls {
 export type AnalyzerSearchMode = AnalyzerSearchPreset | AnalyzerSearchControls;
 
 /**
- * Input shared by raw and human-readable analyzer calls.
+ * Input shared by human-readable and raw analyzer calls.
  *
  * @remarks
  * `item`, `material`, and `xp` describe the enchanting-table setup. `clue`,
@@ -108,10 +107,42 @@ export interface AnalyzerRequest {
     summaryLimit?: number | undefined;
     /** Allow combo output above the normal safety cap, including every combo when no limit is set. */
     uncappedResults?: boolean | undefined;
-    /** Timing accumulator for diagnostics and profiling tools. */
-    timing?: SearchTiming | undefined;
-    /** Instrumentation accumulator for diagnostics and profiling tools. */
-    instrumentation?: EngineInstrumentation | undefined;
+}
+
+/**
+ * Compact machine-readable result returned by {@link EnchantingAnalyzer.analyzeRaw}.
+ *
+ * @remarks
+ * Keys are registry-local numeric IDs and packed combo strings intended for
+ * scripts, storage, and callers that provide their own presentation layer. Use
+ * {@link EnchantingAnalyzer.analyze} for display-ready enchantment names.
+ *
+ * @public
+ */
+export interface AnalyzerRawResult {
+    /** Map of enchantment rank IDs to their total cumulative probability. Key is `(enchantId << 8 | rank)`. */
+    ranks: { [idAndRank: number]: number };
+    /** Map of base enchantment IDs to their total probability on the item at any rank. */
+    any: { [id: number]: number };
+    /** Map of enchantment counts to their total probability. */
+    count: { [count: number]: number };
+    /** Map of bit-packed hexadecimal combo strings to their joint probability. */
+    combos: { [packed: string]: number };
+    /** Map of rank IDs to their probability of being the shown table clue. Omitted for clue-conditioned stats. */
+    shownClueDistribution?: { [idAndRank: number]: number } | undefined;
+    /** Minimum probability threshold used by the search. */
+    threshold: number;
+    /** Normalized classified mass, including resolved results and exact clue-incompatible mass. */
+    accuracy: number;
+    /** Detailed accounting of where probability mass settled. */
+    accounting: MassAccountingBreakdown;
+    /** Observed displayed-clue diagnostics. Present only for clue-conditioned stats. */
+    clue?: {
+        /** Observed clue enchantment/rank ID encoded as `(enchantId << 8 | rank)`. */
+        idAndRank: number;
+        /** Absolute displayed-clue mass used for Bayesian conditioning. */
+        knownSpace: number;
+    } | undefined;
 }
 
 /**
@@ -172,10 +203,11 @@ export interface AnalyzerCacheMetrics {
  * registry and engine factories, applies the supported search controls, and
  * translates compact engine output into display-ready names when requested.
  *
- * `stats` returns compact machine-readable IDs and packed combo keys for
- * storage, scripts, or advanced processing. `insights` returns the same
- * probabilities translated into enchantment names and human-readable combo
- * labels. All returned probabilities are fractions from `0` to `1`.
+ * `analyze` returns display-ready enchantment names and combo labels for
+ * applications, CLIs, and reports. `analyzeRaw` returns the same probabilities
+ * as compact registry-local IDs and packed combo keys for storage, scripts, or
+ * advanced processing. All returned probabilities are fractions from `0` to
+ * `1`.
  *
  * Keep an analyzer instance around when issuing related searches for the same
  * version; per-instance caches can be reused across compatible requests.
@@ -185,7 +217,7 @@ export interface AnalyzerCacheMetrics {
  * import { EnchantingAnalyzer } from 'mc-enchanting-analyzer';
  *
  * const analyzer = EnchantingAnalyzer.forVersion('1.21');
- * const result = await analyzer.insights({
+ * const result = await analyzer.analyze({
  *     item: 'pickaxe',
  *     material: 'diamond',
  *     xp: 30,
@@ -282,45 +314,49 @@ export class EnchantingAnalyzer {
     }
 
     /**
-     * Run a search and return compact machine-readable probabilities.
-     *
-     * @param request - Enchanting setup, optional clue, and optional search controls.
-     * @returns Raw `EnchantStats` using numeric enchantment IDs, packed rank IDs,
-     * and packed combo keys.
-     *
-     * @remarks
-     * This is the best method for scripts that want stable JSON or advanced
-     * callers that do their own post-processing. Use `insights` when displaying
-     * results to humans, or pass the returned stats to `humanize` later.
-     *
-     * @throws If the item, material, XP level, clue, or search controls are invalid
-     * for this analyzer's registry.
-     */
-    public async stats(request: AnalyzerRequest): Promise<EnchantStats> {
-        return this.engine.getStats(this.toEngineRequest(request));
-    }
-
-    /**
      * Run a search and return display-ready probabilities.
      *
      * @param request - Enchanting setup, optional clue, and optional search controls.
      * @param sortMode - Combo ordering for the human-readable `combos` map.
      * Defaults to probability order.
      * @returns `EnchantInsights` with enchantment names, rank labels, combo labels,
-     * and the same accounting totals exposed by `stats`.
+     * and accounting totals.
      *
      * @remarks
      * This is the default choice for application views, CLIs, and reports.
+     * Use `analyzeRaw` for compact registry-local IDs and packed combo keys.
+     *
+     * @throws If the item, material, XP level, clue, or search controls are invalid
+     * for this analyzer's registry.
      */
-    public async insights(request: AnalyzerRequest, sortMode: ResultSortMode = 'prob'): Promise<EnchantInsights> {
-        const stats = await this.stats(request);
+    public async analyze(request: AnalyzerRequest, sortMode: ResultSortMode = 'prob'): Promise<EnchantInsights> {
+        const stats = await this.analyzeRaw(request);
         return this.humanize(stats, sortMode);
     }
 
     /**
-     * Convert raw stats from this analyzer into human-readable names.
+     * Run a search and return compact machine-readable probabilities.
      *
-     * @param stats - Raw stats returned by `stats` from the same analyzer version
+     * @param request - Enchanting setup, optional clue, and optional search controls.
+     * @returns Raw analysis result using numeric enchantment IDs, packed rank IDs, and
+     * packed combo keys.
+     *
+     * @remarks
+     * This is the best method for scripts that want stable JSON or advanced
+     * callers that do their own post-processing. Use `analyze` when displaying
+     * results to humans, or pass the returned result to `humanize` later.
+     *
+     * @throws If the item, material, XP level, clue, or search controls are invalid
+     * for this analyzer's registry.
+     */
+    public async analyzeRaw(request: AnalyzerRequest): Promise<AnalyzerRawResult> {
+        return stripDiagnostics(await this.engine.getStats(this.toEngineRequest(request)));
+    }
+
+    /**
+     * Convert a raw analysis result from this analyzer into human-readable names.
+     *
+     * @param stats - Raw result returned by `analyzeRaw` from the same analyzer version
      * and registry shape.
      * @param sortMode - Combo ordering for the human-readable `combos` map.
      * Defaults to probability order.
@@ -331,7 +367,7 @@ export class EnchantingAnalyzer {
      * different Minecraft version or a differently mutated analyzer; labels may
      * decode incorrectly.
      */
-    public humanize(stats: EnchantStats, sortMode: ResultSortMode = 'prob'): EnchantInsights {
+    public humanize(stats: AnalyzerRawResult, sortMode: ResultSortMode = 'prob'): EnchantInsights {
         return HumanizationService.humanize(stats, this.engine.registry, sortMode, this.engine.registry.romanMap);
     }
 
@@ -345,9 +381,7 @@ export class EnchantingAnalyzer {
             signal: request.signal,
             onProgress: request.onProgress,
             summaryLimit: request.summaryLimit,
-            uncappedResults: request.uncappedResults,
-            timing: request.timing,
-            instrumentation: request.instrumentation
+            uncappedResults: request.uncappedResults
         };
     }
 
@@ -374,4 +408,20 @@ export class EnchantingAnalyzer {
                 : { targetClassifiedMass: checkpoint.targetClassifiedMass })
         };
     }
+}
+
+function stripDiagnostics(stats: EnchantStats): AnalyzerRawResult {
+    return {
+        ranks: stats.ranks,
+        any: stats.any,
+        count: stats.count,
+        combos: stats.combos,
+        threshold: stats.threshold,
+        accuracy: stats.accuracy,
+        accounting: stats.accounting,
+        ...(stats.shownClueDistribution === undefined
+            ? {}
+            : { shownClueDistribution: stats.shownClueDistribution }),
+        ...(stats.clue === undefined ? {} : { clue: stats.clue })
+    };
 }
