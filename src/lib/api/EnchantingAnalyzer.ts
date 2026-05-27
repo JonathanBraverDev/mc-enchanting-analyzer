@@ -130,7 +130,7 @@ export interface AnalyzerOptions {
  * @public
  */
 export interface AnalyzerRegistryInfo {
-    /** Resolved Minecraft registry version used by this analyzer. */
+    /** Requested Minecraft version key this analyzer was created for. */
     readonly version: string;
     /** Whether the analyzer uses bundled vanilla data or caller-supplied mutations. */
     readonly source: 'vanilla' | 'mutated';

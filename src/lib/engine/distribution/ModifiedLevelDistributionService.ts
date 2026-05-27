@@ -1,5 +1,5 @@
 import { PRECISION, ProbUtils } from '#utils/index.js';
-import { ENGINE_LIMITS, MATH_CONSTANTS } from '#constants/engine.js';
+import { MATH_CONSTANTS, POOL_CONSTANTS } from '#constants/engine.js';
 import { MINECRAFT_RULES } from '#constants/minecraft.js';
 import { RegistryState, LevelDistribution, EngineInstrumentation } from '#types/index.js';
 import { CacheManager } from '#engine/cache/CacheManager.js';
@@ -23,7 +23,7 @@ const addLevelMass = (target: Map<number, bigint>, level: number, mass: bigint):
 export class ModifiedLevelDistributionService {
     private readonly buffer: BigUint64Array;
 
-    constructor(bufferSize: number = ENGINE_LIMITS.DEFAULT_BUFFER_SIZE) {
+    constructor(bufferSize: number = POOL_CONSTANTS.DEFAULT_DISTRIBUTION_BUFFER_SIZE) {
         this.buffer = new BigUint64Array(bufferSize);
     }
 

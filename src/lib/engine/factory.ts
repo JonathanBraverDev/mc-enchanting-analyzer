@@ -2,7 +2,7 @@ import { BuiltRegistryState } from '#types/index.js';
 import { DefaultEnchantEngine, type EnchantEngine } from '#engine/index.js';
 import { CacheManager } from '#engine/cache/CacheManager.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
-import { CACHE_CONFIG } from '#constants/engine.js';
+import { CACHE_CONFIG, POOL_CONSTANTS } from '#constants/engine.js';
 import { RegistryFactory } from '#core/factory.js';
 
 /**
@@ -40,7 +40,7 @@ export class EngineFactory {
             poolSize: CACHE_CONFIG.POOL_SIZE
         });
 
-        const distributionService = new ModifiedLevelDistributionService(1024);
+        const distributionService = new ModifiedLevelDistributionService(POOL_CONSTANTS.DEFAULT_DISTRIBUTION_BUFFER_SIZE);
         const engine = new DefaultEnchantEngine(
             registry,
             cache,
