@@ -22,7 +22,31 @@ const buildOptions = (entry, outfile, isStandalone) => ({
 async function build() {
   console.log('Building standalone components...');
 
-  // 1. Build Data as a clean IIFE that defines global ENCHANTING_DATA
+  // 0. Build package root ESM for library consumers.
+  await esbuild.build({
+    entryPoints: [path.join(root, 'src/lib/index.ts')],
+    outfile: path.join(root, 'dist/index.js'),
+    bundle: true,
+    minify: false,
+    sourcemap: true,
+    platform: 'browser',
+    format: 'esm',
+  });
+  console.log('Library entry built.');
+
+  // 1. Build CLI entry for package bin consumers.
+  await esbuild.build({
+    entryPoints: [path.join(root, 'src/cli.ts')],
+    outfile: path.join(root, 'dist/cli.js'),
+    bundle: true,
+    minify: false,
+    sourcemap: true,
+    platform: 'node',
+    format: 'esm',
+  });
+  console.log('CLI entry built.');
+
+  // 2. Build Data as a clean IIFE that defines global ENCHANTING_DATA
   await esbuild.build({
     entryPoints: [path.join(root, 'src/lib/data/registry.ts')],
     outfile: path.join(root, 'dist/data.js'),
@@ -33,11 +57,11 @@ async function build() {
   });
   console.log('Data built.');
 
-  // 2. Build UI
+  // 3. Build UI
   await esbuild.build(buildOptions('src/ui/index.ts', 'dist/ui.js', true));
   console.log('UI built.');
 
-  // 3. Build Workers
+  // 4. Build Workers
   await esbuild.build(buildOptions('src/worker/top-worker.ts', 'dist/top-worker.js', true));
   await esbuild.build(buildOptions('src/worker/chart-worker.ts', 'dist/chart-worker.js', true));
   console.log('Workers built.');
