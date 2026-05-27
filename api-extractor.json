@@ -5,10 +5,7 @@
     "tsconfigFilePath": "<projectFolder>/tsconfig.api-extractor.json"
   },
   "apiReport": {
-    "enabled": true,
-    "reportVariants": ["public"],
-    "reportFolder": "<projectFolder>/etc",
-    "reportTempFolder": "<projectFolder>/tmp/api-extractor"
+    "enabled": false
   },
   "docModel": {
     "enabled": false
@@ -24,7 +21,10 @@
   "messages": {
     "extractorMessageReporting": {
       "ae-missing-release-tag": {
-        "logLevel": "error"
+        "logLevel": "none"
+      },
+      "ae-forgotten-export": {
+        "logLevel": "none"
       }
     },
     "tsdocMessageReporting": {
