@@ -5,7 +5,70 @@
 ```ts
 
 // @public
-export type BuiltRegistryState = VanillaRegistryState | MutatedRegistryState;
+export interface AnalyzerCacheCounter {
+    hits: number;
+    misses: number;
+}
+
+// @public
+export interface AnalyzerCacheMetrics {
+    distCache: AnalyzerCacheCounter;
+    poolCache: AnalyzerCacheCounter;
+}
+
+// @public
+export interface AnalyzerOptions {
+    mutations?: RegistryMutation | RegistryMutation[] | undefined;
+}
+
+// @public
+export interface AnalyzerRegistryInfo {
+    readonly mechanics: VersionMechanics;
+    readonly multiEnchantBooks: boolean;
+    readonly source: 'vanilla' | 'mutated';
+    readonly version: string;
+}
+
+// @public
+export interface AnalyzerRequest {
+    clue?: string | null | undefined;
+    instrumentation?: EngineInstrumentation | undefined;
+    item: string;
+    material: string;
+    onProgress?: ((update: ProgressUpdate) => void) | undefined;
+    search?: AnalyzerSearchMode | undefined;
+    signal?: AbortSignal | undefined;
+    summaryLimit?: number | undefined;
+    timing?: SearchTiming | undefined;
+    uncappedResults?: boolean | undefined;
+    xp: number;
+}
+
+// @public
+export interface AnalyzerSearchControls {
+    drainEqualMassBand?: boolean | undefined;
+    exhaustive?: boolean | undefined;
+    maxIterations?: number | undefined;
+    preset?: AnalyzerSearchPreset | undefined;
+    probabilityFloor?: number | bigint | undefined;
+    targetClassifiedMass?: number | bigint | undefined;
+    threshold?: number | bigint | undefined;
+    useCache?: boolean | undefined;
+}
+
+// @public
+export type AnalyzerSearchMode = AnalyzerSearchPreset | AnalyzerSearchControls;
+
+// @public
+export type AnalyzerSearchPreset = 'coarse' | 'standard' | 'deep' | 'ultra' | 'exhaustive';
+
+// @public (undocumented)
+export interface CacheStats {
+    // (undocumented)
+    hits: number;
+    // (undocumented)
+    misses: number;
+}
 
 // @public
 export interface ConflictRule {
@@ -43,22 +106,30 @@ export interface EnchantableItemRule {
 export type EnchantableItemRuleSelector = Pick<EnchantableItemRule, 'item' | 'valid_from' | 'valid_until'>;
 
 // @public
-export interface EnchantEngine {
-    destroy(): void;
-    getCacheMetrics(): {
-        distCache: {
-            hits: number;
-            misses: number;
-        };
-        poolCache: {
-            hits: number;
-            misses: number;
-        };
-    };
-    getModifiedLevelDist(xp: number, enchantability: number): LevelDistribution;
-    getStats(request: EnchantStatsRequest): Promise<EnchantStats>;
-    readonly registry: BuiltRegistryState;
+export class EnchantingAnalyzer {
+    static forVersion(version: string, options?: AnalyzerOptions): EnchantingAnalyzer;
+    getCacheMetrics(): AnalyzerCacheMetrics;
+    humanize(stats: EnchantStats, sortMode?: ResultSortMode): EnchantInsights;
+    insights(request: AnalyzerRequest, sortMode?: ResultSortMode): Promise<EnchantInsights>;
+    get registry(): AnalyzerRegistryInfo;
     resetCaches(): void;
+    stats(request: AnalyzerRequest): Promise<EnchantStats>;
+    static withMutations(version: string, mutations: RegistryMutation | RegistryMutation[]): EnchantingAnalyzer;
+}
+
+// @public
+export interface EnchantInsights {
+    accounting: MassAccountingBreakdown;
+    accuracy: number;
+    any: Record<string, number>;
+    clue?: {
+        name: string;
+        knownSpace: number;
+    } | undefined;
+    combos: Record<string, number>;
+    count: Record<number, number>;
+    ranks: Record<string, number>;
+    shownClueDistribution?: Record<string, number> | undefined;
 }
 
 // @public
@@ -111,6 +182,8 @@ export interface EnchantStats {
     count: {
         [count: number]: number;
     };
+    // (undocumented)
+    instrumentation?: EngineInstrumentation | undefined;
     ranks: {
         [idAndRank: number]: number;
     };
@@ -118,30 +191,56 @@ export interface EnchantStats {
         [idAndRank: number]: number;
     } | undefined;
     threshold: number;
+    // (undocumented)
     timing?: SearchTiming | undefined;
 }
 
-// @public
-export interface EnchantStatsRequest {
-    clue?: string | null | undefined;
-    item: string;
-    material: string;
-    maxIterations?: number | undefined;
-    onProgress?: ((update: ProgressUpdate) => void) | undefined;
-    signal?: AbortSignal | undefined;
-    summaryLimit?: number | undefined;
-    targetClassifiedMass?: number | bigint | undefined;
-    threshold?: number | bigint | undefined;
-    timing?: SearchTiming | undefined;
-    uncappedResults?: boolean | undefined;
-    xp: number;
+// @public (undocumented)
+export type EngineExitReason = 'threshold' | 'iterations' | 'mass' | 'aborted' | 'empty' | 'exhausted';
+
+// @public (undocumented)
+export interface EngineInstrumentation {
+    distCache: CacheStats;
+    // (undocumented)
+    exitReason?: EngineExitReason | undefined;
+    exploredMassSamples?: ExploredMassSample[] | undefined;
+    exploredMassTargets?: number[] | undefined;
+    fullyResolved: boolean;
+    globalCacheNodes?: number | undefined;
+    globalCacheResults?: number | undefined;
+    globalResultsSize?: number | undefined;
+    // (undocumented)
+    levelsFullyResolved: number;
+    // (undocumented)
+    levelsProcessed: number;
+    memoryMB?: number | undefined;
+    poolCache: CacheStats;
+    queueSize?: number | undefined;
+    resultsSize?: number | undefined;
+    // (undocumented)
+    roundingErrorEvents: number;
+    search?: SearchInstrumentation | undefined;
+    // (undocumented)
+    totalIterations: number;
+    // (undocumented)
+    totalPrunedNodes: number;
+    trackGlobalMetrics?: boolean | undefined;
 }
 
-// @public
-export class EngineFactory {
-    static clearCaches(): void;
-    static create(registry: BuiltRegistryState): EnchantEngine;
-    static createForVersion(version: string): EnchantEngine;
+// @public (undocumented)
+export interface ExploredMassSample {
+    // (undocumented)
+    exploredMass: number;
+    // (undocumented)
+    frontierProbability: number;
+    // (undocumented)
+    iterations: number;
+    // (undocumented)
+    modLevel: number;
+    // (undocumented)
+    targetMass: number;
+    // (undocumented)
+    totalIterations: number;
 }
 
 // @public (undocumented)
@@ -233,23 +332,10 @@ export interface MaterialRule {
 export type MaterialRuleSelector = Pick<MaterialRule, 'material' | 'valid_from' | 'valid_until'>;
 
 // @public
-export interface MutatedRegistryState extends RegistryState {
-    readonly mutations: readonly RegistryMutation[];
-    // (undocumented)
-    readonly source: 'mutated';
-}
-
-// @public
 export interface ProgressUpdate {
     accuracy?: number | undefined;
     processed: number;
     total: number;
-}
-
-// @public
-export class RegistryFactory {
-    static build(version: string): VanillaRegistryState;
-    static buildWithMutations(version: string, mutations: RegistryMutation | RegistryMutation[]): MutatedRegistryState;
 }
 
 // @public
@@ -284,11 +370,36 @@ export type RegistryMutation = {
 };
 
 // @public
-export interface RegistryState {
-    readonly mechanics: VersionMechanics;
-    readonly multiEnchantBooks: boolean;
-    readonly source: 'vanilla' | 'mutated';
-    readonly version: string;
+export type ResultSortMode = 'prob' | 'count' | 'rank';
+
+// @public (undocumented)
+export interface SearchInstrumentation {
+    activeResidueCount: number;
+    activeResidueMass: number;
+    canImprove: boolean;
+    flexExpandedPlexNodeCount?: number | undefined;
+    flexExpandedSolidNodeCount?: number | undefined;
+    flexPlexNodeCount?: number | undefined;
+    flexProjectionClueIncompatible?: number | undefined;
+    flexProjectionLoss?: number | undefined;
+    flexSolidNodeCount?: number | undefined;
+    flexStateIdentityMode?: 'reduced' | 'program' | undefined;
+    flexStructuralPendingEntryCount?: number | undefined;
+    graphCacheHits?: number | undefined;
+    graphCacheMisses?: number | undefined;
+    graphCount: number;
+    largestPendingMass: number;
+    lastExpandedMass: number;
+    pendingEntryCount: number;
+    runCacheHits?: number | undefined;
+    runCacheMisses?: number | undefined;
+    seededLevelCount: number;
+    suffixAvoidedPendingEntries?: number | undefined;
+    suffixMergeCanonicalEntryCount?: number | undefined;
+    suffixMergedPendingMass?: number | undefined;
+    suffixMergeHits?: number | undefined;
+    suffixMergeMisses?: number | undefined;
+    suffixMergingEnabled?: boolean | undefined;
 }
 
 // @public (undocumented)
@@ -299,15 +410,7 @@ export interface SearchTiming {
 }
 
 // @public
-export interface VanillaRegistryState extends RegistryState {
-    // (undocumented)
-    readonly source: 'vanilla';
-}
-
-// @public
 export interface VersionMechanics {
-    // (undocumented)
-    additional_enchantment_level_divisor?: number;
     // (undocumented)
     enchantability_bonus_divisor?: number;
     // (undocumented)
@@ -319,7 +422,5 @@ export interface VersionMechanics {
     // (undocumented)
     xp_cost_type?: 'full' | 'flat';
 }
-
-// (No @packageDocumentation comment for this package)
 
 ```
