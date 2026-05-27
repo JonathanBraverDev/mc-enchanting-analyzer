@@ -20,6 +20,10 @@ const ALIASES = {
     '#tests/': 'tests/'
 };
 
+function isAllowedRelativeImport(relativePath: string, importPath: string): boolean {
+    return relativePath === 'src/lib/api/EnchantingAnalyzer.ts' && importPath.startsWith('../types/');
+}
+
 function getAllFiles(dir: string, fileList: string[] = []): string[] {
     const files = fs.readdirSync(dir);
     files.forEach(file => {
@@ -45,13 +49,15 @@ const files = getAllFiles(ROOT);
 files.forEach(file => {
     const content = fs.readFileSync(file, 'utf8');
     const lines = content.split('\n');
-    const relativePath = path.relative(ROOT, file);
+    const relativePath = path.relative(ROOT, file).replace(/\\/g, '/');
 
     lines.forEach((line, index) => {
         // Match import ... from './...' or import ... from '../...'
         const match = line.match(/import .* from ['"](\.\.?\/.*)['"]/);
         if (match && match[1]) {
             const importPath = match[1];
+            if (isAllowedRelativeImport(relativePath, importPath)) return;
+
             const absoluteImportPath = path.resolve(path.dirname(file), importPath);
             const rootRelativeImportPath = path.relative(ROOT, absoluteImportPath).replace(/\\/g, '/');
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { EnchantingAnalyzer } from '#lib/index.js';
-import type { AnalyzerRequest, AnalyzerSearchControls, AnalyzerSearchPreset, ResultSortMode } from '#lib/index.js';
+import type { AnalyzerRequest, AnalyzerSearchControls, AnalyzerSearchPreset, AnalyzerSortMode } from '#lib/index.js';
 
 type OutputFormat = 'text' | 'json' | 'raw-json';
 
@@ -15,7 +15,7 @@ interface CliOptions {
     summaryLimit?: number;
     uncappedResults?: boolean;
     format: OutputFormat;
-    sortMode: ResultSortMode;
+    sortMode: AnalyzerSortMode;
 }
 
 const HELP = `Minecraft Enchanting Analyzer CLI
@@ -54,7 +54,7 @@ Output:
 `;
 
 const SEARCH_PRESETS = new Set<AnalyzerSearchPreset>(['coarse', 'standard', 'deep', 'ultra', 'exhaustive']);
-const SORT_MODES = new Set<ResultSortMode>(['prob', 'count', 'rank']);
+const SORT_MODES = new Set<AnalyzerSortMode>(['prob', 'count', 'rank']);
 const OUTPUT_FORMATS = new Set<OutputFormat>(['text', 'json', 'raw-json']);
 const TOP_ENCHANTMENT_COUNT = 10;
 const PERCENT_SCALE = 100;
@@ -259,12 +259,12 @@ function parseSearchPreset(flag: string, value: string | undefined): AnalyzerSea
     return text as AnalyzerSearchPreset;
 }
 
-function parseSortMode(flag: string, value: string | undefined): ResultSortMode {
+function parseSortMode(flag: string, value: string | undefined): AnalyzerSortMode {
     const text = requireValue(flag, value);
-    if (!SORT_MODES.has(text as ResultSortMode)) {
+    if (!SORT_MODES.has(text as AnalyzerSortMode)) {
         throw new Error(`${flag} must be one of: ${[...SORT_MODES].join(', ')}.`);
     }
-    return text as ResultSortMode;
+    return text as AnalyzerSortMode;
 }
 
 function parseOutputFormat(flag: string, value: string | undefined): OutputFormat {

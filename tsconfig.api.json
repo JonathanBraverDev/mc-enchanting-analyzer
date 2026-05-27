@@ -2,7 +2,7 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "rootDir": "src/lib",
-    "outDir": "tmp/api-types",
+    "outDir": "dist",
     "declaration": true,
     "declarationMap": false,
     "emitDeclarationOnly": true,
