@@ -149,7 +149,7 @@ function sanitizeDiagnostics(instrumentation: any): any | undefined {
     };
 }
 
-/** 
+/**
  * Utility for snapshot-based regression testing of engine results.
  */
 export const SnapshotUtils = {
