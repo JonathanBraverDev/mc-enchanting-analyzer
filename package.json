@@ -10,7 +10,6 @@
     "docs/"
   ],
   "devDependencies": {
-    "@microsoft/api-extractor": "^7.58.7",
     "@playwright/test": "^1.58.2",
     "@types/chart.js": "^2.9.41",
     "@types/node": "^25.5.0",
@@ -62,8 +61,7 @@
     "lint:imports": "tsx scripts/lint-imports.ts",
     "release": "npm run test:all && npm run build:standalone",
     "test:release-policy": "node --test tests/unit/release-changelog-policy.test.cjs",
-    "api:types": "tsc -p tsconfig.api.json",
-    "build:types": "npm run api:types && api-extractor run --local"
+    "build:types": "tsc -p tsconfig.api.json"
   },
   "imports": {
     "#lib/*": "./src/lib/*",

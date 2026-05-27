@@ -4,18 +4,21 @@
  * @packageDocumentation
  */
 
-export { EnchantingAnalyzer } from '#lib/api/EnchantingAnalyzer.js';
+export { EnchantingAnalyzer } from './api/EnchantingAnalyzer.js';
 export type {
     AnalyzerCacheCounter,
     AnalyzerCacheMetrics,
     AnalyzerOptions,
+    AnalyzerProgressUpdate,
     AnalyzerRawResult,
     AnalyzerRegistryInfo,
     AnalyzerRequest,
+    AnalyzerResult,
     AnalyzerSearchControls,
     AnalyzerSearchMode,
-    AnalyzerSearchPreset
-} from '#lib/api/EnchantingAnalyzer.js';
+    AnalyzerSearchPreset,
+    AnalyzerSortMode
+} from './api/EnchantingAnalyzer.js';
 
 export type {
     ConflictRule,
@@ -40,4 +43,4 @@ export type {
     MassAccountingStageDetails,
     MassBucketName,
     MassBucketUnits
-} from '#types/index.js';
+} from './types/mass.js';

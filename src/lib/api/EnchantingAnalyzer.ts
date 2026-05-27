@@ -4,15 +4,11 @@ import { EngineFactory } from '#engine/factory.js';
 import { HumanizationService } from '#services/HumanizationService.js';
 import type {
     CheckpointSearchRequest,
-    EnchantInsights,
-    EnchantStats,
-    MassAccountingBreakdown,
-    ProgressUpdate,
-    RegistryMutation,
-    ResultSortMode,
-    VersionMechanics
+    EnchantStats
 } from '#types/index.js';
 import type { EnchantEngine } from '#engine/index.js';
+import type { RegistryMutation, VersionMechanics } from '../types/domain.js';
+import type { MassAccountingBreakdown } from '../types/mass.js';
 
 /**
  * Named search presets for package callers.
@@ -75,6 +71,62 @@ export interface AnalyzerSearchControls {
 export type AnalyzerSearchMode = AnalyzerSearchPreset | AnalyzerSearchControls;
 
 /**
+ * Combo ordering modes for human-readable analyzer output.
+ *
+ * @public
+ */
+export type AnalyzerSortMode = 'prob' | 'count' | 'rank';
+
+/**
+ * Lightweight progress update reported while an analyzer request is running.
+ *
+ * @public
+ */
+export interface AnalyzerProgressUpdate {
+    /** Number of modified levels or search units processed. */
+    processed: number;
+    /** Total modified levels or search units expected for this phase. */
+    total: number;
+    /** Optional current resolved/classified mass from `0` to `1`. */
+    accuracy?: number | undefined;
+}
+
+/**
+ * Human-readable result returned by {@link EnchantingAnalyzer.analyze} and
+ * {@link EnchantingAnalyzer.humanize}.
+ *
+ * @remarks
+ * Map keys are display labels such as `Efficiency IV`, `Fortune`, or
+ * `Efficiency IV+Fortune III`. Use {@link AnalyzerRawResult} when a caller
+ * needs compact registry-local IDs instead of presentation labels.
+ *
+ * @public
+ */
+export interface AnalyzerResult {
+    /** Map of enchantment rank labels to their total cumulative probability. */
+    ranks: Record<string, number>;
+    /** Map of base enchantment labels to their total probability on the item at any rank. */
+    any: Record<string, number>;
+    /** Map of enchantment counts to their total probability. */
+    count: Record<number, number>;
+    /** Map of human-readable combo labels to their joint probability. */
+    combos: Record<string, number>;
+    /** Reliability of the result as resolved/classified mass from `0` to `1`. */
+    accuracy: number;
+    /** Detailed accounting of where probability mass settled. */
+    accounting: MassAccountingBreakdown;
+    /** Observed displayed-clue diagnostics. Present only for clue-conditioned stats. */
+    clue?: {
+        /** Human-readable observed clue name, including rank. */
+        name: string;
+        /** Absolute displayed-clue mass used for Bayesian conditioning. */
+        knownSpace: number;
+    } | undefined;
+    /** Possible shown table clues and their original unconditioned probabilities. */
+    shownClueDistribution?: Record<string, number> | undefined;
+}
+
+/**
  * Input shared by human-readable and raw analyzer calls.
  *
  * @remarks
@@ -102,7 +154,7 @@ export interface AnalyzerRequest {
     /** Abort signal for long-running bounded or exhaustive searches. */
     signal?: AbortSignal | undefined;
     /** Progress callback for host UIs that want intermediate search updates. */
-    onProgress?: ((update: ProgressUpdate) => void) | undefined;
+    onProgress?: ((update: AnalyzerProgressUpdate) => void) | undefined;
     /** Maximum number of combo rows to include; use `0` to omit combo rows. */
     summaryLimit?: number | undefined;
     /** Allow combo output above the normal safety cap, including every combo when no limit is set. */
@@ -319,7 +371,7 @@ export class EnchantingAnalyzer {
      * @param request - Enchanting setup, optional clue, and optional search controls.
      * @param sortMode - Combo ordering for the human-readable `combos` map.
      * Defaults to probability order.
-     * @returns `EnchantInsights` with enchantment names, rank labels, combo labels,
+     * @returns `AnalyzerResult` with enchantment names, rank labels, combo labels,
      * and accounting totals.
      *
      * @remarks
@@ -329,7 +381,7 @@ export class EnchantingAnalyzer {
      * @throws If the item, material, XP level, clue, or search controls are invalid
      * for this analyzer's registry.
      */
-    public async analyze(request: AnalyzerRequest, sortMode: ResultSortMode = 'prob'): Promise<EnchantInsights> {
+    public async analyze(request: AnalyzerRequest, sortMode: AnalyzerSortMode = 'prob'): Promise<AnalyzerResult> {
         const stats = await this.analyzeRaw(request);
         return this.humanize(stats, sortMode);
     }
@@ -360,14 +412,14 @@ export class EnchantingAnalyzer {
      * and registry shape.
      * @param sortMode - Combo ordering for the human-readable `combos` map.
      * Defaults to probability order.
-     * @returns Human-readable `EnchantInsights` without running another search.
+     * @returns Human-readable `AnalyzerResult` without running another search.
      *
      * @remarks
      * Packed enchantment IDs are registry-local. Do not pass stats produced by a
      * different Minecraft version or a differently mutated analyzer; labels may
      * decode incorrectly.
      */
-    public humanize(stats: AnalyzerRawResult, sortMode: ResultSortMode = 'prob'): EnchantInsights {
+    public humanize(stats: AnalyzerRawResult, sortMode: AnalyzerSortMode = 'prob'): AnalyzerResult {
         return HumanizationService.humanize(stats, this.engine.registry, sortMode, this.engine.registry.romanMap);
     }
 
