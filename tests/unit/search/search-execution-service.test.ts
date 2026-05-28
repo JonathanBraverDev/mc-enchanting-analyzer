@@ -9,7 +9,7 @@ import { getDefaultStatsCheckpoint, getSearchCheckpointForRefinement } from '#co
 import { getRegistryVersionBoundaries } from '#core/version-resolution.js';
 import { SearchExecutionService } from '#lib/search/SearchExecutionService.js';
 import { ENGINE_FRONTIER_KIND } from '#lib/search/SearchSnapshot.js';
-import { FLEX_CACHE_LIMITS } from '#lib/search/flex/FlexConstants.js';
+import { FLEX_RUN_CACHE_LIMITS } from '#lib/search/flex/FlexConstants.js';
 import { CheckpointSearchRequest, EnchantStats, EngineInstrumentation, SearchResult } from '#types/index.js';
 import { PRECISION } from '#utils/index.js';
 
@@ -173,7 +173,7 @@ describe('Search execution service', () => {
         assert.ok(result.snapshot.pendingAggregates.count.reduce((sum, mass) => sum + mass, 0n) > 0n);
         const search = result.instrumentation?.search;
         assert.ok(search);
-        assert.strictEqual(search.pendingEntryCount, search.flexStructuralPendingEntryCount);
+        assert.strictEqual(search.pendingEntryCount, result.snapshot.pendingCount);
         assert.ok(Math.abs(snapshotAccountingTotal(result) - 1) < 1e-12);
     });
 
@@ -314,9 +314,9 @@ describe('Search execution service', () => {
 
     it('keeps the Flex run cache bounded', async () => {
         const service = new SearchExecutionService();
-        const cases = createCacheFillCases(FLEX_CACHE_LIMITS.RUNS + 12);
+        const cases = createCacheFillCases(FLEX_RUN_CACHE_LIMITS.RUNS + 12);
 
-        assert.ok(cases.length > FLEX_CACHE_LIMITS.RUNS, 'fixture should exceed the Flex run cache capacity');
+        assert.ok(cases.length > FLEX_RUN_CACHE_LIMITS.RUNS, 'fixture should exceed the Flex run cache capacity');
         for (const testCase of cases) {
             await service.searchToCheckpoint({
                 registry: testCase.registry,
@@ -329,7 +329,7 @@ describe('Search execution service', () => {
         }
 
         assert.ok(
-            getFlexRunCacheSize(service) <= FLEX_CACHE_LIMITS.RUNS,
+            getFlexRunCacheSize(service) <= FLEX_RUN_CACHE_LIMITS.RUNS,
             'Flex run cache should evict old runs instead of growing without bound'
         );
     });
