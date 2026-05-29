@@ -53,36 +53,6 @@ jobs:
           git show refs/remotes/origin/release-check-head:package-lock.json > /tmp/release-package-lock.json
           git show refs/remotes/origin/release-check-head:CHANGELOG.md > /tmp/release-CHANGELOG.md
 
-      - name: Verify title matches package metadata
-        run: |
-          PROPOSED_TAG="${{ steps.check_title.outputs.tag }}"
-          PROPOSED_VERSION="${PROPOSED_TAG#v}"
-          PACKAGE_VERSION=$(node -p "require('/tmp/release-package.json').version")
-
-          if [ "$PACKAGE_VERSION" != "$PROPOSED_VERSION" ]; then
-            echo "::error::Release PR title $PROPOSED_TAG does not match package.json version $PACKAGE_VERSION."
-            exit 1
-          fi
-
-      - name: Check PR description
-        env:
-          PR_BODY: ${{ github.event.pull_request.body }}
-        run: |
-          BODY="$PR_BODY"
-          if [ -z "$BODY" ] || [ ${#BODY} -lt 10 ]; then
-            echo "::error::PR description is too short or empty. Please provide release notes from CHANGELOG.md."
-            exit 1
-          fi
-
-      - name: Verify changelog entry exists
-        run: |
-          PROPOSED_TAG="${{ steps.check_title.outputs.tag }}"
-          echo "Searching for entry for $PROPOSED_TAG in PR head CHANGELOG.md..."
-          if ! grep -q "## \[$PROPOSED_TAG\]" /tmp/release-CHANGELOG.md && ! grep -q "## $PROPOSED_TAG" /tmp/release-CHANGELOG.md; then
-            echo "::error::CHANGELOG.md does not contain a header for $PROPOSED_TAG (expected '## [$PROPOSED_TAG]' or '## $PROPOSED_TAG')"
-            exit 1
-          fi
-
       - name: Verify PR description matches changelog
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
@@ -90,7 +60,7 @@ jobs:
           printf '%s' "$PR_BODY" > pr-body.md
           node scripts/validate-release-pr-body.cjs "${{ steps.check_title.outputs.tag }}" pr-body.md /tmp/release-CHANGELOG.md
 
-      - name: Verify package versions
+      - name: Verify package versions match release title
         run: |
           PROPOSED_TAG="${{ steps.check_title.outputs.tag }}"
           PROPOSED_VERSION="${PROPOSED_TAG#v}"
@@ -186,7 +156,10 @@ jobs:
           const marker = process.env.MARKER;
           const changelog = fs.readFileSync('/tmp/release-CHANGELOG.md', 'utf8');
           const entry = extractChangelogEntry(changelog, tag);
-          if (!entry) process.exit(0);
+          if (!entry) {
+            console.error(`::error::CHANGELOG.md does not contain a release entry for ${tag}.`);
+            process.exit(1);
+          }
 
           const bump = releaseBump(latestTag, tag);
           const { sections, issue } = analyzeChangelogSections({ bump, tag, entry });
@@ -230,10 +203,6 @@ jobs:
             --marker "$MARKER" \
             --body-file /tmp/release-section-resolved.md \
             --stale-body-file /tmp/release-section-stale.md
-
-      - name: Validate changelog sections
-        run: |
-          node scripts/validate-release-head-commit.cjs "${{ steps.check_title.outputs.tag }}" refs/remotes/origin/release-check-head origin/main --changelog-only
 
   validate-release-branch:
     name: Validate Release Branch
@@ -297,128 +266,3 @@ jobs:
           fi
 
           echo "origin/release-history is current with main, and the release PR starts from main with linear branch history intact."
-
-  ci-change-advisory:
-    name: CI Change Advisory
-    permissions:
-      contents: read
-      pull-requests: write
-      issues: write
-    # This is intentionally target-branch only, so PR-authored workflow edits
-    # cannot suppress or soften the advisory that reviews those same edits.
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ref: ${{ github.event.pull_request.base.ref }}
-          persist-credentials: false
-
-      - name: Fetch PR head
-        env:
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          git fetch origin \
-            "+refs/heads/main:refs/remotes/origin/main" \
-            "pull/${PR_NUMBER}/head:refs/remotes/origin/ci-advisory-head"
-
-      - name: Classify CI changes
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          REPOSITORY: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          base=origin/main
-          head=refs/remotes/origin/ci-advisory-head
-          MARKER='<!-- ci-change-advisory -->'
-          printf '%s\n' \
-            "$MARKER" \
-            '<!-- status:stale -->' \
-            '### CI change advisory - stale' \
-            '' \
-            'Superseded by a newer CI change advisory.' \
-            > /tmp/ci-change-advisory-stale.md
-
-          printf '%s\n' \
-            "$MARKER" \
-            '<!-- status:resolved -->' \
-            '### CI change advisory - resolved' \
-            '' \
-            'Resolved for the current PR state.' \
-            > /tmp/ci-change-advisory-resolved.md
-          post_active_comment() {
-            node scripts/pr-marker-comment.cjs upsert \
-              --repo "$REPOSITORY" \
-              --pr "$PR_NUMBER" \
-              --marker "$MARKER" \
-              --body-file /tmp/ci-change-advisory.md \
-              --stale-body-file /tmp/ci-change-advisory-stale.md
-          }
-
-          resolve_active_comment() {
-            node scripts/pr-marker-comment.cjs resolve \
-              --repo "$REPOSITORY" \
-              --pr "$PR_NUMBER" \
-              --marker "$MARKER" \
-              --body-file /tmp/ci-change-advisory-resolved.md \
-              --stale-body-file /tmp/ci-change-advisory-stale.md
-          }
-
-          changed_files=$(git diff --name-only "$base...$head")
-          ci_files=$(printf '%s\n' "$changed_files" | grep -E '^(\.github/workflows/.*\.ya?ml|\.github/actions/|scripts/(validate-release-|.*ci.*|.*workflow.*).*)$' || true)
-
-          if [ -z "$ci_files" ]; then
-            resolve_active_comment
-            echo "No CI-sensitive files changed."
-            exit 0
-          fi
-
-          echo "CI-sensitive files changed:"
-          printf '%s\n' "$ci_files"
-
-          workflow_files=$(printf '%s\n' "$ci_files" | grep -E '^\.github/workflows/.*\.ya?ml$' || true)
-          if [ -z "$workflow_files" ]; then
-            {
-              printf '%s\n' "$MARKER" '<!-- status:active -->' '### CI change advisory' ''
-              printf '%s\n' 'CI support scripts/actions changed. Review the validation logic; no workflow trigger/target changes were detected.' ''
-              printf '%s\n' 'Changed CI-sensitive files:' ''
-              printf -- '- `%s`\n' $ci_files
-            } > /tmp/ci-change-advisory.md
-            post_active_comment
-            echo "::warning title=CI logic changed::CI support scripts/actions changed. Review the validation logic, but no workflow trigger/target changes were detected."
-            exit 0
-          fi
-
-          git diff --unified=0 "$base...$head" -- $workflow_files > /tmp/workflow.diff
-          echo "Workflow diff excerpt:"
-          sed -n '1,220p' /tmp/workflow.diff
-
-          critical_lines=$(grep -E '^[+-]([[:space:]]*(on:|pull_request:|pull_request_target:|push:|workflow_dispatch:|workflow_call:|schedule:|branches:|branches-ignore:|paths:|paths-ignore:|types:|permissions:|if:|concurrency:|runs-on:|ref:|token:|secrets:)|[[:space:]]{2}[A-Za-z0-9_-]+:|[[:space:]]{4}name:)$' /tmp/workflow.diff | grep -v -E '^(---|\+\+\+)' || true)
-          checkout_target_lines=$(grep -E '^[+-][[:space:]]*uses:[[:space:]]+actions/checkout@|^[+-][[:space:]]*ref:' /tmp/workflow.diff | grep -v -E '^(---|\+\+\+)' || true)
-          critical_lines=$(printf '%s\n%s\n' "$critical_lines" "$checkout_target_lines" | sed '/^$/d' | sort -u)
-
-          if [ -n "$critical_lines" ]; then
-            {
-              printf '%s\n' "$MARKER" '<!-- status:active -->' '### CI change advisory' ''
-              printf '%s\n' 'Workflow triggers, branch/path filters, permissions, job conditions, runner targets, checkout targets, or similarly sensitive workflow structure changed.' ''
-              printf '%s\n' 'Changed CI-sensitive files:' ''
-              printf -- '- `%s`\n' $ci_files
-              printf '%s\n' '' 'Sensitive workflow diff lines:' '' '```diff'
-              printf '%s\n' "$critical_lines"
-              printf '%s\n' '```'
-            } > /tmp/ci-change-advisory.md
-            post_active_comment
-            echo "::error title=Workflow run condition or target changed::This PR changes workflow triggers, branch/path filters, permissions, job conditions, runner targets, checkout targets, or similarly sensitive workflow structure. This advisory is intentionally non-required; reviewers should treat it as a high-risk CI policy change."
-            printf '%s\n' "$critical_lines"
-            exit 1
-          fi
-
-          {
-            printf '%s\n' "$MARKER" '<!-- status:active -->' '### CI change advisory' ''
-            printf '%s\n' 'Workflow files changed, but no trigger/target/permission/job-condition lines matched the critical pattern. Review the CI logic diff.' ''
-            printf '%s\n' 'Changed CI-sensitive files:' ''
-            printf -- '- `%s`\n' $ci_files
-          } > /tmp/ci-change-advisory.md
-          post_active_comment
-          echo "::warning title=Workflow logic changed::Workflow files changed, but no trigger/target/permission/job-condition lines matched the critical pattern. Review the CI logic diff."

@@ -7,22 +7,27 @@ const { describe, it } = require('node:test');
 const {
   analyzeChangelogSections,
   extractChangelogEntry,
+  extractMajorReleaseName,
   releaseBump,
 } = require('../../scripts/release-changelog-policy.cjs');
 
-function entryFor(sections) {
+function entryFor(sections, options = {}) {
+  const releaseNameSection = options.releaseName ? [`### ${options.releaseName}`, ''] : [];
+  const releaseNameLabel = options.releaseLabel ? [options.releaseLabel, ''] : [];
   return [
     '## [v2.0.0]',
     '',
+    ...releaseNameSection,
+    ...releaseNameLabel,
     ...sections.flatMap((section) => [`### ${section}`, '- Fixture item.', '']),
   ].join('\n');
 }
 
-function policyIssue(bump, sections) {
+function policyIssue(bump, sections, options = {}) {
   return analyzeChangelogSections({
     bump,
     tag: 'v2.0.0',
-    entry: entryFor(sections),
+    entry: entryFor(sections, options),
   }).issue?.validatorMessage ?? null;
 }
 
@@ -82,9 +87,35 @@ describe('release changelog section policy', () => {
 
   it('requires Breaking only for major releases', () => {
     assert.equal(policyIssue('major', ['Breaking']), null);
+    assert.equal(policyIssue('major', ['Breaking'], { releaseName: 'The "Fixture" Update' }), null);
     assert.match(policyIssue('major', ['Added']), /Major releases must include/);
     assert.match(policyIssue('minor', ['Breaking']), /requires a major release/);
     assert.match(policyIssue('patch', ['Breaking']), /requires a major release/);
+  });
+
+  it('treats release names as major-release metadata', () => {
+    assert.equal(policyIssue('major', ['Breaking'], { releaseLabel: '_"Fixture" release._' }), null);
+    assert.match(policyIssue('minor', ['Added'], { releaseName: 'The "Fixture" Update' }), /reserved for major releases/);
+    assert.match(policyIssue('patch', ['Fixed'], { releaseLabel: '_"Fixture" release._' }), /reserved for major releases/);
+    assert.match(
+      policyIssue('major', ['Breaking'], {
+        releaseName: 'The "Fixture" Update',
+        releaseLabel: '_"Fixture" release._',
+      }),
+      /only one release name/
+    );
+  });
+
+  it('extracts major release names from heading and label formats', () => {
+    assert.equal(
+      extractMajorReleaseName(entryFor(['Breaking'], { releaseName: 'The "Divide & Conquer" Update' })),
+      'Divide & Conquer'
+    );
+    assert.equal(
+      extractMajorReleaseName(entryFor(['Breaking'], { releaseLabel: '_"Mental Gymnastics" release._' })),
+      'Mental Gymnastics'
+    );
+    assert.equal(extractMajorReleaseName(entryFor(['Fixed'])), null);
   });
 
   it('rejects empty or unknown sections', () => {
@@ -131,6 +162,164 @@ describe('release PR body validation', () => {
         { cwd: path.resolve(__dirname, '../..') }
       );
     });
+  });
+});
+
+describe('release metadata validation', () => {
+  function git(cwd, args) {
+    return execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
+  }
+
+  function writeFixtureFile(root, file, content) {
+    const fullPath = path.join(root, file);
+    fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+    fs.writeFileSync(fullPath, content);
+  }
+
+  function createReleaseRepo() {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'release-metadata-check-'));
+    git(tmpDir, ['init', '-q']);
+    git(tmpDir, ['config', 'user.email', 'test@example.com']);
+    git(tmpDir, ['config', 'user.name', 'Test User']);
+
+    writeFixtureFile(tmpDir, 'package.json', JSON.stringify({ version: '1.2.3' }, null, 2));
+    writeFixtureFile(tmpDir, 'package-lock.json', JSON.stringify({
+      version: '1.2.3',
+      packages: { '': { version: '1.2.3' } },
+    }, null, 2));
+    writeFixtureFile(tmpDir, 'CHANGELOG.md', [
+      '# Changelog',
+      '',
+      '## v1.2.3',
+      '',
+      '### Fixed',
+      '- Previous fixture.',
+    ].join('\n'));
+    writeFixtureFile(tmpDir, 'ARCHITECTURE.md', '# Architecture\n');
+    writeFixtureFile(tmpDir, 'docs/public-api.md', '# Public API\n');
+    writeFixtureFile(tmpDir, 'docs/search-engine.md', '# Search Engine\n');
+    writeFixtureFile(tmpDir, '.github/workflows/dev-test.yml', 'name: Dev Test\n');
+    git(tmpDir, ['add', '.']);
+    git(tmpDir, ['commit', '-qm', 'initial']);
+    git(tmpDir, ['tag', 'v1.2.3']);
+    git(tmpDir, ['branch', 'base']);
+    return tmpDir;
+  }
+
+  function writeMajorReleaseMetadata(root, { updatePublicApi = true } = {}) {
+    writeFixtureFile(root, 'package.json', JSON.stringify({ version: '2.0.0' }, null, 2));
+    writeFixtureFile(root, 'package-lock.json', JSON.stringify({
+      version: '2.0.0',
+      packages: { '': { version: '2.0.0' } },
+    }, null, 2));
+    writeFixtureFile(root, 'CHANGELOG.md', [
+      '# Changelog',
+      '',
+      '## v2.0.0',
+      '',
+      '### The "Fixture" Update',
+      '',
+      '### Breaking',
+      '- Fixture breaking change.',
+      '',
+      '## v1.2.3',
+      '',
+      '### Fixed',
+      '- Previous fixture.',
+    ].join('\n'));
+    writeFixtureFile(root, 'ARCHITECTURE.md', '# Architecture\n\nReviewed for v2.0.0.\n');
+    writeFixtureFile(root, 'docs/search-engine.md', '# Search Engine\n\nReviewed for v2.0.0.\n');
+    if (updatePublicApi) {
+      writeFixtureFile(root, 'docs/public-api.md', '# Public API\n\nReviewed for v2.0.0.\n');
+    }
+    git(root, ['add', '.']);
+    git(root, ['commit', '-qm', 'chore(release): prepare v2.0.0']);
+  }
+
+  function writeCiPolicyChange(root, { mixedProductChange = false } = {}) {
+    writeFixtureFile(root, '.github/workflows/dev-test.yml', [
+      'name: Dev Test',
+      '',
+      'on:',
+      '  pull_request:',
+      '',
+    ].join('\n'));
+    if (mixedProductChange) {
+      writeFixtureFile(root, 'src/lib/example.ts', 'export const mixedProductChange = true;\n');
+    }
+    git(root, ['add', '.']);
+    git(root, ['commit', '-qm', 'ci: refine release policy checks']);
+  }
+
+  function writePatchReleaseMetadata(root) {
+    writeFixtureFile(root, 'package.json', JSON.stringify({ version: '1.2.4' }, null, 2));
+    writeFixtureFile(root, 'package-lock.json', JSON.stringify({
+      version: '1.2.4',
+      packages: { '': { version: '1.2.4' } },
+    }, null, 2));
+    writeFixtureFile(root, 'CHANGELOG.md', [
+      '# Changelog',
+      '',
+      '## v1.2.4',
+      '',
+      '### Developer Experience',
+      '- Fixture CI policy change.',
+      '',
+      '## v1.2.3',
+      '',
+      '### Fixed',
+      '- Previous fixture.',
+    ].join('\n'));
+    git(root, ['add', '.']);
+    git(root, ['commit', '-qm', 'chore(release): prepare v1.2.4']);
+  }
+
+  it('allows major release names and release docs in final metadata commits', () => {
+    const tmpDir = createReleaseRepo();
+    const scriptPath = path.resolve(__dirname, '../../scripts/validate-release-head-commit.cjs');
+
+    writeMajorReleaseMetadata(tmpDir);
+
+    assert.doesNotThrow(() => {
+      execFileSync(process.execPath, [scriptPath, 'v2.0.0', 'HEAD', 'base'], { cwd: tmpDir, stdio: 'pipe' });
+    });
+  });
+
+  it('requires public API docs somewhere in minor and major release branches', () => {
+    const tmpDir = createReleaseRepo();
+    const scriptPath = path.resolve(__dirname, '../../scripts/validate-release-head-commit.cjs');
+
+    writeMajorReleaseMetadata(tmpDir, { updatePublicApi: false });
+
+    assert.throws(
+      () => execFileSync(process.execPath, [scriptPath, 'v2.0.0', 'HEAD', 'base'], { cwd: tmpDir, stdio: 'pipe' }),
+      /docs\/public-api\.md/
+    );
+  });
+
+  it('allows isolated CI policy release branches', () => {
+    const tmpDir = createReleaseRepo();
+    const scriptPath = path.resolve(__dirname, '../../scripts/validate-release-head-commit.cjs');
+
+    writeCiPolicyChange(tmpDir);
+    writePatchReleaseMetadata(tmpDir);
+
+    assert.doesNotThrow(() => {
+      execFileSync(process.execPath, [scriptPath, 'v1.2.4', 'HEAD', 'base'], { cwd: tmpDir, stdio: 'pipe' });
+    });
+  });
+
+  it('rejects release branches that mix CI policy changes with product changes', () => {
+    const tmpDir = createReleaseRepo();
+    const scriptPath = path.resolve(__dirname, '../../scripts/validate-release-head-commit.cjs');
+
+    writeCiPolicyChange(tmpDir, { mixedProductChange: true });
+    writePatchReleaseMetadata(tmpDir);
+
+    assert.throws(
+      () => execFileSync(process.execPath, [scriptPath, 'v1.2.4', 'HEAD', 'base'], { cwd: tmpDir, stdio: 'pipe' }),
+      /CI-sensitive release changes must be isolated/
+    );
   });
 });
 
