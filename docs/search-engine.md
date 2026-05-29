@@ -313,19 +313,23 @@ resolved + clueIncompatible + pending + sieved + overflow + capped + rounding ==
 
 Recovered buckets are diagnostics and are not part of active conservation.
 
-Detailed accounting splits the same public mass into stages and operations. The folded public view must match exactly:
+Detailed accounting splits the same public mass into search-stage and projection-stage operations. The folded public view must match exactly:
 
 ```text
 public.resolved          = projection.results.projected
 public.pending           = projection.pending.projected
-public.clueIncompatible  = search.clueIncompatible + projection.clueIncompatible
+public.clueIncompatible  = search.clueIncompatible
+  + projection.results.clueIncompatible
+  + projection.pending.clueIncompatible
 public.sieved            = search.sieved
 public.overflow          = search.overflow
 public.capped            = search.capped
-public.rounding          = search.rounding + projection.loss
+public.rounding          = search.rounding
+  + projection.results.loss
+  + projection.pending.loss
 ```
 
-The detailed view is diagnostic. The public accounting view remains the stable compatibility surface.
+The detailed view is diagnostic. The public accounting view remains the stable compatibility surface. `MASS_HANDLING.md` owns the full stage/operation reference.
 
 The engine applies modified-level probability before graph expansion:
 

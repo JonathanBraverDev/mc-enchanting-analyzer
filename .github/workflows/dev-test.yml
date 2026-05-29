@@ -46,4 +46,4 @@ jobs:
     - name: Verify engine test discovery
       run: npm run test:engine:check
     - name: Run All Tests
-      run: npm run test:engine && npm run test:ui
+      run: npm run test:public:built && npm run test:engine && npm run test:ui
