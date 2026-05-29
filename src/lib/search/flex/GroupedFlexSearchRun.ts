@@ -7,6 +7,7 @@ import type {
     FlexCheckpointRequest,
     FlexNodeId,
     FlexOptimizationControls,
+    FlexRankMergeMemoryStats,
     FlexRunState,
     FlexRunSnapshot,
     FlexRunMemoryStats,
@@ -22,6 +23,20 @@ interface GroupedFlexGraphRecord {
     readonly id: number;
     readonly graph: GroupedFlexGraph;
 }
+
+interface RankMergeCandidate {
+    readonly familyKey: string;
+    readonly exactKey: string;
+    readonly childLevel: number;
+    readonly mass: bigint;
+}
+
+const EMPTY_RANK_MERGE_STATS: FlexRankMergeMemoryStats = Object.freeze({
+    eligibleFamilyGroupCount: 0,
+    eligibleExactPoolCount: 0,
+    eligibleLevelCount: 0,
+    eligibleMass: 0n
+});
 
 export interface GroupedFlexSearchRunOptions {
     readonly distributionService?: ModifiedLevelDistributionService | undefined;
@@ -51,6 +66,7 @@ export class GroupedFlexSearchRun {
     private readonly targetClueId: number | undefined;
     private readonly stateIdentityMode: FlexStateIdentityMode;
     private readonly optimizationControls: FlexOptimizationControls | undefined;
+    private rankMergeStats: FlexRankMergeMemoryStats = EMPTY_RANK_MERGE_STATS;
     private seeded = false;
 
     public constructor(
@@ -89,6 +105,7 @@ export class GroupedFlexSearchRun {
         );
 
         let seededMass = 0n;
+        const rankMergeCandidates: RankMergeCandidate[] = [];
         for (const [levelText, rootMass] of Object.entries(distribution)) {
             if (rootMass === 0n) continue;
             const level = Number(levelText);
@@ -99,11 +116,18 @@ export class GroupedFlexSearchRun {
                 continue;
             }
 
+            rankMergeCandidates.push({
+                familyKey: pool.familySignature,
+                exactKey: pool.signature,
+                childLevel: Math.floor(level / this.kernel.additionalEnchantmentLevelDivisor),
+                mass: rootMass
+            });
             const graph = this.graphForPool(pool);
             const root = graph.graph.getRootNode(level);
             this.coordinator.seedPending(graph.id, root.id, rootMass);
             seededMass += rootMass;
         }
+        this.rankMergeStats = createRankMergeStats(rankMergeCandidates);
 
         if (seededMass < PRECISION) this.coordinator.recordSeedRounding(PRECISION - seededMass);
         if (seededMass > PRECISION) throw new Error(`Modified-level distribution overflowed precision by ${seededMass - PRECISION} units.`);
@@ -137,7 +161,8 @@ export class GroupedFlexSearchRun {
         return {
             coordinator: this.coordinator.getMemoryStats(),
             programs: this.programs.getMemoryStats(),
-            graphs: this.graphs.map(graph => graph.getMemoryStats())
+            graphs: this.graphs.map(graph => graph.getMemoryStats()),
+            rankMerge: this.rankMergeStats
         };
     }
 
@@ -179,4 +204,48 @@ export class GroupedFlexSearchRun {
         if (targetBit === undefined) return false;
         return (this.getGraph(graphId).getNodeExclusionMask(nodeId as FlexNodeId) & targetBit) === 0n;
     }
+}
+
+function createRankMergeStats(candidates: readonly RankMergeCandidate[]): FlexRankMergeMemoryStats {
+    const groups = new Map<string, {
+        readonly exactKeys: Set<string>;
+        levelCount: number;
+        mass: bigint;
+    }>();
+
+    for (const candidate of candidates) {
+        const key = `${candidate.familyKey}|${String(candidate.childLevel)}`;
+        let group = groups.get(key);
+        if (!group) {
+            group = {
+                exactKeys: new Set<string>(),
+                levelCount: 0,
+                mass: 0n
+            };
+            groups.set(key, group);
+        }
+        group.exactKeys.add(candidate.exactKey);
+        group.levelCount++;
+        group.mass += candidate.mass;
+    }
+
+    let eligibleFamilyGroupCount = 0;
+    let eligibleExactPoolCount = 0;
+    let eligibleLevelCount = 0;
+    let eligibleMass = 0n;
+    for (const group of groups.values()) {
+        if (group.exactKeys.size <= 1) continue;
+        eligibleFamilyGroupCount++;
+        eligibleExactPoolCount += group.exactKeys.size;
+        eligibleLevelCount += group.levelCount;
+        eligibleMass += group.mass;
+    }
+
+    if (eligibleFamilyGroupCount === 0) return EMPTY_RANK_MERGE_STATS;
+    return Object.freeze({
+        eligibleFamilyGroupCount,
+        eligibleExactPoolCount,
+        eligibleLevelCount,
+        eligibleMass
+    });
 }

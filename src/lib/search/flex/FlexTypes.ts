@@ -134,10 +134,18 @@ export interface FlexProgramStoreMemoryStats {
     readonly cachedProgramCount: number;
 }
 
+export interface FlexRankMergeMemoryStats {
+    readonly eligibleFamilyGroupCount: number;
+    readonly eligibleExactPoolCount: number;
+    readonly eligibleLevelCount: number;
+    readonly eligibleMass: bigint;
+}
+
 export interface FlexRunMemoryStats {
     readonly coordinator: FlexCoordinatorMemoryStats;
     readonly programs: FlexProgramStoreMemoryStats;
     readonly graphs: readonly FlexGraphMemoryStats[];
+    readonly rankMerge: FlexRankMergeMemoryStats;
 }
 
 export interface FlexCheckpointRequest {

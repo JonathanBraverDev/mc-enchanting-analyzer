@@ -308,6 +308,27 @@ describe('GroupedFlexSearchRun', () => {
         assert.ok(hasPlexSourceProgram(run, flex), 'checkpoint should include at least one PlexNode source program');
     });
 
+    it('reports rank-merge eligibility by pool family and child level', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
+        const run = new GroupedFlexSearchRun(kernel);
+
+        assert.deepStrictEqual(run.getMemoryStats().rankMerge, {
+            eligibleFamilyGroupCount: 0,
+            eligibleExactPoolCount: 0,
+            eligibleLevelCount: 0,
+            eligibleMass: 0n
+        });
+
+        run.seedXp(30);
+        const stats = run.getMemoryStats().rankMerge;
+
+        assert.ok(stats.eligibleFamilyGroupCount > 0);
+        assert.ok(stats.eligibleExactPoolCount > stats.eligibleFamilyGroupCount);
+        assert.ok(stats.eligibleLevelCount >= stats.eligibleExactPoolCount);
+        assert.ok(stats.eligibleMass > 0n);
+    });
+
     it('keeps incremental residue diagnostics aligned with a full residue scan', () => {
         const registry = RegistryFactory.build('1.21.11');
         const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
