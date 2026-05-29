@@ -7,8 +7,8 @@ import type {
     EnchantStats
 } from '#types/index.js';
 import type { EnchantEngine } from '#engine/index.js';
-import type { RegistryMutation, VersionMechanics } from '../types/domain.js';
-import type { MassAccountingBreakdown } from '../types/mass.js';
+import type { RegistryMutation, VersionMechanics } from '#types/domain.js';
+import type { MassAccountingBreakdown } from '#types/mass.js';
 
 /**
  * Named search presets for package callers.
