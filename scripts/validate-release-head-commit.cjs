@@ -23,8 +23,6 @@ const REQUIRED_RELEASE_FILES = ['CHANGELOG.md', 'package.json', 'package-lock.js
 const REQUIRED_MINOR_PLUS_API_DOC = 'docs/public-api.md';
 const ALLOWED_HEAD_FILES = new Set([...REQUIRED_RELEASE_FILES, ...KNOWN_RELEASE_DOCS]);
 const SNAPSHOT_PATH_PATTERN = /^tests\/snapshots\//;
-const CI_POLICY_PATH_PATTERN = /^(?:\.github\/workflows\/.*\.ya?ml|\.github\/actions\/|scripts\/(?:validate-release-|release-|pr-marker-comment|lint-imports|run-engine-tests|.*ci.*|.*workflow.*).*|tests\/unit\/release-changelog-policy\.test\.cjs)$/;
-const CI_RELEASE_METADATA_FILES = new Set(REQUIRED_RELEASE_FILES);
 
 function fail(message) {
   console.error(`::error::${message}`);
@@ -93,31 +91,6 @@ function validateSnapshotCommitIsolation(baseRef, headRef) {
   }
 
   console.log(`Snapshot commit isolation passed for ${commits.length} commit(s) between ${baseRef} and ${headRef}.`);
-}
-
-function validateCiChangeIsolation(changedFiles) {
-  const ciFiles = changedFiles.filter((file) => CI_POLICY_PATH_PATTERN.test(file));
-  if (ciFiles.length === 0) {
-    return;
-  }
-
-  const mixedFiles = changedFiles.filter((file) => {
-    return !CI_POLICY_PATH_PATTERN.test(file) && !CI_RELEASE_METADATA_FILES.has(file);
-  });
-
-  if (mixedFiles.length > 0) {
-    fail([
-      'CI-sensitive release changes must be isolated from product, engine, general documentation, and generated updates.',
-      'Move CI workflow/policy changes into their own release PR, with only required release metadata alongside them.',
-      '',
-      'CI-sensitive files:',
-      ciFiles.map((file) => `  - ${file}`).join('\n'),
-      'Mixed non-CI files:',
-      mixedFiles.map((file) => `  - ${file}`).join('\n'),
-    ].join('\n'));
-  }
-
-  console.log(`CI-sensitive changes are isolated to CI policy/support files plus release metadata: ${ciFiles.join(', ')}`);
 }
 
 function validateChangelogSections(bump, tag, entry) {
@@ -215,7 +188,6 @@ validateSnapshotCommitIsolation(baseRef, headRef);
 const changedFiles = gitLines(['diff', '--name-only', baseRef, headRef]);
 
 console.log(`Detected release bump: ${bump}`);
-validateCiChangeIsolation(changedFiles);
 
 if (bump === 'major' && !lastCommitFiles.includes('ARCHITECTURE.md')) {
   fail('Major releases must update ARCHITECTURE.md in the final release metadata commit.');

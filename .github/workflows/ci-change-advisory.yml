@@ -79,60 +79,28 @@ jobs:
               --stale-body-file /tmp/ci-change-advisory-stale.md
           }
 
-          changed_files=$(git diff --name-only "$base...$head")
-          ci_files=$(printf '%s\n' "$changed_files" | grep -E '^(\.github/workflows/.*\.ya?ml|\.github/actions/|scripts/(validate-release-|.*ci.*|.*workflow.*).*)$' || true)
+          set +e
+          node scripts/classify-ci-changes.cjs "$base" "$head" \
+            --body-file /tmp/ci-change-advisory-body.md \
+            --json-file /tmp/ci-change-advisory.json
+          advisory_status=$?
+          set -e
 
-          if [ -z "$ci_files" ]; then
+          if [ "$advisory_status" -eq 0 ]; then
             resolve_active_comment
-            echo "No CI-sensitive files changed."
+            echo "No CI-affecting behavior changes detected."
             exit 0
           fi
 
-          echo "CI-sensitive files changed:"
-          printf '%s\n' "$ci_files"
-
-          workflow_files=$(printf '%s\n' "$ci_files" | grep -E '^\.github/workflows/.*\.ya?ml$' || true)
-          if [ -z "$workflow_files" ]; then
-            {
-              printf '%s\n' "$MARKER" '<!-- status:active -->' '### CI change advisory' ''
-              printf '%s\n' 'CI support scripts/actions changed. Review the validation logic; no workflow trigger/target changes were detected.' ''
-              printf '%s\n' 'Changed CI-sensitive files:' ''
-              printf -- '- `%s`\n' $ci_files
-            } > /tmp/ci-change-advisory.md
-            post_active_comment
-            echo "::warning title=CI logic changed::CI support scripts/actions changed. Review the validation logic, but no workflow trigger/target changes were detected."
-            exit 0
-          fi
-
-          git diff --unified=0 "$base...$head" -- $workflow_files > /tmp/workflow.diff
-          echo "Workflow diff excerpt:"
-          sed -n '1,220p' /tmp/workflow.diff
-
-          critical_lines=$(grep -E '^[+-]([[:space:]]*(on:|pull_request:|pull_request_target:|push:|workflow_dispatch:|workflow_call:|schedule:|branches:|branches-ignore:|paths:|paths-ignore:|types:|permissions:|if:|concurrency:|runs-on:|ref:|token:|secrets:)|[[:space:]]{2}[A-Za-z0-9_-]+:|[[:space:]]{4}name:)$' /tmp/workflow.diff | grep -v -E '^(---|\+\+\+)' || true)
-          checkout_target_lines=$(grep -E '^[+-][[:space:]]*uses:[[:space:]]+actions/checkout@|^[+-][[:space:]]*ref:' /tmp/workflow.diff | grep -v -E '^(---|\+\+\+)' || true)
-          critical_lines=$(printf '%s\n%s\n' "$critical_lines" "$checkout_target_lines" | sed '/^$/d' | sort -u)
-
-          if [ -n "$critical_lines" ]; then
-            {
-              printf '%s\n' "$MARKER" '<!-- status:active -->' '### CI change advisory' ''
-              printf '%s\n' 'Workflow triggers, branch/path filters, permissions, job conditions, runner targets, checkout targets, or similarly sensitive workflow structure changed.' ''
-              printf '%s\n' 'Changed CI-sensitive files:' ''
-              printf -- '- `%s`\n' $ci_files
-              printf '%s\n' '' 'Sensitive workflow diff lines:' '' '```diff'
-              printf '%s\n' "$critical_lines"
-              printf '%s\n' '```'
-            } > /tmp/ci-change-advisory.md
-            post_active_comment
-            echo "::error title=Workflow run condition or target changed::This PR changes workflow triggers, branch/path filters, permissions, job conditions, runner targets, checkout targets, or similarly sensitive workflow structure. This advisory is intentionally non-required; reviewers should treat it as a high-risk CI policy change."
-            printf '%s\n' "$critical_lines"
-            exit 1
+          if [ "$advisory_status" -ne 1 ]; then
+            exit "$advisory_status"
           fi
 
           {
             printf '%s\n' "$MARKER" '<!-- status:active -->' '### CI change advisory' ''
-            printf '%s\n' 'Workflow files changed, but no trigger/target/permission/job-condition lines matched the critical pattern. Review the CI logic diff.' ''
-            printf '%s\n' 'Changed CI-sensitive files:' ''
-            printf -- '- `%s`\n' $ci_files
+            cat /tmp/ci-change-advisory-body.md
           } > /tmp/ci-change-advisory.md
           post_active_comment
-          echo "::warning title=Workflow logic changed::Workflow files changed, but no trigger/target/permission/job-condition lines matched the critical pattern. Review the CI logic diff."
+          echo "::error title=CI behavior changed::This advisory is intentionally non-required; reviewers should inspect the CI-affecting behavior changes."
+          cat /tmp/ci-change-advisory-body.md
+          exit 1
