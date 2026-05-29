@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## v7.4.8 (2026-05-29)
+
+### Developer Experience
+- **Snapshot advisory**: Added a non-blocking PR advisory that summarizes generated snapshot changes against the base branch, including raw and human snapshot counts, diff volume, added cases, combo churn, accuracy shifts, and diagnostic/accounting field changes.
+- **CI advisory summaries**: Replaced context-poor critical workflow diff excerpts with structured workflow behavior summaries that show new or changed triggers, permissions, concurrency, jobs, checkout targets, and CI entrypoints.
+
 ## v7.4.7 (2026-05-29)
 
 ### Developer Experience

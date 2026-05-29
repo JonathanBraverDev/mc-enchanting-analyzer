@@ -6,11 +6,9 @@ const CI_CONFIG_PATHS = ['.github/workflows', '.github/actions'];
 const WORKFLOW_FILE_PATTERN = /^\.github\/(?:workflows\/.*\.ya?ml|actions\/)/;
 const CI_SUPPORT_SCRIPT_PATTERN = /^scripts\/(?:classify-ci-changes|validate-release-[^/]+|release-changelog-policy|pr-marker-comment|.*ci.*|.*workflow.*)\./;
 const SCRIPT_PATH_PATTERN = /\b(?:node|tsx|playwright|tsc)\s+(?:--[^\s]+\s+)*(?<file>(?:scripts|tests|src)\/[^\s"'`]+)/g;
+const SCRIPT_COMMAND_PATTERN = /\b(?<runner>node|tsx|playwright|tsc)\s+(?:--[^\s]+\s+)*(?<file>(?:scripts|tests|src)\/[^\s"'`]+)/g;
 const NPM_RUN_PATTERN = /\bnpm\s+(?:run|run-script)(?:\s+--[^\s]+)*\s+([A-Za-z0-9:_-]+)/g;
-const CRITICAL_WORKFLOW_DIFF_PATTERN = /^[+-](?:\s*(?:on:|pull_request:|pull_request_target:|push:|workflow_dispatch:|workflow_call:|schedule:|branches:|branches-ignore:|paths:|paths-ignore:|types:|permissions:|if:|concurrency:|runs-on:|ref:|token:|secrets:)|\s{2}[A-Za-z0-9_-]+:|\s{4}name:)$/;
-const CHECKOUT_TARGET_DIFF_PATTERN = /^[+-]\s*(?:uses:\s+actions\/checkout@|ref:)/;
-const CRITICAL_DIFF_MAX_LINES = 80;
-const CRITICAL_DIFF_MAX_CHARS = 8000;
+const WORKFLOW_SUMMARY_MAX_CHARS = 4000;
 
 function git(args, options = {}) {
   return execFileSync('git', args, { encoding: 'utf8', ...options }).trim();
@@ -33,8 +31,28 @@ function readRefFile(ref, file, options = {}) {
   return git(['show', `${ref}:${file}`], options);
 }
 
+function readRefFileIfPresent(ref, file, options = {}) {
+  try {
+    return readRefFile(ref, file, options);
+  } catch {
+    return '';
+  }
+}
+
 function listChangedFiles(baseRef, headRef, options = {}) {
   return gitLines(['diff', '--name-only', `${baseRef}...${headRef}`], options);
+}
+
+function listChangedFileStatuses(baseRef, headRef, options = {}) {
+  const output = git(['diff', '--name-status', `${baseRef}...${headRef}`], options);
+  if (!output) return new Map();
+
+  return new Map(output.split(/\r?\n/).filter(Boolean).map((line) => {
+    const parts = line.split('\t');
+    const status = parts[0][0];
+    const file = normalizePath(parts[parts.length - 1]);
+    return [file, status];
+  }));
 }
 
 function listCiConfigFiles(ref, options = {}) {
@@ -100,6 +118,156 @@ function collectExecutedScriptFiles(scripts, scriptNames) {
   return files;
 }
 
+function escapeRegExp(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function collectTopLevelSection(content, key) {
+  const lines = content.split(/\r?\n/);
+  const keyPattern = new RegExp(`^${escapeRegExp(key)}:\\s*(.*)$`);
+  const start = lines.findIndex((line) => keyPattern.test(line));
+  if (start === -1) return '';
+
+  const section = [lines[start]];
+  for (let index = start + 1; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (/^\S[^:]*:\s*/.test(line) && line.trim() !== '') break;
+    section.push(line);
+  }
+
+  return section.join('\n').trimEnd();
+}
+
+function collectWorkflowJobs(content) {
+  const jobsSection = collectTopLevelSection(content, 'jobs');
+  if (!jobsSection) return [];
+
+  const jobs = [];
+  let current = null;
+  for (const line of jobsSection.split(/\r?\n/)) {
+    const jobMatch = /^  (?<id>[A-Za-z0-9_-]+):\s*$/.exec(line);
+    if (jobMatch) {
+      current = { id: jobMatch.groups.id, name: '', runsOn: '', condition: '' };
+      jobs.push(current);
+      continue;
+    }
+
+    if (!current) continue;
+    const nameMatch = /^    name:\s*(?<value>.+?)\s*$/.exec(line);
+    const runsOnMatch = /^    runs-on:\s*(?<value>.+?)\s*$/.exec(line);
+    const conditionMatch = /^    if:\s*(?<value>.+?)\s*$/.exec(line);
+    if (nameMatch) current.name = nameMatch.groups.value;
+    if (runsOnMatch) current.runsOn = runsOnMatch.groups.value;
+    if (conditionMatch) current.condition = conditionMatch.groups.value;
+  }
+
+  return jobs;
+}
+
+function collectCheckoutTargets(content) {
+  const lines = content.split(/\r?\n/);
+  const checkouts = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const checkoutMatch = /uses:\s*actions\/checkout@(?<version>[^\s]+)/.exec(lines[index]);
+    if (!checkoutMatch) continue;
+
+    const baseIndent = lines[index].match(/^\s*/)?.[0].length ?? 0;
+    const checkout = {
+      uses: `actions/checkout@${checkoutMatch.groups.version}`,
+      ref: '',
+      persistCredentials: '',
+      fetchDepth: '',
+    };
+
+    for (let cursor = index + 1; cursor < lines.length; cursor += 1) {
+      const line = lines[cursor];
+      if (line.trim() === '') continue;
+      const indent = line.match(/^\s*/)?.[0].length ?? 0;
+      if (indent <= baseIndent && /^\s*-?\s*\w/.test(line)) break;
+
+      const refMatch = /^\s*ref:\s*(?<value>.+?)\s*$/.exec(line);
+      const persistMatch = /^\s*persist-credentials:\s*(?<value>.+?)\s*$/.exec(line);
+      const fetchDepthMatch = /^\s*fetch-depth:\s*(?<value>.+?)\s*$/.exec(line);
+      if (refMatch) checkout.ref = refMatch.groups.value;
+      if (persistMatch) checkout.persistCredentials = persistMatch.groups.value;
+      if (fetchDepthMatch) checkout.fetchDepth = fetchDepthMatch.groups.value;
+    }
+
+    checkouts.push(checkout);
+  }
+
+  return checkouts;
+}
+
+function collectWorkflowInvocations(content) {
+  const invocations = new Set();
+
+  for (const script of collectNpmRunScripts(content)) {
+    invocations.add(`npm run ${script}`);
+  }
+
+  for (const match of content.matchAll(SCRIPT_COMMAND_PATTERN)) {
+    invocations.add(`${match.groups.runner} ${normalizePath(match.groups.file).replace(/[),;]+$/, '')}`);
+  }
+
+  return [...invocations].sort();
+}
+
+function summarizeWorkflowBehavior(content) {
+  if (!content) return null;
+  return {
+    triggers: collectTopLevelSection(content, 'on'),
+    permissions: collectTopLevelSection(content, 'permissions'),
+    concurrency: collectTopLevelSection(content, 'concurrency'),
+    jobs: collectWorkflowJobs(content),
+    checkoutTargets: collectCheckoutTargets(content),
+    invocations: collectWorkflowInvocations(content),
+  };
+}
+
+function workflowBehaviorCategories(summary) {
+  if (!summary) return [];
+  const categories = [];
+  if (summary.triggers) categories.push('triggers');
+  if (summary.permissions) categories.push('permissions');
+  if (summary.concurrency) categories.push('concurrency');
+  if (summary.jobs.length > 0) categories.push('jobs');
+  if (summary.checkoutTargets.length > 0) categories.push('checkoutTargets');
+  if (summary.invocations.length > 0) categories.push('invocations');
+  return categories;
+}
+
+function changedWorkflowBehaviorCategories(before, after) {
+  const categories = [...new Set([
+    ...workflowBehaviorCategories(before),
+    ...workflowBehaviorCategories(after),
+  ])];
+
+  return categories.filter((category) => {
+    return JSON.stringify(before?.[category] ?? null) !== JSON.stringify(after?.[category] ?? null);
+  });
+}
+
+function summarizeWorkflowFileChange({ baseRef, headRef, file, status, cwd }) {
+  const beforeContent = status === 'A' ? '' : readRefFileIfPresent(baseRef, file, { cwd });
+  const afterContent = status === 'D' ? '' : readRefFileIfPresent(headRef, file, { cwd });
+  const before = summarizeWorkflowBehavior(beforeContent);
+  const after = summarizeWorkflowBehavior(afterContent);
+
+  return {
+    file,
+    status,
+    before,
+    after,
+    changedCategories: status === 'A'
+      ? workflowBehaviorCategories(after)
+      : status === 'D'
+        ? workflowBehaviorCategories(before)
+        : changedWorkflowBehaviorCategories(before, after),
+  };
+}
+
 function ciPolicyFiles(classification) {
   return [...new Set([
     ...classification.workflowFiles,
@@ -107,48 +275,11 @@ function ciPolicyFiles(classification) {
   ])].sort();
 }
 
-function truncateCriticalDiff(diff) {
-  const lines = diff.split(/\r?\n/);
-  let truncated = false;
-  let selected = lines;
-
-  if (selected.length > CRITICAL_DIFF_MAX_LINES) {
-    selected = selected.slice(0, CRITICAL_DIFF_MAX_LINES);
-    truncated = true;
-  }
-
-  let text = selected.join('\n');
-  if (text.length > CRITICAL_DIFF_MAX_CHARS) {
-    text = text.slice(0, CRITICAL_DIFF_MAX_CHARS);
-    truncated = true;
-  }
-
-  return truncated
-    ? `${text.trimEnd()}\n... critical diff truncated; open the PR files view for the full workflow diff.`
-    : text.trimEnd();
-}
-
-function collectCriticalWorkflowDiff({ baseRef, headRef, classification, cwd = process.cwd() }) {
-  const files = classification.workflowFiles;
-  if (files.length === 0) return '';
-
-  const diff = git(['diff', '--unified=0', `${baseRef}...${headRef}`, '--', ...files], { cwd });
-  const criticalLines = diff
-    .split(/\r?\n/)
-    .filter((line) => {
-      return !/^(?:---|\+\+\+)/.test(line)
-        && (CRITICAL_WORKFLOW_DIFF_PATTERN.test(line) || CHECKOUT_TARGET_DIFF_PATTERN.test(line));
-    });
-
-  return criticalLines.length > 0
-    ? truncateCriticalDiff([...new Set(criticalLines)].sort().join('\n'))
-    : '';
-}
-
 function classifyCiChanges({ baseRef, headRef, changedFiles, cwd = process.cwd() }) {
   changedFiles ??= listChangedFiles(baseRef, headRef, { cwd });
 
   const normalizedFiles = changedFiles.map(normalizePath);
+  const statusByFile = listChangedFileStatuses(baseRef, headRef, { cwd });
   const workflowFiles = normalizedFiles.filter((file) => WORKFLOW_FILE_PATTERN.test(file));
   const supportScripts = normalizedFiles.filter((file) => CI_SUPPORT_SCRIPT_PATTERN.test(file));
   const baseScripts = readRefJson(baseRef, 'package.json', { cwd }).scripts ?? {};
@@ -164,6 +295,17 @@ function classifyCiChanges({ baseRef, headRef, changedFiles, cwd = process.cwd()
   ]);
   const result = {
     workflowFiles,
+    workflowFileChanges: workflowFiles.map((file) => ({
+      file,
+      status: statusByFile.get(file) ?? 'M',
+    })),
+    workflowBehaviorChanges: workflowFiles.map((file) => summarizeWorkflowFileChange({
+      baseRef,
+      headRef,
+      file,
+      status: statusByFile.get(file) ?? 'M',
+      cwd,
+    })),
     supportScripts,
     packageScripts: [],
     executedScriptFiles: normalizedFiles
@@ -192,7 +334,122 @@ function hasCiChanges(classification) {
     || classification.executedScriptFiles.length > 0;
 }
 
-function formatMarkdown(classification, { criticalWorkflowDiff = '' } = {}) {
+function truncateWorkflowSummary(text) {
+  if (text.length <= WORKFLOW_SUMMARY_MAX_CHARS) return text;
+  return `${text.slice(0, WORKFLOW_SUMMARY_MAX_CHARS).trimEnd()}\n... summary truncated; open the PR files view for the full workflow content.`;
+}
+
+function workflowStatusLabel(status) {
+  if (status === 'A') return 'added';
+  if (status === 'D') return 'removed';
+  if (status === 'R') return 'renamed';
+  return 'modified';
+}
+
+function addYamlSection(lines, label, snippet) {
+  if (!snippet) return;
+  lines.push(`${label}:`, '', '```yaml');
+  lines.push(truncateWorkflowSummary(snippet));
+  lines.push('```', '');
+}
+
+function formatJobs(jobs) {
+  if (!jobs || jobs.length === 0) return ['- none detected'];
+  return jobs.map((job) => {
+    const details = [
+      job.name ? `name ${job.name}` : '',
+      job.runsOn ? `runs-on ${job.runsOn}` : '',
+      job.condition ? `if ${job.condition}` : '',
+    ].filter(Boolean).join(', ');
+    return details ? `- \`${job.id}\` (${details})` : `- \`${job.id}\``;
+  });
+}
+
+function formatCheckoutTargets(checkoutTargets) {
+  if (!checkoutTargets || checkoutTargets.length === 0) return ['- none detected'];
+  return checkoutTargets.map((checkout) => {
+    const details = [
+      checkout.ref ? `ref \`${checkout.ref}\`` : '',
+      checkout.persistCredentials ? `persist-credentials \`${checkout.persistCredentials}\`` : '',
+      checkout.fetchDepth ? `fetch-depth \`${checkout.fetchDepth}\`` : '',
+    ].filter(Boolean).join(', ');
+    return details ? `- \`${checkout.uses}\` (${details})` : `- \`${checkout.uses}\``;
+  });
+}
+
+function formatInvocations(invocations) {
+  if (!invocations || invocations.length === 0) return ['- none detected'];
+  return invocations.map((invocation) => `- \`${invocation}\``);
+}
+
+function addListComparison(lines, label, beforeLines, afterLines) {
+  lines.push(`Before ${label}:`, '');
+  lines.push(...beforeLines);
+  lines.push('', `After ${label}:`, '');
+  lines.push(...afterLines, '');
+}
+
+function addWorkflowSummary(lines, summary, categories) {
+  const categorySet = new Set(categories);
+  if (categorySet.has('triggers')) addYamlSection(lines, 'Triggers', summary?.triggers ?? '');
+  if (categorySet.has('permissions')) addYamlSection(lines, 'Permissions', summary?.permissions ?? '');
+  if (categorySet.has('concurrency')) addYamlSection(lines, 'Concurrency', summary?.concurrency ?? '');
+
+  if (categorySet.has('jobs')) {
+    lines.push('Jobs:', '');
+    lines.push(...formatJobs(summary?.jobs), '');
+  }
+
+  if (categorySet.has('checkoutTargets')) {
+    lines.push('Checkout targets:', '');
+    lines.push(...formatCheckoutTargets(summary?.checkoutTargets), '');
+  }
+
+  if (categorySet.has('invocations')) {
+    lines.push('CI entrypoints:', '');
+    lines.push(...formatInvocations(summary?.invocations), '');
+  }
+}
+
+function formatWorkflowBehaviorChange(change) {
+  const lines = [`#### \`${change.file}\` (${workflowStatusLabel(change.status)})`, ''];
+  const categories = change.changedCategories ?? [];
+
+  if (categories.length === 0) {
+    lines.push('No trigger, permission, checkout, job, concurrency, or CI entrypoint changes detected.', '');
+    return lines;
+  }
+
+  if (change.status === 'A') {
+    lines.push('New workflow behavior:', '');
+    addWorkflowSummary(lines, change.after, categories);
+    return lines;
+  }
+
+  if (change.status === 'D') {
+    lines.push('Removed workflow behavior:', '');
+    addWorkflowSummary(lines, change.before, categories);
+    return lines;
+  }
+
+  lines.push(`Changed behavior categories: ${categories.map((category) => `\`${category}\``).join(', ')}`, '');
+  for (const category of categories) {
+    if (['triggers', 'permissions', 'concurrency'].includes(category)) {
+      addYamlSection(lines, `Before ${category}`, change.before?.[category] ?? '');
+      addYamlSection(lines, `After ${category}`, change.after?.[category] ?? '');
+    } else if (category === 'jobs') {
+      addListComparison(lines, 'jobs', formatJobs(change.before?.jobs), formatJobs(change.after?.jobs));
+    } else if (category === 'checkoutTargets') {
+      addListComparison(lines, 'checkout targets', formatCheckoutTargets(change.before?.checkoutTargets), formatCheckoutTargets(change.after?.checkoutTargets));
+    } else if (category === 'invocations') {
+      addListComparison(lines, 'CI entrypoints', formatInvocations(change.before?.invocations), formatInvocations(change.after?.invocations));
+    }
+  }
+
+  return lines;
+}
+
+function formatMarkdown(classification) {
   const lines = [
     'CI-affecting behavior changed. Review the affected areas before merging.',
     '',
@@ -207,10 +464,12 @@ function formatMarkdown(classification, { criticalWorkflowDiff = '' } = {}) {
     lines.push('Changed policy files:', '');
     for (const file of policyFiles) lines.push(`- \`${file}\``);
     lines.push('');
-    if (criticalWorkflowDiff) {
-      lines.push('Critical workflow diff lines:', '', '```diff');
-      lines.push(criticalWorkflowDiff);
-      lines.push('```', '');
+
+    if ((classification.workflowBehaviorChanges ?? []).length > 0) {
+      lines.push('## Workflow behavior summary', '');
+      for (const change of classification.workflowBehaviorChanges) {
+        lines.push(...formatWorkflowBehaviorChange(change));
+      }
     }
   }
 
@@ -273,8 +532,7 @@ if (require.main === module) {
     const { baseRef, headRef, options } = parseCliArgs(process.argv.slice(2));
     const classification = classifyCiChanges({ baseRef, headRef });
     const changed = hasCiChanges(classification);
-    const criticalWorkflowDiff = changed ? collectCriticalWorkflowDiff({ baseRef, headRef, classification }) : '';
-    const markdown = changed ? formatMarkdown(classification, { criticalWorkflowDiff }) : '';
+    const markdown = changed ? formatMarkdown(classification) : '';
 
     writeFileIfRequested(options.jsonFile, `${JSON.stringify(classification, null, 2)}\n`);
     writeFileIfRequested(options.bodyFile, markdown);
@@ -295,7 +553,7 @@ if (require.main === module) {
 module.exports = {
   classifyCiChanges,
   ciPolicyFiles,
-  collectCriticalWorkflowDiff,
+  summarizeWorkflowBehavior,
   collectWorkflowCalledScripts,
   collectNpmScriptClosure,
   collectExecutedScriptFiles,

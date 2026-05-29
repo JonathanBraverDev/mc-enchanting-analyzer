@@ -14,6 +14,11 @@ const {
   classifyCiChanges,
   hasCiChanges,
 } = require('../../scripts/classify-ci-changes.cjs');
+const {
+  classifySnapshotChanges,
+  formatMarkdown: formatSnapshotMarkdown,
+  hasSnapshotChanges,
+} = require('../../scripts/classify-snapshot-changes.cjs');
 
 function entryFor(sections, options = {}) {
   const releaseNameSection = options.releaseName ? [`### ${options.releaseName}`, ''] : [];
@@ -469,10 +474,101 @@ describe('CI change advisory classification', () => {
       { status: 1 }
     );
 
+    assert.deepEqual(classification.workflowBehaviorChanges.map((change) => ({
+      file: change.file,
+      status: change.status,
+      changedCategories: change.changedCategories,
+    })), [
+      {
+        file: '.github/workflows/dev-test.yml',
+        status: 'M',
+        changedCategories: ['triggers'],
+      },
+    ]);
+
     const advisoryBody = fs.readFileSync(bodyPath, 'utf8');
-    assert.match(advisoryBody, /Critical workflow diff lines:/);
-    assert.match(advisoryBody, /```diff/);
-    assert.match(advisoryBody, /\+  push:/);
+    assert.match(advisoryBody, /Workflow behavior summary/);
+    assert.match(advisoryBody, /Changed behavior categories: `triggers`/);
+    assert.match(advisoryBody, /Before triggers:/);
+    assert.match(advisoryBody, /After triggers:/);
+    assert.match(advisoryBody, /pull_request:/);
+    assert.match(advisoryBody, /push:/);
+    assert.doesNotMatch(advisoryBody, /Critical existing workflow setting changes:/);
+  });
+
+  it('summarizes newly added workflow behavior instead of showing critical line excerpts', () => {
+    const tmpDir = createCiAdvisoryRepo();
+    const bodyPath = path.join(tmpDir, 'advisory.md');
+    const scriptPath = path.resolve(__dirname, '../../scripts/classify-ci-changes.cjs');
+
+    writeFixtureFile(tmpDir, '.github/workflows/snapshot-advisory.yml', [
+      'name: Snapshot Advisory',
+      '',
+      'on:',
+      '  pull_request_target:',
+      '    branches:',
+      '      - main',
+      '',
+      'permissions:',
+      '  contents: read',
+      '  pull-requests: write',
+      '',
+      'concurrency:',
+      '  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}',
+      '',
+      'jobs:',
+      '  snapshot-advisory:',
+      '    runs-on: ubuntu-latest',
+      '    steps:',
+      '      - uses: actions/checkout@v4',
+      '        with:',
+      '          ref: ${{ github.event.pull_request.base.ref }}',
+      '          persist-credentials: false',
+      '      - run: node scripts/classify-snapshot-changes.cjs origin/main HEAD',
+      '',
+    ].join('\n'));
+    git(tmpDir, ['add', '.']);
+    git(tmpDir, ['commit', '-qm', 'add snapshot advisory workflow']);
+
+    const classification = classify(tmpDir);
+    assert.equal(hasCiChanges(classification), true);
+    assert.deepEqual(classification.workflowFileChanges, [
+      { file: '.github/workflows/snapshot-advisory.yml', status: 'A' },
+    ]);
+    assert.deepEqual(classification.workflowBehaviorChanges.map((change) => ({
+      file: change.file,
+      status: change.status,
+      changedCategories: change.changedCategories,
+    })), [
+      {
+        file: '.github/workflows/snapshot-advisory.yml',
+        status: 'A',
+        changedCategories: ['triggers', 'permissions', 'concurrency', 'jobs', 'checkoutTargets', 'invocations'],
+      },
+    ]);
+    assert.throws(
+      () => execFileSync(process.execPath, [scriptPath, 'base', 'HEAD', '--body-file', bodyPath], {
+        cwd: tmpDir,
+        stdio: 'pipe',
+      }),
+      { status: 1 }
+    );
+
+    const advisoryBody = fs.readFileSync(bodyPath, 'utf8');
+    assert.match(advisoryBody, /Workflow behavior summary/);
+    assert.match(advisoryBody, /`\.github\/workflows\/snapshot-advisory\.yml` \(added\)/);
+    assert.match(advisoryBody, /New workflow behavior:/);
+    assert.match(advisoryBody, /pull_request_target:/);
+    assert.match(advisoryBody, /branches:/);
+    assert.match(advisoryBody, /contents: read/);
+    assert.match(advisoryBody, /pull-requests: write/);
+    assert.match(advisoryBody, /Checkout targets:/);
+    assert.match(advisoryBody, /ref `\$\{\{ github\.event\.pull_request\.base\.ref \}\}`/);
+    assert.match(advisoryBody, /persist-credentials `false`/);
+    assert.match(advisoryBody, /CI entrypoints:/);
+    assert.match(advisoryBody, /`node scripts\/classify-snapshot-changes\.cjs`/);
+    assert.doesNotMatch(advisoryBody, /Critical existing workflow setting changes:/);
+    assert.doesNotMatch(advisoryBody, /```diff/);
   });
 
   it('reports direct CI support script changes', () => {
@@ -571,6 +667,119 @@ describe('CI change advisory classification', () => {
     const classification = classify(tmpDir);
     assert.equal(hasCiChanges(classification), true);
     assert.deepEqual(classification.executedScriptFiles, ['scripts/build.js']);
+  });
+});
+
+describe('snapshot advisory classification', () => {
+  function git(cwd, args) {
+    return execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
+  }
+
+  function writeFixtureFile(root, file, content) {
+    const fullPath = path.join(root, file);
+    fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+    fs.writeFileSync(fullPath, content);
+  }
+
+  function writeSnapshot(root, file, snapshot) {
+    writeFixtureFile(root, file, `${JSON.stringify(snapshot, null, 2)}\n`);
+  }
+
+  function createSnapshotAdvisoryRepo() {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'snapshot-advisory-check-'));
+    git(tmpDir, ['init', '-q']);
+    git(tmpDir, ['config', 'user.email', 'test@example.com']);
+    git(tmpDir, ['config', 'user.name', 'Test User']);
+
+    writeSnapshot(tmpDir, 'tests/snapshots/example.json', {
+      ranks: { sharpness: { 1: 0.5 } },
+      any: { sharpness: 0.5 },
+      count: { 1: 1 },
+      combos: {
+        'sharpness:1': 0.5,
+        'smite:1': 0.25,
+      },
+      accuracy: 0.75,
+      accounting: { resolved: 0.75 },
+    });
+    writeSnapshot(tmpDir, 'tests/snapshots/example.human.json', {
+      summary: 'fixture',
+    });
+    git(tmpDir, ['add', '.']);
+    git(tmpDir, ['commit', '-qm', 'initial']);
+    git(tmpDir, ['branch', 'base']);
+    return tmpDir;
+  }
+
+  it('summarizes added and modified snapshot outputs', () => {
+    const tmpDir = createSnapshotAdvisoryRepo();
+
+    writeSnapshot(tmpDir, 'tests/snapshots/example.json', {
+      ranks: { sharpness: { 1: 0.6 } },
+      any: { sharpness: 0.6 },
+      count: { 1: 1 },
+      combos: {
+        'sharpness:1': 0.6,
+        'looting:1': 0.1,
+      },
+      accuracy: 0.7,
+      accounting: {
+        resolved: 0.7,
+        details: { stages: { search: { buckets: { resolved: { value: 0.7 } } } } },
+      },
+      diagnostics: { engine: { exitReason: 'empty' } },
+    });
+    writeSnapshot(tmpDir, 'tests/snapshots/example.human.json', {
+      summary: 'fixture changed',
+    });
+    writeSnapshot(tmpDir, 'tests/snapshots/new-case.json', {
+      ranks: { efficiency: { 1: 1 } },
+      any: { efficiency: 1 },
+      count: { 1: 1 },
+      combos: { 'efficiency:1': 1 },
+      accuracy: 1,
+      accounting: {
+        resolved: 1,
+        details: { stages: { search: { buckets: { resolved: { value: 1 } } } } },
+      },
+      diagnostics: { engine: { exitReason: 'empty' } },
+    });
+    writeSnapshot(tmpDir, 'tests/snapshots/new-case.human.json', {
+      summary: 'new fixture',
+    });
+    git(tmpDir, ['add', '.']);
+    git(tmpDir, ['commit', '-qm', 'update snapshots']);
+
+    const classification = classifySnapshotChanges({ baseRef: 'base', headRef: 'HEAD', cwd: tmpDir });
+    assert.equal(hasSnapshotChanges(classification), true);
+    assert.equal(classification.counts.raw, 2);
+    assert.equal(classification.counts.human, 2);
+    assert.equal(classification.counts.added, 1);
+    assert.equal(classification.counts.modified, 1);
+    assert.equal(classification.counts.diagnosticsAdded, 2);
+    assert.equal(classification.counts.accountingDetailsAdded, 2);
+
+    const example = classification.rawSnapshots.find((snapshot) => snapshot.id === 'example');
+    assert.equal(example.comboCountBefore, 2);
+    assert.equal(example.comboCountAfter, 2);
+    assert.equal(example.comboKeysAdded, 1);
+    assert.equal(example.comboKeysRemoved, 1);
+    assert.equal(example.comboValuesChanged, 1);
+
+    const markdown = formatSnapshotMarkdown(classification);
+    assert.match(markdown, /Snapshot outputs changed/);
+    assert.match(markdown, /Raw snapshots changed: 2 \(1 added, 1 modified, 0 removed\)/);
+    assert.match(markdown, /Diagnostics\/accounting detail fields added/);
+    assert.match(markdown, /`new-case`/);
+    assert.match(markdown, /combo keys \+1\/-1/);
+  });
+
+  it('reports no changes when snapshots are untouched', () => {
+    const tmpDir = createSnapshotAdvisoryRepo();
+    const classification = classifySnapshotChanges({ baseRef: 'base', headRef: 'HEAD', cwd: tmpDir });
+
+    assert.equal(hasSnapshotChanges(classification), false);
+    assert.equal(formatSnapshotMarkdown(classification), 'No snapshot files changed.\n');
   });
 });
 
