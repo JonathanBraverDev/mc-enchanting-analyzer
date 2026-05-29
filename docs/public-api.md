@@ -2,44 +2,59 @@
 
 ## Common Description
 
-This document defines the supported library surface for application and tool callers. The search implementation can change underneath this boundary without requiring product callers to change how they create engines or request results.
+This document defines the supported library surface for application and tool callers. The V8 search implementation can change underneath this boundary without requiring product callers to change how they create engines or request results.
 
 The short version:
 
-- supported callers create an `EnchantEngine` through `EngineFactory`;
-- supported callers request summarized probabilities through `engine.getStats(request)`;
-- registry objects returned from `RegistryFactory` are public handles, not full runtime tables;
-- checkpoint snapshots, direct search classes, and engine implementation selectors are internal diagnostics, not product API.
+- supported callers create an `EnchantingAnalyzer`;
+- supported callers request human-readable probabilities through `analyzer.analyze(request)`;
+- supported callers request compact probabilities through `analyzer.analyzeRaw(request)`;
+- supported callers convert raw results through `analyzer.humanize(result)`;
+- registry construction, result translation, and engine creation are owned by the analyzer facade;
+- checkpoint snapshots, direct search classes, full registry tables, and engine implementation details are internal diagnostics, not product API.
 
 ## Supported Entry Points
 
 Import from the package root unless working inside the repository:
 
 ```ts
-import { EngineFactory, RegistryFactory } from 'mc-enchanting-analyzer';
+import { EnchantingAnalyzer } from 'mc-enchanting-analyzer';
 ```
 
 The supported construction APIs are:
 
 | API | Purpose |
 |---|---|
-| `EngineFactory.createForVersion(version)` | Create an engine from a bundled vanilla version. |
-| `EngineFactory.create(registry)` | Create an engine from a registry handle, including mutation-derived handles. |
-| `EngineFactory.clearCaches()` | Clear shared engine-level factory caches. |
-| `RegistryFactory.build(version)` | Build a vanilla registry handle. |
-| `RegistryFactory.buildWithMutations(version, mutations)` | Build a mutation-derived registry handle. |
+| `EnchantingAnalyzer.forVersion(version)` | Create an analyzer from a bundled vanilla version. |
+| `EnchantingAnalyzer.forVersion(version, { mutations })` | Create an analyzer from a vanilla version plus targeted mutations. |
+| `EnchantingAnalyzer.withMutations(version, mutations)` | Equivalent explicit mutation constructor. |
 
-The supported engine calls are:
+The supported analyzer calls are:
 
 | API | Purpose |
 |---|---|
-| `engine.getStats(request)` | Return summarized probabilities for product/UI use. |
-| `engine.getModifiedLevelDist(...)` | Inspect modified-level probability distribution. |
-| `engine.resetCaches()` | Clear engine-owned caches. |
-| `engine.getCacheMetrics()` | Inspect high-level cache hit/miss counters. |
-| `engine.destroy()` | Release engine-owned resources. |
+| `analyzer.analyze(request, sortMode?)` | Return probabilities with enchantment names and combo labels. |
+| `analyzer.analyzeRaw(request)` | Return compact machine-readable probabilities. |
+| `analyzer.humanize(result, sortMode?)` | Convert an already-computed raw result into human-readable names. |
+| `analyzer.registry` | Inspect high-level registry metadata without runtime lookup tables. |
+| `analyzer.resetCaches()` | Clear analyzer-owned engine caches. |
+| `analyzer.getCacheMetrics()` | Inspect high-level cache hit/miss counters. |
 
-The package root intentionally does not expose raw checkpoint APIs, available-pool APIs, packed enchant/rank IDs, or conflict bitset controls. The web workers still use checkpoint snapshots and packed runtime state through internal `#engine`, `#types`, and `#services` imports, but those are repository implementation details rather than package guarantees.
+The package root intentionally does not expose raw checkpoint APIs. The web workers still use checkpoint snapshots through internal `#engine`, `#types`, and `#services` imports, but those are repository implementation details rather than package guarantees.
+
+The published package also exposes `mcenchant` and `mc-enchanting-analyzer` command-line binaries. The CLI is a thin wrapper around `EnchantingAnalyzer`: text output uses `analyze`, `--format json` emits human-readable JSON, and `--raw` / `--format raw-json` emits compact `AnalyzerRawResult`. Everyday calls can use positional inputs:
+
+```bash
+mcenchant 1.21 pickaxe diamond 30 --search deep
+```
+
+Scripts can use the equivalent explicit flags:
+
+```bash
+mcenchant --version 1.21 --item pickaxe --material diamond --xp 30 --search deep
+```
+
+CLI version input follows the registry timeline instead of requiring an exact data-boundary version. For example, `1.14.2` uses the rules active before the `1.14.3` protection-conflict boundary, and `1.7.1` uses the rules active before `1.7.2`.
 
 ## Request Surface
 
@@ -47,20 +62,26 @@ Stable request fields are the fields used by normal programmatic callers:
 
 | Field | Applies To | Purpose |
 |---|---|---|
-| `item` | stats | Item key, such as `sword`, `book`, or `pickaxe`. |
-| `material` | stats | Material key, such as `diamond`, `book`, or `bow`. |
-| `xp` | stats | Player XP level used by the enchanting-table roll. |
-| `clue` | stats | Optional exact table clue, such as `Sharpness III`. |
-| `threshold` | stats | Stop when the largest pending mass falls below this probability. |
-| `maxIterations` | stats | Work-budget stop for expensive searches. |
-| `targetClassifiedMass` | stats | Stop when enough mass is resolved or classified. |
-| `signal` | stats | Abort signal for host UIs. |
-| `onProgress` | stats | Progress callback for host UIs. |
-| `summaryLimit` | stats | Limit summarized combo rows. |
-| `uncappedResults` | stats | Explicitly allow very large summary result sets. |
-| `timing` | diagnostics/tools | Collect search and post-processing timing. |
+| `item` | analyze/analyzeRaw | Item key, such as `sword`, `book`, or `pickaxe`. |
+| `material` | analyze/analyzeRaw | Material key, such as `diamond`, `book`, or `bow`. |
+| `xp` | analyze/analyzeRaw | Player XP level used by the enchanting-table roll. |
+| `clue` | analyze/analyzeRaw | Optional exact table clue, such as `Sharpness III`. |
+| `search` | analyze/analyzeRaw | Named preset or explicit search controls. |
+| `signal` | analyze/analyzeRaw | Abort signal for host UIs. |
+| `onProgress` | analyze/analyzeRaw | Progress callback for host UIs. |
+| `summaryLimit` | analyze/analyzeRaw | Limit summarized combo rows. |
+| `uncappedResults` | analyze/analyzeRaw | Explicitly allow very large summary result sets. |
 
-Lower-level runtime knobs such as `probabilityFloor`, `exhaustive`, `drainEqualMassBand`, raw checkpoints, and instrumentation objects are internal. They exist for repository diagnostics and can change with the engine.
+`search` may be a named preset or a control object:
+
+| Search shape | Purpose |
+|---|---|
+| `'coarse'`, `'standard'`, `'deep'`, `'ultra'` | Use the same refinement checkpoints as the app. |
+| `'exhaustive'` | Search until resolved, aborted, or host resources are exhausted. |
+| `{ preset, ...overrides }` | Start from a preset and override specific controls. |
+| `{ threshold, maxIterations, targetClassifiedMass, probabilityFloor, drainEqualMassBand, exhaustive, useCache }` | Directly control the engine stop/search behavior. |
+
+Direct checkpoint snapshots and sequential checkpoint streaming remain internal. Public callers get summarized results from the facade instead of raw frontier state.
 
 ## Supported Results
 
@@ -68,85 +89,67 @@ Supported result shapes are:
 
 | Type | Purpose |
 |---|---|
-| `EnchantStats` | Summarized probabilities from `getStats`. |
-| `EnchantStatsRequest` | Stable request shape for `getStats`. |
+| `AnalyzerRequest` | Stable request shape for `analyze` and `analyzeRaw`. |
+| `AnalyzerSearchPreset` / `AnalyzerSearchControls` | Public search mode controls. |
+| `AnalyzerRegistryInfo` | Public high-level registry metadata. |
+| `AnalyzerRawResult` | Compact probabilities from `analyzeRaw`. |
+| `AnalyzerResult` | Human-readable probabilities from `analyze` or `humanize`. |
 | `MassAccountingBreakdown` | Public probability mass buckets. |
-| `MassAccountingDetails` | Optional expanded accounting detail shape. |
-| `MassAccountingStageDetails` | Expanded accounting details grouped by stage. |
-| `MassAccountingOperationDetails` | Expanded accounting details grouped by operation. |
-| `MassAccountingDetailBucket` | Expanded accounting bucket value plus units. |
-| `MassBucketName` | Public mass bucket names. |
-| `MassBucketUnits` | BigInt unit-space counterpart for public mass buckets. |
-| `SearchTiming` | Optional timing measurements. |
-| `ProgressUpdate` | Progress callback payload for host UIs. |
-| `LevelDistribution` | Modified-level distribution returned by `getModifiedLevelDist`. |
 
-Result probabilities and accounting are part of the supported behavior. The internal tree shape, graph node IDs, checkpoint snapshots, and backend-specific diagnostics are not.
-
-`RegistryState`, `VanillaRegistryState`, `MutatedRegistryState`, and `BuiltRegistryState` are intentionally small public handles: `version`, `source`, `mechanics`, `multiEnchantBooks`, and mutation history for mutated registries. The full resolved registry contains packed conflict bitsets, ID maps, and cache-oriented tables that remain internal.
-
-## Supported Registry And Rule Shapes
-
-The package root also exposes the rule and mutation shapes needed to build mutation-derived registry handles:
+Supported mutation input shapes are:
 
 | Type | Purpose |
 |---|---|
-| `RegistryMutation` | Describes a registry patch accepted by `RegistryFactory.buildWithMutations`. |
-| `Enchantment`, `EnchantmentLevels` | Public enchantment data shape used by patch mutations. |
-| `ConflictRule`, `ConflictRuleSelector` | Add or remove enchantment conflict rules. |
-| `EnchantmentGroupRule`, `EnchantmentGroupRuleSelector` | Add or remove enchantment-group membership rules. |
-| `MaterialRule`, `MaterialRuleSelector` | Add or remove material rules. |
-| `EnchantableItemRule`, `EnchantableItemRuleSelector` | Add or remove item enchantability rules. |
-| `EnchantabilityTable` | Public enchantability category names. |
-| `VersionMechanics` | High-level mechanics flags exposed on registry handles. |
+| `RegistryMutation` | Union of mutation operations accepted by `forVersion(..., { mutations })` and `withMutations(...)`. |
+| `Enchantment`, `EnchantmentLevels` | Enchantment patch shape for `patchEnchantment`. |
+| `ConflictRule`, `ConflictRuleSelector` | Add or remove version-ranged enchantment conflict rules. |
+| `EnchantmentGroupRule`, `EnchantmentGroupRuleSelector` | Add or remove version-ranged enchantment-group membership rules. |
+| `MaterialRule`, `MaterialRuleSelector` | Add or remove version-ranged material keys. |
+| `EnchantableItemRule`, `EnchantableItemRuleSelector` | Add or remove item/material/enchantability bindings. |
+| `EnchantabilityTable` | Public enchantability category names accepted by item rules. |
+| `VersionMechanics` | High-level mechanics flags exposed through `AnalyzerRegistryInfo`. |
 
-These types describe accepted caller input and high-level registry metadata. They do not expose the resolved runtime registry tables built from those inputs.
+`AnalyzerRawResult` keeps compact packed keys for callers that want stable machine-readable IDs. `AnalyzerResult` uses display labels such as `Efficiency IV` and `Efficiency IV+Fortune III` so applications do not need registry internals just to present results.
 
-The generated public API report is checked into [`etc/mc-enchanting-analyzer.public.api.md`](../etc/mc-enchanting-analyzer.public.api.md). It is the machine-checked source of truth for what the package root exposes.
+Result probabilities and accounting are part of the supported behavior. The internal tree shape, graph node IDs, checkpoint snapshots, and engine diagnostics are not.
+
+`AnalyzerRegistryInfo` is intentionally small: `version`, `source`, `mechanics`, and `multiEnchantBooks`. Mutation input types describe accepted vanilla-data patches only; the full resolved registry contains packed conflict bitsets, ID maps, and cache-oriented tables that remain internal.
+
+Public API coverage lives in the facade tests and CLI tests. Build-time declarations come from the TypeScript API build, and the generated files are not treated as the support contract.
 
 ## Internal And Diagnostic Surface
 
 The following are repository/internal tools. They can change or disappear when the engine implementation changes:
 
-- `probabilityFloor`, `exhaustive`, `drainEqualMassBand`, and other runtime-only search controls;
 - `SearchResult`, `EngineSearchSnapshot`, frontier views, graph/node IDs, and pending-entry snapshots;
 - full resolved registry internals such as conflict bitsets, packed ID maps, and weight tables;
-- `EngineInstrumentation` and backend-specific diagnostic counters;
+- engine diagnostic counters, instrumentation accumulators, and timing sinks;
 - direct imports of `SearchExecutionService`;
+- direct imports of `EngineFactory` or `RegistryFactory`;
 - direct imports from `src/lib/search/flex/**`;
 - direct use of `GroupedFlexSearchRun`, `FlexCoordinator`, `FlexProjector`, or `FlexProgramStore`;
-- direct runtime parity scripts and profiling scripts;
-- backend labels in diagnostics, except as best-effort internal telemetry.
+- direct runtime parity scripts and profiling scripts.
 
 ## Engine Replacement Policy
 
 The project may replace the internal search runtime in a minor release when the supported API above remains stable:
 
-- callers still create engines through `EngineFactory`;
-- public `EnchantStatsRequest` fields keep their meaning;
-- `EnchantStats`, accounting, and timing remain compatible;
+- callers still create analyzers through `EnchantingAnalyzer`;
+- public `AnalyzerRequest` fields keep their meaning;
+- `AnalyzerRawResult`, `AnalyzerResult`, and accounting remain compatible;
 - public probabilities and accounting stay semantically equivalent;
-- internal engine names, diagnostic selectors, and direct search classes may change.
+- internal engine names, diagnostics, and direct search classes may change.
 
-The active search implementation should remain behind the supported API, not become a new product-facing API.
+The current search implementation should remain behind the supported API, not become a new product-facing API.
 
 ## Release Policy
 
-### v8.0.0 Review
-
-The V8 release keeps the supported package-root API centered on `EngineFactory`,
-`RegistryFactory`, `EnchantEngine`, summarized stats results, mass accounting,
-and mutation-derived registry handles. The release removes legacy and prototype
-search internals behind that boundary, but does not promote checkpoint snapshots,
-backend selectors, full registry tables, or direct `src/lib/search/flex/**`
-imports into supported caller API.
-
 Minor and major releases must update this file in the final release metadata commit. That update can be a no-op review note when the boundary did not change, but the file should still be touched so reviewers explicitly confirm whether the supported API changed, stayed stable, or reclassified previously experimental surface.
 
-Major releases must also have a human-readable changelog name, using the established `### The "..." Update` style.
+Major releases must also have a human-readable changelog name, using the historical `### The "..." Update` style. The next search-centered major should use a name that describes the model shift, such as `### The "Folded Frontier" Update`.
 
 ## References
 
 - [`ARCHITECTURE.md`](../ARCHITECTURE.md) for high-level engine and worker flow.
 - [`MASS_HANDLING.md`](../MASS_HANDLING.md) for probability conservation and accounting.
-- [`docs/search-engine.md`](search-engine.md) for search behavior, factorized-tree design, and invariants.
+- [`docs/search-engine.md`](search-engine.md) for active search behavior, factorized-tree design, and invariants.
