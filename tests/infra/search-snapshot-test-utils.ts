@@ -1,6 +1,6 @@
 import { PRECISION } from '#utils/index.js';
 import type { PackedCombo } from '#types/index.js';
-import type { PendingFrontierEntry, SearchRunSnapshot } from '#lib/search/SearchRun.js';
+import { createMaterializedEngineFrontier, type MaterializedSearchSnapshot, type PendingFrontierEntry } from '#lib/search/SearchSnapshot.js';
 import type { MassAccountingBreakdown } from '#types/mass.js';
 
 type UnitOverrides = Partial<Record<keyof NonNullable<MassAccountingBreakdown['units']>, bigint>>;
@@ -10,9 +10,10 @@ export function makeSearchSnapshot(options: {
     pendingEntries?: readonly PendingFrontierEntry[];
     units?: UnitOverrides;
     iterations?: number;
-} = {}): SearchRunSnapshot {
+} = {}): MaterializedSearchSnapshot {
     const results = options.results ?? new Map<PackedCombo, bigint>();
     const pendingEntries = options.pendingEntries ?? [];
+    const frozenPendingEntries = Object.freeze([...pendingEntries]);
     const mass = makeMass(options.units);
     return Object.freeze({
         results,
@@ -21,20 +22,13 @@ export function makeSearchSnapshot(options: {
         lastExpandedMass: 0n,
         pendingCount: pendingEntries.length,
         largestPendingMass: pendingEntries.reduce((max, entry) => entry.mass > max ? entry.mass : max, 0n),
-        pendingEntries: Object.freeze([...pendingEntries]),
+        pendingEntries: frozenPendingEntries,
+        frontier: createMaterializedEngineFrontier(frozenPendingEntries),
         graphCount: 1,
         seededLevelCount: 1,
         activeResidueCount: 0,
         activeResidueMass: 0n,
-        fullyResolved: pendingEntries.length === 0,
-        suffixMerging: {
-            enabled: false,
-            canonicalEntryCount: 0,
-            hits: 0,
-            misses: 0,
-            mergedPendingMass: 0n,
-            avoidedPendingEntries: 0
-        }
+        fullyResolved: pendingEntries.length === 0
     });
 }
 

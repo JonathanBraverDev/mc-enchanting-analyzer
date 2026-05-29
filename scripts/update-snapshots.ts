@@ -1,10 +1,7 @@
 import { EnchantEngine, EngineFactory } from '#engine/index.js';
 import { SnapshotUtils } from '#tests/infra/test-utils.js';
 import { TEST_DEFAULTS } from '#constants/testing.js';
-import { ClueValidator } from '#core/clue.js';
-import { SummaryService } from '#services/SummaryService.js';
-import { RegistryKernel, SearchRun } from '#lib/search/index.js';
-import { EnchantStats } from '#types/index.js';
+import type { EnchantStats, EngineInstrumentation } from '#types/index.js';
 
 interface SnapshotCase {
     name: string;
@@ -21,8 +18,13 @@ interface SnapshotCase {
 const SNAPSHOT_CASES: SnapshotCase[] = [
     { name: '1.8_sword_30_diamond', version: '1.8', item: 'sword', xp: 30, material: 'diamond' },
     { name: '1.21_mace_30_mace', version: '1.21', item: 'mace', xp: 30, material: 'mace' },
-    { name: '1.7.2_book_30_book', version: '1.7.2', item: 'book', xp: 30, material: 'book' },
     { name: '1.21.11_spear_30_diamond', version: '1.21.11', item: 'spear', xp: 30, material: 'diamond' },
+    { name: '1.21_sword_30_diamond_clue_sharpness', version: '1.21', item: 'sword', xp: 30, material: 'diamond', clue: 'Sharpness IV' },
+    { name: '1.8_bow_30_bow_clue_power', version: '1.8', item: 'bow', xp: 30, material: 'bow', clue: 'Power IV' },
+    { name: '1.4.6_book_30_book', version: '1.4.6', item: 'book', xp: 30, material: 'book' },
+    { name: '1.7.2_book_30_book', version: '1.7.2', item: 'book', xp: 30, material: 'book' },
+    { name: '1.14_chestplate_30_diamond', version: '1.14', item: 'chestplate', xp: 30, material: 'diamond' },
+    { name: '1.14.3_chestplate_30_diamond', version: '1.14.3', item: 'chestplate', xp: 30, material: 'diamond' },
     {
         name: '1.21.11_book_30_book',
         version: '1.21.11',
@@ -31,10 +33,21 @@ const SNAPSHOT_CASES: SnapshotCase[] = [
         material: 'book',
         targetClassifiedMass: TEST_DEFAULTS.MODERN_BOOK_SNAPSHOT_TARGET_CLASSIFIED_MASS,
         maxIterations: TEST_DEFAULTS.MODERN_BOOK_SNAPSHOT_ITERATIONS
-    },
-    { name: '1.21_sword_30_diamond_clue_sharpness', version: '1.21', item: 'sword', xp: 30, material: 'diamond', clue: 'Sharpness IV' },
-    { name: '1.8_bow_30_bow_clue_power', version: '1.8', item: 'bow', xp: 30, material: 'bow', clue: 'Power IV' }
+    }
 ];
+
+function createSnapshotInstrumentation(): EngineInstrumentation {
+    return {
+        poolCache: { hits: 0, misses: 0 },
+        distCache: { hits: 0, misses: 0 },
+        totalIterations: 0,
+        totalPrunedNodes: 0,
+        roundingErrorEvents: 0,
+        levelsProcessed: 0,
+        levelsFullyResolved: 0,
+        fullyResolved: false
+    };
+}
 
 function getRequestedCases(): SnapshotCase[] {
     const args = process.argv.slice(2);
@@ -61,41 +74,23 @@ function getRequestedCases(): SnapshotCase[] {
 }
 
 async function getStats(engine: EnchantEngine, testCase: SnapshotCase): Promise<EnchantStats> {
-    const targetClueId = testCase.clue
-        ? ClueValidator.validate(engine.registry, testCase.item, testCase.clue)
-        : undefined;
-    const kernel = new RegistryKernel({
-        registry: engine.registry,
-        item: testCase.item,
-        material: testCase.material
-    });
-    const run = new SearchRun(kernel, { targetClueId });
-    run.seedXp(testCase.xp);
-
-    // Snapshot generation is a final artifact export. Use the synchronous search run path
-    // so the search loop does not repeatedly materialize full checkpoint snapshots
-    // while yielding; modern book runs have millions of pending entries.
     const threshold = testCase.targetClassifiedMass === undefined
         ? TEST_DEFAULTS.SNAPSHOT_THRESHOLD
         : 0;
-    const snapshot = run.searchToCheckpoint({
+
+    return await engine.getStats({
+        item: testCase.item,
+        material: testCase.material,
+        xp: testCase.xp,
+        clue: testCase.clue,
         exhaustive: testCase.targetClassifiedMass === undefined ? TEST_DEFAULTS.SNAPSHOT_EXHAUSTIVE : false,
         threshold,
         maxIterations: testCase.maxIterations ?? TEST_DEFAULTS.SNAPSHOT_ITERATIONS,
-        targetClassifiedMass: testCase.targetClassifiedMass
-    });
-    const summaryRequest = {
-        combos: snapshot.results,
-        snapshot,
-        indexToEnchant: engine.registry.indexToEnchant,
+        targetClassifiedMass: testCase.targetClassifiedMass,
         uncappedResults: true,
-        threshold: testCase.targetClassifiedMass === undefined && TEST_DEFAULTS.SNAPSHOT_EXHAUSTIVE ? 0 : threshold,
-        isBook: testCase.item === 'book'
-    };
-
-    return targetClueId === undefined
-        ? SummaryService.summarize(summaryRequest)
-        : SummaryService.summarizeConditioned({ ...summaryRequest, targetClueId });
+        useCache: false,
+        instrumentation: createSnapshotInstrumentation()
+    });
 }
 
 async function updateSnapshots() {

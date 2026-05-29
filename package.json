@@ -1,6 +1,14 @@
 {
   "name": "mc-enchanting-analyzer",
-  "version": "7.4.8",
+  "version": "8.0.0",
+  "files": [
+    "dist/",
+    "README.md",
+    "CHANGELOG.md",
+    "ARCHITECTURE.md",
+    "MASS_HANDLING.md",
+    "docs/"
+  ],
   "devDependencies": {
     "@playwright/test": "^1.58.2",
     "@types/chart.js": "^2.9.41",
@@ -12,6 +20,10 @@
     "typescript": "^5.9.3"
   },
   "type": "module",
+  "bin": {
+    "mc-enchanting-analyzer": "./dist/cli.js",
+    "mcenchant": "./dist/cli.js"
+  },
   "exports": {
     ".": {
       "import": "./dist/index.js",
@@ -19,29 +31,38 @@
     }
   },
   "scripts": {
-    "start": "npx serve .",
+    "start": "node scripts/serve-static.cjs",
     "clean": "node -e \"const fs = require('fs'); fs.rmSync('dist', { recursive: true, force: true }); fs.mkdirSync('dist', { recursive: true });\"",
-    "build": "npm run clean && npm run build:js && npm run build:bundle",
+    "build": "npm run clean && npm run build:js && npm run build:bundle && npm run build:types",
     "build:ts": "tsc",
     "build:js": "node scripts/build.js",
     "build:bundle": "node scripts/bundle-worker.js",
     "build:standalone": "npm run build && node scripts/inline-assets.js",
     "test": "npm run test:all",
-    "test:all": "npm run build && npm run lint && npm run lint:imports && npm run test:release-policy && npm run test:engine && npm run test:ui",
+    "test:all": "npm run build && npm run lint && npm run lint:imports && npm run test:release-policy && npm run test:public:built && npm run test:engine && npm run test:ui",
+    "test:public": "npm run build && npm run test:public:built",
+    "test:public:built": "node --test --import tsx tests/public/public-api.test.ts tests/public/cli.test.ts tests/public/packed-package.test.ts",
+    "test:api": "node --test --import tsx tests/public/public-api.test.ts",
+    "test:cli": "node --test --import tsx tests/public/cli.test.ts",
     "test:engine": "node scripts/run-engine-tests.cjs",
     "test:engine:check": "node scripts/run-engine-tests.cjs --check",
-    "test:snapshots": "NODE_OPTIONS=--max-old-space-size=8192 tsx --test tests/unit/engine/engine.snapshots.test.ts tests/unit/engine/engine-modern-book-snapshot.test.ts",
+    "test:snapshots": "node --max-old-space-size=8192 --test --import tsx tests/unit/engine/engine.snapshots.test.ts",
     "test:ui": "playwright test tests/ui/playwright",
-    "benchmark": "tsx scripts/profile_snapshot.ts",
-    "benchmark:cpu": "tsx --cpu-prof scripts/profile_snapshot.ts",
+    "benchmark": "tsx scripts/probe_flex_grouping.ts",
+    "benchmark:cpu": "tsx --cpu-prof scripts/probe_flex_grouping.ts",
+    "benchmark:engine": "tsx scripts/profile_snapshot.ts",
+    "benchmark:engine:cpu": "tsx --cpu-prof scripts/profile_snapshot.ts",
     "benchmark:compare": "tsx scripts/compare_profiles.ts",
+    "benchmark:flex": "tsx scripts/probe_flex_grouping.ts",
+    "cli": "tsx src/cli.ts",
     "profile:split": "tsx scripts/analyze_cpu_profile.ts",
     "benchmark:clean": "node -e \"const fs = require('fs'); const files = fs.readdirSync('.').filter(f => f.endsWith('.cpuprofile')); console.log(`Cleaning ${files.length} root profiles...`); files.forEach(f => fs.unlinkSync(f));\"",
     "update-snapshots": "tsx scripts/update-snapshots.ts",
     "lint": "tsc --noEmit",
     "lint:imports": "tsx scripts/lint-imports.ts",
     "release": "npm run test:all && npm run build:standalone",
-    "test:release-policy": "node --test tests/unit/release-changelog-policy.test.cjs"
+    "test:release-policy": "node --test tests/unit/release-changelog-policy.test.cjs",
+    "build:types": "tsc -p tsconfig.api.json"
   },
   "imports": {
     "#lib/*": "./src/lib/*",

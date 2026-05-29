@@ -1,14 +1,9 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import {
-    RegistryFactory,
-    RegistryKernel,
-    SearchGraph,
-    SearchRun,
-    type PackedCombo
-} from '#lib/index.js';
+import { RegistryFactory } from '#core/factory.js';
+import { RegistryKernel } from '#lib/search/index.js';
 import { ENGINE_LIMITS } from '#constants/engine.js';
-import type { SearchRunSnapshot } from '#lib/search/SearchRun.js';
+import { type PackedCombo } from '#types/index.js';
 import { ComboUtils, PRECISION, ProbUtils } from '#utils/index.js';
 import type { RegistryState } from '#types/index.js';
 import {
@@ -18,26 +13,69 @@ import {
     type FlexChoiceEmission,
     type FlexEdge,
     type FlexEmission,
-    type FlexFixedEmission,
+    type FlexNativeCheckpoint,
     type FlexRunSnapshot
 } from '#lib/search/flex/index.js';
 
-const MASS_TOLERANCE = 1_000n;
 const SYSTEM_FLOOR_UNITS = ProbUtils.toBigInt(ENGINE_LIMITS.SYSTEM_THRESHOLD_FLOOR);
-const FLOOR_MASS_TOLERANCE = SYSTEM_FLOOR_UNITS * 10n;
 
 interface GroupedGraphFixture {
     readonly registry: RegistryState;
     readonly kernel: RegistryKernel;
-    readonly concrete: SearchGraph;
     readonly graph: GroupedFlexGraph;
     readonly programs: FlexProgramStore;
 }
 
+interface HotExpansionSnapshot {
+    readonly nodeId: ReturnType<GroupedFlexGraph['getRootNode']>['id'];
+    readonly programId: number;
+    readonly nodeKind: string;
+    readonly count: number;
+    readonly probContinue: bigint;
+    readonly totalWeight: number;
+    readonly clueIncompatibleWeight: number;
+    readonly terminalReason: ReturnType<GroupedFlexGraph['getExpansion']>['terminalReason'];
+    readonly edges: readonly { readonly weight: number; readonly childId: ReturnType<GroupedFlexGraph['getRootNode']>['id'] }[];
+}
+
 describe('GroupedFlexGraph', () => {
+    it('exposes the same edge order and weights through the hot-path expansion view', () => {
+        const fixture = createGraphFixture('book', 'book', 30);
+        const root = fixture.graph.getRootNode(30);
+        const hot = captureHotExpansion(fixture.graph, root.id);
+        const debug = fixture.graph.getExpansion(root.id);
+
+        assert.strictEqual(hot.nodeId, debug.node.id);
+        assert.strictEqual(hot.programId, debug.node.programId);
+        assert.strictEqual(hot.nodeKind, debug.node.kind);
+        assert.strictEqual(hot.count, debug.node.count);
+        assert.strictEqual(hot.probContinue, debug.probContinue);
+        assert.strictEqual(hot.totalWeight, debug.totalWeight);
+        assert.strictEqual(hot.clueIncompatibleWeight, debug.clueIncompatibleWeight ?? 0);
+        assert.strictEqual(hot.terminalReason, debug.terminalReason);
+        assert.deepStrictEqual(hot.edges, debug.edges.map(edge => ({
+            weight: edge.weight,
+            childId: edge.childId
+        })));
+    });
+
+    it('reuses grouped shapes across nodes with the same exclusion mask and clue mode', () => {
+        const fixture = createGraphFixture('book', 'book', 30);
+        const firstRoot = fixture.graph.getRootNode(30);
+        fixture.graph.withSearchExpansion(firstRoot.id, () => undefined);
+        const afterFirst = fixture.graph.getMemoryStats();
+
+        const secondRoot = fixture.graph.getRootNode(20);
+        fixture.graph.withSearchExpansion(secondRoot.id, () => undefined);
+        const afterSecond = fixture.graph.getMemoryStats();
+
+        assert.strictEqual(afterFirst.groupingBuildCount, 1);
+        assert.strictEqual(afterSecond.groupingBuildCount, 1);
+        assert.strictEqual(afterSecond.searchExpansionCount, afterFirst.searchExpansionCount + 1);
+    });
+
     it('collapses diamond sword damage alternatives into one PlexNode edge', () => {
         const fixture = createGraphFixture('sword', 'diamond', 30);
-        const concreteRoot = fixture.concrete.getExpansion(fixture.concrete.getRootNode(30).id);
         const root = fixture.graph.getRootNode(30);
         const expansion = fixture.graph.getExpansion(root.id);
         const damageEdge = findChoiceEdgeByNames(fixture, expansion.edges, [
@@ -48,8 +86,8 @@ describe('GroupedFlexGraph', () => {
         const choice = getEdgeChoice(fixture, damageEdge);
 
         assert.strictEqual(expansion.probContinue, PRECISION);
-        assert.strictEqual(expansion.totalWeight, concreteRoot.totalWeight);
-        assert.ok(expansion.edges.length < concreteRoot.edges.length);
+        assert.strictEqual(expansion.totalWeight, fixture.kernel.getPool(30).totalWeight);
+        assert.ok(expansion.edges.length < fixture.kernel.getPool(30).entries.length);
         assert.strictEqual(fixture.graph.getNode(damageEdge.childId).kind, 'plex');
         assert.deepStrictEqual(edgeChoiceNames(fixture, damageEdge), ['Bane of Arthropods', 'Sharpness', 'Smite']);
         assertChoiceWeightsByName(fixture, choice, {
@@ -120,26 +158,69 @@ describe('GroupedFlexGraph', () => {
         assert.strictEqual(getLastEmission(fixture, singletonEdge).kind, 'fixed');
     });
 
-    it('expands non-root singleton children with halved level and concrete-equivalent total weight', () => {
+    it('reports structural Solid and Plex node counts without scanning diagnostics', () => {
+        const fixture = createGraphFixture('sword', 'diamond', 30);
+        const root = fixture.graph.getRootNode(30);
+        fixture.graph.getExpansion(root.id);
+        const stats = fixture.graph.getMemoryStats();
+
+        assert.strictEqual(stats.nodeCount, stats.solidNodeCount + stats.plexNodeCount);
+        assert.ok(stats.solidNodeCount > 0, 'root and singleton transitions should count as Solid nodes');
+        assert.ok(stats.plexNodeCount > 0, 'grouped choice transitions should count as Plex nodes');
+    });
+
+    it('creates Plex nodes only when eligible conflicts create equivalent grouped choices', () => {
+        const conflictFixture = createGraphFixture('sword', 'diamond', 30);
+        const conflictExpansion = conflictFixture.graph.getExpansion(conflictFixture.graph.getRootNode(30).id);
+        const conflictStats = conflictFixture.graph.getMemoryStats();
+
+        assert.ok(
+            conflictExpansion.edges.some(edge => conflictFixture.graph.getNode(edge.childId).kind === 'plex'),
+            'modern sword should create at least one Plex child from the damage conflict group'
+        );
+        assert.ok(conflictStats.plexNodeCount > 0, 'conflict-group fixtures must not report zero Plex nodes');
+        assert.ok(conflictStats.choiceGroupCount > 0, 'conflict-group fixtures should record at least one grouped choice');
+
+        const conflictFreeFixture = createGraphFixture('bow', 'bow', 30);
+        const conflictFreeExpansion = conflictFreeFixture.graph.getExpansion(conflictFreeFixture.graph.getRootNode(30).id);
+        const conflictFreeStats = conflictFreeFixture.graph.getMemoryStats();
+
+        assert.ok(conflictFreeExpansion.edges.length > 0, 'conflict-free fixture should still have eligible transitions');
+        assert.ok(
+            conflictFreeExpansion.edges.every(edge => conflictFreeFixture.graph.getNode(edge.childId).kind === 'solid'),
+            'conflict-free pools must keep all root children solid'
+        );
+        assert.strictEqual(conflictFreeStats.plexNodeCount, 0, 'conflict-free pools must not create Plex nodes');
+        assert.strictEqual(conflictFreeStats.choiceGroupCount, 0, 'conflict-free pools must not record grouped choices');
+    });
+
+    it('expands non-root singleton children with modern child-level decay', () => {
         const fixture = createGraphFixture('sword', 'diamond', 30);
         const groupedRoot = fixture.graph.getExpansion(fixture.graph.getRootNode(30).id);
         const singletonEdge = groupedRoot.edges.find(edge => getLastEmission(fixture, edge).kind === 'fixed');
         assert.ok(singletonEdge, 'fixture should expose a singleton root transition');
 
-        const fixed = getLastEmission(fixture, singletonEdge) as FlexFixedEmission;
-        const concreteRoot = fixture.concrete.getExpansion(fixture.concrete.getRootNode(30).id);
-        const concreteEdge = concreteRoot.edges.find(edge => edge.entry.packedEnchant === fixed.packedEnchant);
-        assert.ok(concreteEdge, 'concrete graph should expose the same singleton transition');
-
         const groupedChildExpansion = fixture.graph.getExpansion(singletonEdge.childId);
-        const concreteChildExpansion = fixture.concrete.getExpansion(concreteEdge.childId);
 
         assert.strictEqual(fixture.graph.getNodeCurrentLevel(singletonEdge.childId), 30);
-        assert.strictEqual(groupedChildExpansion.totalWeight, concreteChildExpansion.totalWeight);
+        assert.ok(groupedChildExpansion.totalWeight > 0);
         assert.ok(groupedChildExpansion.edges.every(edge => fixture.graph.getNodeCurrentLevel(edge.childId) === 15));
     });
 
-    it('keeps no-eligible, single-book, and max-enchants terminal behavior compatible with Flex', () => {
+    it('uses legacy child-level decay from registry mechanics', () => {
+        const fixture = createGraphFixture('sword', 'diamond', 30, '1.0');
+        const groupedRoot = fixture.graph.getExpansion(fixture.graph.getRootNode(30).id);
+        const singletonEdge = groupedRoot.edges.find(edge => getLastEmission(fixture, edge).kind === 'fixed');
+        assert.ok(singletonEdge, 'legacy fixture should expose a singleton root transition');
+
+        const groupedChildExpansion = fixture.graph.getExpansion(singletonEdge.childId);
+
+        assert.strictEqual(fixture.kernel.additionalEnchantmentLevelDivisor, 4);
+        assert.ok(groupedChildExpansion.totalWeight > 0);
+        assert.ok(groupedChildExpansion.edges.every(edge => fixture.graph.getNodeCurrentLevel(edge.childId) === 7));
+    });
+
+    it('keeps no-eligible, single-book, and max-enchants terminal behavior explicit', () => {
         const pickaxe = createGraphFixture('pickaxe', 'diamond', 30);
         const noEligibleExpansion = followFirstPathUntil(pickaxe.graph, pickaxe.graph.getRootNode(30).id, expansion => expansion.edges.length === 0);
         assert.strictEqual(noEligibleExpansion.terminalReason, null);
@@ -160,49 +241,39 @@ describe('GroupedFlexGraph', () => {
 });
 
 describe('GroupedFlexSearchRun', () => {
-    it('matches concrete projected public rows for low-XP diamond sword', () => {
-        assertExhaustiveProjectedParity('1.21.11', 'sword', 'diamond', 1, true);
+    it('fully resolves representative low-XP searches without a zero combo row', () => {
+        assertExhaustiveFlexSearch('1.21.11', 'sword', 'diamond', 1, true);
+        assertExhaustiveFlexSearch('1.4.6', 'book', 'book', 1, false);
+        assertExhaustiveFlexSearch('1.7.2', 'book', 'book', 1, false);
+        assertExhaustiveFlexSearch('1.13', 'book', 'book', 1, true);
+        assertExhaustiveFlexSearch('1.21.11', 'book', 'book', 1, true);
     });
 
-    it('matches concrete projected public rows for low-XP single-book search', () => {
-        assertExhaustiveProjectedParity('1.4.6', 'book', 'book', 1, false);
-    });
-
-    it('matches concrete projected public rows for low-XP multi-book searches', () => {
-        assertExhaustiveProjectedParity('1.7.2', 'book', 'book', 1, false);
-        assertExhaustiveProjectedParity('1.13', 'book', 'book', 1, true);
-        assertExhaustiveProjectedParity('1.21.11', 'book', 'book', 1, true);
-    });
-
-    it('projects exact clue-conditioned grouped results like concrete V7', () => {
+    it('projects exact clue-conditioned grouped results and filters non-clue rows', () => {
         const registry = RegistryFactory.build('1.21.11');
         const kernel = new RegistryKernel({ registry, item: 'sword', material: 'diamond' });
         const targetClueId = findPoolEnchantByName(registry, kernel, 30, 'Sharpness');
-        const concreteRun = new SearchRun(kernel, { targetClueId });
         const groupedRun = new GroupedFlexSearchRun(kernel, { targetClueId });
-        const request = { exhaustive: true } as const;
 
-        concreteRun.seedXp(30);
         groupedRun.seedXp(30);
-        const concrete = concreteRun.searchToCheckpoint(request);
-        const flex = groupedRun.searchToCheckpoint(request);
-        const projected = groupedRun.projectSnapshot(flex);
+        const flex = groupedRun.searchToCheckpoint({ exhaustive: true });
+        const native = groupedRun.buildEngineSnapshot(flex);
 
-        assert.strictEqual(concrete.fullyResolved, true);
         assert.strictEqual(flex.fullyResolved, true);
-        assert.strictEqual(flex.iterations, concrete.iterations);
-        assertProjectedRowsApproximatelyEqual(projected.results, concrete.results);
         assert.ok(BigInt(flex.mass.units!.clueIncompatible) > 0n);
-        assert.ok(projected.clueIncompatible > 0n);
-        assert.strictEqual(projected.projectedMass + projected.clueIncompatible + projected.projectionLoss, projected.sourceMass);
-        assert.strictEqual(projected.results.has(0 as PackedCombo), false);
-        for (const combo of projected.results.keys()) {
+        assert.ok(native.resolvedClueIncompatible > 0n);
+        assert.strictEqual(
+            BigInt(native.snapshot.mass.units!.resolved) + native.resolvedClueIncompatible + native.resolvedProjectionLoss,
+            BigInt(flex.mass.units!.resolved)
+        );
+        assert.strictEqual(native.snapshot.results.has(0 as PackedCombo), false);
+        for (const combo of native.snapshot.results.keys()) {
             assert.ok(comboContainsExactEnchant(combo, targetClueId, registry.indexToEnchant));
         }
     });
 
     it('produces a bounded XP 30 checkpoint with PlexNode programs and conserved resolved source mass', () => {
-        const { run, flex, projected } = runConcreteAndGrouped('1.21.11', 'sword', 'diamond', 30, {
+        const { run, flex, native } = runGrouped('1.21.11', 'sword', 'diamond', 30, {
             threshold: 0n,
             maxIterations: 500,
             probabilityFloor: 0n
@@ -210,43 +281,50 @@ describe('GroupedFlexSearchRun', () => {
 
         assert.strictEqual(flex.exitReason, 'iterations');
         assert.ok(flex.pendingEntries.length > 0);
-        assert.ok(projected.pendingEntries.length > 0);
-        assert.strictEqual(projected.projectedMass + projected.projectionLoss, projected.sourceMass);
-        assert.strictEqual(projected.results.has(0 as PackedCombo), false);
+        assert.ok(native.snapshot.pendingAggregates);
+        assert.strictEqual(
+            BigInt(native.snapshot.mass.units!.resolved) + native.resolvedClueIncompatible + native.resolvedProjectionLoss,
+            BigInt(flex.mass.units!.resolved)
+        );
+        assert.strictEqual(native.snapshot.results.has(0 as PackedCombo), false);
         assert.ok(hasPlexSourceProgram(run, flex), 'checkpoint should include at least one PlexNode source program');
     });
 
-    it('applies probability-floor sieving with grouped PlexNode projection parity', () => {
+    it('keeps incremental residue diagnostics aligned with a full residue scan', () => {
         const registry = RegistryFactory.build('1.21.11');
-        const kernel = new RegistryKernel({ registry, item: 'sword', material: 'diamond' });
-        const concreteRun = new SearchRun(kernel);
-        const groupedRun = new GroupedFlexSearchRun(kernel);
+        const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
+        const run = new GroupedFlexSearchRun(kernel);
+        run.seedXp(30);
 
-        concreteRun.seedXp(30);
-        groupedRun.seedXp(30);
+        const snapshot = run.searchToCheckpoint({
+            threshold: 0n,
+            maxIterations: 500,
+            probabilityFloor: 0n
+        });
+        const scanned = run.scanActiveResidueStatsForDiagnostics();
 
-        const concrete = concreteRun.searchToCheckpoint({
+        assert.ok(snapshot.activeResidueCount > 0);
+        assert.ok(snapshot.activeResidueMass > 0n);
+        assert.strictEqual(snapshot.activeResidueCount, scanned.count);
+        assert.strictEqual(snapshot.activeResidueMass, scanned.mass);
+    });
+
+    it('applies probability-floor sieving with grouped PlexNode projection', () => {
+        const { run, flex, native } = runGrouped('1.21.11', 'sword', 'diamond', 30, {
             threshold: 0n,
             maxIterations: 100_000,
             probabilityFloor: ENGINE_LIMITS.SYSTEM_THRESHOLD_FLOOR
         });
-        const flex = groupedRun.searchToCheckpoint({
-            threshold: 0n,
-            maxIterations: 100_000
-        });
-        const projected = groupedRun.projectSnapshot(flex);
 
-        assert.strictEqual(concrete.fullyResolved, true);
         assert.strictEqual(flex.fullyResolved, true);
         assert.strictEqual(flex.pendingCount, 0);
-        assert.ok(BigInt(flex.mass.units!.sieved) > 0n);
-        assertBigintApproximatelyEqual(BigInt(flex.mass.units!.resolved), BigInt(concrete.mass.units!.resolved), 'resolved mass', FLOOR_MASS_TOLERANCE);
-        assertBigintApproximatelyEqual(BigInt(flex.mass.units!.sieved), BigInt(concrete.mass.units!.sieved), 'sieved mass', FLOOR_MASS_TOLERANCE);
-        assertBigintApproximatelyEqual(BigInt(flex.mass.units!.rounding), BigInt(concrete.mass.units!.rounding), 'rounding mass', FLOOR_MASS_TOLERANCE);
-        assertProjectedRowsApproximatelyEqual(projected.results, concrete.results, FLOOR_MASS_TOLERANCE);
-        assert.strictEqual(projected.projectedMass + projected.projectionLoss, BigInt(flex.mass.units!.resolved));
-        assert.strictEqual(projected.results.has(0 as PackedCombo), false);
-        assert.ok(hasPlexSourceProgram(groupedRun, flex), 'floor fixture should exercise PlexNode source programs');
+        assert.ok(BigInt(flex.mass.units!.sieved) >= SYSTEM_FLOOR_UNITS);
+        assert.strictEqual(
+            BigInt(native.snapshot.mass.units!.resolved) + native.resolvedClueIncompatible + native.resolvedProjectionLoss,
+            BigInt(flex.mass.units!.resolved)
+        );
+        assert.strictEqual(native.snapshot.results.has(0 as PackedCombo), false);
+        assert.ok(hasPlexSourceProgram(run, flex), 'floor fixture should exercise PlexNode source programs');
     });
 });
 
@@ -259,10 +337,34 @@ function createGraphFixture(
     const registry = RegistryFactory.build(version);
     const kernel = new RegistryKernel({ registry, item, material });
     const pool = kernel.getPool(level);
-    const concrete = new SearchGraph(kernel, pool);
     const programs = new FlexProgramStore();
     const graph = new GroupedFlexGraph(kernel, pool, programs);
-    return { registry, kernel, concrete, graph, programs };
+    return { registry, kernel, graph, programs };
+}
+
+function captureHotExpansion(
+    graph: GroupedFlexGraph,
+    nodeId: ReturnType<GroupedFlexGraph['getRootNode']>['id']
+): HotExpansionSnapshot {
+    let captured: HotExpansionSnapshot | undefined;
+    graph.withSearchExpansion(nodeId, expansion => {
+        captured = {
+            nodeId: expansion.nodeId,
+            programId: expansion.programId,
+            nodeKind: expansion.nodeKind,
+            count: expansion.count,
+            probContinue: expansion.probContinue,
+            totalWeight: expansion.totalWeight,
+            clueIncompatibleWeight: expansion.clueIncompatibleWeight ?? 0,
+            terminalReason: expansion.terminalReason,
+            edges: Object.freeze(Array.from({ length: expansion.edgeCount }, (_, edgeIndex) => Object.freeze({
+                weight: expansion.edgeWeights[edgeIndex]!,
+                childId: expansion.edgeChildIds[edgeIndex]! as ReturnType<GroupedFlexGraph['getRootNode']>['id']
+            })))
+        };
+    });
+    assert.ok(captured, 'hot-path expansion callback should run');
+    return captured;
 }
 
 function findChoiceEdgeByNames(
@@ -342,80 +444,49 @@ function followFirstPathUntil(
     assert.fail('First-path fixture did not reach the requested expansion.');
 }
 
-function assertExhaustiveProjectedParity(
+function assertExhaustiveFlexSearch(
     version: string,
     item: string,
     material: string,
     xp: number,
     requirePlexSource: boolean
 ): void {
-    const { run, flex, concrete, projected } = runConcreteAndGrouped(version, item, material, xp, { exhaustive: true });
+    const { run, flex, native } = runGrouped(version, item, material, xp, { exhaustive: true });
 
-    assert.strictEqual(concrete.fullyResolved, true);
     assert.strictEqual(flex.fullyResolved, true);
-    assertProjectedRowsApproximatelyEqual(projected.results, concrete.results);
-    assert.strictEqual(projected.projectedMass + projected.projectionLoss, projected.sourceMass);
-    assert.strictEqual(projected.results.has(0 as PackedCombo), false);
+    assert.strictEqual(
+        BigInt(native.snapshot.mass.units!.resolved) + native.resolvedClueIncompatible + native.resolvedProjectionLoss,
+        BigInt(flex.mass.units!.resolved)
+    );
+    assert.strictEqual(native.snapshot.results.has(0 as PackedCombo), false);
     if (requirePlexSource) {
         assert.ok(hasPlexSourceProgram(run, flex), `${version} ${item}/${material} XP ${String(xp)} should exercise PlexNode programs`);
     }
 }
 
-function runConcreteAndGrouped(
+function runGrouped(
     version: string,
     item: string,
     material: string,
     xp: number,
-    request: Parameters<SearchRun['searchToCheckpoint']>[0]
+    request: Parameters<GroupedFlexSearchRun['searchToCheckpoint']>[0]
 ): {
     run: GroupedFlexSearchRun;
-    concrete: SearchRunSnapshot;
     flex: FlexRunSnapshot;
-    projected: ReturnType<GroupedFlexSearchRun['projectSnapshot']>;
+    native: FlexNativeCheckpoint;
 } {
     const registry = RegistryFactory.build(version);
     const kernel = new RegistryKernel({ registry, item, material });
-    const concreteRun = new SearchRun(kernel);
     const groupedRun = new GroupedFlexSearchRun(kernel);
 
-    concreteRun.seedXp(xp);
     groupedRun.seedXp(xp);
 
-    const concrete = concreteRun.searchToCheckpoint(request);
     const flex = groupedRun.searchToCheckpoint(request);
     return {
         run: groupedRun,
-        concrete,
         flex,
-        projected: groupedRun.projectSnapshot(flex)
+        native: groupedRun.buildEngineSnapshot(flex)
     };
-}
-
-function assertProjectedRowsApproximatelyEqual(
-    actual: ReadonlyMap<PackedCombo, bigint>,
-    expected: ReadonlyMap<PackedCombo, bigint>,
-    tolerance: bigint = MASS_TOLERANCE
-): void {
-    const keys = new Set<PackedCombo>([...actual.keys(), ...expected.keys()]);
-    for (const key of [...keys].sort((left, right) => Number(left) - Number(right))) {
-        const actualMass = actual.get(key) ?? 0n;
-        const expectedMass = expected.get(key) ?? 0n;
-        const delta = actualMass > expectedMass ? actualMass - expectedMass : expectedMass - actualMass;
-        assert.ok(
-            delta <= tolerance,
-            `combo ${String(key)} expected ${String(expectedMass)}, got ${String(actualMass)}, delta ${String(delta)}`
-        );
-    }
-}
-
-function assertBigintApproximatelyEqual(
-    actual: bigint,
-    expected: bigint,
-    label: string,
-    tolerance: bigint = MASS_TOLERANCE
-): void {
-    const delta = actual > expected ? actual - expected : expected - actual;
-    assert.ok(delta <= tolerance, `${label}: expected ${String(expected)}, got ${String(actual)}, delta ${String(delta)}`);
 }
 
 function comboContainsExactEnchant(combo: PackedCombo, targetClueId: number, indexToEnchant: number[]): boolean {

@@ -60,24 +60,180 @@
   "accuracy": 0.999997551563,
   "accounting": {
     "resolved": 0.16452898736859184,
-    "clueIncompatible": 0.8354685641941597,
+    "clueIncompatible": 0.8354685641941598,
     "pending": 0,
     "sieved": 0,
     "overflow": 0.000002448437247999473,
     "capped": 0,
-    "rounding": 4.0939474033052647e-16,
+    "rounding": 3.5214886562329184e-16,
     "recoveredRounding": 5.117434254131581e-17,
     "recoveredSieved": 0,
     "units": {
       "resolved": "189689007668437813",
-      "clueIncompatible": "963229674082452792",
+      "clueIncompatible": "963229674082452858",
       "pending": "0",
       "sieved": "0",
       "overflow": "2822855955899",
       "capped": "0",
-      "rounding": "472",
+      "rounding": "406",
       "recoveredRounding": "59",
       "recoveredSieved": "0"
+    },
+    "details": {
+      "stages": {
+        "search": {
+          "buckets": {
+            "resolved": {
+              "value": 0.2515772268680228,
+              "units": "290048794925498932"
+            },
+            "clueIncompatible": {
+              "value": 0.7484203246947289,
+              "units": "862869886825391739"
+            },
+            "overflow": {
+              "value": 0.000002448437247999473,
+              "units": "2822855955899"
+            },
+            "rounding": {
+              "value": 3.5214886562329184e-16,
+              "units": "406"
+            },
+            "recoveredRounding": {
+              "value": 5.117434254131581e-17,
+              "units": "59"
+            }
+          },
+          "operations": {
+            "seed": {
+              "buckets": {
+                "clueIncompatible": {
+                  "value": 0.5838888888888889,
+                  "units": "673178056300997895"
+                },
+                "pending": {
+                  "value": 0.4161111111111111,
+                  "units": "479743448305849081"
+                }
+              }
+            },
+            "frontier": {
+              "buckets": {
+                "pending": {
+                  "value": -0.4161111111111111,
+                  "units": "-479743448305849081"
+                }
+              }
+            },
+            "resolve": {
+              "buckets": {
+                "resolved": {
+                  "value": 0.2515772268680228,
+                  "units": "290048794925498932"
+                }
+              }
+            },
+            "edgeSplit": {
+              "buckets": {
+                "rounding": {
+                  "value": 3.5214886562329184e-16,
+                  "units": "406"
+                }
+              }
+            },
+            "overflow": {
+              "buckets": {
+                "overflow": {
+                  "value": 0.000002448437247999473,
+                  "units": "2822855955899"
+                }
+              }
+            },
+            "residue": {
+              "buckets": {
+                "recoveredRounding": {
+                  "value": 5.117434254131581e-17,
+                  "units": "59"
+                }
+              }
+            },
+            "cluePrune": {
+              "buckets": {
+                "clueIncompatible": {
+                  "value": 0.16453143580583995,
+                  "units": "189691830524393844"
+                }
+              }
+            }
+          }
+        },
+        "projection": {
+          "buckets": {
+            "clueIncompatible": {
+              "value": 0.08704823949943097,
+              "units": "100359787257061119"
+            },
+            "source": {
+              "value": 0.2515772268680228,
+              "units": "290048794925498932"
+            },
+            "projected": {
+              "value": 0.16452898736859184,
+              "units": "189689007668437813"
+            }
+          },
+          "operations": {
+            "results": {
+              "buckets": {
+                "clueIncompatible": {
+                  "value": 0.08704823949943097,
+                  "units": "100359787257061119"
+                },
+                "source": {
+                  "value": 0.2515772268680228,
+                  "units": "290048794925498932"
+                },
+                "projected": {
+                  "value": 0.16452898736859184,
+                  "units": "189689007668437813"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "diagnostics": {
+    "engine": {
+      "totalIterations": 344,
+      "roundingErrorEvents": 1,
+      "levelsProcessed": 3,
+      "levelsFullyResolved": 3,
+      "fullyResolved": true,
+      "resultsSize": 32,
+      "queueSize": 0,
+      "exitReason": "empty"
+    },
+    "search": {
+      "graphCount": 3,
+      "seededLevelCount": 3,
+      "pendingEntryCount": 0,
+      "largestPendingMass": 0,
+      "lastExpandedMass": 1.73253e-7,
+      "activeResidueCount": 857,
+      "activeResidueMass": 0,
+      "canImprove": false,
+      "flexStateIdentityMode": "reduced",
+      "flexSolidNodeCount": 262,
+      "flexPlexNodeCount": 0,
+      "flexSingletonGroupCount": 971,
+      "flexChoiceGroupCount": 0,
+      "flexGroupedAlternativeCount": 971,
+      "flexExpandedSolidNodeCount": 344,
+      "flexExpandedPlexNodeCount": 0,
+      "flexProjectionLoss": 0,
+      "flexProjectionClueIncompatible": 0.087048239499
     }
   },
   "clue": {

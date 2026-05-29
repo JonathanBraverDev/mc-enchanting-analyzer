@@ -10,6 +10,7 @@ This guide is the source of truth for contributing code, preparing release branc
 - [Release PR Style](#release-pr-style)
 - [Development Principles](#development-principles)
 - [Linting & Style](#linting--style)
+- [Public API Boundary](#public-api-boundary)
 - [Testing Guidelines](#testing-guidelines)
 - [Performance Profiling](#performance-profiling)
 - [Mass Conservation Invariants](#mass-conservation-invariants)
@@ -30,8 +31,8 @@ We follow a specialized workflow to keep production history clean while preservi
 2.  **Release preparation branches**: Prepare each version on a branch created from the current `main` snapshot.
     *   Keep the normal commit history on the branch. Do not squash it before opening the PR.
     *   Update `CHANGELOG.md`, `package.json`, and `package-lock.json` on this branch.
-    *   For major releases, update `ARCHITECTURE.md`.
-    *   For minor releases, update project docs when behavior, architecture, workflows, or user-facing capabilities changed.
+    *   For major and minor releases, update `docs/public-api.md` so supported API policy stays current.
+    *   For major releases, also update `ARCHITECTURE.md`.
     *   Lint, tests, CodeQL, and release-format checks must pass on the PR before merge.
     *   PR the release branch into `main` and merge it using **Squash and Merge**.
 3.  **Release archive (`release-history`)**: This branch records the full commit history that produced each release.
@@ -52,7 +53,13 @@ Release validation is split into separate checks so failures point at the right 
 - `Validate Changelog SemVer Policy`: changelog sections that imply major/minor/patch scope, including PR comments when the proposed version should be promoted.
 - `Validate Release Branch`: final release metadata commit shape, current archive state, branch base, linear unsquashed release history, and snapshot commit isolation.
 
-A non-required `CI Change Advisory` check also reviews CI-sensitive file changes. It should be green when no CI-sensitive files changed, warn when CI validation logic changed, and fail red when workflow triggers, branch/path filters, permissions, job conditions, runner targets, checkout targets, or status-check names changed. A red advisory is not a merge blocker by itself; it is a reviewer signal that the PR may alter whether policy checks run at all.
+Non-required advisory checks review generated or CI-sensitive changes:
+
+- `CI Change Advisory` runs from the base branch and comments on CI-sensitive file changes. It exits green and resolves any active advisory comment when no CI-sensitive behavior changed; it fails red when reviewers should inspect workflow behavior, release/advisory validator scripts, or package scripts reached from workflow-called commands.
+- `Snapshot Advisory` runs from the base branch and comments when generated snapshot files changed. It exits green and resolves any active advisory comment when no snapshot files changed. A red snapshot advisory means reviewers should inspect the generated output summary before merging.
+- Preview advisory jobs run from the PR branch with read-only permissions and write only to the job summary. They show branch-authored classifier output before that classifier exists on `main`; trusted base-branch advisory comments remain the source of truth. Preview jobs also exit green when their classifier finds no relevant advisory changes.
+
+A red advisory is not a merge blocker by itself. It is a reviewer signal that the PR changes generated output, CI behavior, or the checks that decide whether release policy ran.
 
 ### Required PR shape
 
@@ -62,10 +69,24 @@ A non-required `CI Change Advisory` check also reviews CI-sensitive file changes
 - Ensure `origin/release-history` already matches `origin/main` before merging the release PR.
 - Use a PR title exactly matching `Release: vX.Y.Z`.
 - Put the matching release notes from `CHANGELOG.md` at the start or end of the PR description. The `## vX.Y.Z` heading and date may be omitted from the PR body, but the release-note sections and bullets must match.
+- Major releases should have a human-readable name because each one redefines a major part of how the project works. Use the historical heading style directly after the release heading, for example `### The "Folded Frontier" Update`.
 
 ### Changelog section policy
 
 Release changelog entries should use concrete section headings so release intent is machine-checkable and readable.
+
+Major release entries must also include exactly one human-readable release name heading before the normal changelog sections:
+
+```markdown
+## v8.0.0 (YYYY-MM-DD)
+
+### The "Folded Frontier" Update
+
+### Breaking
+- ...
+```
+
+The name heading is release metadata, not a SemVer category. It follows the historical major-release style used by entries such as `The "Divide & Conquer" Update`, `The "Precision Architecture" Update`, and `The "Modernization Update"`.
 
 Write release notes reader-first:
 
@@ -91,6 +112,7 @@ Write release notes reader-first:
 SemVer section rules:
 
 - **Major releases** must include `### Breaking`.
+- **Major releases** must include a name heading like `### The "Folded Frontier" Update`.
 - **Minor releases** must include at least one of `### Added`, `### Improved`, `### Changed`, `### Developer Experience`, or `### Deprecated`.
 - **Patch releases** must include at least one of `### Fixed`, `### Security`, `### Performance`, `### Developer Experience`, `### Documentation`, or `### Cleanup`.
 - Patch releases should not use `### Added`, `### Improved`, `### Changed`, `### Deprecated`, `### Removed`, or `### Breaking`.
@@ -123,6 +145,8 @@ That commit must update:
 
 It may also update known release documentation such as `CONTRIBUTING.md`, `README.md`, `ARCHITECTURE.md`, or `MASS_HANDLING.md`. Keep functional source, test, and snapshot changes in earlier commits so the release commit remains easy to audit.
 
+Minor and major release metadata commits must update `docs/public-api.md`. Major release metadata commits must also update `ARCHITECTURE.md`. This keeps the documented supported API boundary in lockstep with releases that may add, change, remove, or reclassify supported behavior.
+
 ## Development Principles
 
 1.  **Strict Mass Conservation**: Every probability mass must be accounted for. Use `ProbabilityMassAccountant` for all search logic.
@@ -136,8 +160,22 @@ It may also update known release documentation such as `CONTRIBUTING.md`, `READM
 We use TypeScript for type safety and a custom script to enforce import consistency.
 - **Type Checking**: `npm run lint`
 - **Import Optimization**: `npm run lint:imports`
+- **Public API/CLI Tests**: `npm run test:public`
 
-Ensure both pass before submitting changes.
+Ensure all of these pass before submitting changes.
+
+## Public API Boundary
+
+The package root (`src/lib/index.ts`) is the only supported library API. The supported surface is centered on `EnchantingAnalyzer` and the request/result types it uses. Internal aliases such as `#engine`, `#types`, `#services`, and `#lib/search/**` are repository implementation details even when they are used by the UI workers.
+
+Public API tests enforce this boundary:
+
+- `npm run test:public` must pass locally and in CI;
+- when intentionally changing the package root API, update `docs/public-api.md` and the public facade tests;
+- `npm run build` emits package declarations with TypeScript, but the generated files are not the policy source of truth;
+- do not export implementation selectors, checkpoint snapshots, full registry runtime tables, or direct search classes from the package root just because they exist internally.
+
+Use `docs/public-api.md` for the human policy. If that policy and the facade tests disagree, fix the code or docs before opening the release PR.
 
 ## Testing Guidelines
 
@@ -156,16 +194,28 @@ Snapshot fixture updates must be isolated in their own commits. A commit that to
 
 ## Performance Profiling
 
-Performance is critical for the "Standalone HTML" version. We use dedicated profiling scripts to track search time, post-processing time, and cache behavior.
+Performance is critical for the "Standalone HTML" version. We use dedicated benchmark and profiling scripts to track V8/Flex grouped-tree search, snapshot projection, and product-engine timing.
 
 ### Running the Benchmarks
 ```bash
-npm run benchmark -- --version 1.21.11
+npm run benchmark
 ```
 
-For CPU profiles, use:
+The default benchmark runs `scripts/probe_flex_grouping.ts`, which measures the V8 grouped runtime on a representative modern book target-mass case and reports grouped graph, Solid/Plex, shape-cache, projection, and residue counters.
+
+For CPU profiles of the grouped runtime benchmark, use:
 ```bash
-npm run benchmark:cpu -- --version 1.21.11
+npm run benchmark:cpu
+```
+
+For product-engine timing through the public engine path, use:
+```bash
+npm run benchmark:engine -- --version 1.21.11
+```
+
+For product-engine CPU profiles, use:
+```bash
+npm run benchmark:engine:cpu -- --version 1.21.11
 ```
 
 For the repeatable book clue/no-clue perf cases, use:
@@ -173,12 +223,12 @@ For the repeatable book clue/no-clue perf cases, use:
 npx tsx scripts/profile_perf_cases.ts
 ```
 
-These scripts report result counts, active search time, post-processing time, and total engine time. `scripts/benchmark_engine.ts` remains available for simple cold/warm cache smoke checks.
+These scripts report tree shape, throughput, result counts, active search time, post-processing time, and total engine time.
 
 ### Optimizing the Search
-- Keep Minecraft rule lookup in the registry/core layer, structural graph work in `SearchGraph`, and weighted probability movement in `SearchRun`.
+- Keep Minecraft rule lookup in the registry/core layer, structural graph work in `GroupedFlexGraph`, and weighted probability movement in `FlexCoordinator`.
 - Avoid object allocation in hot loops such as graph expansion, weighted fanout, frontier push/pop, and summary aggregation.
-- Prefer dense graph node IDs, packed combos, typed arrays, precomputed `SearchPoolEntry` metadata, and reusable expansion blueprints over repeated map/key reconstruction.
+- Prefer dense graph node IDs, packed combos, typed arrays, precomputed `SearchPoolEntry` metadata, and reusable grouped expansion shapes over repeated map/key reconstruction.
 - Measure wall-clock runtime, not only iteration counts. Suffix merging is the current example where fewer frontier pops can still be slower because canonicalization overhead dominates.
 
 ## Mass Conservation Invariants
@@ -214,14 +264,16 @@ The engine maintains a system of "buckets" to track every atom of probability:
 - If the release archive readiness check fails, verify that `origin/release-history` has the same tree as `origin/main` before merging.
 - If a workflow change is required for a release, push with credentials that have GitHub `workflow` permission; otherwise GitHub rejects `.github/workflows/*` updates.
 - If `CI Change Advisory` is red, inspect workflow trigger, branch/path filter, permission, job condition, runner, checkout target, and status-check-name changes before treating the release as safe.
+- If `Snapshot Advisory` or `Snapshot Advisory Preview` is red, inspect comparable result changes, fixture additions/removals, instrumentation summary, invariant warnings, and unknown paths before treating generated snapshot changes as intentional.
 
 ## References / Related Docs
 
 - `CHANGELOG.md`
 - `.github/workflows/release-check.yml`
 - `.github/workflows/release.yml`
-- `docs/v7-shared-search-engine.md`
-- `docs/search-function-inventory.md` — archived rename research snapshot, not canonical current behavior.
+- `docs/README.md`
+- `docs/public-api.md`
+- `docs/search-engine.md`
 
 ## Owner / Maintainer
 
@@ -229,4 +281,4 @@ JonathanBraverDev maintains this project.
 
 ## Last Updated
 
-2026-05-18
+2026-05-29

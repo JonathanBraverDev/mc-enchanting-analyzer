@@ -1,0 +1,187 @@
+{
+  "ranks": {
+    "Unbreaking III": 0.680111500253,
+    "Protection III": 0.308174964675,
+    "Protection IV": 0.226761712647,
+    "Fire Protection III": 0.154087482338,
+    "Fire Protection IV": 0.113380856324,
+    "Blast Protection III": 0.002179620753,
+    "Blast Protection IV": 0.101240597886,
+    "Projectile Protection IV": 0.000865726415,
+    "Thorns I": 0.018384462787,
+    "Thorns II": 0.310813831478
+  },
+  "any": {
+    "Unbreaking": 0.680111500253,
+    "Protection": 0.534936677323,
+    "Fire Protection": 0.267468338661,
+    "Blast Protection": 0.103420218639,
+    "Projectile Protection": 0.000865726415,
+    "Thorns": 0.329198294264
+  },
+  "count": {
+    "1": 0.319825777778,
+    "2": 0.444347688889,
+    "3": 0.235826533333
+  },
+  "combos": {
+    "Protection III+Unbreaking III": 0.122457873016,
+    "Protection IV+Unbreaking III": 0.092870114485,
+    "Protection III": 0.089273374741,
+    "Unbreaking III": 0.06958247527,
+    "Thorns II+Protection IV+Unbreaking III": 0.066283774292,
+    "Thorns II+Protection III+Unbreaking III": 0.066026807843,
+    "Fire Protection III+Unbreaking III": 0.061228936508,
+    "Protection IV": 0.049891575799,
+    "Fire Protection IV+Unbreaking III": 0.046435057243,
+    "Fire Protection III": 0.044636687371,
+    "Blast Protection IV+Unbreaking III": 0.040759049705,
+    "Thorns II+Fire Protection IV+Unbreaking III": 0.033141887146,
+    "Thorns II+Fire Protection III+Unbreaking III": 0.033013403922,
+    "Blast Protection IV": 0.026467536232,
+    "Thorns II+Blast Protection IV+Unbreaking III": 0.025247562353,
+    "Fire Protection IV": 0.0249457879,
+    "Thorns II+Protection III": 0.020792181057,
+    "Thorns II+Protection IV": 0.017716248071,
+    "Thorns II": 0.01271799816,
+    "Thorns II+Fire Protection III": 0.010396090528,
+    "Thorns II+Unbreaking III": 0.009198890256,
+    "Thorns II+Fire Protection IV": 0.008858124035,
+    "Thorns II+Blast Protection IV": 0.007420863815,
+    "Thorns I+Protection III+Unbreaking III": 0.007036693286,
+    "Thorns I+Fire Protection III+Unbreaking III": 0.003518346643,
+    "Thorns I+Protection III": 0.002588034732,
+    "Thorns I+Fire Protection III": 0.001294017366,
+    "Thorns I": 0.001198496894,
+    "Thorns I+Blast Protection IV+Unbreaking III": 0.000985176471,
+    "Blast Protection III+Unbreaking III": 0.000821431393,
+    "Blast Protection III": 0.000778829538,
+    "Thorns I+Unbreaking III": 0.000611178381,
+    "Thorns I+Blast Protection III+Unbreaking III": 0.000422162187,
+    "Thorns I+Blast Protection IV": 0.00036040931,
+    "Projectile Protection IV": 0.000333015873,
+    "Projectile Protection IV+Unbreaking III": 0.000319960663,
+    "Thorns I+Blast Protection III": 0.000157197636,
+    "Thorns I+Projectile Protection IV+Unbreaking III": 0.000150719192,
+    "Thorns I+Projectile Protection IV": 0.000062030688
+  },
+  "shownClueDistribution": {
+    "Unbreaking III": 0.335542565539,
+    "Protection III": 0.18654691952,
+    "Protection IV": 0.127279348508,
+    "Fire Protection III": 0.09327345976,
+    "Fire Protection IV": 0.063639674254,
+    "Blast Protection III": 0.001408864781,
+    "Blast Protection IV": 0.059481943922,
+    "Projectile Protection IV": 0.000574251279,
+    "Thorns I": 0.007772630211,
+    "Thorns II": 0.124480342226
+  },
+  "accuracy": 1,
+  "accounting": {
+    "resolved": 0.9999999999999999,
+    "clueIncompatible": 0,
+    "pending": 0,
+    "sieved": 0,
+    "overflow": 0,
+    "capped": 0,
+    "rounding": 7.37257477290143e-17,
+    "recoveredRounding": 0,
+    "recoveredSieved": 0,
+    "units": {
+      "resolved": "1152921504606846891",
+      "clueIncompatible": "0",
+      "pending": "0",
+      "sieved": "0",
+      "overflow": "0",
+      "capped": "0",
+      "rounding": "85",
+      "recoveredRounding": "0",
+      "recoveredSieved": "0"
+    },
+    "details": {
+      "stages": {
+        "search": {
+          "buckets": {
+            "resolved": {
+              "value": 1,
+              "units": "1152921504606846918"
+            },
+            "rounding": {
+              "value": 5.0306980803327406e-17,
+              "units": "58"
+            }
+          },
+          "operations": {
+            "seed": {
+              "buckets": {
+                "pending": {
+                  "value": 1,
+                  "units": "1152921504606846976"
+                }
+              }
+            },
+            "frontier": {
+              "buckets": {
+                "pending": {
+                  "value": -1,
+                  "units": "-1152921504606846976"
+                }
+              }
+            },
+            "resolve": {
+              "buckets": {
+                "resolved": {
+                  "value": 1,
+                  "units": "1152921504606846918"
+                }
+              }
+            },
+            "edgeSplit": {
+              "buckets": {
+                "rounding": {
+                  "value": 5.0306980803327406e-17,
+                  "units": "58"
+                }
+              }
+            }
+          }
+        },
+        "projection": {
+          "buckets": {
+            "source": {
+              "value": 1,
+              "units": "1152921504606846918"
+            },
+            "projected": {
+              "value": 0.9999999999999999,
+              "units": "1152921504606846891"
+            },
+            "loss": {
+              "value": 2.3418766925686896e-17,
+              "units": "27"
+            }
+          },
+          "operations": {
+            "results": {
+              "buckets": {
+                "source": {
+                  "value": 1,
+                  "units": "1152921504606846918"
+                },
+                "projected": {
+                  "value": 0.9999999999999999,
+                  "units": "1152921504606846891"
+                },
+                "loss": {
+                  "value": 2.3418766925686896e-17,
+                  "units": "27"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

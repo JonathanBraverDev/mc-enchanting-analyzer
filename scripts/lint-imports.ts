@@ -42,6 +42,14 @@ console.log('--- Checking for direct relative imports that should use "#" aliase
 
 const files = getAllFiles(ROOT);
 
+function isPublicApiDeclarationImport(line: string, relativePath: string, importPath: string, rootRelativeImportPath: string): boolean {
+    const normalizedRelativePath = relativePath.replace(/\\/g, '/');
+    return normalizedRelativePath.startsWith('src/lib/api/')
+        && line.includes('import type')
+        && importPath.startsWith('../types/')
+        && rootRelativeImportPath.startsWith('src/lib/types/');
+}
+
 files.forEach(file => {
     const content = fs.readFileSync(file, 'utf8');
     const lines = content.split('\n');
@@ -54,6 +62,7 @@ files.forEach(file => {
             const importPath = match[1];
             const absoluteImportPath = path.resolve(path.dirname(file), importPath);
             const rootRelativeImportPath = path.relative(ROOT, absoluteImportPath).replace(/\\/g, '/');
+            if (isPublicApiDeclarationImport(line, relativePath, importPath, rootRelativeImportPath)) return;
 
             // Check if this path matches any of our aliases
             for (const [alias, aliasPath] of Object.entries(ALIASES)) {

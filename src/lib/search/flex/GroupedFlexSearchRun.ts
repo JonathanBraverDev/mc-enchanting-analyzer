@@ -5,50 +5,47 @@ import { RegistryKernel } from '#lib/search/registry/RegistryKernel.js';
 import { PRECISION } from '#utils/index.js';
 import type {
     FlexCheckpointRequest,
-    FlexPendingEntry,
-    FlexProjectedPendingEntry,
-    FlexProjectedResults,
+    FlexNodeId,
+    FlexRunState,
     FlexRunSnapshot,
+    FlexRunMemoryStats,
     FlexStateIdentityMode
 } from '#lib/search/flex/FlexTypes.js';
 import { FlexCoordinator } from '#lib/search/flex/FlexCoordinator.js';
 import { FlexProgramStore } from '#lib/search/flex/FlexProgramStore.js';
 import { FlexProjector } from '#lib/search/flex/FlexProjector.js';
 import { GroupedFlexGraph } from '#lib/search/flex/GroupedFlexGraph.js';
+import { FlexSnapshotBuilder, type FlexNativeCheckpoint } from '#lib/search/flex/FlexSnapshotBuilder.js';
 
 interface GroupedFlexGraphRecord {
     readonly id: number;
     readonly graph: GroupedFlexGraph;
 }
 
-export interface GroupedFlexProjectedCheckpoint extends FlexProjectedResults {
-    readonly pendingEntries: readonly FlexProjectedPendingEntry[];
-    readonly projectedPendingMass: bigint;
-    readonly projectedPendingSourceMass: bigint;
-    readonly pendingProjectionLoss: bigint;
-    readonly pendingClueIncompatible: bigint;
-}
-
 export interface GroupedFlexSearchRunOptions {
     readonly distributionService?: ModifiedLevelDistributionService | undefined;
     readonly targetClueId?: number | undefined;
+    /**
+     * Reduced mode merges by structural state; program mode conservatively keeps
+     * distinct program histories separate for registries that fail the reduced-key invariant.
+     */
     readonly stateIdentityMode?: FlexStateIdentityMode | undefined;
 }
 
 /**
- * Flex runner backed by grouped registry graphs.
+ * Current Flex runner backed by grouped registry graphs.
  *
- * This is the first PlexNode-capable Flex runner. It remains selected only by
- * explicit internal `searchBackend: 'flex'` requests while parity is being proven.
+ * The `flex` name is retained for internal implementation modules and node types.
  */
 export class GroupedFlexSearchRun {
-    public readonly programs = new FlexProgramStore();
+    public readonly programs: FlexProgramStore;
 
     private readonly distributionService: ModifiedLevelDistributionService;
     private readonly graphsBySignature = new Map<SearchPoolSignature, GroupedFlexGraphRecord>();
     private readonly graphs: GroupedFlexGraph[] = [];
     private readonly coordinator = new FlexCoordinator(this.graphs);
     private readonly projector: FlexProjector;
+    private readonly snapshotBuilder: FlexSnapshotBuilder;
     private readonly targetClueId: number | undefined;
     private readonly stateIdentityMode: FlexStateIdentityMode;
     private seeded = false;
@@ -60,10 +57,19 @@ export class GroupedFlexSearchRun {
         this.distributionService = options.distributionService ?? new ModifiedLevelDistributionService();
         this.targetClueId = options.targetClueId;
         this.stateIdentityMode = options.stateIdentityMode ?? 'reduced';
+        this.programs = new FlexProgramStore({
+            canonicalizeProgramOrder: this.stateIdentityMode === 'program'
+        });
         this.projector = new FlexProjector(this.programs, this.kernel.registry.enchantToIndex, {
             applyBookRemoval: this.kernel.item === 'book',
             targetClueId: this.targetClueId
         });
+        this.snapshotBuilder = new FlexSnapshotBuilder(
+            this.coordinator,
+            this.projector,
+            this.kernel.registry.indexToEnchant,
+            (graphId, nodeId) => this.isTargetClueReachableById(graphId, nodeId)
+        );
     }
 
     public seedXp(xp: number): void {
@@ -101,28 +107,40 @@ export class GroupedFlexSearchRun {
         return this.coordinator.searchToCheckpoint(request);
     }
 
+    public searchToCheckpointState(request: FlexCheckpointRequest = {}): FlexRunState {
+        return this.coordinator.searchToCheckpointState(request);
+    }
+
     public searchToCheckpointAsync(request: FlexCheckpointRequest = {}): Promise<FlexRunSnapshot> {
         return this.coordinator.searchToCheckpointAsync(request);
+    }
+
+    public searchToCheckpointStateAsync(request: FlexCheckpointRequest = {}): Promise<FlexRunState> {
+        return this.coordinator.searchToCheckpointStateAsync(request);
     }
 
     public snapshot(): FlexRunSnapshot {
         return this.coordinator.snapshot();
     }
 
-    public projectSnapshot(snapshot: FlexRunSnapshot = this.snapshot()): GroupedFlexProjectedCheckpoint {
-        const projectedResults = this.projector.projectResults(snapshot.results);
-        const projectedPending = this.projector.projectPendingWithDiagnostics(
-            this.withPendingClueReachability(snapshot.pendingEntries)
-        );
+    public state(): FlexRunState {
+        return this.coordinator.state();
+    }
 
-        return Object.freeze({
-            ...projectedResults,
-            pendingEntries: projectedPending.pendingEntries,
-            projectedPendingMass: projectedPending.projectedMass,
-            projectedPendingSourceMass: projectedPending.sourceMass,
-            pendingProjectionLoss: projectedPending.projectionLoss,
-            pendingClueIncompatible: projectedPending.clueIncompatible
-        });
+    public getMemoryStats(): FlexRunMemoryStats {
+        return {
+            coordinator: this.coordinator.getMemoryStats(),
+            programs: this.programs.getMemoryStats(),
+            graphs: this.graphs.map(graph => graph.getMemoryStats())
+        };
+    }
+
+    public scanActiveResidueStatsForDiagnostics(): { readonly count: number; readonly mass: bigint } {
+        return this.coordinator.scanActiveResidueStatsForDiagnostics();
+    }
+
+    public buildEngineSnapshot(state: FlexRunState = this.coordinator.state()): FlexNativeCheckpoint {
+        return this.snapshotBuilder.build(state);
     }
 
     public getGraph(graphId: number): GroupedFlexGraph {
@@ -147,20 +165,11 @@ export class GroupedFlexSearchRun {
         return record;
     }
 
-    private withPendingClueReachability(entries: readonly FlexPendingEntry[]): readonly FlexPendingEntry[] {
-        if (this.targetClueId === undefined) return entries;
-
-        return Object.freeze(entries.map(entry => Object.freeze({
-            ...entry,
-            targetClueReachable: this.isTargetClueReachable(entry)
-        })));
-    }
-
-    private isTargetClueReachable(entry: FlexPendingEntry): boolean {
-        if (this.targetClueId === undefined) return false;
+    private isTargetClueReachableById(graphId: number, nodeId: number): boolean | undefined {
+        if (this.targetClueId === undefined) return undefined;
         const targetEnchantId = this.targetClueId >> PACKING_CONSTANTS.ENCHANT_SHIFT;
         const targetBit = BIGINT_CONSTANTS.ID_BIT_LOOKUP[targetEnchantId];
         if (targetBit === undefined) return false;
-        return (this.getGraph(entry.graphId).getNodeExclusionMask(entry.nodeId) & targetBit) === 0n;
+        return (this.getGraph(graphId).getNodeExclusionMask(nodeId as FlexNodeId) & targetBit) === 0n;
     }
 }

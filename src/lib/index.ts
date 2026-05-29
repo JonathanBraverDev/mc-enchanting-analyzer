@@ -1,10 +1,46 @@
-export { EnchantEngine } from './engine/index.js';
-export { EngineFactory } from './engine/factory.js';
-export { RegistryFactory } from './core/factory.js';
-export * from './core/registry.js';
-export { DATA } from './data/index.js';
-export * from './types/index.js';
-export * from './core/config.js';
-export * from './utils/index.js';
-export { CacheManager } from './engine/cache/CacheManager.js';
-export * from './search/index.js';
+/**
+ * Supported package entry point for application and tool callers.
+ *
+ * @packageDocumentation
+ */
+
+export { EnchantingAnalyzer } from './api/EnchantingAnalyzer.js';
+export type {
+    AnalyzerCacheCounter,
+    AnalyzerCacheMetrics,
+    AnalyzerOptions,
+    AnalyzerProgressUpdate,
+    AnalyzerRawResult,
+    AnalyzerRegistryInfo,
+    AnalyzerRequest,
+    AnalyzerResult,
+    AnalyzerSearchControls,
+    AnalyzerSearchMode,
+    AnalyzerSearchPreset,
+    AnalyzerSortMode
+} from './api/EnchantingAnalyzer.js';
+
+export type {
+    ConflictRule,
+    ConflictRuleSelector,
+    EnchantabilityTable,
+    EnchantableItemRule,
+    EnchantableItemRuleSelector,
+    Enchantment,
+    EnchantmentGroupRule,
+    EnchantmentGroupRuleSelector,
+    EnchantmentLevels,
+    MaterialRule,
+    MaterialRuleSelector,
+    RegistryMutation,
+    VersionMechanics
+} from './types/domain.js';
+export type {
+    MassAccountingBreakdown,
+    MassAccountingDetailBucket,
+    MassAccountingDetails,
+    MassAccountingOperationDetails,
+    MassAccountingStageDetails,
+    MassBucketName,
+    MassBucketUnits
+} from './types/mass.js';

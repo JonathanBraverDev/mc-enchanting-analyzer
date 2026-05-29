@@ -16,7 +16,6 @@ export const ENGINE_LIMITS = {
     /** Cooperative async search slice size. Yield points are scheduler boundaries, not result checkpoints. */
     ASYNC_SEARCH_CHUNK_ITERATIONS: 2048,
     DEFAULT_THRESHOLD: 0.0001,
-    DEFAULT_BUFFER_SIZE: 1024,
     MAX_COUNT_STATS: 8
 };
 
@@ -60,6 +59,9 @@ export const BIGINT_CONSTANTS = {
  * Shared memory pool and heap limits.
  */
 export const POOL_CONSTANTS = {
+    /** Default scratch buffer size for modified-level distribution calculations. */
+    DEFAULT_DISTRIBUTION_BUFFER_SIZE: 1024,
+
     /** Maximum depth for nested distribution calls. */
     DIST_POOL_DEPTH: 8,
 
@@ -114,18 +116,4 @@ export const SEARCH_CONSTANTS = {
     FALLBACK_LIMIT_HIGH_RES: 25000,
     FALLBACK_LIMIT_LOW_RES: 10000,
     MAX_RESULTS_SUMMARY_OPTIMIZED_THRESHOLD: 250
-};
-
-/**
- * UI and display constants.
- */
-export const UI_CONSTANTS = {
-    /** How often to fire progress callbacks during search (every N levels). */
-    PROGRESS_UPDATE_FREQUENCY: 3,
-
-    /** Decimal places for percentage formatting. */
-    PERCENT_DECIMAL_PLACES: 1,
-
-    /** Default max entries for generic LRU caches. */
-    DEFAULT_LRU_MAX_ENTRIES: 500
 };

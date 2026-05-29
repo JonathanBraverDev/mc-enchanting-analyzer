@@ -29,6 +29,8 @@ interface LevelInterval {
 
 /**
  * Factory for building a fully initialized Registry state.
+ *
+ * @public
  */
 export class RegistryFactory {
     public static build(version: string): VanillaRegistryState {

@@ -1,0 +1,250 @@
+{
+  "ranks": {
+    "Sharpness III": 0.104415311977,
+    "Sharpness IV": 0.012869047619,
+    "Smite III": 0.005975914415,
+    "Smite IV": 0.052666265383,
+    "Bane of Arthropods III": 0.005975914415,
+    "Bane of Arthropods IV": 0.052666265383,
+    "Knockback II": 0.058642179798,
+    "Fire Aspect I": 0.005233062395,
+    "Fire Aspect II": 0.018223809524,
+    "Looting II": 0.017871157634,
+    "Looting III": 0.005585714286,
+    "Unbreaking III": 0.058642179798,
+    "Efficiency III": 0.045915311977,
+    "Efficiency IV": 0.071369047619,
+    "Fortune II": 0.017871157634,
+    "Fortune III": 0.005585714286,
+    "Silk Touch I": 0.01172843596,
+    "Power III": 0.045915311977,
+    "Power IV": 0.071369047619,
+    "Punch I": 0.013921157634,
+    "Punch II": 0.009535714286,
+    "Flame I": 0.023456871919,
+    "Infinity I": 0.01172843596,
+    "Protection III": 0.104415311977,
+    "Protection IV": 0.012869047619,
+    "Fire Protection III": 0.052207655989,
+    "Fire Protection IV": 0.00643452381,
+    "Blast Protection III": 0.002390365766,
+    "Blast Protection IV": 0.021066506153,
+    "Projectile Protection IV": 0.001728723404,
+    "Respiration II": 0.005233062395,
+    "Respiration III": 0.018223809524,
+    "Aqua Affinity I": 0.023456871919,
+    "Thorns I": 0.002616531198,
+    "Thorns II": 0.009111904762,
+    "Feather Falling IV": 0.013082655989
+  },
+  "any": {
+    "Sharpness": 0.117284359596,
+    "Smite": 0.058642179798,
+    "Bane of Arthropods": 0.058642179798,
+    "Knockback": 0.058642179798,
+    "Fire Aspect": 0.023456871919,
+    "Looting": 0.023456871919,
+    "Unbreaking": 0.058642179798,
+    "Efficiency": 0.117284359596,
+    "Fortune": 0.023456871919,
+    "Silk Touch": 0.01172843596,
+    "Power": 0.117284359596,
+    "Punch": 0.023456871919,
+    "Flame": 0.023456871919,
+    "Infinity": 0.01172843596,
+    "Protection": 0.117284359596,
+    "Fire Protection": 0.058642179798,
+    "Blast Protection": 0.023456871919,
+    "Projectile Protection": 0.001728723404,
+    "Respiration": 0.023456871919,
+    "Aqua Affinity": 0.023456871919,
+    "Thorns": 0.01172843596,
+    "Feather Falling": 0.013082655989
+  },
+  "count": {
+    "1": 1
+  },
+  "combos": {
+    "Protection III": 0.104415311977,
+    "Sharpness III": 0.104415311977,
+    "Efficiency IV": 0.071369047619,
+    "Power IV": 0.071369047619,
+    "Knockback II": 0.058642179798,
+    "Unbreaking III": 0.058642179798,
+    "Bane of Arthropods IV": 0.052666265383,
+    "Smite IV": 0.052666265383,
+    "Fire Protection III": 0.052207655989,
+    "Efficiency III": 0.045915311977,
+    "Power III": 0.045915311977,
+    "Aqua Affinity I": 0.023456871919,
+    "Flame I": 0.023456871919,
+    "Blast Protection IV": 0.021066506153,
+    "Fire Aspect II": 0.018223809524,
+    "Respiration III": 0.018223809524,
+    "Fortune II": 0.017871157634,
+    "Looting II": 0.017871157634,
+    "Punch I": 0.013921157634,
+    "Feather Falling IV": 0.013082655989,
+    "Protection IV": 0.012869047619,
+    "Sharpness IV": 0.012869047619,
+    "Infinity I": 0.01172843596,
+    "Silk Touch I": 0.01172843596,
+    "Punch II": 0.009535714286,
+    "Thorns II": 0.009111904762,
+    "Fire Protection IV": 0.00643452381,
+    "Bane of Arthropods III": 0.005975914415,
+    "Smite III": 0.005975914415,
+    "Fortune III": 0.005585714286,
+    "Looting III": 0.005585714286,
+    "Fire Aspect I": 0.005233062395,
+    "Respiration II": 0.005233062395,
+    "Thorns I": 0.002616531198,
+    "Blast Protection III": 0.002390365766,
+    "Projectile Protection IV": 0.001728723404
+  },
+  "shownClueDistribution": {
+    "Sharpness III": 0.104415311977,
+    "Sharpness IV": 0.012869047619,
+    "Smite III": 0.005975914415,
+    "Smite IV": 0.052666265383,
+    "Bane of Arthropods III": 0.005975914415,
+    "Bane of Arthropods IV": 0.052666265383,
+    "Knockback II": 0.058642179798,
+    "Fire Aspect I": 0.005233062395,
+    "Fire Aspect II": 0.018223809524,
+    "Looting II": 0.017871157634,
+    "Looting III": 0.005585714286,
+    "Unbreaking III": 0.058642179798,
+    "Efficiency III": 0.045915311977,
+    "Efficiency IV": 0.071369047619,
+    "Fortune II": 0.017871157634,
+    "Fortune III": 0.005585714286,
+    "Silk Touch I": 0.01172843596,
+    "Power III": 0.045915311977,
+    "Power IV": 0.071369047619,
+    "Punch I": 0.013921157634,
+    "Punch II": 0.009535714286,
+    "Flame I": 0.023456871919,
+    "Infinity I": 0.01172843596,
+    "Protection III": 0.104415311977,
+    "Protection IV": 0.012869047619,
+    "Fire Protection III": 0.052207655989,
+    "Fire Protection IV": 0.00643452381,
+    "Blast Protection III": 0.002390365766,
+    "Blast Protection IV": 0.021066506153,
+    "Projectile Protection IV": 0.001728723404,
+    "Respiration II": 0.005233062395,
+    "Respiration III": 0.018223809524,
+    "Aqua Affinity I": 0.023456871919,
+    "Thorns I": 0.002616531198,
+    "Thorns II": 0.009111904762,
+    "Feather Falling IV": 0.013082655989
+  },
+  "accuracy": 1,
+  "accounting": {
+    "resolved": 0.9999999999999999,
+    "clueIncompatible": 0,
+    "pending": 0,
+    "sieved": 0,
+    "overflow": 0,
+    "capped": 0,
+    "rounding": 8.500145032286355e-17,
+    "recoveredRounding": 0,
+    "recoveredSieved": 0,
+    "units": {
+      "resolved": "1152921504606846878",
+      "clueIncompatible": "0",
+      "pending": "0",
+      "sieved": "0",
+      "overflow": "0",
+      "capped": "0",
+      "rounding": "98",
+      "recoveredRounding": "0",
+      "recoveredSieved": "0"
+    },
+    "details": {
+      "stages": {
+        "search": {
+          "buckets": {
+            "resolved": {
+              "value": 0.9999999999999999,
+              "units": "1152921504606846891"
+            },
+            "rounding": {
+              "value": 7.37257477290143e-17,
+              "units": "85"
+            }
+          },
+          "operations": {
+            "seed": {
+              "buckets": {
+                "pending": {
+                  "value": 1,
+                  "units": "1152921504606846976"
+                }
+              }
+            },
+            "frontier": {
+              "buckets": {
+                "pending": {
+                  "value": -1,
+                  "units": "-1152921504606846976"
+                }
+              }
+            },
+            "resolve": {
+              "buckets": {
+                "resolved": {
+                  "value": 0.9999999999999999,
+                  "units": "1152921504606846891"
+                }
+              }
+            },
+            "edgeSplit": {
+              "buckets": {
+                "rounding": {
+                  "value": 7.37257477290143e-17,
+                  "units": "85"
+                }
+              }
+            }
+          }
+        },
+        "projection": {
+          "buckets": {
+            "source": {
+              "value": 0.9999999999999999,
+              "units": "1152921504606846891"
+            },
+            "projected": {
+              "value": 0.9999999999999999,
+              "units": "1152921504606846878"
+            },
+            "loss": {
+              "value": 1.1275702593849246e-17,
+              "units": "13"
+            }
+          },
+          "operations": {
+            "results": {
+              "buckets": {
+                "source": {
+                  "value": 0.9999999999999999,
+                  "units": "1152921504606846891"
+                },
+                "projected": {
+                  "value": 0.9999999999999999,
+                  "units": "1152921504606846878"
+                },
+                "loss": {
+                  "value": 1.1275702593849246e-17,
+                  "units": "13"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

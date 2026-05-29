@@ -142,12 +142,14 @@ function collectWorkflowJobs(content) {
   const jobsSection = collectTopLevelSection(content, 'jobs');
   if (!jobsSection) return [];
 
+  const lines = jobsSection.split(/\r?\n/);
   const jobs = [];
   let current = null;
-  for (const line of jobsSection.split(/\r?\n/)) {
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
     const jobMatch = /^  (?<id>[A-Za-z0-9_-]+):\s*$/.exec(line);
     if (jobMatch) {
-      current = { id: jobMatch.groups.id, name: '', runsOn: '', condition: '' };
+      current = { id: jobMatch.groups.id, name: '', runsOn: '', condition: '', permissions: '' };
       jobs.push(current);
       continue;
     }
@@ -156,9 +158,26 @@ function collectWorkflowJobs(content) {
     const nameMatch = /^    name:\s*(?<value>.+?)\s*$/.exec(line);
     const runsOnMatch = /^    runs-on:\s*(?<value>.+?)\s*$/.exec(line);
     const conditionMatch = /^    if:\s*(?<value>.+?)\s*$/.exec(line);
+    const permissionsMatch = /^    permissions:\s*(?<value>.*?)\s*$/.exec(line);
     if (nameMatch) current.name = nameMatch.groups.value;
     if (runsOnMatch) current.runsOn = runsOnMatch.groups.value;
     if (conditionMatch) current.condition = conditionMatch.groups.value;
+    if (permissionsMatch) {
+      const section = [line];
+      for (let cursor = index + 1; cursor < lines.length; cursor += 1) {
+        const nextLine = lines[cursor];
+        if (nextLine.trim() === '') {
+          section.push(nextLine);
+          continue;
+        }
+
+        const indent = nextLine.match(/^\s*/)?.[0].length ?? 0;
+        if (indent <= 4) break;
+        section.push(nextLine);
+        index = cursor;
+      }
+      current.permissions = section.join('\n').trimEnd();
+    }
   }
 
   return jobs;
@@ -360,9 +379,28 @@ function formatJobs(jobs) {
       job.name ? `name ${job.name}` : '',
       job.runsOn ? `runs-on ${job.runsOn}` : '',
       job.condition ? `if ${job.condition}` : '',
+      job.permissions ? `permissions ${formatInlinePermissions(job.permissions)}` : '',
     ].filter(Boolean).join(', ');
     return details ? `- \`${job.id}\` (${details})` : `- \`${job.id}\``;
   });
+}
+
+function formatInlinePermissions(snippet) {
+  const lines = snippet
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length === 0) return '`none detected`';
+
+  if (lines.length === 1) {
+    return `\`${lines[0].replace(/^permissions:\s*/, '') || 'set'}\``;
+  }
+
+  const entries = lines
+    .slice(1)
+    .map((line) => line.replace(/^-\s*/, '').trim())
+    .filter(Boolean);
+  return entries.length > 0 ? `\`${entries.join(', ')}\`` : '`set`';
 }
 
 function formatCheckoutTargets(checkoutTargets) {

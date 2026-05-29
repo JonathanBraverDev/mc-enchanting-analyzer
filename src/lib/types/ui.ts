@@ -2,12 +2,18 @@ import type { EnchantStats } from '#types/engine.js';
 import type { MassAccountingBreakdown } from '#types/mass.js';
 
 /**
- * Human-readable enchantment enchant stats.
+ * Human-readable enchantment stats.
+ *
+ * @public
  */
 export interface EnchantInsights {
+    /** Map of enchantment rank labels to their total cumulative probability. */
     ranks: Record<string, number>;
+    /** Map of base enchantment labels to their total probability on the item at any rank. */
     any: Record<string, number>;
+    /** Map of enchantment counts to their total probability. */
     count: Record<number, number>;
+    /** Map of human-readable combo labels to their joint probability. */
     combos: Record<string, number>;
 
     /** Reliability of the results (Resolved mass: 0.0 to 1.0). */
@@ -40,6 +46,8 @@ export interface SweepData {
 
 /**
  * Supported sorting modes for enchantment combinations.
+ *
+ * @public
  */
 export type ResultSortMode = 'prob' | 'count' | 'rank';
 
