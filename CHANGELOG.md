@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## v7.4.6 (2026-05-29)
+
+### Developer Experience
+- **Release policy cleanup**: Treated major-release names such as `### The "..." Update` as release metadata instead of changelog sections, moved changelog SemVer validation into one CI job, and kept branch-shape validation focused on release metadata.
+- **Release docs policy**: Allowed public API and search-engine docs in final release metadata commits and required public API docs to be reviewed for minor and major releases.
+- **CI advisory separation**: Split CI change advisory checks into their own target-branch workflow while keeping release pre-merge checks focused on release validation.
+
 ## v7.4.5 (2026-05-23)
 
 ### Performance
