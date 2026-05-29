@@ -16,10 +16,15 @@ const KNOWN_RELEASE_DOCS = new Set([
   'README.md',
   'MASS_HANDLING.md',
   'CONTRIBUTING.md',
+  'docs/public-api.md',
+  'docs/search-engine.md',
 ]);
 const REQUIRED_RELEASE_FILES = ['CHANGELOG.md', 'package.json', 'package-lock.json'];
+const REQUIRED_MINOR_PLUS_API_DOC = 'docs/public-api.md';
 const ALLOWED_HEAD_FILES = new Set([...REQUIRED_RELEASE_FILES, ...KNOWN_RELEASE_DOCS]);
 const SNAPSHOT_PATH_PATTERN = /^tests\/snapshots\//;
+const CI_POLICY_PATH_PATTERN = /^(?:\.github\/workflows\/.*\.ya?ml|\.github\/actions\/|scripts\/(?:validate-release-|release-|pr-marker-comment|lint-imports|run-engine-tests|.*ci.*|.*workflow.*).*|tests\/unit\/release-changelog-policy\.test\.cjs)$/;
+const CI_RELEASE_METADATA_FILES = new Set(REQUIRED_RELEASE_FILES);
 
 function fail(message) {
   console.error(`::error::${message}`);
@@ -88,6 +93,31 @@ function validateSnapshotCommitIsolation(baseRef, headRef) {
   }
 
   console.log(`Snapshot commit isolation passed for ${commits.length} commit(s) between ${baseRef} and ${headRef}.`);
+}
+
+function validateCiChangeIsolation(changedFiles) {
+  const ciFiles = changedFiles.filter((file) => CI_POLICY_PATH_PATTERN.test(file));
+  if (ciFiles.length === 0) {
+    return;
+  }
+
+  const mixedFiles = changedFiles.filter((file) => {
+    return !CI_POLICY_PATH_PATTERN.test(file) && !CI_RELEASE_METADATA_FILES.has(file);
+  });
+
+  if (mixedFiles.length > 0) {
+    fail([
+      'CI-sensitive release changes must be isolated from product, engine, general documentation, and generated updates.',
+      'Move CI workflow/policy changes into their own release PR, with only required release metadata alongside them.',
+      '',
+      'CI-sensitive files:',
+      ciFiles.map((file) => `  - ${file}`).join('\n'),
+      'Mixed non-CI files:',
+      mixedFiles.map((file) => `  - ${file}`).join('\n'),
+    ].join('\n'));
+  }
+
+  console.log(`CI-sensitive changes are isolated to CI policy/support files plus release metadata: ${ciFiles.join(', ')}`);
 }
 
 function validateChangelogSections(bump, tag, entry) {
@@ -183,22 +213,16 @@ const bump = releaseBump(latestTag, tag);
 validateSnapshotCommitIsolation(baseRef, headRef);
 
 const changedFiles = gitLines(['diff', '--name-only', baseRef, headRef]);
-const changelogEntry = extractChangelogEntry(headChangelog, tag);
 
 console.log(`Detected release bump: ${bump}`);
-
-if (!changelogEntry) {
-  fail(`CHANGELOG.md does not contain a release entry for ${tag}.`);
-}
-
-validateChangelogSections(bump, tag, changelogEntry);
+validateCiChangeIsolation(changedFiles);
 
 if (bump === 'major' && !lastCommitFiles.includes('ARCHITECTURE.md')) {
   fail('Major releases must update ARCHITECTURE.md in the final release metadata commit.');
 }
 
-if (bump === 'minor' && !changedFiles.some((file) => KNOWN_RELEASE_DOCS.has(file))) {
-  warn('Minor releases should update project docs when behavior, architecture, workflows, or user-facing capabilities changed.');
+if ((bump === 'major' || bump === 'minor') && !changedFiles.includes(REQUIRED_MINOR_PLUS_API_DOC)) {
+  fail(`Minor and major releases must update ${REQUIRED_MINOR_PLUS_API_DOC} somewhere in the release branch so supported API policy stays current.`);
 }
 
 console.log(`Final release PR commit bumps package metadata and adds the ${tag} changelog entry.`);

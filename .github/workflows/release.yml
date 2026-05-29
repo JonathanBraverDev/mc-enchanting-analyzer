@@ -92,6 +92,7 @@ jobs:
           test -s dist/analyzer-standalone.html
 
       - name: Extract release notes
+        id: release_notes
         if: steps.version.outputs.should_release == 'true' && github.event_name == 'push'
         run: |
           TAG="${{ steps.version.outputs.tag }}"
@@ -105,6 +106,23 @@ jobs:
           if [ ! -s release-notes.md ]; then
             git log -1 --pretty=%B > release-notes.md
           fi
+
+          RELEASE_TITLE=$(node - "$TAG" <<'NODE'
+          const fs = require('fs');
+          const {
+            extractChangelogEntry,
+            extractMajorReleaseName,
+          } = require('./scripts/release-changelog-policy.cjs');
+
+          const tag = process.argv[2];
+          const changelog = fs.readFileSync('CHANGELOG.md', 'utf8');
+          const entry = extractChangelogEntry(changelog, tag);
+          const releaseName = entry ? extractMajorReleaseName(entry) : null;
+          process.stdout.write(releaseName ? `${tag}: ${releaseName}` : `Release ${tag}`);
+          NODE
+          )
+
+          echo "title=$RELEASE_TITLE" >> "$GITHUB_OUTPUT"
 
       - name: Create or verify tag
         if: steps.version.outputs.should_release == 'true' && github.event_name == 'push'
@@ -133,14 +151,14 @@ jobs:
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" dist/analyzer-standalone.html --clobber
             gh release edit "$TAG" \
-              --title "Release $TAG" \
+              --title "${{ steps.release_notes.outputs.title }}" \
               --notes-file release-notes.md \
               --latest \
               --draft=false \
               --verify-tag
           else
             gh release create "$TAG" dist/analyzer-standalone.html \
-              --title "Release $TAG" \
+              --title "${{ steps.release_notes.outputs.title }}" \
               --notes-file release-notes.md \
               --latest \
               --verify-tag

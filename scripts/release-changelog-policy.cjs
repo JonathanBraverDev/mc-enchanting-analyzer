@@ -16,6 +16,8 @@ const ALLOWED_CHANGELOG_SECTIONS = new Set([
 const MINOR_SECTIONS = ['Added', 'Improved', 'Changed', 'Developer Experience', 'Deprecated'];
 const PATCH_SECTIONS = ['Fixed', 'Security', 'Performance', 'Developer Experience', 'Documentation', 'Cleanup'];
 const PATCH_MINOR_SIGNAL_SECTIONS = ['Added', 'Improved', 'Changed', 'Deprecated', 'Removed'];
+const MAJOR_RELEASE_NAME_PATTERN = /^The "([^"]+)" Update$/;
+const MAJOR_RELEASE_LABEL_PATTERN = /^_?"([^"]+)" release\._?$/i;
 
 function parseVersion(value) {
   const match = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(value ?? '');
@@ -73,6 +75,33 @@ function extractChangelogSections(entry) {
   return Array.from(entry.matchAll(/^###\s+(.+)\s*$/gm), (match) => match[1].trim());
 }
 
+function isMajorReleaseNameSection(section) {
+  return MAJOR_RELEASE_NAME_PATTERN.test(section);
+}
+
+function extractMajorReleaseLabels(entry) {
+  return entry
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => MAJOR_RELEASE_LABEL_PATTERN.test(line));
+}
+
+function extractMajorReleaseName(entry) {
+  const label = entry
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .map((line) => MAJOR_RELEASE_LABEL_PATTERN.exec(line)?.[1] ?? null)
+    .find(Boolean);
+
+  if (label) {
+    return label;
+  }
+
+  return extractChangelogSections(entry)
+    .map((section) => MAJOR_RELEASE_NAME_PATTERN.exec(section)?.[1] ?? null)
+    .find(Boolean) ?? null;
+}
+
 function formatSections(sections) {
   return sections.map((section) => `'### ${section}'`).join(', ');
 }
@@ -86,15 +115,49 @@ function issue(validatorMessage, advisoryMessage = validatorMessage) {
 }
 
 function analyzeChangelogSections({ bump, tag, entry }) {
-  const sections = extractChangelogSections(entry);
+  const allSections = extractChangelogSections(entry);
+  const releaseNameSections = allSections.filter(isMajorReleaseNameSection);
+  const releaseNameLabels = extractMajorReleaseLabels(entry);
+  const releaseNameCount = releaseNameSections.length + releaseNameLabels.length;
+  const sections = allSections.filter((section) => !isMajorReleaseNameSection(section));
   const sectionSet = new Set(sections);
 
-  if (sections.length === 0) {
+  if (allSections.length === 0) {
     return {
       sections,
       issue: issue(
         `The ${tag} changelog entry must include at least one '###' section.`,
         `This PR proposes release **${tag}**, but the changelog entry does not include any \`###\` sections.`
+      ),
+    };
+  }
+
+  if (releaseNameCount > 1) {
+    return {
+      sections,
+      issue: issue(
+        `Major release entries may include only one release name.`,
+        `This PR's changelog includes multiple release names. Keep one human-readable major release name.`
+      ),
+    };
+  }
+
+  if (bump !== 'major' && releaseNameCount > 0) {
+    return {
+      sections,
+      issue: issue(
+        `Release names are reserved for major releases.`,
+        `This PR's changelog includes a release name, but release names are reserved for major releases.`
+      ),
+    };
+  }
+
+  if (sections.length === 0) {
+    return {
+      sections,
+      issue: issue(
+        `The ${tag} changelog entry must include at least one SemVer changelog section in addition to any release name heading.`,
+        `This PR proposes release **${tag}**, but the changelog entry only includes release-name metadata and no SemVer section.`
       ),
     };
   }
@@ -169,12 +232,15 @@ function analyzeChangelogSections({ bump, tag, entry }) {
 
 module.exports = {
   ALLOWED_CHANGELOG_SECTIONS,
+  MAJOR_RELEASE_LABEL_PATTERN,
+  MAJOR_RELEASE_NAME_PATTERN,
   MINOR_SECTIONS,
   PATCH_MINOR_SIGNAL_SECTIONS,
   PATCH_SECTIONS,
   analyzeChangelogSections,
   changelogHeaderPattern,
   extractChangelogEntry,
+  extractMajorReleaseName,
   extractChangelogSections,
   parseVersion,
   releaseBump,

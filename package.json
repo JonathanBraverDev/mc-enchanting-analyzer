@@ -1,6 +1,6 @@
 {
   "name": "mc-enchanting-analyzer",
-  "version": "7.4.5",
+  "version": "7.4.6",
   "devDependencies": {
     "@playwright/test": "^1.58.2",
     "@types/chart.js": "^2.9.41",
@@ -27,7 +27,7 @@
     "build:bundle": "node scripts/bundle-worker.js",
     "build:standalone": "npm run build && node scripts/inline-assets.js",
     "test": "npm run test:all",
-    "test:all": "npm run build && npm run lint && npm run test:release-policy && npm run test:engine && npm run test:ui",
+    "test:all": "npm run build && npm run lint && npm run lint:imports && npm run test:release-policy && npm run test:engine && npm run test:ui",
     "test:engine": "node scripts/run-engine-tests.cjs",
     "test:engine:check": "node scripts/run-engine-tests.cjs --check",
     "test:snapshots": "NODE_OPTIONS=--max-old-space-size=8192 tsx --test tests/unit/engine/engine.snapshots.test.ts tests/unit/engine/engine-modern-book-snapshot.test.ts",
