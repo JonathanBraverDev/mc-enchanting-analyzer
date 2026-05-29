@@ -120,7 +120,8 @@ describe('Enchantment Engine Test Suite', () => {
                  material: TEST_DATA.MATERIALS.DIAMOND,
                  clue: 'Sharpness IV',
                  threshold: 0.000001,
-                 maxIterations: 5
+                 maxIterations: 5,
+                 uncappedResults: true
              });
 
              const sharpnessId = getEnchantId(engine.registry,'Sharpness');
@@ -129,10 +130,11 @@ describe('Enchantment Engine Test Suite', () => {
              assert.ok(stats.accounting.pending > 0.1, `Expected high uncertainty, got ${stats.accounting.pending}`);
              assert.ok((anySharpness ?? 0) > 0.9999, 'Any Sharpness prob should be ~1.0 even with high search uncertainty');
 
-             // Conditioned results target 1.0 to reflect absolute posterior certainty,
-             // while stats.accuracy preserves the search progress.
+             // Aggregate conditioned probabilities include pending frontier mass, while
+             // combo rows contain only resolved projected rows.
              const totalComboProb = Object.values(stats.combos).reduce((a: number, b: any) => a + Number(b), 0);
-             assert.ok(Math.abs(totalComboProb - 1.0) < 0.0001, 'Conditioned results should sum to 1.0');
+             assert.ok(totalComboProb < 1.0, 'Resolved combo rows should not pretend high-uncertainty pending mass is resolved');
+             assert.ok((stats.clue?.knownSpace ?? 0) > 0, 'Conditioned clue known space should include reachable pending mass');
          });
 
          it('Regression: Clue conditioning must still allow single-enchant outcomes (Match Wiki)', async () => {

@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { RegistryFactory, RegistryKernel } from '#lib/index.js';
+import { RegistryFactory } from '#core/factory.js';
+import { RegistryKernel } from '#lib/search/index.js';
 import type { SearchPool } from '#lib/search/index.js';
 
 describe('RegistryKernel', () => {
@@ -36,6 +37,34 @@ describe('RegistryKernel', () => {
         assert.ok(pair, 'fixture should include rank-variant book pools');
         assert.notStrictEqual(pair!.a.signature, pair!.b.signature);
         assert.strictEqual(pair!.a.familySignature, pair!.b.familySignature);
+    });
+
+    it('exposes version-specific additional enchantment level decay', () => {
+        const legacy = new RegistryKernel({
+            registry: RegistryFactory.build('1.0'),
+            item: 'sword',
+            material: 'diamond'
+        });
+        const multiBookLegacy = new RegistryKernel({
+            registry: RegistryFactory.build('1.7.2'),
+            item: 'book',
+            material: 'book'
+        });
+        const lapisPivot = new RegistryKernel({
+            registry: RegistryFactory.build('1.8'),
+            item: 'sword',
+            material: 'diamond'
+        });
+        const modern = new RegistryKernel({
+            registry: RegistryFactory.build('1.21.11'),
+            item: 'sword',
+            material: 'diamond'
+        });
+
+        assert.strictEqual(legacy.additionalEnchantmentLevelDivisor, 4);
+        assert.strictEqual(multiBookLegacy.additionalEnchantmentLevelDivisor, 4);
+        assert.strictEqual(lapisPivot.additionalEnchantmentLevelDivisor, 2);
+        assert.strictEqual(modern.additionalEnchantmentLevelDivisor, 2);
     });
 
     it('includes ordered base candidates in family signatures', () => {

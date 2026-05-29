@@ -4,6 +4,151 @@ import { HumanizationService } from '#services/index.js';
 import { EnchantEngine } from '#engine/index.js';
 import type { EnchantStats, CheckpointSearchRequest } from '#types/index.js';
 
+const SNAPSHOT_ROUNDING_SCALE = 1e12;
+const MASS_BUCKET_ORDER = [
+    'resolved',
+    'clueIncompatible',
+    'pending',
+    'sieved',
+    'overflow',
+    'capped',
+    'rounding',
+    'recoveredRounding',
+    'recoveredSieved',
+    'source',
+    'projected',
+    'loss'
+];
+const MASS_STAGE_ORDER = ['search', 'projection'];
+const MASS_OPERATION_ORDER = [
+    'seed',
+    'frontier',
+    'resolve',
+    'clueIncompatible',
+    'edgeSplit',
+    'overflow',
+    'sieve',
+    'residue',
+    'cap',
+    'results',
+    'pending'
+];
+const SNAPSHOT_ENGINE_DIAGNOSTIC_KEYS = [
+    'totalIterations',
+    'roundingErrorEvents',
+    'levelsProcessed',
+    'levelsFullyResolved',
+    'fullyResolved',
+    'resultsSize',
+    'queueSize',
+    'exitReason'
+];
+const SNAPSHOT_SEARCH_DIAGNOSTIC_KEYS = [
+    'graphCount',
+    'seededLevelCount',
+    'pendingEntryCount',
+    'largestPendingMass',
+    'lastExpandedMass',
+    'activeResidueCount',
+    'activeResidueMass',
+    'canImprove',
+    'flexStateIdentityMode',
+    'flexSolidNodeCount',
+    'flexPlexNodeCount',
+    'flexSingletonGroupCount',
+    'flexChoiceGroupCount',
+    'flexGroupedAlternativeCount',
+    'flexExpandedSolidNodeCount',
+    'flexExpandedPlexNodeCount',
+    'flexProjectionLoss',
+    'flexProjectionClueIncompatible'
+];
+
+function roundSnapshotProbability(val: number): number {
+    return Math.round(val * SNAPSHOT_ROUNDING_SCALE) / SNAPSHOT_ROUNDING_SCALE;
+}
+
+function orderedKeys(obj: Record<string, unknown> | undefined, preferredOrder: readonly string[]): string[] {
+    if (!obj) return [];
+    const preferred = preferredOrder.filter(key => Object.prototype.hasOwnProperty.call(obj, key));
+    const preferredSet = new Set(preferred);
+    const remaining = Object.keys(obj)
+        .filter(key => !preferredSet.has(key))
+        .sort((a, b) => a.localeCompare(b));
+    return [...preferred, ...remaining];
+}
+
+function pickOrderedFields(obj: any, keys: readonly string[]): any | undefined {
+    if (!obj) return undefined;
+    const out: any = {};
+    for (const key of keys) {
+        if (obj[key] !== undefined) out[key] = typeof obj[key] === 'number' ? roundSnapshotProbability(obj[key]) : obj[key];
+    }
+    return Object.keys(out).length > 0 ? out : undefined;
+}
+
+function sortDetailBuckets(buckets: any): any {
+    const out: any = {};
+    for (const key of orderedKeys(buckets, MASS_BUCKET_ORDER)) {
+        const bucket = buckets[key];
+        out[key] = {
+            value: bucket.value,
+            units: bucket.units
+        };
+    }
+    return out;
+}
+
+function sortMassDetails(details: any): any | undefined {
+    if (!details) return undefined;
+    const stages: any = {};
+    for (const stageKey of orderedKeys(details.stages, MASS_STAGE_ORDER)) {
+        const stage = details.stages[stageKey];
+        const operations: any = {};
+        for (const operationKey of orderedKeys(stage.operations, MASS_OPERATION_ORDER)) {
+            operations[operationKey] = {
+                buckets: sortDetailBuckets(stage.operations[operationKey].buckets)
+            };
+        }
+        stages[stageKey] = {
+            buckets: sortDetailBuckets(stage.buckets),
+            operations
+        };
+    }
+    return { stages };
+}
+
+function sortAccounting(accounting: any): any {
+    if (!accounting) return accounting;
+    const out: any = {};
+    const reserved = new Set(['units', 'details']);
+    for (const bucket of MASS_BUCKET_ORDER) {
+        if (accounting[bucket] !== undefined) out[bucket] = accounting[bucket];
+        reserved.add(bucket);
+    }
+    for (const key of Object.keys(accounting).filter(key => !reserved.has(key)).sort((a, b) => a.localeCompare(b))) {
+        out[key] = accounting[key];
+    }
+    if (accounting.units) {
+        const units: any = {};
+        for (const bucket of orderedKeys(accounting.units, MASS_BUCKET_ORDER)) units[bucket] = accounting.units[bucket];
+        out.units = units;
+    }
+    if (accounting.details) out.details = sortMassDetails(accounting.details);
+    return out;
+}
+
+function sanitizeDiagnostics(instrumentation: any): any | undefined {
+    if (!instrumentation) return undefined;
+    const engine = pickOrderedFields(instrumentation, SNAPSHOT_ENGINE_DIAGNOSTIC_KEYS);
+    const search = pickOrderedFields(instrumentation.search, SNAPSHOT_SEARCH_DIAGNOSTIC_KEYS);
+    if (!engine && !search) return undefined;
+    return {
+        ...(engine ? { engine } : {}),
+        ...(search ? { search } : {})
+    };
+}
+
 /**
  * Utility for snapshot-based regression testing of engine results.
  */
@@ -98,7 +243,13 @@ export const SnapshotUtils = {
             }
         }
 
-        // 3. Check probability categories (Fixed: Restored the missing categories loop)
+        const diagnosticsReport = this.compareExactObject(actual.diagnostics, expected.diagnostics, 'diagnostics');
+        if (diagnosticsReport.hasMismatches) {
+            hasMismatches = true;
+            sections.push(diagnosticsReport.text);
+        }
+
+        // 3. Check probability categories
         const categories = ['ranks', 'any', 'count', 'combos'];
         for (const item of categories) {
             const report = this.compareProbabilityMap(actual[item] || {}, expected[item] || {}, item);
@@ -163,7 +314,23 @@ export const SnapshotUtils = {
             }
         }
 
+        const detailReport = this.compareExactObject(actual.details, expected.details, 'accounting.details');
+        if (detailReport.hasMismatches) {
+            hasMismatches = true;
+            lines.push(detailReport.text);
+        }
+
         return { hasMismatches, text: lines.join('\n') };
+    },
+
+    compareExactObject(actual: any, expected: any, name: string) {
+        const actualJson = JSON.stringify(actual ?? null);
+        const expectedJson = JSON.stringify(expected ?? null);
+        if (actualJson === expectedJson) return { hasMismatches: false, text: '' };
+        return {
+            hasMismatches: true,
+            text: `Category [${name}]: exact diagnostic mismatch`
+        };
     },
 
     /**
@@ -258,8 +425,6 @@ export const SnapshotUtils = {
      * Truncates probabilities to a reasonable precision to avoid floating point noise.
      */
     sanitize(stats: any): any {
-        const round = (val: number) => Math.round(val * 1e12) / 1e12;
-
         const sortMap = (obj: any) => {
             if (!obj) return {};
             const keys = Object.keys(obj);
@@ -275,10 +440,12 @@ export const SnapshotUtils = {
 
             const res: any = {};
             for (const k of keys) {
-                res[k] = round(obj[k]);
+                res[k] = roundSnapshotProbability(obj[k]);
             }
             return res;
         };
+
+        const diagnostics = sanitizeDiagnostics(stats.instrumentation);
 
         return {
             ranks: sortMap(stats.ranks),
@@ -286,10 +453,11 @@ export const SnapshotUtils = {
             count: sortMap(stats.count),
             combos: sortMap(stats.combos),
             ...(stats.shownClueDistribution !== undefined ? { shownClueDistribution: sortMap(stats.shownClueDistribution) } : {}),
-            accuracy: round(stats.accuracy),
-            accounting: stats.accounting,
+            accuracy: roundSnapshotProbability(stats.accuracy),
+            accounting: sortAccounting(stats.accounting),
+            ...(diagnostics ? { diagnostics } : {}),
             ...(stats.clue?.knownSpace !== undefined
-                ? { clue: { idAndRank: stats.clue.idAndRank, knownSpace: round(stats.clue.knownSpace) } }
+                ? { clue: { idAndRank: stats.clue.idAndRank, knownSpace: roundSnapshotProbability(stats.clue.knownSpace) } }
                 : {})
         };
     }

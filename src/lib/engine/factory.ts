@@ -1,17 +1,14 @@
 import { BuiltRegistryState } from '#types/index.js';
-import { EnchantEngine } from '#engine/index.js';
+import { DefaultEnchantEngine, type EnchantEngine } from '#engine/index.js';
 import { CacheManager } from '#engine/cache/CacheManager.js';
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
-import { CACHE_CONFIG } from '#constants/engine.js';
+import { CACHE_CONFIG, POOL_CONSTANTS } from '#constants/engine.js';
 import { RegistryFactory } from '#core/factory.js';
-
-export interface EngineRuntimeOverrides {
-    cache: CacheManager;
-    distributionService: ModifiedLevelDistributionService;
-}
 
 /**
  * Factory for creating Enchantment Engine instances with default dependencies.
+ *
+ * @public
  */
 export class EngineFactory {
     private static readonly instances = new Map<string, EnchantEngine>();
@@ -20,33 +17,31 @@ export class EngineFactory {
      * Creates or retrieves a fully-wired EnchantEngine for the given version.
      * Reuses instances to optimize registry building and cache warming.
      */
-    public static createForVersion(version: string, overrides: Partial<EngineRuntimeOverrides> = {}): EnchantEngine {
+    public static createForVersion(version: string): EnchantEngine {
         const cacheKey = version;
-        if (this.instances.has(cacheKey) && Object.keys(overrides).length === 0) {
+        if (this.instances.has(cacheKey)) {
             return this.instances.get(cacheKey)!;
         }
 
         const registry = RegistryFactory.build(version);
-        const engine = this.create(registry, overrides);
+        const engine = this.create(registry);
 
-        if (Object.keys(overrides).length === 0) {
-            this.instances.set(cacheKey, engine);
-        }
+        this.instances.set(cacheKey, engine);
         return engine;
     }
 
     /**
      * Creates a fully-wired engine around an already resolved registry.
      */
-    public static create(registry: BuiltRegistryState, overrides: Partial<EngineRuntimeOverrides> = {}): EnchantEngine {
-        const cache = overrides.cache || new CacheManager({
+    public static create(registry: BuiltRegistryState): EnchantEngine {
+        const cache = new CacheManager({
             comboOtherSize: CACHE_CONFIG.COMBO_OTHER_SIZE,
             comboBookSize: CACHE_CONFIG.COMBO_BOOK_SIZE,
             poolSize: CACHE_CONFIG.POOL_SIZE
         });
 
-        const distributionService = overrides.distributionService || new ModifiedLevelDistributionService(1024);
-        const engine = new EnchantEngine(
+        const distributionService = new ModifiedLevelDistributionService(POOL_CONSTANTS.DEFAULT_DISTRIBUTION_BUFFER_SIZE);
+        const engine = new DefaultEnchantEngine(
             registry,
             cache,
             distributionService

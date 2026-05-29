@@ -8,7 +8,8 @@ import {
     FlexProgramStore,
     type FlexExpansion,
     type FlexGraph,
-    type FlexNodeId
+    type FlexNodeId,
+    type FlexSearchExpansion
 } from '#lib/search/flex/index.js';
 
 const packed = (id: number, rank = 1): PackedEnchant => ((id << 8) | rank) as PackedEnchant;
@@ -29,8 +30,37 @@ class TestFlexGraph implements FlexGraph {
         return expansion;
     }
 
+    public withSearchExpansion<T>(nodeIdValue: FlexNodeId, consumer: (expansion: FlexSearchExpansion) => T): T {
+        const expansion = this.getExpansion(nodeIdValue);
+        return consumer({
+            nodeId: expansion.node.id,
+            programId: expansion.node.programId,
+            nodeKind: expansion.node.kind,
+            count: expansion.node.count,
+            probContinue: expansion.probContinue,
+            totalWeight: expansion.totalWeight,
+            edgeCount: expansion.edges.length,
+            edgeWeights: expansion.edges.map(edge => edge.weight),
+            edgeChildIds: expansion.edges.map(edge => edge.childId as number),
+            clueIncompatibleWeight: expansion.clueIncompatibleWeight,
+            terminalReason: expansion.terminalReason
+        });
+    }
+
     public getNode(nodeIdValue: FlexNodeId): FlexExpansion['node'] {
         return this.getExpansion(nodeIdValue).node;
+    }
+
+    public getProgramId(nodeIdValue: FlexNodeId): FlexExpansion['node']['programId'] {
+        return this.getNode(nodeIdValue).programId;
+    }
+
+    public getNodeCount(nodeIdValue: FlexNodeId): number {
+        return this.getNode(nodeIdValue).count;
+    }
+
+    public getNodeKind(nodeIdValue: FlexNodeId): FlexExpansion['node']['kind'] {
+        return this.getNode(nodeIdValue).kind;
     }
 }
 
@@ -75,6 +105,32 @@ describe('FlexCoordinator', () => {
         assert.strictEqual(snapshot.pendingEntries[0]!.programId, smiteProgram);
         assert.strictEqual(snapshot.pendingEntries[0]!.mass, 25n);
         assert.strictEqual(snapshot.lastExpandedMass, 75n);
+    });
+
+    it('counts expanded Solid and Plex nodes for diagnostics', () => {
+        const store = new FlexProgramStore();
+        const choiceProgram = store.appendChoice(store.empty, [
+            { packedEnchant: packed(1), weight: 1 },
+            { packedEnchant: packed(2), weight: 1 }
+        ]);
+        const graph = new TestFlexGraph();
+        graph.set(nodeId(0), Object.freeze({
+            node: store.createNode(nodeId(0), store.empty),
+            probContinue: PRECISION,
+            totalWeight: 1,
+            edges: Object.freeze([{ weight: 1, childId: nodeId(1) }]),
+            terminalReason: null
+        }));
+        graph.set(nodeId(1), terminalExpansion(store, nodeId(1), choiceProgram));
+
+        const run = new FlexCoordinator([graph]);
+        run.seedPending(0, nodeId(0), 100n);
+        const snapshot = run.searchToCheckpoint({ maxIterations: 2 });
+        const stats = run.getMemoryStats();
+
+        assert.strictEqual(snapshot.iterations, 2);
+        assert.strictEqual(stats.expandedSolidNodeCount, 1);
+        assert.strictEqual(stats.expandedPlexNodeCount, 1);
     });
 
     it('can drain the equal-mass frontier band after an iteration cap', () => {
@@ -150,7 +206,7 @@ describe('FlexCoordinator', () => {
         assert.strictEqual(snapshot.pendingCount, 0);
     });
 
-    it('forwards edge residues with V7 rounding and recovered-rounding semantics', () => {
+    it('forwards edge residues with exact rounding and recovered-rounding semantics', () => {
         const store = new FlexProgramStore();
         const graph = new TestFlexGraph();
         graph.set(nodeId(0), Object.freeze({

@@ -1,7 +1,7 @@
 /**
  * Shared-search reporting runner.
  *
- * Runs V7-native checkpoint searches across known item/material/xp combinations
+ * Runs checkpoint searches across known item/material/xp combinations
  * and writes one JSON report per combination to scripts/search-report-output/.
  *
  * Usage:
@@ -60,7 +60,7 @@ export interface SearchCheckpointReport {
     activeResidueMass: number;
 }
 
-export interface SearchRunReport {
+export interface SearchReport {
     version: string;
     item: string;
     material: string;
@@ -76,13 +76,13 @@ export interface SearchRunReport {
 export interface SearchReportingResult {
     generatedAt: string;
     options: SearchReportingOptions;
-    reports: SearchRunReport[];
+    reports: SearchReport[];
 }
 
 export async function generateSearchReporting(options: SearchReportingOptions): Promise<SearchReportingResult> {
     const engine = EngineFactory.createForVersion(options.version);
     const jobs = getJobs(engine, options.item, options.material);
-    const reports: SearchRunReport[] = [];
+    const reports: SearchReport[] = [];
 
     for (const job of jobs) {
         for (const xp of options.xpLevels) {
@@ -119,7 +119,7 @@ async function runOne(
     material: string,
     xp: number,
     options: SearchReportingOptions
-): Promise<SearchRunReport> {
+): Promise<SearchReport> {
     const checkpoints = buildCheckpoints(item, options);
     const reports: SearchCheckpointReport[] = [];
     const start = performance.now();
@@ -276,7 +276,7 @@ function parseOptionalInt(raw: string | null): number | undefined {
     return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-function getOutputPath(report: SearchRunReport, outputDir: string): string {
+function getOutputPath(report: SearchReport, outputDir: string): string {
     const cluePart = report.clue ? `_clue_${safeFilePart(report.clue)}` : '';
     const filename = `${safeFilePart(report.version)}_${safeFilePart(report.item)}_${safeFilePart(report.material)}_xp${report.xp}${cluePart}.json`;
     return path.join(outputDir, filename);

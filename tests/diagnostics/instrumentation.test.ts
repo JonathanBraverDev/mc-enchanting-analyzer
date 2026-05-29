@@ -15,7 +15,6 @@ test('Engine Instrumentation Collection', async () => {
     await engine.getStats({ item: 'leggings', xp: 30, material: 'diamond', instrumentation, threshold: 0.0001 });
 
     assert.ok(instrumentation.totalIterations > 0, 'Should have recorded iterations');
-    assert.ok((instrumentation.search?.graphCacheMisses ?? 0) > 0, 'Should have search graph cache misses');
     assert.ok((instrumentation.search?.runCacheMisses ?? 0) > 0, 'Should have search run cache misses');
     assert.ok(instrumentation.exitReason, 'Should have an exit reason');
 

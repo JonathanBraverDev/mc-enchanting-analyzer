@@ -1,0 +1,65 @@
+name: CI Change Advisory Preview
+
+on:
+  pull_request:
+    branches:
+      - main
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci-change-advisory-preview:
+    name: CI Change Advisory Preview
+    permissions:
+      contents: read
+    # Branch-authored preview: useful for richer advisory rendering before the
+    # classifier reaches main, but never authoritative and never comment-writing.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Fetch base branch
+        run: git fetch origin "+refs/heads/main:refs/remotes/origin/main"
+
+      - name: Classify CI changes
+        run: |
+          set -euo pipefail
+          set +e
+          node scripts/classify-ci-changes.cjs origin/main HEAD \
+            --body-file /tmp/ci-change-advisory-preview-body.md \
+            --json-file /tmp/ci-change-advisory-preview.json
+          advisory_status=$?
+          set -e
+
+          {
+            echo '## CI Change Advisory Preview'
+            echo
+            echo 'Branch-authored preview. The trusted advisory comment is produced by the base-branch `pull_request_target` job.'
+            echo
+            if [ -s /tmp/ci-change-advisory-preview-body.md ]; then
+              cat /tmp/ci-change-advisory-preview-body.md
+            else
+              echo 'No CI-affecting behavior changes detected.'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$advisory_status" -eq 0 ]; then
+            echo "No CI-affecting behavior changes detected."
+            exit 0
+          fi
+
+          if [ "$advisory_status" -eq 1 ]; then
+            echo "::error title=CI behavior changed::Branch-authored preview detected CI-affecting behavior changes."
+            exit 1
+          fi
+
+          exit "$advisory_status"

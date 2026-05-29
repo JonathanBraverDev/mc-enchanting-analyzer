@@ -1,5 +1,5 @@
 import { RegistryState, PackedEnchant } from '#types/index.js';
-import { RomanUtils, EnchantUtils } from '#utils/index.js';
+import { RomanUtils } from '#utils/index.js';
 import { PACKING_CONSTANTS, ENGINE_LIMITS } from '#constants/engine.js';
 
 /**
@@ -176,27 +176,6 @@ export function getAvailablePool(
         const enchantId = packedEnchant >> PACKING_CONSTANTS.ENCHANT_SHIFT;
         return (bitset & (1n << BigInt(enchantId))) === 0n;
     });
-}
-
-export function isEnchantmentAchievable(
-    state: RegistryState,
-    fullName: string,
-    item: string,
-    levels: number[],
-    cache?: { getPool(v: string, k: string): PackedEnchant[] | undefined; setPool(v: string, k: string, val: PackedEnchant[]): void },
-    version?: string
-): boolean {
-    const parsed = EnchantUtils.parse(fullName, state.romanMap);
-    if (!parsed) return false;
-    const targetId = state.idMap.get(parsed.name);
-    if (targetId === undefined) return false;
-    const targetRank = parsed.rank;
-
-    for (const ml of levels) {
-        const pool = getCandidatePool(state, item, ml, cache, version);
-        if (pool.some(p => (p >> PACKING_CONSTANTS.ENCHANT_SHIFT) === targetId && (p & PACKING_CONSTANTS.RANK_MASK) === targetRank)) return true;
-    }
-    return false;
 }
 
 export function getEnchantability(state: RegistryState, material: string, item: string): number {

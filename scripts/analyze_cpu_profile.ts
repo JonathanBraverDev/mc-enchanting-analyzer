@@ -38,62 +38,146 @@ interface CliOptions {
     readonly files: readonly string[];
     readonly top: number;
     readonly includeIdle: boolean;
+    readonly includeProfiler: boolean;
 }
 
 const DEFAULT_TOP = 15;
 
-const projectionFunctions = new Set([
+const flexProjectionFunctions = new Set([
     'projectResults',
-    'projectSnapshot',
-    'projectPendingWithDiagnostics',
+    'projectPendingAggregates',
+    'getPendingClueSplit',
+    'addPendingProgramAggregate',
+    'addPendingEmissionAggregate',
+    'addPendingClueJointAggregate',
+    'addPendingClueJointEmissionAggregate',
+    'createPendingAggregates',
+    'freezePendingAggregates',
+    'createPendingClueJointAggregates',
+    'freezePendingClueJointAggregates',
+    'addPendingAggregateContribution',
+    'addFrontierContribution',
+    'createFactorizedEngineFrontier',
+    'createMaterializedEngineFrontier',
     'visitProgramFactors',
-    'materializeBookFactors',
     'visit',
     'pack'
 ]);
 
-const engineFunctions = new Set([
-    'seedXp',
-    'step',
-    'advance',
-    'searchToCheckpoint',
-    'advanceUntilCheckpoint',
-    'expand',
-    'forwardOrResolve',
+const flexGraphFunctions = new Set([
+    'buildRootExpansion',
+    'buildSearchExpansion',
+    'getGroupedExpansionTemplate',
+    'buildGroupedExpansionTemplate',
+    'materializeGroupedEdges',
+    'addAlternative',
+    'createGroupedEdgeTemplate',
+    'createGroupedEdge',
+    'compareFlexEdges',
+    'getOrCreateNodeId',
+    'getExistingReducedNodeId',
+    'getExpansion',
+    'getNode',
+    'hash',
+    'insert',
+    'grow',
+    'get',
+    'set'
+]);
+
+const flexProgramFunctions = new Set([
+    'appendChoice',
+    'appendCanonicalChoice',
+    'appendEmission',
+    'appendCanonicalEmission',
+    'appendFixed',
+    'canonicalizeChoice',
+    'canonicalizeEmission',
+    'compareEmissions',
+    'createEmissionKey',
+    'createNode',
+    'getChoiceEmission',
+    'getEmissionId',
+    'getFixedEmission',
+    'getOrCreateProgram',
+    'getProgram',
+    'getProgramInternNode',
+    'insertCanonicalEmission'
+]);
+
+const flexFrontierFunctions = new Set([
     'pushPending',
     'popLargestPending',
     'pushOrMerge',
     'setPosition',
     'sinkDown',
     'bubbleUp',
-    'moveHeapEntry',
-    'buildGroupedEdges',
-    'buildSearchExpansion',
-    'getOrCreateNodeId',
-    'getExpansion',
-    'appendChoice',
-    'appendFixed',
-    'insertCanonicalEmission',
-    'insertPackedEnchant',
-    'getProgramInternNode',
-    'canonicalizePackedEnchantList',
+    'moveHeapEntry'
+]);
+
+const flexForwardingFunctions = new Set([
+    'forwardMass',
+    'forwardOrResolve',
     'recordResolved',
     'recordResidueDelta',
-    'recordResiduePromotion'
+    'recordResiduePromotion',
+    'recordEdgeResidue',
+    'getForwardingResidues',
+    'setForwardingResidues'
+]);
+
+const flexCoordinatorFunctions = new Set([
+    'seedXp',
+    'step',
+    'advance',
+    'searchToCheckpoint',
+    'advanceUntilCheckpoint',
+    'expand',
+    'snapshot',
+    'getPendingEntries',
+    'getActiveResidueStats'
+]);
+
+const flexAccountingFunctions = new Set([
+    'recordSearch',
+    'subtractSearch',
+    'recordProjection',
+    'recordDetail',
+    'snapshot',
+    'toMassAccountingBreakdown',
+    'toMassAccountingDetails'
 ]);
 
 const phaseRules: readonly PhaseRule[] = [
     {
-        name: 'projection/materialization',
-        matches: frame => projectionFunctions.has(frame.functionName)
-            || frame.url.includes('FlexProjector')
+        name: 'flex/projection',
+        matches: frame => flexProjectionFunctions.has(frame.functionName)
+            || frame.url.includes('search/flex/FlexProjector.ts')
             || (frame.url.includes('ComboUtils') && (frame.functionName === 'pack' || frame.functionName === '(anonymous)'))
     },
     {
-        name: 'engine/search',
-        matches: frame => engineFunctions.has(frame.functionName)
-            || frame.url.includes('search/flex/GroupedFlexGraph.ts')
-            || frame.url.includes('search/flex/FlexCoordinator.ts')
+        name: 'flex/graph-grouping',
+        matches: frame => frame.url.includes('search/flex/GroupedFlexGraph.ts') && flexGraphFunctions.has(frame.functionName)
+    },
+    {
+        name: 'flex/program-store',
+        matches: frame => frame.url.includes('search/flex/FlexProgramStore.ts') && flexProgramFunctions.has(frame.functionName)
+    },
+    {
+        name: 'flex/frontier',
+        matches: frame => frame.url.includes('search/flex/FlexCoordinator.ts') && flexFrontierFunctions.has(frame.functionName)
+    },
+    {
+        name: 'flex/forwarding',
+        matches: frame => frame.url.includes('search/flex/FlexCoordinator.ts') && flexForwardingFunctions.has(frame.functionName)
+    },
+    {
+        name: 'flex/coordinator',
+        matches: frame => frame.url.includes('search/flex/FlexCoordinator.ts') && flexCoordinatorFunctions.has(frame.functionName)
+    },
+    {
+        name: 'flex/accounting',
+        matches: frame => frame.url.includes('engine/search/ProbabilityMassAccountant.ts') && flexAccountingFunctions.has(frame.functionName)
     }
 ];
 
@@ -113,6 +197,7 @@ function parseArgs(args: readonly string[]): CliOptions {
     const files: string[] = [];
     let top = DEFAULT_TOP;
     let includeIdle = false;
+    let includeProfiler = false;
 
     for (let index = 0; index < args.length; index++) {
         const arg = args[index]!;
@@ -124,6 +209,8 @@ function parseArgs(args: readonly string[]): CliOptions {
             top = parsePositiveInteger(arg.slice('--top='.length), '--top');
         } else if (arg === '--include-idle') {
             includeIdle = true;
+        } else if (arg === '--include-profiler') {
+            includeProfiler = true;
         } else if (arg === '--help' || arg === '-h') {
             printUsage();
             process.exit(0);
@@ -134,7 +221,7 @@ function parseArgs(args: readonly string[]): CliOptions {
         }
     }
 
-    return { files, top, includeIdle };
+    return { files, top, includeIdle, includeProfiler };
 }
 
 function parsePositiveInteger(value: string, label: string): number {
@@ -147,11 +234,16 @@ function parsePositiveInteger(value: string, label: string): number {
 
 function printUsage(): void {
     console.log([
-        'Usage: tsx scripts/analyze_cpu_profile.ts [--top N] [--include-idle] <CPU.cpuprofile...>',
+        'Usage: tsx scripts/analyze_cpu_profile.ts [--top N] [--include-idle] [--include-profiler] <CPU.cpuprofile...>',
         '',
-        'Splits Node/V8 CPU profile samples into coarse Flex phases using call-stack ancestry:',
-        '- engine/search',
-        '- projection/materialization',
+        'Splits Node/V8 CPU profile samples into Flex phases using call-stack ancestry:',
+        '- flex/graph-grouping',
+        '- flex/program-store',
+        '- flex/frontier',
+        '- flex/forwarding',
+        '- flex/coordinator',
+        '- flex/projection',
+        '- flex/accounting',
         '- runtime/unattributed',
         '- shared/runtime/other',
         '',
@@ -164,9 +256,11 @@ function printUsage(): void {
 function analyzeFile(file: string, options: CliOptions): void {
     const profile = readProfile(file);
     const samples = collectSamples(profile);
-    const filteredSamples = options.includeIdle
-        ? samples
-        : samples.filter(sample => sample.self.functionName !== '(idle)');
+    const filteredSamples = samples.filter(sample => {
+        if (!options.includeIdle && sample.self.functionName === '(idle)') return false;
+        if (!options.includeProfiler && isProfilerOverhead(sample.self)) return false;
+        return true;
+    });
     const totalMicroseconds = sumNumbers(filteredSamples.map(sample => sample.microseconds));
 
     const phaseTotals = new Map<string, number>();
@@ -273,8 +367,10 @@ function shortenUrl(url: string): string {
 }
 
 function classifySample(sample: ProfileSample): string {
-    for (const rule of phaseRules) {
-        if (sample.stack.some(rule.matches)) return rule.name;
+    for (const frame of sample.stack) {
+        for (const rule of phaseRules) {
+            if (rule.matches(frame)) return rule.name;
+        }
     }
 
     if (sample.self.functionName === '(garbage collector)' || sample.self.functionName === '(program)' || sample.self.functionName === '(idle)') {
@@ -309,7 +405,11 @@ function sumSelfTime(samples: readonly ProfileSample[], functionName: string): n
 }
 
 function formatFrame(frame: FrameKey): string {
-    return `${frame.functionName} — ${frame.url}`;
+    return `${frame.functionName} - ${frame.url}`;
+}
+
+function isProfilerOverhead(frame: FrameKey): boolean {
+    return frame.url === 'node:inspector' && frame.functionName === 'post';
 }
 
 function addToMap(map: Map<string, number>, key: string, value: number): void {

@@ -9,7 +9,6 @@ import {
 } from '#core/registry.js';
 import { RegistryFactory } from '#core/factory.js';
 import { EngineFactory } from '#engine/factory.js';
-import { CacheManager } from '#engine/cache/CacheManager.js';
 import type { RegistryMutation } from '#types/index.js';
 
 describe('EngineFactory', () => {
@@ -288,19 +287,6 @@ describe('EngineFactory', () => {
         const e2 = EngineFactory.createForVersion('1.21.11');
 
         assert.strictEqual(e1, e2, 'Should return the same instance for the same version');
-    });
-
-    it('should not use the vanilla version cache when overrides are supplied', () => {
-        EngineFactory.clearCaches();
-
-        const cached = EngineFactory.createForVersion('1.21.11');
-        const overrideEngine = EngineFactory.createForVersion('1.21.11', {
-            cache: new CacheManager({ comboOtherSize: 10, comboBookSize: 10, poolSize: 10 })
-        });
-        const cachedAgain = EngineFactory.createForVersion('1.21.11');
-
-        assert.notStrictEqual(overrideEngine, cached, 'Override engines should be separate instances');
-        assert.strictEqual(cachedAgain, cached, 'Override engines should not replace the cached vanilla instance');
     });
 
     it('should create an engine around exactly the provided registry', () => {

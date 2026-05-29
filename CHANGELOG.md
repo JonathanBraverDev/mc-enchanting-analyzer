@@ -2,6 +2,41 @@
 
 All notable changes to this project will be documented in this file.
 
+## v8.0.0 (2026-05-29)
+
+### The "Mental Gymnastics" Update
+
+A major search-engine release that bends equivalent enchantment futures back into shared grouped structure, making book-heavy searches far smaller and faster while preserving exact result accounting.
+
+### Breaking
+- **Public analyzer facade**: The package root now centers supported library use on `EnchantingAnalyzer`. Use `analyze(...)` for display-ready results, `analyzeRaw(...)` for compact machine-readable results, and `humanize(...)` to translate raw results without another search.
+- **Internal search runtime boundary**: Direct engine factories, registry factories, search classes, checkpoint internals, backend selectors, and diagnostic-only runtime fields are implementation details. Product callers should use the analyzer facade and package-root request/result types.
+- **Result export surface**: Large raw result exports stay behind explicit snapshot/reporting internals. Use analyzer requests with bounded combo output for supported library/UI flows.
+- **Mutation input surface**: Vanilla-derived registry variants are supported through `RegistryMutation` plus package-root rule and selector types. Full resolved registry tables remain internal.
+
+### Improved
+- **Default search runtime**: Promoted the grouped factorized runtime to the maintained search path, with one globally weighted frontier across modified levels and shared graph structure for equivalent future enchantment states.
+- **Checkpoint snapshots**: Native factorized checkpoint snapshots now preserve exact resolved combo rows while summarizing pending frontier state without eagerly materializing every internal program branch.
+- **Clue-conditioned searches**: Clue pruning, pending aggregates, and projection accounting now stay inside the active grouped runtime instead of relying on legacy compatibility paths.
+
+### Performance
+- **Flex frontier and projection hot paths**: Reduced allocation, lookup, and pending-projection overhead in book-heavy checkpoint searches through compact identities, lazy group emissions, indexed choice members, native snapshots, and reusable pending aggregate projections.
+- **Shared graph reuse**: Reused registry-derived graph structure across pool-equivalent modified levels while preserving exact mass accounting and residue ownership.
+
+### Fixed
+- **Legacy enchantment decay**: Restored pre-1.8 additional-enchantment level decay so legacy snapshots follow the correct historical divisor.
+
+### Developer Experience
+- **Public API and CLI tests**: Added CI coverage for the supported analyzer facade, CLI output modes, raw JSON output, search controls, mutation input types, packed-package declaration/runtime imports, and non-boundary Minecraft version inputs.
+- **Advisory previews**: Added read-only branch-authored CI and snapshot advisory preview jobs so PRs can show newer advisory summaries before the trusted base-branch comment jobs learn those renderers.
+- **Snapshot advisory signals**: Expanded snapshot summaries to separate schema-only changes from result-bearing changes, combo key churn from mass movement, distribution/accounting shifts, invariant warnings, known V8 diagnostics/accounting instrumentation, and generic new snapshot paths.
+- **CI advisory summaries**: Included job-level workflow permissions in CI advisory output so permission moves between workflow and job scope remain visible during review.
+- **Grouped-runtime diagnostics**: Split grouped-choice counters from Plex-node history counters and removed a redundant pending diagnostic that duplicated `pendingEntryCount`.
+- **Profiling tools**: Replaced obsolete backend-comparison scripts with maintained grouped-runtime probes and CPU-profile phase analysis.
+
+### Documentation
+- **Current engine references**: Replaced V7/Flex/Plex planning notes with maintained architecture, public API, mass-accounting, and search-engine references for the active runtime.
+
 ## v7.4.8 (2026-05-29)
 
 ### Developer Experience
