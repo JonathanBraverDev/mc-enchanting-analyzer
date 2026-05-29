@@ -1,0 +1,106 @@
+name: Snapshot Advisory
+
+on:
+  pull_request_target:
+    branches:
+      - main
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  snapshot-advisory:
+    name: Snapshot Advisory
+    # Target-branch only: PR-authored advisory changes cannot alter the
+    # reviewer summary for those same generated snapshot changes.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.base.ref }}
+          persist-credentials: false
+
+      - name: Fetch PR head
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          git fetch origin \
+            "+refs/heads/main:refs/remotes/origin/main" \
+            "pull/${PR_NUMBER}/head:refs/remotes/origin/snapshot-advisory-head"
+
+      - name: Summarize snapshot changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          base=origin/main
+          head=refs/remotes/origin/snapshot-advisory-head
+          MARKER='<!-- snapshot-advisory -->'
+          printf '%s\n' \
+            "$MARKER" \
+            '<!-- status:stale -->' \
+            '### Snapshot advisory - stale' \
+            '' \
+            'Superseded by a newer snapshot advisory.' \
+            > /tmp/snapshot-advisory-stale.md
+
+          printf '%s\n' \
+            "$MARKER" \
+            '<!-- status:resolved -->' \
+            '### Snapshot advisory - resolved' \
+            '' \
+            'No snapshot files changed in the current PR state.' \
+            > /tmp/snapshot-advisory-resolved.md
+
+          post_active_comment() {
+            node scripts/pr-marker-comment.cjs upsert \
+              --repo "$REPOSITORY" \
+              --pr "$PR_NUMBER" \
+              --marker "$MARKER" \
+              --body-file /tmp/snapshot-advisory.md \
+              --stale-body-file /tmp/snapshot-advisory-stale.md
+          }
+
+          resolve_active_comment() {
+            node scripts/pr-marker-comment.cjs resolve \
+              --repo "$REPOSITORY" \
+              --pr "$PR_NUMBER" \
+              --marker "$MARKER" \
+              --body-file /tmp/snapshot-advisory-resolved.md \
+              --stale-body-file /tmp/snapshot-advisory-stale.md
+          }
+
+          set +e
+          node scripts/classify-snapshot-changes.cjs "$base" "$head" \
+            --body-file /tmp/snapshot-advisory-body.md \
+            --json-file /tmp/snapshot-advisory.json
+          advisory_status=$?
+          set -e
+
+          if [ "$advisory_status" -eq 0 ]; then
+            resolve_active_comment
+            echo "No snapshot files changed."
+            exit 0
+          fi
+
+          if [ "$advisory_status" -ne 1 ]; then
+            exit "$advisory_status"
+          fi
+
+          {
+            printf '%s\n' "$MARKER" '<!-- status:active -->' '### Snapshot advisory' ''
+            cat /tmp/snapshot-advisory-body.md
+          } > /tmp/snapshot-advisory.md
+
+          post_active_comment
+          echo "::notice title=Snapshot outputs changed::Snapshot advisory comment updated with a generated change summary."
