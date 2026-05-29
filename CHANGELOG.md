@@ -2,6 +2,40 @@
 
 All notable changes to this project will be documented in this file.
 
+## v8.0.0 (2026-05-29)
+
+### The "Mental Gymnastics" Update
+
+Using some incredible mental gymnastics, the engine now runs faster, is more accurate, and uses less CPU and memory, especially for complex searches.
+It also adds CLI support and formalizes the package API so future engine work can move without exposing search internals.
+
+### Breaking
+- **Package root API**: The package root is now a supported analyzer interface, not the internal engine surface. Callers that imported engine factories, registry factories, search and checkpoint classes, backend selectors, or diagnostic internals should migrate to `EnchantingAnalyzer` and the exported request/result types.
+- **Registry customization**: Customization is now supported through vanilla-derived `RegistryMutation` inputs. Full resolved registry tables, packed lookup structures, and direct registry construction are no longer part of the package-root contract.
+
+### Added
+- **Supported package API**: Added a stable analyzer interface for applications and scripts, with human-readable and machine-readable result modes.
+- **Package CLI**: Added `mcenchant` and `mc-enchanting-analyzer` commands for running analysis jobs from the terminal, with text and JSON output.
+- **Vanilla-derived custom analyzers**: Added supported mutation-based customization for callers who need targeted rule changes on top of bundled Minecraft data.
+
+### Improved
+- **Deep book searches**: High-level book calculations can now be driven much further, allowing more reliable exhaustive searches even for modern books.
+- **Clue-filtered results**: Searches with a shown table clue now track progress, uncertainty, and unfinished probability mass more consistently with normal searches.
+
+### Performance
+- **Large search efficiency**: Reduced CPU and memory use for the largest searches, especially high-level book calculations and deep refinement runs.
+
+### Fixed
+- **Legacy enchantment rules**: Restored the pre-1.8 additional-enchantment level decay, correcting historical book and additional-enchantment probabilities.
+
+### Developer Experience
+- **Public API contract coverage**: Added tests for the analyzer facade, CLI output modes, search controls, mutation types, packed-package declarations and runtime imports, and non-boundary Minecraft versions.
+- **Release advisories**: Added read-only advisory preview jobs and expanded trusted CI and snapshot advisory summaries so reviewers can see CI-sensitive changes and generated snapshot deltas more clearly.
+- **Search diagnostics and profiling**: Refreshed grouped-runtime counters, snapshot accounting diagnostics, and profiling scripts for the maintained V8 search path.
+
+### Documentation
+- **Supported API and architecture docs**: Updated public API, architecture, mass-accounting, and search-engine docs to describe the supported V8 surface and current engine design.
+
 ## v7.4.8 (2026-05-29)
 
 ### Developer Experience
