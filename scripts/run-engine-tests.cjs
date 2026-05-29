@@ -5,7 +5,7 @@ const { spawnSync } = require('node:child_process');
 
 const root = process.cwd();
 const testRoot = 'tests';
-const excludedDirs = new Set(['public', 'ui']);
+const excludedDirs = new Set(['ui']);
 
 function walk(dir) {
   const entries = readdirSync(dir, { withFileTypes: true });
