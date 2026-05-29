@@ -25,17 +25,46 @@ interface GroupedFlexGraphRecord {
 }
 
 interface RankMergeCandidate {
+    readonly level: number;
     readonly familyKey: string;
     readonly exactKey: string;
     readonly childLevel: number;
     readonly mass: bigint;
+    readonly pool: SearchPool;
+}
+
+interface RankMergeCandidateGroup {
+    readonly familyKey: string;
+    readonly childLevel: number;
+    readonly candidates: RankMergeCandidate[];
+    readonly exactKeys: Set<string>;
+    mass: bigint;
+}
+
+interface RankMergeUsageStats {
+    usedFamilyGroupCount: number;
+    usedExactPoolCount: number;
+    usedLevelCount: number;
+    usedMass: bigint;
+    fallbackFamilyGroupCount: number;
+    fallbackExactPoolCount: number;
+    fallbackLevelCount: number;
+    fallbackMass: bigint;
 }
 
 const EMPTY_RANK_MERGE_STATS: FlexRankMergeMemoryStats = Object.freeze({
     eligibleFamilyGroupCount: 0,
     eligibleExactPoolCount: 0,
     eligibleLevelCount: 0,
-    eligibleMass: 0n
+    eligibleMass: 0n,
+    usedFamilyGroupCount: 0,
+    usedExactPoolCount: 0,
+    usedLevelCount: 0,
+    usedMass: 0n,
+    fallbackFamilyGroupCount: 0,
+    fallbackExactPoolCount: 0,
+    fallbackLevelCount: 0,
+    fallbackMass: 0n
 });
 
 export interface GroupedFlexSearchRunOptions {
@@ -116,18 +145,21 @@ export class GroupedFlexSearchRun {
                 continue;
             }
 
+            const childLevel = Math.floor(level / this.kernel.additionalEnchantmentLevelDivisor);
             rankMergeCandidates.push({
+                level,
                 familyKey: pool.familySignature,
                 exactKey: pool.signature,
-                childLevel: Math.floor(level / this.kernel.additionalEnchantmentLevelDivisor),
-                mass: rootMass
+                childLevel,
+                mass: rootMass,
+                pool
             });
-            const graph = this.graphForPool(pool);
-            const root = graph.graph.getRootNode(level);
-            this.coordinator.seedPending(graph.id, root.id, rootMass);
             seededMass += rootMass;
         }
-        this.rankMergeStats = createRankMergeStats(rankMergeCandidates);
+        const usageStats = this.optimizationControls?.allowRankMerge === true
+            ? this.seedRankMergedCandidates(rankMergeCandidates)
+            : this.seedExactCandidates(rankMergeCandidates);
+        this.rankMergeStats = createRankMergeStats(rankMergeCandidates, usageStats);
 
         if (seededMass < PRECISION) this.coordinator.recordSeedRounding(PRECISION - seededMass);
         if (seededMass > PRECISION) throw new Error(`Modified-level distribution overflowed precision by ${seededMass - PRECISION} units.`);
@@ -180,6 +212,30 @@ export class GroupedFlexSearchRun {
         return graph;
     }
 
+    private seedExactCandidates(candidates: readonly RankMergeCandidate[]): RankMergeUsageStats {
+        for (const candidate of candidates) {
+            this.seedExactCandidate(candidate);
+        }
+        return createEmptyRankMergeUsageStats();
+    }
+
+    private seedRankMergedCandidates(candidates: readonly RankMergeCandidate[]): RankMergeUsageStats {
+        const usage = createEmptyRankMergeUsageStats();
+        for (const group of groupRankMergeCandidates(candidates)) {
+            if (group.exactKeys.size > 1) {
+                addRankMergeUsage(usage, group, 'fallback');
+            }
+            for (const candidate of group.candidates) this.seedExactCandidate(candidate);
+        }
+        return usage;
+    }
+
+    private seedExactCandidate(candidate: RankMergeCandidate): void {
+        const graph = this.graphForPool(candidate.pool);
+        const root = graph.graph.getRootNode(candidate.level);
+        this.coordinator.seedPending(graph.id, root.id, candidate.mass);
+    }
+
     private graphForPool(pool: SearchPool): GroupedFlexGraphRecord {
         const existing = this.graphsBySignature.get(pool.signature);
         if (existing) return existing;
@@ -206,46 +262,100 @@ export class GroupedFlexSearchRun {
     }
 }
 
-function createRankMergeStats(candidates: readonly RankMergeCandidate[]): FlexRankMergeMemoryStats {
-    const groups = new Map<string, {
-        readonly exactKeys: Set<string>;
-        levelCount: number;
-        mass: bigint;
-    }>();
+function createRankMergeStats(
+    candidates: readonly RankMergeCandidate[],
+    usage: RankMergeUsageStats
+): FlexRankMergeMemoryStats {
+    let eligibleFamilyGroupCount = 0;
+    let eligibleExactPoolCount = 0;
+    let eligibleLevelCount = 0;
+    let eligibleMass = 0n;
+    for (const group of groupRankMergeCandidates(candidates)) {
+        if (group.exactKeys.size <= 1) continue;
+        eligibleFamilyGroupCount++;
+        eligibleExactPoolCount += group.exactKeys.size;
+        eligibleLevelCount += group.candidates.length;
+        eligibleMass += group.mass;
+    }
+
+    if (eligibleFamilyGroupCount === 0
+        && usage.usedFamilyGroupCount === 0
+        && usage.fallbackFamilyGroupCount === 0) {
+        return EMPTY_RANK_MERGE_STATS;
+    }
+
+    return Object.freeze({
+        eligibleFamilyGroupCount,
+        eligibleExactPoolCount,
+        eligibleLevelCount,
+        eligibleMass,
+        usedFamilyGroupCount: usage.usedFamilyGroupCount,
+        usedExactPoolCount: usage.usedExactPoolCount,
+        usedLevelCount: usage.usedLevelCount,
+        usedMass: usage.usedMass,
+        fallbackFamilyGroupCount: usage.fallbackFamilyGroupCount,
+        fallbackExactPoolCount: usage.fallbackExactPoolCount,
+        fallbackLevelCount: usage.fallbackLevelCount,
+        fallbackMass: usage.fallbackMass
+    });
+}
+
+function groupRankMergeCandidates(candidates: readonly RankMergeCandidate[]): RankMergeCandidateGroup[] {
+    const groups = new Map<string, RankMergeCandidateGroup>();
 
     for (const candidate of candidates) {
-        const key = `${candidate.familyKey}|${String(candidate.childLevel)}`;
+        const key = createRankCandidateGroupKey(candidate.familyKey, candidate.childLevel);
         let group = groups.get(key);
         if (!group) {
             group = {
+                familyKey: candidate.familyKey,
+                childLevel: candidate.childLevel,
+                candidates: [],
                 exactKeys: new Set<string>(),
-                levelCount: 0,
                 mass: 0n
             };
             groups.set(key, group);
         }
         group.exactKeys.add(candidate.exactKey);
-        group.levelCount++;
+        group.candidates.push(candidate);
         group.mass += candidate.mass;
     }
 
-    let eligibleFamilyGroupCount = 0;
-    let eligibleExactPoolCount = 0;
-    let eligibleLevelCount = 0;
-    let eligibleMass = 0n;
-    for (const group of groups.values()) {
-        if (group.exactKeys.size <= 1) continue;
-        eligibleFamilyGroupCount++;
-        eligibleExactPoolCount += group.exactKeys.size;
-        eligibleLevelCount += group.levelCount;
-        eligibleMass += group.mass;
+    return [...groups.values()];
+}
+
+function createEmptyRankMergeUsageStats(): RankMergeUsageStats {
+    return {
+        usedFamilyGroupCount: 0,
+        usedExactPoolCount: 0,
+        usedLevelCount: 0,
+        usedMass: 0n,
+        fallbackFamilyGroupCount: 0,
+        fallbackExactPoolCount: 0,
+        fallbackLevelCount: 0,
+        fallbackMass: 0n
+    };
+}
+
+function addRankMergeUsage(
+    usage: RankMergeUsageStats,
+    group: RankMergeCandidateGroup,
+    kind: 'used' | 'fallback'
+): void {
+    if (kind === 'used') {
+        usage.usedFamilyGroupCount++;
+        usage.usedExactPoolCount += group.exactKeys.size;
+        usage.usedLevelCount += group.candidates.length;
+        usage.usedMass += group.mass;
+        return;
     }
 
-    if (eligibleFamilyGroupCount === 0) return EMPTY_RANK_MERGE_STATS;
-    return Object.freeze({
-        eligibleFamilyGroupCount,
-        eligibleExactPoolCount,
-        eligibleLevelCount,
-        eligibleMass
-    });
+    usage.fallbackFamilyGroupCount++;
+    usage.fallbackExactPoolCount += group.exactKeys.size;
+    usage.fallbackLevelCount += group.candidates.length;
+    usage.fallbackMass += group.mass;
+}
+
+function createRankCandidateGroupKey(familySignature: string, childLevel: number): string {
+    return `rank:${familySignature}:${String(childLevel)}`;
 }

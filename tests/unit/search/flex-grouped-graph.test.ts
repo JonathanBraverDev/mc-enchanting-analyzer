@@ -317,7 +317,15 @@ describe('GroupedFlexSearchRun', () => {
             eligibleFamilyGroupCount: 0,
             eligibleExactPoolCount: 0,
             eligibleLevelCount: 0,
-            eligibleMass: 0n
+            eligibleMass: 0n,
+            usedFamilyGroupCount: 0,
+            usedExactPoolCount: 0,
+            usedLevelCount: 0,
+            usedMass: 0n,
+            fallbackFamilyGroupCount: 0,
+            fallbackExactPoolCount: 0,
+            fallbackLevelCount: 0,
+            fallbackMass: 0n
         });
 
         run.seedXp(30);
@@ -327,6 +335,41 @@ describe('GroupedFlexSearchRun', () => {
         assert.ok(stats.eligibleExactPoolCount > stats.eligibleFamilyGroupCount);
         assert.ok(stats.eligibleLevelCount >= stats.eligibleExactPoolCount);
         assert.ok(stats.eligibleMass > 0n);
+        assert.strictEqual(stats.usedFamilyGroupCount, 0);
+        assert.strictEqual(stats.fallbackFamilyGroupCount, 0);
+    });
+
+    it('keeps rank-merge opt-in on the exact path until profile-aware merging is safe', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'pickaxe', material: 'diamond' });
+        const split = PRECISION / 2n;
+        const distributionService = {
+            getModifiedLevelDist: () => ({
+                10: split,
+                11: PRECISION - split
+            })
+        } as any;
+
+        const exactRun = new GroupedFlexSearchRun(kernel, { distributionService });
+        exactRun.seedXp(30);
+        const exactState = exactRun.searchToCheckpointState({ exhaustive: true, probabilityFloor: 0n });
+        const exact = exactRun.buildEngineSnapshot(exactState);
+
+        const rankRun = new GroupedFlexSearchRun(kernel, {
+            distributionService,
+            optimizationControls: { allowRankMerge: true }
+        });
+        rankRun.seedXp(30);
+        const rankStats = rankRun.getMemoryStats().rankMerge;
+        const rankState = rankRun.searchToCheckpointState({ exhaustive: true, probabilityFloor: 0n });
+        const rank = rankRun.buildEngineSnapshot(rankState);
+
+        assert.strictEqual(rankStats.usedFamilyGroupCount, 0);
+        assert.strictEqual(rankStats.fallbackFamilyGroupCount, 1);
+        assert.strictEqual(rankStats.fallbackExactPoolCount, 2);
+        assert.strictEqual(rankRun.getMemoryStats().graphs.length, exactRun.getMemoryStats().graphs.length);
+        assert.deepStrictEqual(rank.snapshot.results, exact.snapshot.results);
+        assert.strictEqual(rank.resolvedProjectionLoss, exact.resolvedProjectionLoss);
     });
 
     it('keeps incremental residue diagnostics aligned with a full residue scan', () => {

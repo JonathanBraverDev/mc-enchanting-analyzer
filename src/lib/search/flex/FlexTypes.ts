@@ -155,6 +155,14 @@ export interface FlexRankMergeMemoryStats {
     readonly eligibleExactPoolCount: number;
     readonly eligibleLevelCount: number;
     readonly eligibleMass: bigint;
+    readonly usedFamilyGroupCount: number;
+    readonly usedExactPoolCount: number;
+    readonly usedLevelCount: number;
+    readonly usedMass: bigint;
+    readonly fallbackFamilyGroupCount: number;
+    readonly fallbackExactPoolCount: number;
+    readonly fallbackLevelCount: number;
+    readonly fallbackMass: bigint;
 }
 
 export interface FlexRunMemoryStats {
