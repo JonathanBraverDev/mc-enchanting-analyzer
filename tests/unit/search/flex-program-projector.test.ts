@@ -94,7 +94,7 @@ describe('FlexProgramStore', () => {
         );
     });
 
-    it('classifies SolidNode and PlexNode variants from program contents', () => {
+    it('classifies legacy node kind from program merge flags', () => {
         const store = new FlexProgramStore();
         const solidProgram = store.appendFixed(store.empty, sharpness);
         const plexProgram = store.appendChoice(solidProgram, [
@@ -103,9 +103,16 @@ describe('FlexProgramStore', () => {
         ]);
         const solidAfterPlexProgram = store.appendFixed(plexProgram, smite);
 
-        assert.strictEqual(store.createNode(nodeId(1), solidProgram).kind, 'solid');
-        assert.strictEqual(store.createNode(nodeId(2), plexProgram).kind, 'plex');
-        assert.strictEqual(store.createNode(nodeId(3), solidAfterPlexProgram).kind, 'plex');
+        const solidNode = store.createNode(nodeId(1), solidProgram);
+        const plexNode = store.createNode(nodeId(2), plexProgram);
+        const solidAfterPlexNode = store.createNode(nodeId(3), solidAfterPlexProgram);
+
+        assert.deepStrictEqual(solidNode.mergeFlags, { conflictMerge: false, rankMerge: false });
+        assert.deepStrictEqual(plexNode.mergeFlags, { conflictMerge: true, rankMerge: false });
+        assert.deepStrictEqual(solidAfterPlexNode.mergeFlags, { conflictMerge: true, rankMerge: false });
+        assert.strictEqual(solidNode.kind, 'solid');
+        assert.strictEqual(plexNode.kind, 'plex');
+        assert.strictEqual(solidAfterPlexNode.kind, 'plex');
     });
 });
 

@@ -5,6 +5,17 @@ import type { PendingFrontierAggregates } from '#lib/search/SearchSnapshot.js';
 export type FlexNodeId = number & { readonly __brand: 'FlexNodeId' };
 export type FlexProgramId = number & { readonly __brand: 'FlexProgramId' };
 export type FlexStateIdentityMode = 'reduced' | 'program';
+export type FlexNodeKind = 'solid' | 'plex';
+
+export interface FlexMergeFlags {
+    readonly conflictMerge: boolean;
+    readonly rankMerge: boolean;
+}
+
+export const FLEX_MERGE_FLAGS_NONE: FlexMergeFlags = Object.freeze({
+    conflictMerge: false,
+    rankMerge: false
+});
 
 export interface FlexAlternative {
     readonly packedEnchant: PackedEnchant;
@@ -25,21 +36,14 @@ export interface FlexChoiceEmission {
 export type FlexEmission = FlexFixedEmission | FlexChoiceEmission;
 export type FlexProgram = readonly FlexEmission[];
 
-export interface FlexNodeBase {
+export interface FlexNode {
     readonly id: FlexNodeId;
     readonly programId: FlexProgramId;
     readonly count: number;
+    readonly mergeFlags: FlexMergeFlags;
+    /** Legacy diagnostic classification. Prefer `mergeFlags` for new behavior. */
+    readonly kind: FlexNodeKind;
 }
-
-export interface SolidNode extends FlexNodeBase {
-    readonly kind: 'solid';
-}
-
-export interface PlexNode extends FlexNodeBase {
-    readonly kind: 'plex';
-}
-
-export type FlexNode = SolidNode | PlexNode;
 
 export interface FlexEdge {
     readonly weight: number;
@@ -51,7 +55,7 @@ export type FlexTerminalReason = 'overflow' | null;
 export interface FlexSearchExpansion {
     readonly nodeId: FlexNodeId;
     readonly programId: FlexProgramId;
-    readonly nodeKind: FlexNode['kind'];
+    readonly nodeKind: FlexNodeKind;
     readonly count: number;
     readonly probContinue: bigint;
     readonly totalWeight: number;
@@ -78,7 +82,7 @@ export interface FlexGraph {
     withSearchExpansion<T>(nodeId: FlexNodeId, consumer: FlexSearchExpansionConsumer<T>): T;
     getProgramId(nodeId: FlexNodeId): FlexProgramId;
     getNodeCount(nodeId: FlexNodeId): number;
-    getNodeKind(nodeId: FlexNodeId): FlexNode['kind'];
+    getNodeKind(nodeId: FlexNodeId): FlexNodeKind;
     getNode(nodeId: FlexNodeId): FlexNode;
 }
 
@@ -151,7 +155,7 @@ export interface FlexPendingEntry {
     readonly programId: FlexProgramId;
     readonly mass: bigint;
     readonly count: number;
-    readonly nodeKind: FlexNode['kind'];
+    readonly nodeKind: FlexNodeKind;
     readonly targetClueReachable?: boolean | undefined;
 }
 
@@ -161,7 +165,7 @@ export type FlexPendingEntryVisitor = (
     programId: FlexProgramId,
     mass: bigint,
     count: number,
-    nodeKind: FlexNode['kind']
+    nodeKind: FlexNodeKind
 ) => void;
 
 export interface FlexRunState {

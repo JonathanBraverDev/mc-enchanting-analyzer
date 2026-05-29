@@ -4,6 +4,8 @@ import {
     type FlexChoiceEmission,
     type FlexEmission,
     type FlexFixedEmission,
+    FLEX_MERGE_FLAGS_NONE,
+    type FlexMergeFlags,
     type FlexNode,
     type FlexNodeId,
     type FlexProgram,
@@ -15,7 +17,7 @@ interface FlexProgramRecord {
     readonly id: FlexProgramId;
     readonly parentId: FlexProgramId | null;
     readonly emission: FlexEmission | null;
-    readonly hasChoice: boolean;
+    readonly mergeFlags: FlexMergeFlags;
     readonly slotCount: number;
 }
 
@@ -55,7 +57,7 @@ export class FlexProgramStore {
         id: EMPTY_PROGRAM_ID,
         parentId: null,
         emission: null,
-        hasChoice: false,
+        mergeFlags: FLEX_MERGE_FLAGS_NONE,
         slotCount: 0
     })];
     private readonly idsByTransition: Array<Array<FlexProgramId | undefined> | undefined> = [];
@@ -135,7 +137,7 @@ export class FlexProgramStore {
             id,
             parentId,
             emission: canonical,
-            hasChoice: parent.hasChoice || canonical.kind === 'choice',
+            mergeFlags: this.createMergeFlags(parent.mergeFlags, canonical),
             slotCount: parent.slotCount + 1
         });
         this.records.push(record);
@@ -203,8 +205,22 @@ export class FlexProgramStore {
     }
 
     public hasChoice(id: FlexProgramId): boolean {
+        return this.hasConflictMerge(id);
+    }
+
+    public hasConflictMerge(id: FlexProgramId): boolean {
         this.assertProgram(id);
-        return this.records[id]!.hasChoice;
+        return this.records[id]!.mergeFlags.conflictMerge;
+    }
+
+    public hasRankMerge(id: FlexProgramId): boolean {
+        this.assertProgram(id);
+        return this.records[id]!.mergeFlags.rankMerge;
+    }
+
+    public getMergeFlags(id: FlexProgramId): FlexMergeFlags {
+        this.assertProgram(id);
+        return this.records[id]!.mergeFlags;
     }
 
     public getSlotCount(id: FlexProgramId): number {
@@ -214,9 +230,14 @@ export class FlexProgramStore {
 
     public createNode(id: FlexNodeId, programId: FlexProgramId): FlexNode {
         const count = this.getSlotCount(programId);
-        return Object.freeze(this.hasChoice(programId)
-            ? { kind: 'plex', id, programId, count }
-            : { kind: 'solid', id, programId, count });
+        const mergeFlags = this.getMergeFlags(programId);
+        return Object.freeze({
+            id,
+            programId,
+            count,
+            mergeFlags,
+            kind: mergeFlags.conflictMerge ? 'plex' : 'solid'
+        });
     }
 
     public getMemoryStats(): FlexProgramStoreMemoryStats {
@@ -241,6 +262,17 @@ export class FlexProgramStore {
             throw new Error(`Flex choice total weight ${emission.totalWeight} does not match alternatives total ${canonical.totalWeight}.`);
         }
         return canonical;
+    }
+
+    private createMergeFlags(parent: FlexMergeFlags, emission: FlexEmission): FlexMergeFlags {
+        const conflictMerge = parent.conflictMerge || emission.kind === 'choice';
+        const rankMerge = parent.rankMerge;
+        if (conflictMerge === parent.conflictMerge && rankMerge === parent.rankMerge) return parent;
+
+        return Object.freeze({
+            conflictMerge,
+            rankMerge
+        });
     }
 
     private canonicalizeChoice(alternatives: readonly FlexAlternative[]): FlexChoiceEmission {
@@ -385,7 +417,7 @@ export class FlexProgramStore {
             id,
             parentId,
             emission,
-            hasChoice: parent.hasChoice || emission.kind === 'choice',
+            mergeFlags: this.createMergeFlags(parent.mergeFlags, emission),
             slotCount: parent.slotCount + 1
         });
         this.records.push(record);
