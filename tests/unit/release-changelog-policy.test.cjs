@@ -571,6 +571,49 @@ describe('CI change advisory classification', () => {
     assert.doesNotMatch(advisoryBody, /```diff/);
   });
 
+  it('shows job-level permissions when workflow permissions move there', () => {
+    const tmpDir = createCiAdvisoryRepo();
+    const bodyPath = path.join(tmpDir, 'advisory.md');
+    const scriptPath = path.resolve(__dirname, '../../scripts/classify-ci-changes.cjs');
+
+    writeFixtureFile(tmpDir, '.github/workflows/dev-test.yml', [
+      'name: Dev Test',
+      '',
+      'on:',
+      '  pull_request_target:',
+      '',
+      'permissions:',
+      '  contents: read',
+      '',
+      'jobs:',
+      '  test:',
+      '    permissions:',
+      '      contents: read',
+      '      pull-requests: write',
+      '      issues: write',
+      '    runs-on: ubuntu-latest',
+      '    steps:',
+      '      - run: npm run lint',
+      '',
+    ].join('\n'));
+    git(tmpDir, ['add', '.']);
+    git(tmpDir, ['commit', '-qm', 'move permissions to job']);
+
+    const classification = classify(tmpDir);
+    assert.deepEqual(new Set(classification.workflowBehaviorChanges[0].changedCategories), new Set(['triggers', 'permissions', 'jobs', 'invocations']));
+    assert.throws(
+      () => execFileSync(process.execPath, [scriptPath, 'base', 'HEAD', '--body-file', bodyPath], {
+        cwd: tmpDir,
+        stdio: 'pipe',
+      }),
+      { status: 1 }
+    );
+
+    const advisoryBody = fs.readFileSync(bodyPath, 'utf8');
+    assert.match(advisoryBody, /After jobs:/);
+    assert.match(advisoryBody, /permissions `contents: read, pull-requests: write, issues: write`/);
+  });
+
   it('reports direct CI support script changes', () => {
     const tmpDir = createCiAdvisoryRepo();
     const bodyPath = path.join(tmpDir, 'advisory.md');
@@ -670,6 +713,59 @@ describe('CI change advisory classification', () => {
   });
 });
 
+describe('advisory preview workflows', () => {
+  function workflow(name) {
+    return fs.readFileSync(path.resolve(__dirname, `../../.github/workflows/${name}`), 'utf8');
+  }
+
+  function jobBlock(contents, jobName) {
+    const start = contents.indexOf(`  ${jobName}:`);
+    assert.notEqual(start, -1, `missing workflow job ${jobName}`);
+    const rest = contents.slice(start + 1);
+    const next = rest.search(/\n  [a-zA-Z0-9_-]+:\n/);
+    return next === -1 ? rest : rest.slice(0, next);
+  }
+
+  it('keeps trusted advisory jobs comment-writing and base-authored', () => {
+    for (const file of ['ci-change-advisory.yml', 'snapshot-advisory.yml']) {
+      const contents = workflow(file);
+      const trustedJob = file === 'ci-change-advisory.yml' ? 'ci-change-advisory' : 'snapshot-advisory';
+      const block = jobBlock(contents, trustedJob);
+
+      assert.match(contents, /pull_request_target:/);
+      assert.doesNotMatch(contents, /^\s*pull_request:/m);
+      assert.match(block, /pull-requests: write/);
+      assert.match(block, /issues: write/);
+      assert.match(block, /scripts\/pr-marker-comment\.cjs/);
+      assert.match(block, /github\.event\.pull_request\.base\.ref/);
+      assert.match(block, /if \[ "\$advisory_status" -eq 0 \]/);
+      assert.match(block, /resolve_active_comment/);
+      assert.match(block, /exit 0/);
+    }
+  });
+
+  it('keeps branch-authored advisory previews read-only and summary-only', () => {
+    for (const file of ['ci-change-advisory-preview.yml', 'snapshot-advisory-preview.yml']) {
+      const contents = workflow(file);
+      const previewJob = file === 'ci-change-advisory-preview.yml'
+        ? 'ci-change-advisory-preview'
+        : 'snapshot-advisory-preview';
+      const block = jobBlock(contents, previewJob);
+
+      assert.match(contents, /pull_request:/);
+      assert.doesNotMatch(contents, /pull_request_target:/);
+      assert.match(block, /contents: read/);
+      assert.match(block, /GITHUB_STEP_SUMMARY/);
+      assert.match(block, /Branch-authored preview/);
+      assert.doesNotMatch(block, /pull-requests: write/);
+      assert.doesNotMatch(block, /issues: write/);
+      assert.doesNotMatch(block, /scripts\/pr-marker-comment\.cjs/);
+      assert.match(block, /if \[ "\$advisory_status" -eq 0 \]/);
+      assert.match(block, /exit 0/);
+    }
+  });
+});
+
 describe('snapshot advisory classification', () => {
   function git(cwd, args) {
     return execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
@@ -758,20 +854,205 @@ describe('snapshot advisory classification', () => {
     assert.equal(classification.counts.modified, 1);
     assert.equal(classification.counts.diagnosticsAdded, 2);
     assert.equal(classification.counts.accountingDetailsAdded, 2);
+    assert.equal(classification.counts.resultBearing, 1);
+    assert.equal(classification.counts.fixtureAdded, 1);
+    assert.equal(classification.counts.fixtureRemoved, 0);
 
     const example = classification.rawSnapshots.find((snapshot) => snapshot.id === 'example');
+    assert.equal(example.reviewKind, 'result-bearing');
     assert.equal(example.comboCountBefore, 2);
     assert.equal(example.comboCountAfter, 2);
     assert.equal(example.comboKeysAdded, 1);
     assert.equal(example.comboKeysRemoved, 1);
     assert.equal(example.comboValuesChanged, 1);
+    assert.deepEqual(example.signals.filter((signal) => [
+      'accuracy changed',
+      'combo keys changed',
+      'combo mass moved',
+      'distribution shifted',
+      'accounting shifted',
+      'diagnostics changed',
+      'accounting details changed',
+      'human snapshot changed',
+    ].includes(signal)), [
+      'accuracy changed',
+      'combo keys changed',
+      'combo mass moved',
+      'distribution shifted',
+      'accounting shifted',
+      'diagnostics changed',
+      'accounting details changed',
+      'human snapshot changed',
+    ]);
+    assert.equal(example.distributions.some((distribution) => distribution.key === 'any'), true);
+    assert.equal(example.accounting.topMovers[0].key, 'resolved');
+    assert.match(example.diagnosticPathsKnownAdded.join('\n'), /diagnostics\.engine\.exitReason/);
+    assert.match(example.accountingDetailPathsKnownAdded.join('\n'), /accounting\.details\.stages\.search\.buckets\.resolved\.value/);
+    assert.deepEqual(example.unmappedPathsAdded, []);
+
+    const newCase = classification.rawSnapshots.find((snapshot) => snapshot.id === 'new-case');
+    assert.equal(newCase.reviewKind, 'fixture-added');
+    assert.match(newCase.signals.join(', '), /new fixture/);
+    assert.doesNotMatch(newCase.signals.join(', '), /combo keys changed/);
 
     const markdown = formatSnapshotMarkdown(classification);
     assert.match(markdown, /Snapshot outputs changed/);
     assert.match(markdown, /Raw snapshots changed: 2 \(1 added, 1 modified, 0 removed\)/);
     assert.match(markdown, /Diagnostics\/accounting detail fields added/);
-    assert.match(markdown, /`new-case`/);
-    assert.match(markdown, /combo keys \+1\/-1/);
+    assert.match(markdown, /Comparable result changes: 1/);
+    assert.match(markdown, /New\/removed snapshots: 1 added, 0 removed/);
+    assert.match(markdown, /New Or Removed Snapshots/);
+    assert.match(markdown, /Result Changes/);
+    assert.match(markdown, /Instrumentation Additions/);
+    assert.match(markdown, /Engine\/search diagnostics changed/);
+    assert.match(markdown, /Accounting details changed/);
+    assert.doesNotMatch(markdown, /diagnostics\.engine\.exitReason/);
+    const resultSection = markdown.slice(markdown.indexOf('## Result Changes'), markdown.indexOf('## New Or Removed Snapshots'));
+    const fixtureSection = markdown.slice(markdown.indexOf('## New Or Removed Snapshots'), markdown.indexOf('## Instrumentation Additions'));
+    assert.equal(markdown.indexOf('## Result Changes') < markdown.indexOf('## New Or Removed Snapshots'), true);
+    assert.match(fixtureSection, /`new-case`/);
+    assert.match(fixtureSection, /\| Snapshot \| Status \| Accuracy \| Combos \| Review \|/);
+    assert.doesNotMatch(fixtureSection, /combo keys changed/);
+    assert.doesNotMatch(resultSection, /`new-case`/);
+    assert.match(resultSection, /\| Snapshot \| Accuracy \| Combos \| Review \|/);
+    assert.match(resultSection, /combo key set changed/);
+    assert.doesNotMatch(resultSection, /combo keys \+1\/-1/);
+  });
+
+  it('reports same combo keys with mass movement separately from key churn', () => {
+    const tmpDir = createSnapshotAdvisoryRepo();
+
+    writeSnapshot(tmpDir, 'tests/snapshots/example.json', {
+      ranks: { sharpness: { 1: 0.4 }, smite: { 1: 0.35 } },
+      any: { sharpness: 0.4, smite: 0.35 },
+      count: { 1: 0.5, 2: 0.25 },
+      combos: {
+        'sharpness:1': 0.4,
+        'smite:1': 0.35,
+      },
+      accuracy: 0.75,
+      accounting: { resolved: 0.75 },
+    });
+    git(tmpDir, ['add', '.']);
+    git(tmpDir, ['commit', '-qm', 'move mass']);
+
+    const classification = classifySnapshotChanges({ baseRef: 'base', headRef: 'HEAD', cwd: tmpDir });
+    const example = classification.rawSnapshots.find((snapshot) => snapshot.id === 'example');
+
+    assert.equal(example.comboKeysAdded, 0);
+    assert.equal(example.comboKeysRemoved, 0);
+    assert.equal(example.comboValuesChanged, 2);
+    assert.match(example.signals.join(', '), /combo mass moved/);
+    assert.doesNotMatch(example.signals.join(', '), /combo keys changed/);
+  });
+
+  it('lists removed snapshots as fixture changes instead of comparable result changes', () => {
+    const tmpDir = createSnapshotAdvisoryRepo();
+
+    fs.unlinkSync(path.join(tmpDir, 'tests/snapshots/example.json'));
+    fs.unlinkSync(path.join(tmpDir, 'tests/snapshots/example.human.json'));
+    git(tmpDir, ['add', '.']);
+    git(tmpDir, ['commit', '-qm', 'remove snapshot fixture']);
+
+    const classification = classifySnapshotChanges({ baseRef: 'base', headRef: 'HEAD', cwd: tmpDir });
+    const example = classification.rawSnapshots.find((snapshot) => snapshot.id === 'example');
+    const markdown = formatSnapshotMarkdown(classification);
+
+    assert.equal(classification.counts.resultBearing, 0);
+    assert.equal(classification.counts.fixtureAdded, 0);
+    assert.equal(classification.counts.fixtureRemoved, 1);
+    assert.equal(example.reviewKind, 'fixture-removed');
+    assert.match(example.signals.join(', '), /removed fixture/);
+    assert.doesNotMatch(example.signals.join(', '), /combo keys changed/);
+    assert.match(markdown, /New\/removed snapshots: 0 added, 1 removed/);
+    assert.match(markdown, /New Or Removed Snapshots/);
+    assert.doesNotMatch(markdown, /Result Changes/);
+  });
+
+  it('reports distribution shifts and accounting bucket shifts', () => {
+    const tmpDir = createSnapshotAdvisoryRepo();
+
+    writeSnapshot(tmpDir, 'tests/snapshots/example.json', {
+      ranks: { sharpness: { 1: 0.5 } },
+      any: { sharpness: 0.5 },
+      count: { 1: 0.25, 3: 0.5 },
+      combos: {
+        'sharpness:1': 0.5,
+        'smite:1': 0.25,
+      },
+      accuracy: 0.75,
+      accounting: { resolved: 0.7, rounding: 0.05 },
+    });
+    git(tmpDir, ['add', '.']);
+    git(tmpDir, ['commit', '-qm', 'shift buckets']);
+
+    const classification = classifySnapshotChanges({ baseRef: 'base', headRef: 'HEAD', cwd: tmpDir });
+    const example = classification.rawSnapshots.find((snapshot) => snapshot.id === 'example');
+    const countDistribution = example.distributions.find((distribution) => distribution.key === 'count');
+    const markdown = formatSnapshotMarkdown(classification);
+
+    assert.equal(countDistribution.direction, 'higher');
+    assert.match(example.signals.join(', '), /distribution shifted/);
+    assert.match(example.signals.join(', '), /accounting shifted/);
+    assert.deepEqual(example.accounting.topMovers.map((mover) => mover.key), ['resolved', 'rounding']);
+    assert.match(markdown, /\| `example` \| stable \| stable \| .* \|/);
+    assert.doesNotMatch(markdown, /0\.750000000000 -> 0\.750000000000/);
+    assert.doesNotMatch(markdown, /2 -> 2 \(0\)/);
+    assert.doesNotMatch(markdown, /movers:/);
+  });
+
+  it('reports invariant warnings without diagnosing the cause', () => {
+    const tmpDir = createSnapshotAdvisoryRepo();
+
+    writeSnapshot(tmpDir, 'tests/snapshots/example.json', {
+      ranks: { sharpness: { 1: 0.5 } },
+      any: { sharpness: 0.5 },
+      count: { 1: 1 },
+      combos: {
+        'sharpness:1': 0.4,
+        'smite:1': 0.2,
+      },
+      accuracy: 0.75,
+      accounting: { resolved: 0.75, pending: 0.4 },
+    });
+    git(tmpDir, ['add', '.']);
+    git(tmpDir, ['commit', '-qm', 'break invariant']);
+
+    const classification = classifySnapshotChanges({ baseRef: 'base', headRef: 'HEAD', cwd: tmpDir });
+    const example = classification.rawSnapshots.find((snapshot) => snapshot.id === 'example');
+    const markdown = formatSnapshotMarkdown(classification);
+
+    assert.match(example.signals.join(', '), /invariant warning/);
+    assert.equal(example.invariantWarnings.length >= 1, true);
+    assert.match(markdown, /Invariant Warnings/);
+  });
+
+  it('reports generic unknown snapshot paths', () => {
+    const tmpDir = createSnapshotAdvisoryRepo();
+
+    writeSnapshot(tmpDir, 'tests/snapshots/example.json', {
+      ranks: { sharpness: { 1: 0.5 } },
+      any: { sharpness: 0.5 },
+      count: { 1: 1 },
+      combos: {
+        'sharpness:1': 0.5,
+        'smite:1': 0.25,
+      },
+      accuracy: 0.75,
+      accounting: { resolved: 0.75 },
+      futureSurface: { nested: true },
+    });
+    git(tmpDir, ['add', '.']);
+    git(tmpDir, ['commit', '-qm', 'add unknown path']);
+
+    const classification = classifySnapshotChanges({ baseRef: 'base', headRef: 'HEAD', cwd: tmpDir });
+    const example = classification.rawSnapshots.find((snapshot) => snapshot.id === 'example');
+    const markdown = formatSnapshotMarkdown(classification);
+
+    assert.deepEqual(example.unmappedPathsAdded, ['futureSurface']);
+    assert.match(example.signals.join(', '), /new\/unmapped paths/);
+    assert.match(markdown, /Unknown Paths/);
+    assert.match(markdown, /futureSurface/);
   });
 
   it('reports no changes when snapshots are untouched', () => {
