@@ -11,6 +11,8 @@ interface CliOptions {
     readonly xp: number;
     readonly targetClassifiedMass: number;
     readonly exhaustive: boolean;
+    readonly allowConflictMerge: boolean;
+    readonly allowRankMerge: boolean;
     readonly clue?: string | undefined;
 }
 
@@ -44,6 +46,18 @@ interface SummedFlexGroupingStats {
     readonly shapePreparedEmissionAppendCount: number;
     readonly nodeIndexGrowCount: number;
     readonly residueArrayAllocationCount: number;
+    readonly rankMergeEligibleFamilyGroupCount: number;
+    readonly rankMergeEligibleExactPoolCount: number;
+    readonly rankMergeEligibleLevelCount: number;
+    readonly rankMergeEligibleMass: string;
+    readonly rankMergeUsedFamilyGroupCount: number;
+    readonly rankMergeUsedExactPoolCount: number;
+    readonly rankMergeUsedLevelCount: number;
+    readonly rankMergeUsedMass: string;
+    readonly rankMergeFallbackFamilyGroupCount: number;
+    readonly rankMergeFallbackExactPoolCount: number;
+    readonly rankMergeFallbackLevelCount: number;
+    readonly rankMergeFallbackMass: string;
 }
 
 const DEFAULT_OPTIONS: CliOptions = {
@@ -52,7 +66,9 @@ const DEFAULT_OPTIONS: CliOptions = {
     material: 'book',
     xp: 30,
     targetClassifiedMass: 0.995,
-    exhaustive: false
+    exhaustive: false,
+    allowConflictMerge: true,
+    allowRankMerge: false
 };
 
 async function main(): Promise<void> {
@@ -63,7 +79,13 @@ async function main(): Promise<void> {
         ? undefined
         : ClueValidator.validate(registry, options.item, options.clue);
 
-    const run = new GroupedFlexSearchRun(kernel, { targetClueId });
+    const run = new GroupedFlexSearchRun(kernel, {
+        targetClueId,
+        optimizationControls: {
+            allowConflictMerge: options.allowConflictMerge,
+            allowRankMerge: options.allowRankMerge
+        }
+    });
     run.seedXp(options.xp);
 
     const searchStarted = performance.now();
@@ -132,6 +154,15 @@ function parseArgs(args: readonly string[]): CliOptions {
             case '--exhaustive':
                 options = { ...options, exhaustive: true };
                 break;
+            case '--no-conflict-merge':
+                options = { ...options, allowConflictMerge: false };
+                break;
+            case '--rank-merge':
+                options = { ...options, allowRankMerge: true };
+                break;
+            case '--no-rank-merge':
+                options = { ...options, allowRankMerge: false };
+                break;
             case '--help':
             case '-h':
                 printUsage();
@@ -157,7 +188,10 @@ function printUsage(): void {
         '  --xp LEVEL               Default: 30',
         '  --target VALUE           Classified-mass stop. Default: 0.995',
         '  --clue "Sharpness III"   Optional exact clue',
-        '  --exhaustive             Run exhaustive search instead of mass target'
+        '  --exhaustive             Run exhaustive search instead of mass target',
+        '  --no-conflict-merge      Disable current Plex/conflict grouping',
+        '  --rank-merge             Request rank-family merging; currently reports fallback stats',
+        '  --no-rank-merge          Keep rank-family merging disabled (default)'
     ].join('\n'));
 }
 
@@ -174,6 +208,7 @@ function parseProbability(value: string, label: string): number {
 }
 
 function sumStats(memory: FlexRunMemoryStats): SummedFlexGroupingStats {
+    const rankMerge = memory.rankMerge;
     return {
         programCount: memory.programs.programCount,
         cachedProgramCount: memory.programs.cachedProgramCount,
@@ -203,7 +238,19 @@ function sumStats(memory: FlexRunMemoryStats): SummedFlexGroupingStats {
         lazyChoiceEmissionMemberVisitCount: sum(memory.graphs.map(graph => graph.lazyChoiceEmissionMemberVisitCount)),
         shapePreparedEmissionAppendCount: sum(memory.graphs.map(graph => graph.shapePreparedEmissionAppendCount)),
         nodeIndexGrowCount: sum(memory.graphs.map(graph => graph.nodeIndexGrowCount)),
-        residueArrayAllocationCount: memory.coordinator.residueArrayAllocationCount
+        residueArrayAllocationCount: memory.coordinator.residueArrayAllocationCount,
+        rankMergeEligibleFamilyGroupCount: rankMerge.eligibleFamilyGroupCount,
+        rankMergeEligibleExactPoolCount: rankMerge.eligibleExactPoolCount,
+        rankMergeEligibleLevelCount: rankMerge.eligibleLevelCount,
+        rankMergeEligibleMass: rankMerge.eligibleMass.toString(),
+        rankMergeUsedFamilyGroupCount: rankMerge.usedFamilyGroupCount,
+        rankMergeUsedExactPoolCount: rankMerge.usedExactPoolCount,
+        rankMergeUsedLevelCount: rankMerge.usedLevelCount,
+        rankMergeUsedMass: rankMerge.usedMass.toString(),
+        rankMergeFallbackFamilyGroupCount: rankMerge.fallbackFamilyGroupCount,
+        rankMergeFallbackExactPoolCount: rankMerge.fallbackExactPoolCount,
+        rankMergeFallbackLevelCount: rankMerge.fallbackLevelCount,
+        rankMergeFallbackMass: rankMerge.fallbackMass.toString()
     };
 }
 
@@ -241,7 +288,19 @@ function printableStats(phase: string, stats: SummedFlexGroupingStats): Record<s
         detailCollectionRate: formatRatio(stats.collectedAlternativeDetailCount, stats.groupedAlternativeCount),
         choicesPreparedPerChoiceGroup: formatRatio(stats.preparedChoiceEmissionCount, stats.choiceGroupCount),
         residueArrays: stats.residueArrayAllocationCount,
-        nodeIndexGrows: stats.nodeIndexGrowCount
+        nodeIndexGrows: stats.nodeIndexGrowCount,
+        rankEligibleFamilies: stats.rankMergeEligibleFamilyGroupCount,
+        rankEligibleExactPools: stats.rankMergeEligibleExactPoolCount,
+        rankEligibleLevels: stats.rankMergeEligibleLevelCount,
+        rankEligibleMass: stats.rankMergeEligibleMass,
+        rankUsedFamilies: stats.rankMergeUsedFamilyGroupCount,
+        rankUsedExactPools: stats.rankMergeUsedExactPoolCount,
+        rankUsedLevels: stats.rankMergeUsedLevelCount,
+        rankUsedMass: stats.rankMergeUsedMass,
+        rankFallbackFamilies: stats.rankMergeFallbackFamilyGroupCount,
+        rankFallbackExactPools: stats.rankMergeFallbackExactPoolCount,
+        rankFallbackLevels: stats.rankMergeFallbackLevelCount,
+        rankFallbackMass: stats.rankMergeFallbackMass
     };
 }
 
