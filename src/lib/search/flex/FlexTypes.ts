@@ -24,6 +24,21 @@ export const FLEX_MERGE_FLAGS_NONE: FlexMergeFlags = Object.freeze({
     rankMerge: false
 });
 
+export const FLEX_MERGE_FLAGS_CONFLICT: FlexMergeFlags = Object.freeze({
+    conflictMerge: true,
+    rankMerge: false
+});
+
+export const FLEX_MERGE_FLAGS_RANK: FlexMergeFlags = Object.freeze({
+    conflictMerge: false,
+    rankMerge: true
+});
+
+export const FLEX_MERGE_FLAGS_CONFLICT_RANK: FlexMergeFlags = Object.freeze({
+    conflictMerge: true,
+    rankMerge: true
+});
+
 export interface FlexAlternative {
     readonly packedEnchant: PackedEnchant;
     readonly weight: number;
@@ -38,6 +53,7 @@ export interface FlexChoiceEmission {
     readonly kind: 'choice';
     readonly alternatives: readonly FlexAlternative[];
     readonly totalWeight: number;
+    readonly mergeFlags: FlexMergeFlags;
 }
 
 export type FlexEmission = FlexFixedEmission | FlexChoiceEmission;

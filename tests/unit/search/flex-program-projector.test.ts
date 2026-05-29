@@ -4,6 +4,7 @@ import type { PackedCombo, PackedEnchant } from '#types/index.js';
 import type { PendingFrontierAggregates } from '#lib/search/SearchSnapshot.js';
 import { ComboUtils } from '#utils/index.js';
 import {
+    FLEX_MERGE_FLAGS_RANK,
     FlexProgramStore,
     FlexProjector,
     type FlexNodeId,
@@ -113,6 +114,21 @@ describe('FlexProgramStore', () => {
         assert.strictEqual(solidNode.kind, 'solid');
         assert.strictEqual(plexNode.kind, 'plex');
         assert.strictEqual(solidAfterPlexNode.kind, 'plex');
+    });
+
+    it('tracks rank-only choice flags without promoting the legacy Plex kind', () => {
+        const store = new FlexProgramStore();
+        const rankProgram = store.appendCanonicalChoice(store.empty, [
+            { packedEnchant: sharpnessThree, weight: 1 },
+            { packedEnchant: sharpness, weight: 2 }
+        ], FLEX_MERGE_FLAGS_RANK);
+
+        const rankNode = store.createNode(nodeId(1), rankProgram);
+
+        assert.deepStrictEqual(rankNode.mergeFlags, { conflictMerge: false, rankMerge: true });
+        assert.strictEqual(rankNode.kind, 'solid');
+        assert.strictEqual(store.hasChoice(rankProgram), false);
+        assert.strictEqual(store.hasRankMerge(rankProgram), true);
     });
 });
 
