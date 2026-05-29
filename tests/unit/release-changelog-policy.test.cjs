@@ -10,6 +10,10 @@ const {
   extractMajorReleaseName,
   releaseBump,
 } = require('../../scripts/release-changelog-policy.cjs');
+const {
+  classifyCiChanges,
+  hasCiChanges,
+} = require('../../scripts/classify-ci-changes.cjs');
 
 function entryFor(sections, options = {}) {
   const releaseNameSection = options.releaseName ? [`### ${options.releaseName}`, ''] : [];
@@ -309,17 +313,264 @@ describe('release metadata validation', () => {
     });
   });
 
-  it('rejects release branches that mix CI policy changes with product changes', () => {
+  it('allows release branches that mix CI policy changes with product changes', () => {
     const tmpDir = createReleaseRepo();
     const scriptPath = path.resolve(__dirname, '../../scripts/validate-release-head-commit.cjs');
 
     writeCiPolicyChange(tmpDir, { mixedProductChange: true });
     writePatchReleaseMetadata(tmpDir);
 
+    assert.doesNotThrow(() => {
+      execFileSync(process.execPath, [scriptPath, 'v1.2.4', 'HEAD', 'base'], { cwd: tmpDir, stdio: 'pipe' });
+    });
+  });
+});
+
+describe('CI change advisory classification', () => {
+  function git(cwd, args) {
+    return execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
+  }
+
+  function writeFixtureFile(root, file, content) {
+    const fullPath = path.join(root, file);
+    fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+    fs.writeFileSync(fullPath, content);
+  }
+
+  function writePackage(root, packageJson = {}) {
+    const { scripts = {}, ...packageFields } = packageJson;
+    writeFixtureFile(root, 'package.json', `${JSON.stringify({
+      name: 'ci-advisory-fixture',
+      version: '1.0.0',
+      ...packageFields,
+      scripts: {
+        build: 'vite build',
+        lint: 'eslint .',
+        'lint:imports': 'node scripts/lint-imports.cjs',
+        'test:release-policy': 'node --test tests/unit/release-changelog-policy.test.cjs',
+        ...scripts,
+      },
+    }, null, 2)}\n`);
+  }
+
+  function createCiAdvisoryRepo() {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ci-advisory-check-'));
+    git(tmpDir, ['init', '-q']);
+    git(tmpDir, ['config', 'user.email', 'test@example.com']);
+    git(tmpDir, ['config', 'user.name', 'Test User']);
+
+    writePackage(tmpDir);
+    writeFixtureFile(tmpDir, '.github/workflows/dev-test.yml', [
+      'name: Dev Test',
+      '',
+      'on:',
+      '  pull_request:',
+      '',
+      'jobs:',
+      '  test:',
+      '    runs-on: ubuntu-latest',
+      '    steps:',
+      '      - run: npm run lint',
+      '      - run: npm run lint:imports',
+      '      - run: npm run test:release-policy',
+      '      - run: npm run build',
+      '',
+    ].join('\n'));
+    writeFixtureFile(tmpDir, 'scripts/lint-imports.cjs', 'console.log("lint imports");\n');
+    writeFixtureFile(tmpDir, 'tests/unit/release-changelog-policy.test.cjs', 'console.log("release policy");\n');
+    git(tmpDir, ['add', '.']);
+    git(tmpDir, ['commit', '-qm', 'initial']);
+    git(tmpDir, ['branch', 'base']);
+    return tmpDir;
+  }
+
+  function classify(root) {
+    return classifyCiChanges({ baseRef: 'base', headRef: 'HEAD', cwd: root });
+  }
+
+  it('reports workflow-called build script changes', () => {
+    const tmpDir = createCiAdvisoryRepo();
+
+    writePackage(tmpDir, { scripts: { build: 'vite build --mode production' } });
+    git(tmpDir, ['add', '.']);
+    git(tmpDir, ['commit', '-qm', 'change build script']);
+
+    const classification = classify(tmpDir);
+    assert.equal(hasCiChanges(classification), true);
+    assert.deepEqual(classification.packageScripts.map((script) => script.name), ['build']);
+  });
+
+  it('reports transitive workflow-called package script additions', () => {
+    const tmpDir = createCiAdvisoryRepo();
+
+    writePackage(tmpDir, {
+      scripts: {
+        build: 'npm run build:types && vite build',
+        'build:types': 'tsc -p tsconfig.api.json',
+      },
+    });
+    git(tmpDir, ['add', '.']);
+    git(tmpDir, ['commit', '-qm', 'add type build']);
+
+    const classification = classify(tmpDir);
+    assert.deepEqual(classification.packageScripts.map((script) => script.name), ['build', 'build:types']);
+  });
+
+  it('ignores package scripts that workflows do not call', () => {
+    const tmpDir = createCiAdvisoryRepo();
+
+    writePackage(tmpDir, {
+      scripts: {
+        cli: 'node src/cli/index.js',
+        'test:public': 'node --test tests/public/*.test.cjs',
+      },
+    });
+    git(tmpDir, ['add', '.']);
+    git(tmpDir, ['commit', '-qm', 'add public scripts']);
+
+    const classification = classify(tmpDir);
+    assert.equal(hasCiChanges(classification), false);
+    assert.deepEqual(classification.packageScripts, []);
+  });
+
+  it('reports workflow file changes', () => {
+    const tmpDir = createCiAdvisoryRepo();
+    const bodyPath = path.join(tmpDir, 'advisory.md');
+    const scriptPath = path.resolve(__dirname, '../../scripts/classify-ci-changes.cjs');
+
+    writeFixtureFile(tmpDir, '.github/workflows/dev-test.yml', [
+      'name: Dev Test',
+      '',
+      'on:',
+      '  pull_request:',
+      '  push:',
+      '',
+      'jobs:',
+      '  test:',
+      '    runs-on: ubuntu-latest',
+      '    steps:',
+      '      - run: npm run lint',
+      '      - run: npm run lint:imports',
+      '      - run: npm run test:release-policy',
+      '      - run: npm run build',
+      '',
+    ].join('\n'));
+    git(tmpDir, ['add', '.']);
+    git(tmpDir, ['commit', '-qm', 'change workflow']);
+
+    const classification = classify(tmpDir);
+    assert.equal(hasCiChanges(classification), true);
+    assert.deepEqual(classification.workflowFiles, ['.github/workflows/dev-test.yml']);
     assert.throws(
-      () => execFileSync(process.execPath, [scriptPath, 'v1.2.4', 'HEAD', 'base'], { cwd: tmpDir, stdio: 'pipe' }),
-      /CI-sensitive release changes must be isolated/
+      () => execFileSync(process.execPath, [scriptPath, 'base', 'HEAD', '--body-file', bodyPath], {
+        cwd: tmpDir,
+        stdio: 'pipe',
+      }),
+      { status: 1 }
     );
+
+    const advisoryBody = fs.readFileSync(bodyPath, 'utf8');
+    assert.match(advisoryBody, /Critical workflow diff lines:/);
+    assert.match(advisoryBody, /```diff/);
+    assert.match(advisoryBody, /\+  push:/);
+  });
+
+  it('reports direct CI support script changes', () => {
+    const tmpDir = createCiAdvisoryRepo();
+    const bodyPath = path.join(tmpDir, 'advisory.md');
+    const scriptPath = path.resolve(__dirname, '../../scripts/classify-ci-changes.cjs');
+
+    writeFixtureFile(tmpDir, 'scripts/validate-release-head-commit.cjs', 'console.log("release validator");\n');
+    git(tmpDir, ['add', '.']);
+    git(tmpDir, ['commit', '-qm', 'change release validator']);
+
+    const classification = classify(tmpDir);
+    assert.equal(hasCiChanges(classification), true);
+    assert.deepEqual(classification.supportScripts, ['scripts/validate-release-head-commit.cjs']);
+    assert.throws(
+      () => execFileSync(process.execPath, [scriptPath, 'base', 'HEAD', '--body-file', bodyPath], {
+        cwd: tmpDir,
+        stdio: 'pipe',
+      }),
+      { status: 1 }
+    );
+
+    const advisoryBody = fs.readFileSync(bodyPath, 'utf8');
+    assert.doesNotMatch(advisoryBody, /```diff/);
+  });
+
+  it('ignores package metadata-only changes', () => {
+    const tmpDir = createCiAdvisoryRepo();
+
+    writePackage(tmpDir, {
+      version: '1.0.1',
+      bin: { 'ci-advisory-fixture': './bin/fixture.js' },
+      files: ['dist'],
+      exports: { '.': './dist/index.js' },
+    });
+    git(tmpDir, ['add', '.']);
+    git(tmpDir, ['commit', '-qm', 'change package metadata']);
+
+    const classification = classify(tmpDir);
+    assert.equal(hasCiChanges(classification), false);
+    assert.deepEqual(classification.packageScripts, []);
+  });
+
+  it('reports scripts once CI files start calling them', () => {
+    const tmpDir = createCiAdvisoryRepo();
+
+    writePackage(tmpDir, {
+      scripts: {
+        'test:public': 'node --test tests/public/*.test.cjs',
+      },
+    });
+    writeFixtureFile(tmpDir, '.github/workflows/dev-test.yml', [
+      'name: Dev Test',
+      '',
+      'on:',
+      '  pull_request:',
+      '',
+      'jobs:',
+      '  test:',
+      '    runs-on: ubuntu-latest',
+      '    steps:',
+      '      - run: npm run lint',
+      '      - run: npm run lint:imports',
+      '      - run: npm run test:release-policy',
+      '      - run: npm run build',
+      '      - run: npm run test:public',
+      '',
+    ].join('\n'));
+    git(tmpDir, ['add', '.']);
+    git(tmpDir, ['commit', '-qm', 'call public tests from ci']);
+
+    const classification = classify(tmpDir);
+    assert.equal(hasCiChanges(classification), true);
+    assert.deepEqual(classification.packageScripts.map((script) => script.name), ['test:public']);
+    assert.deepEqual(classification.workflowFiles, ['.github/workflows/dev-test.yml']);
+  });
+
+  it('reports changed files executed by workflow-called package scripts', () => {
+    const tmpDir = createCiAdvisoryRepo();
+
+    writePackage(tmpDir, {
+      scripts: {
+        build: 'npm run build:js',
+        'build:js': 'node scripts/build.js',
+      },
+    });
+    writeFixtureFile(tmpDir, 'scripts/build.js', 'console.log("build");\n');
+    git(tmpDir, ['add', '.']);
+    git(tmpDir, ['commit', '-qm', 'add build script']);
+    git(tmpDir, ['branch', '-f', 'base', 'HEAD']);
+
+    writeFixtureFile(tmpDir, 'scripts/build.js', 'console.log("build changed");\n');
+    git(tmpDir, ['add', '.']);
+    git(tmpDir, ['commit', '-qm', 'change build helper']);
+
+    const classification = classify(tmpDir);
+    assert.equal(hasCiChanges(classification), true);
+    assert.deepEqual(classification.executedScriptFiles, ['scripts/build.js']);
   });
 });
 
