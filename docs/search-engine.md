@@ -99,7 +99,6 @@ Implemented search behavior:
 - Book removal, clue conditioning, pending aggregates, and result summaries are snapshot/reporting concerns, not caller concerns.
 - Async chunked checkpoint search lets worker abort signals interrupt long checkpoints.
 - `exhaustive: true` forces threshold `0`, bypasses the normal iteration safety cap, and remains abortable.
-- Unsupported backend selector values fail through the shared unsupported-backend path.
 
 Non-goals:
 
@@ -471,13 +470,13 @@ Validation should cover both exact public behavior and internal accounting shape
 
 Supported product callers should use:
 
-- `EngineFactory`
-- `EnchantEngine`
-- registry factories/data
-- request/result/stat types documented in [`public-api.md`](public-api.md)
+- `EnchantingAnalyzer`
+- request/result types documented in [`public-api.md`](public-api.md)
 
 Internal search modules are not part of the stable caller API:
 
+- `EngineFactory`
+- `RegistryFactory`
 - `GroupedFlexSearchRun`
 - `FlexCoordinator`
 - `GroupedFlexGraph`
@@ -498,4 +497,4 @@ Jonathan Braver / search engine maintainers.
 
 ## Last Updated
 
-2026-05-25
+2026-05-27
