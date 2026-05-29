@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## v7.4.7 (2026-05-29)
+
+### Developer Experience
+- **CI advisory scope**: Made CI behavior detection advisory-only, removed the release-validator isolation failure for mixed CI/product changes, and taught the advisory to scan workflow/action files for invoked package scripts, transitive script calls, direct CI support scripts, changed helper files those scripts execute, and inline critical workflow diff lines for trigger, permission, target, and condition changes.
+
 ## v7.4.6 (2026-05-29)
 
 ### Developer Experience
