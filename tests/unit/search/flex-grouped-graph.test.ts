@@ -14,7 +14,8 @@ import {
     type FlexEdge,
     type FlexEmission,
     type FlexNativeCheckpoint,
-    type FlexRunSnapshot
+    type FlexRunSnapshot,
+    type GroupedFlexGraphOptions
 } from '#lib/search/flex/index.js';
 
 const SYSTEM_FLOOR_UNITS = ProbUtils.toBigInt(ENGINE_LIMITS.SYSTEM_THRESHOLD_FLOOR);
@@ -96,6 +97,23 @@ describe('GroupedFlexGraph', () => {
             'Bane of Arthropods': 5
         });
         assert.strictEqual(damageEdge.weight, 20);
+    });
+
+    it('can disable conflict-merge grouping for fixed baseline probes', () => {
+        const fixture = createGraphFixture('sword', 'diamond', 30, '1.21.11', {
+            optimizationControls: { allowConflictMerge: false }
+        });
+        const root = fixture.graph.getRootNode(30);
+        const expansion = fixture.graph.getExpansion(root.id);
+        const stats = fixture.graph.getMemoryStats();
+
+        assert.strictEqual(expansion.edges.length, fixture.kernel.getPool(30).entries.length);
+        assert.strictEqual(stats.choiceGroupCount, 0);
+        assert.strictEqual(stats.singletonGroupCount, fixture.kernel.getPool(30).entries.length);
+        for (const edge of expansion.edges) {
+            assert.strictEqual(fixture.graph.getNode(edge.childId).kind, 'solid');
+            assert.strictEqual(getLastEmission(fixture, edge).kind, 'fixed');
+        }
     });
 
     it('collapses modern book damage alternatives only when they share future state', () => {
@@ -332,13 +350,14 @@ function createGraphFixture(
     item: string,
     material: string,
     level: number,
-    version = '1.21.11'
+    version = '1.21.11',
+    graphOptions: GroupedFlexGraphOptions = {}
 ): GroupedGraphFixture {
     const registry = RegistryFactory.build(version);
     const kernel = new RegistryKernel({ registry, item, material });
     const pool = kernel.getPool(level);
     const programs = new FlexProgramStore();
-    const graph = new GroupedFlexGraph(kernel, pool, programs);
+    const graph = new GroupedFlexGraph(kernel, pool, programs, graphOptions);
     return { registry, kernel, graph, programs };
 }
 

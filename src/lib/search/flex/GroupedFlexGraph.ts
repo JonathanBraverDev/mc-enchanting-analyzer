@@ -11,6 +11,7 @@ import type {
     FlexGraphMemoryStats,
     FlexNode,
     FlexNodeId,
+    FlexOptimizationControls,
     FlexProgramId,
     FlexSearchExpansion,
     FlexSearchExpansionConsumer,
@@ -214,6 +215,7 @@ class FlexNodeIndex {
 export interface GroupedFlexGraphOptions {
     readonly stateIdentityMode?: FlexStateIdentityMode | undefined;
     readonly targetClueId?: number | undefined;
+    readonly optimizationControls?: FlexOptimizationControls | undefined;
 }
 
 
@@ -261,6 +263,7 @@ export class GroupedFlexGraph implements FlexGraph {
         terminalReason: null
     };
     private readonly stateIdentityMode: FlexStateIdentityMode;
+    private readonly allowConflictMerge: boolean;
     private readonly targetClueId: number | undefined;
     private readonly targetClueEnchantId: number | undefined;
     private readonly targetClueConflictBitset: bigint;
@@ -295,7 +298,10 @@ export class GroupedFlexGraph implements FlexGraph {
         options: GroupedFlexGraphOptions = {}
     ) {
         this.pool = pool;
-        this.stateIdentityMode = options.stateIdentityMode ?? 'reduced';
+        this.allowConflictMerge = options.optimizationControls?.allowConflictMerge ?? true;
+        this.stateIdentityMode = this.allowConflictMerge
+            ? options.stateIdentityMode ?? 'reduced'
+            : 'program';
         this.targetClueId = options.targetClueId;
         this.targetClueEnchantId = this.targetClueId === undefined
             ? undefined
@@ -622,7 +628,9 @@ export class GroupedFlexGraph implements FlexGraph {
             }
 
             const childExclusionMask = parentExclusionMask | entry.blocksBitset;
-            const groupIndex = this.getOrCreateScratchGroup(childExclusionMask, collectAlternatives);
+            const groupIndex = this.allowConflictMerge
+                ? this.getOrCreateScratchGroup(childExclusionMask, collectAlternatives)
+                : this.createScratchGroup(childExclusionMask, collectAlternatives);
             this.addScratchGroupMember(groupIndex, entryIndex, scratchEntryNextIndexes);
             if (collectAlternatives) {
                 this.addScratchAlternative(groupIndex, entry.packedEnchant, entry.weight);
@@ -853,6 +861,10 @@ export class GroupedFlexGraph implements FlexGraph {
             if (this.scratchGroupMasks[groupIndex] === childExclusionMask) return groupIndex;
         }
 
+        return this.createScratchGroup(childExclusionMask, collectAlternatives);
+    }
+
+    private createScratchGroup(childExclusionMask: bigint, collectAlternatives: boolean): number {
         const groupIndex = this.groupCount++;
         this.scratchGroupMasks[groupIndex] = childExclusionMask;
         this.scratchGroupMaskLows[groupIndex] = exclusionMaskLow(childExclusionMask);

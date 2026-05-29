@@ -6,6 +6,7 @@ import { PRECISION } from '#utils/index.js';
 import type {
     FlexCheckpointRequest,
     FlexNodeId,
+    FlexOptimizationControls,
     FlexRunState,
     FlexRunSnapshot,
     FlexRunMemoryStats,
@@ -30,6 +31,7 @@ export interface GroupedFlexSearchRunOptions {
      * distinct program histories separate for registries that fail the reduced-key invariant.
      */
     readonly stateIdentityMode?: FlexStateIdentityMode | undefined;
+    readonly optimizationControls?: FlexOptimizationControls | undefined;
 }
 
 /**
@@ -48,6 +50,7 @@ export class GroupedFlexSearchRun {
     private readonly snapshotBuilder: FlexSnapshotBuilder;
     private readonly targetClueId: number | undefined;
     private readonly stateIdentityMode: FlexStateIdentityMode;
+    private readonly optimizationControls: FlexOptimizationControls | undefined;
     private seeded = false;
 
     public constructor(
@@ -56,7 +59,10 @@ export class GroupedFlexSearchRun {
     ) {
         this.distributionService = options.distributionService ?? new ModifiedLevelDistributionService();
         this.targetClueId = options.targetClueId;
-        this.stateIdentityMode = options.stateIdentityMode ?? 'reduced';
+        this.optimizationControls = options.optimizationControls;
+        this.stateIdentityMode = options.optimizationControls?.allowConflictMerge === false
+            ? 'program'
+            : options.stateIdentityMode ?? 'reduced';
         this.programs = new FlexProgramStore({
             canonicalizeProgramOrder: this.stateIdentityMode === 'program'
         });
@@ -157,7 +163,8 @@ export class GroupedFlexSearchRun {
             id: this.graphs.length,
             graph: new GroupedFlexGraph(this.kernel, pool, this.programs, {
                 stateIdentityMode: this.stateIdentityMode,
-                targetClueId: this.targetClueId
+                targetClueId: this.targetClueId,
+                optimizationControls: this.optimizationControls
             })
         });
         this.graphs.push(record.graph);

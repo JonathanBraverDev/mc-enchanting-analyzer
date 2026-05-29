@@ -12,6 +12,13 @@ export interface FlexMergeFlags {
     readonly rankMerge: boolean;
 }
 
+export interface FlexOptimizationControls {
+    /** Current Plex-style grouping by shared child exclusion state. */
+    readonly allowConflictMerge?: boolean | undefined;
+    /** Reserved for rank-only pool-family sharing; currently accepted but not implemented. */
+    readonly allowRankMerge?: boolean | undefined;
+}
+
 export const FLEX_MERGE_FLAGS_NONE: FlexMergeFlags = Object.freeze({
     conflictMerge: false,
     rankMerge: false
