@@ -7,8 +7,8 @@ import type {
     EnchantStats
 } from '#types/index.js';
 import type { EnchantEngine } from '#engine/index.js';
-import type { RegistryMutation, VersionMechanics } from '#types/domain.js';
-import type { MassAccountingBreakdown } from '#types/mass.js';
+import type { RegistryMutation, VersionMechanics } from '../types/domain.js';
+import type { MassAccountingBreakdown } from '../types/mass.js';
 
 /**
  * Named search presets for package callers.
@@ -54,7 +54,7 @@ export interface AnalyzerSearchControls {
     drainEqualMassBand?: boolean | undefined;
     /** Request an exhaustive search rather than a bounded checkpoint-style search. */
     exhaustive?: boolean | undefined;
-    /** Reuse compatible cached search state from earlier calls on the same analyzer. */
+    /** Reuse compatible cached search state from earlier calls on the same backing engine. */
     useCache?: boolean | undefined;
 }
 
@@ -113,7 +113,7 @@ export interface AnalyzerResult {
     combos: Record<string, number>;
     /** Reliability of the result as resolved/classified mass from `0` to `1`. */
     accuracy: number;
-    /** Detailed accounting of where probability mass settled. */
+    /** Probability mass accounting for this checkpoint result. */
     accounting: MassAccountingBreakdown;
     /** Observed displayed-clue diagnostics. Present only for clue-conditioned stats. */
     clue?: {
@@ -186,7 +186,7 @@ export interface AnalyzerRawResult {
     threshold: number;
     /** Normalized classified mass, including resolved results and exact clue-incompatible mass. */
     accuracy: number;
-    /** Detailed accounting of where probability mass settled. */
+    /** Probability mass accounting for this checkpoint result. */
     accounting: MassAccountingBreakdown;
     /** Observed displayed-clue diagnostics. Present only for clue-conditioned stats. */
     clue?: {
@@ -224,7 +224,7 @@ export interface AnalyzerRegistryInfo {
 }
 
 /**
- * Hit/miss counters for one analyzer cache.
+ * Hit/miss counters for one backing engine cache.
  *
  * @public
  */
@@ -261,8 +261,10 @@ export interface AnalyzerCacheMetrics {
  * advanced processing. All returned probabilities are fractions from `0` to
  * `1`.
  *
- * Keep an analyzer instance around when issuing related searches for the same
- * version; per-instance caches can be reused across compatible requests.
+ * Vanilla analyzers for the same requested version string share a backing
+ * engine and cache. Mutation-derived analyzers have their own backing engine.
+ * Keep an analyzer instance around when issuing related searches so compatible
+ * cached search state can be reused.
  *
  * @example
  * ```ts
@@ -345,19 +347,20 @@ export class EnchantingAnalyzer {
     }
 
     /**
-     * Clear caches owned by this analyzer instance.
+     * Clear caches owned by this analyzer's backing engine.
      *
      * @remarks
-     * Use this when benchmarking, profiling cache behavior, or releasing memory
-     * after a burst of searches. It does not change the registry or invalidate
-     * the analyzer itself.
+     * Vanilla analyzers created with `forVersion()` for the same resolved
+     * version share a backing engine, so resetting one also resets cache state
+     * observed by the others. Mutation-derived analyzers use isolated backing
+     * engines. This does not change the registry or invalidate the analyzer.
      */
     public resetCaches(): void {
         this.engine.resetCaches();
     }
 
     /**
-     * Return high-level cache hit/miss counters for this analyzer instance.
+     * Return high-level cache hit/miss counters for this analyzer's backing engine.
      *
      * @returns Cache counters for modified-level distributions and enchantment pools.
      */

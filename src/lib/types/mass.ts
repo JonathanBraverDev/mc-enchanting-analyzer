@@ -1,6 +1,6 @@
 /**
  * Detailed breakdown of probability mass categories for accuracy and diagnostic reporting.
- * All values are percentages (0.0 to 1.0).
+ * All values are probability shares from 0.0 to 1.0.
  *
  * @public
  */
@@ -17,7 +17,7 @@ export interface MassAccountingBreakdown {
   overflow: number;
   /** Nodes discarded because they hit engine search/storage limits. */
   capped: number;
-  /** Cumulative mass lost to floating point precision or integer division during search. */
+  /** Active fixed-point split residue plus projection materialization loss. */
   rounding: number;
   /** Diagnostic: Gross mass made distributable only because carried residue combined with later input. (Non-additive.) */
   recoveredRounding: number;
@@ -55,6 +55,8 @@ export type MassBucketName = keyof MassBucketUnits;
  * Operation buckets may be signed deltas. For example, frontier expansion removes
  * mass from the pending public bucket, so that operation reports a negative
  * pending delta while the stage total still matches the public compatibility view.
+ * Fold this view back into {@link MassAccountingBreakdown} buckets for semantic
+ * result comparisons.
  *
  * @public
  */

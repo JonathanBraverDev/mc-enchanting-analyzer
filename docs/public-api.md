@@ -37,10 +37,12 @@ The supported analyzer calls are:
 | `analyzer.analyzeRaw(request)` | Return compact machine-readable probabilities. |
 | `analyzer.humanize(result, sortMode?)` | Convert an already-computed raw result into human-readable names. |
 | `analyzer.registry` | Inspect high-level registry metadata without runtime lookup tables. |
-| `analyzer.resetCaches()` | Clear analyzer-owned engine caches. |
-| `analyzer.getCacheMetrics()` | Inspect high-level cache hit/miss counters. |
+| `analyzer.resetCaches()` | Clear this analyzer's backing engine caches. |
+| `analyzer.getCacheMetrics()` | Inspect backing engine cache hit/miss counters. |
 
 The package root intentionally does not expose raw checkpoint APIs. The web workers still use checkpoint snapshots through internal `#engine`, `#types`, and `#services` imports, but those are repository implementation details rather than package guarantees.
+
+Vanilla analyzers created with `forVersion()` for the same requested version string share a backing engine and cache. Calling `resetCaches()` on one of those analyzers clears cache state observed by the others. Mutation-derived analyzers use isolated backing engines.
 
 The published package also exposes `mcenchant` and `mc-enchanting-analyzer` command-line binaries. The CLI is a thin wrapper around `EnchantingAnalyzer`: text output uses `analyze`, `--format json` emits human-readable JSON, and `--raw` / `--format raw-json` emits compact `AnalyzerRawResult`. Everyday calls can use positional inputs:
 
@@ -94,7 +96,7 @@ Supported result shapes are:
 | `AnalyzerRegistryInfo` | Public high-level registry metadata. |
 | `AnalyzerRawResult` | Compact probabilities from `analyzeRaw`. |
 | `AnalyzerResult` | Human-readable probabilities from `analyze` or `humanize`. |
-| `MassAccountingBreakdown` | Public probability mass buckets. |
+| `MassAccountingBreakdown` | Public probability mass buckets, with optional foldable diagnostic details. |
 
 Supported mutation input shapes are:
 
@@ -111,7 +113,7 @@ Supported mutation input shapes are:
 
 `AnalyzerRawResult` keeps compact packed keys for callers that want stable machine-readable IDs. `AnalyzerResult` uses display labels such as `Efficiency IV` and `Efficiency IV+Fortune III` so applications do not need registry internals just to present results.
 
-Result probabilities and accounting are part of the supported behavior. The internal tree shape, graph node IDs, checkpoint snapshots, and engine diagnostics are not.
+Result probabilities and folded accounting buckets are part of the supported behavior. Optional accounting details are diagnostic drill-down data and should be folded back to the public buckets for semantic comparisons. The internal tree shape, graph node IDs, checkpoint snapshots, and engine diagnostics are not.
 
 `AnalyzerRegistryInfo` is intentionally small: `version`, `source`, `mechanics`, and `multiEnchantBooks`. Mutation input types describe accepted vanilla-data patches only; the full resolved registry contains packed conflict bitsets, ID maps, and cache-oriented tables that remain internal.
 
