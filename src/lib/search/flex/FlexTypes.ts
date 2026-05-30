@@ -9,10 +9,12 @@ export type FlexRankProfileId = number & { readonly __brand: 'FlexRankProfileId'
 export type FlexStateIdentityMode = 'reduced' | 'program';
 export type FlexNodeKind = 'solid' | 'plex';
 
-export interface FlexMergeFlags {
-    readonly conflictMerge: boolean;
-    readonly rankMerge: boolean;
+export const enum FlexMergeFlag {
+    Conflict = 1 << 0,
+    Rank = 1 << 1
 }
+
+export type FlexMergeFlags = number;
 
 export interface FlexOptimizationControls {
     /** Current Plex-style grouping by shared child exclusion state. */
@@ -21,25 +23,21 @@ export interface FlexOptimizationControls {
     readonly allowRankMerge?: boolean | undefined;
 }
 
-export const FLEX_MERGE_FLAGS_NONE: FlexMergeFlags = Object.freeze({
-    conflictMerge: false,
-    rankMerge: false
-});
+export const FLEX_MERGE_FLAGS_NONE: FlexMergeFlags = 0;
 
-export const FLEX_MERGE_FLAGS_CONFLICT: FlexMergeFlags = Object.freeze({
-    conflictMerge: true,
-    rankMerge: false
-});
+export const FLEX_MERGE_FLAGS_CONFLICT: FlexMergeFlags = FlexMergeFlag.Conflict;
 
-export const FLEX_MERGE_FLAGS_RANK: FlexMergeFlags = Object.freeze({
-    conflictMerge: false,
-    rankMerge: true
-});
+export const FLEX_MERGE_FLAGS_RANK: FlexMergeFlags = FlexMergeFlag.Rank;
 
-export const FLEX_MERGE_FLAGS_CONFLICT_RANK: FlexMergeFlags = Object.freeze({
-    conflictMerge: true,
-    rankMerge: true
-});
+export const FLEX_MERGE_FLAGS_CONFLICT_RANK: FlexMergeFlags = FlexMergeFlag.Conflict | FlexMergeFlag.Rank;
+
+export function hasFlexConflictMerge(flags: FlexMergeFlags): boolean {
+    return (flags & FlexMergeFlag.Conflict) !== 0;
+}
+
+export function hasFlexRankMerge(flags: FlexMergeFlags): boolean {
+    return (flags & FlexMergeFlag.Rank) !== 0;
+}
 
 export interface FlexAlternative {
     readonly packedEnchant: PackedEnchant;

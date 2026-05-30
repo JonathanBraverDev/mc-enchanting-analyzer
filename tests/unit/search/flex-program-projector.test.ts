@@ -4,6 +4,8 @@ import type { PackedCombo, PackedEnchant } from '#types/index.js';
 import type { PendingFrontierAggregates } from '#lib/search/SearchSnapshot.js';
 import { ComboUtils } from '#utils/index.js';
 import {
+    FLEX_MERGE_FLAGS_CONFLICT,
+    FLEX_MERGE_FLAGS_NONE,
     FLEX_MERGE_FLAGS_RANK,
     FlexProgramStore,
     FlexProjector,
@@ -108,9 +110,9 @@ describe('FlexProgramStore', () => {
         const plexNode = store.createNode(nodeId(2), plexProgram);
         const solidAfterPlexNode = store.createNode(nodeId(3), solidAfterPlexProgram);
 
-        assert.deepStrictEqual(solidNode.mergeFlags, { conflictMerge: false, rankMerge: false });
-        assert.deepStrictEqual(plexNode.mergeFlags, { conflictMerge: true, rankMerge: false });
-        assert.deepStrictEqual(solidAfterPlexNode.mergeFlags, { conflictMerge: true, rankMerge: false });
+        assert.strictEqual(solidNode.mergeFlags, FLEX_MERGE_FLAGS_NONE);
+        assert.strictEqual(plexNode.mergeFlags, FLEX_MERGE_FLAGS_CONFLICT);
+        assert.strictEqual(solidAfterPlexNode.mergeFlags, FLEX_MERGE_FLAGS_CONFLICT);
         assert.strictEqual(solidNode.kind, 'solid');
         assert.strictEqual(plexNode.kind, 'plex');
         assert.strictEqual(solidAfterPlexNode.kind, 'plex');
@@ -127,7 +129,7 @@ describe('FlexProgramStore', () => {
 
         const rankNode = store.createNode(nodeId(1), rankProgram);
 
-        assert.deepStrictEqual(rankNode.mergeFlags, { conflictMerge: false, rankMerge: true });
+        assert.strictEqual(rankNode.mergeFlags, FLEX_MERGE_FLAGS_RANK);
         assert.strictEqual(rankNode.kind, 'solid');
         assert.strictEqual(store.hasChoice(rankProgram), false);
         assert.strictEqual(store.hasRankMerge(rankProgram), true);

@@ -77,14 +77,15 @@ It is more naturally a set of program-derived flags.
 
 ## Proposed Flags
 
-Use a small number of booleans named for the equivalence class that made a merge
-legal:
+Use a small bitmask named for the equivalence class that made a merge legal:
 
 ```ts
-interface FlexProgramFlags {
-    readonly conflictMerge: boolean; // same-pool child-exclusion group
-    readonly rankMerge: boolean;     // same structural pool family, different exact ranks
+const enum FlexMergeFlag {
+    Conflict = 1 << 0, // same-pool child-exclusion group
+    Rank = 1 << 1      // same structural pool family, different exact ranks
 }
+
+type FlexMergeFlags = number;
 ```
 
 No flag means the plain fixed/Solid case: one exact packed enchant and no merge
@@ -94,7 +95,7 @@ behavior in program history.
 label, but the internal flag name should say what was merged.
 
 Avoid building a generalized node-type matrix. If a probe needs to count nodes
-with both booleans set, add that as a direct diagnostic counter, not as a new
+with both bits set, add that as a direct diagnostic counter, not as a new
 semantic node category.
 
 The physical graph node does not need a new subclass for v1. The node can keep
@@ -106,6 +107,7 @@ programId
 count
 currentLevel
 exclusionMask
+mergeFlags
 ```
 
 The behavior lives in the program emission stream and in projection. The graph
@@ -259,7 +261,7 @@ else:
 ```
 
 This keeps the first slice small. It also leaves a clear path for a future
-implementation where `conflictMerge` and `rankMerge` can both be true, without
+implementation where `Conflict` and `Rank` can both be true, without
 creating a named compound node type.
 
 Expected tradeoff: Solid-only Rank may capture less upside in book-heavy cases,
@@ -508,8 +510,8 @@ npm run benchmark:rank-shape -- --item pickaxe --material diamond --mode all
 
 ## Suggested Implementation Order
 
-1. Add program merge booleans:
-   `conflictMerge` and `rankMerge`.
+1. Add program merge flags:
+   `FlexMergeFlag.Conflict` and `FlexMergeFlag.Rank`.
 
 2. Add Rank emission types and interners without enabling graph merging.
    Projection tests should prove fixed, Conflict, and Rank emissions compose
