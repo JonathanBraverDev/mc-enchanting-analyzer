@@ -448,6 +448,64 @@ The same probe showed small absolute benefits for non-book cases. That suggests
 Rank should be optimized and validated primarily against modern book-heavy
 searches, with non-book cases treated as regression guards.
 
+## Rank Shape Probe
+
+The reusable investigation script is:
+
+```text
+npm run benchmark:rank-shape -- --mode all
+```
+
+It measures two related questions:
+
+1. Row collapse for the actual XP root distribution.
+   Each depth compares unique rows under:
+   `childLevel`, `(childLevel, exact pool)`, and `(childLevel, family pool)`.
+2. Aligned power-of-two blocks.
+   Each block checks whether every modified level in that block shares one
+   exact or rankless family signature.
+
+The row-collapse table is the closest proxy for the expected tree shape. If
+the family sequence equals the ideal child sequence, rank-only family merging
+has removed every rank-split row that remains after level division.
+
+Representative modern XP 30 findings:
+
+```text
+pickaxe/diamond
+ideal:   15 -> 8 -> 5 -> 3 -> 2 -> 2
+exact:   15 -> 10 -> 7 -> 5 -> 4 -> 4
+family:  15 -> 8 -> 5 -> 3 -> 2 -> 2
+
+sword/diamond
+ideal:   15 -> 8 -> 5 -> 3 -> 2 -> 2
+exact:   15 -> 12 -> 11 -> 9 -> 8 -> 8
+family:  15 -> 9 -> 6 -> 4 -> 3 -> 3
+
+book/book
+ideal:   11 -> 6 -> 4 -> 2 -> 2 -> 2
+exact:   11 -> 9 -> 9 -> 8 -> 8 -> 8
+family:  11 -> 6 -> 5 -> 4 -> 4 -> 4
+```
+
+The strong result is that many item families hit the ideal halving shape:
+diamond pickaxe, axe, shovel, hoe, bow, fishing rod, trident, crossbow, mace,
+and diamond spear all matched the ideal child rows in the first probe run.
+
+The weaker result is that books and armor still benefit but do not become a
+clean power-of-two collapse. They need either more precise profiling or a later
+Rank-in-Conflict implementation before assuming large savings there.
+
+Useful commands:
+
+```text
+npm run benchmark:rank-shape -- --mode rows
+npm run benchmark:rank-shape -- --mode blocks
+npm run benchmark:rank-shape -- --mode weighted-blocks
+npm run benchmark:rank-shape -- --all-materials --mode summary
+npm run benchmark:rank-shape -- --item pickaxe --material diamond --mode all
+```
+
 ## Suggested Implementation Order
 
 1. Add program merge booleans:

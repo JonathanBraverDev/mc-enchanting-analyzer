@@ -54,6 +54,7 @@
     "benchmark:engine:cpu": "tsx --cpu-prof scripts/profile_snapshot.ts",
     "benchmark:compare": "tsx scripts/compare_profiles.ts",
     "benchmark:flex": "tsx scripts/probe_flex_grouping.ts",
+    "benchmark:rank-shape": "tsx scripts/probe_rank_merge_shape.ts",
     "cli": "tsx src/cli.ts",
     "profile:split": "tsx scripts/analyze_cpu_profile.ts",
     "benchmark:clean": "node -e \"const fs = require('fs'); const files = fs.readdirSync('.').filter(f => f.endsWith('.cpuprofile')); console.log(`Cleaning ${files.length} root profiles...`); files.forEach(f => fs.unlinkSync(f));\"",
