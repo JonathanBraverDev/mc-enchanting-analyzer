@@ -1,7 +1,8 @@
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { BIGINT_CONSTANTS, PACKING_CONSTANTS } from '#constants/engine.js';
-import type { SearchPool, SearchPoolSignature } from '#lib/search/registry/RegistryKernel.js';
+import type { SearchPool, SearchPoolFamilySignature, SearchPoolSignature } from '#lib/search/registry/RegistryKernel.js';
 import { RegistryKernel } from '#lib/search/registry/RegistryKernel.js';
+import type { PackedEnchant } from '#types/index.js';
 import { PRECISION } from '#utils/index.js';
 import type {
     FlexCheckpointRequest,
@@ -22,6 +23,10 @@ interface GroupedFlexGraphRecord {
     readonly graph: GroupedFlexGraph;
 }
 
+interface GroupedFlexGraphUse extends GroupedFlexGraphRecord {
+    readonly profileId: number;
+}
+
 export interface GroupedFlexSearchRunOptions {
     readonly distributionService?: ModifiedLevelDistributionService | undefined;
     readonly targetClueId?: number | undefined;
@@ -30,6 +35,7 @@ export interface GroupedFlexSearchRunOptions {
      * distinct program histories separate for registries that fail the reduced-key invariant.
      */
     readonly stateIdentityMode?: FlexStateIdentityMode | undefined;
+    readonly rankProfileMode?: boolean | undefined;
 }
 
 /**
@@ -41,13 +47,16 @@ export class GroupedFlexSearchRun {
     public readonly programs: FlexProgramStore;
 
     private readonly distributionService: ModifiedLevelDistributionService;
-    private readonly graphsBySignature = new Map<SearchPoolSignature, GroupedFlexGraphRecord>();
+    private readonly graphsBySignature = new Map<SearchPoolSignature | SearchPoolFamilySignature, GroupedFlexGraphRecord>();
+    private readonly rankProfileIdsBySignature = new Map<SearchPoolSignature, number>();
+    private readonly rankProfilePools: SearchPool[] = [];
     private readonly graphs: GroupedFlexGraph[] = [];
     private readonly coordinator = new FlexCoordinator(this.graphs);
     private readonly projector: FlexProjector;
     private readonly snapshotBuilder: FlexSnapshotBuilder;
     private readonly targetClueId: number | undefined;
     private readonly stateIdentityMode: FlexStateIdentityMode;
+    private readonly rankProfileMode: boolean;
     private seeded = false;
 
     public constructor(
@@ -57,12 +66,16 @@ export class GroupedFlexSearchRun {
         this.distributionService = options.distributionService ?? new ModifiedLevelDistributionService();
         this.targetClueId = options.targetClueId;
         this.stateIdentityMode = options.stateIdentityMode ?? 'reduced';
+        this.rankProfileMode = options.rankProfileMode ?? false;
         this.programs = new FlexProgramStore({
             canonicalizeProgramOrder: this.stateIdentityMode === 'program'
         });
         this.projector = new FlexProjector(this.programs, this.kernel.registry.enchantToIndex, {
             applyBookRemoval: this.kernel.item === 'book',
-            targetClueId: this.targetClueId
+            targetClueId: this.targetClueId,
+            rankProfileResolver: this.rankProfileMode
+                ? (profileId, enchantId) => this.resolveRankProfilePackedEnchant(profileId, enchantId)
+                : undefined
         });
         this.snapshotBuilder = new FlexSnapshotBuilder(
             this.coordinator,
@@ -94,7 +107,7 @@ export class GroupedFlexSearchRun {
             }
 
             const graph = this.graphForPool(pool);
-            const root = graph.graph.getRootNode(level);
+            const root = graph.graph.getRootNode(level, graph.profileId);
             this.coordinator.seedPending(graph.id, root.id, rootMass);
             seededMass += rootMass;
         }
@@ -149,20 +162,42 @@ export class GroupedFlexSearchRun {
         return graph;
     }
 
-    private graphForPool(pool: SearchPool): GroupedFlexGraphRecord {
-        const existing = this.graphsBySignature.get(pool.signature);
-        if (existing) return existing;
+    private graphForPool(pool: SearchPool): GroupedFlexGraphUse {
+        const profileId = this.rankProfileMode ? this.getOrCreateRankProfileId(pool) : 0;
+        const graphKey = this.rankProfileMode ? pool.familySignature : pool.signature;
+        const existing = this.graphsBySignature.get(graphKey);
+        if (existing) {
+            if (this.rankProfileMode) existing.graph.registerRankProfile(profileId, pool);
+            return { ...existing, profileId };
+        }
 
         const record = Object.freeze({
             id: this.graphs.length,
             graph: new GroupedFlexGraph(this.kernel, pool, this.programs, {
                 stateIdentityMode: this.stateIdentityMode,
-                targetClueId: this.targetClueId
+                targetClueId: this.targetClueId,
+                rankProfileMode: this.rankProfileMode
             })
         });
+        if (this.rankProfileMode) record.graph.registerRankProfile(profileId, pool);
         this.graphs.push(record.graph);
-        this.graphsBySignature.set(pool.signature, record);
-        return record;
+        this.graphsBySignature.set(graphKey, record);
+        return { ...record, profileId };
+    }
+
+    private getOrCreateRankProfileId(pool: SearchPool): number {
+        const existing = this.rankProfileIdsBySignature.get(pool.signature);
+        if (existing !== undefined) return existing;
+
+        const profileId = this.rankProfilePools.length;
+        this.rankProfileIdsBySignature.set(pool.signature, profileId);
+        this.rankProfilePools.push(pool);
+        return profileId;
+    }
+
+    private resolveRankProfilePackedEnchant(profileId: number, enchantId: number): PackedEnchant | undefined {
+        const pool = this.rankProfilePools[profileId];
+        return pool?.entries.find(entry => entry.enchantId === enchantId)?.packedEnchant;
     }
 
     private isTargetClueReachableById(graphId: number, nodeId: number): boolean | undefined {

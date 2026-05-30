@@ -11,9 +11,20 @@ export interface FlexAlternative {
     readonly weight: number;
 }
 
+export interface FlexRankAlternative {
+    readonly enchantId: number;
+    readonly weight: number;
+}
+
 export interface FlexFixedEmission {
     readonly kind: 'fixed';
     readonly packedEnchant: PackedEnchant;
+}
+
+export interface FlexRankFixedEmission {
+    readonly kind: 'rank-fixed';
+    readonly profileId: number;
+    readonly enchantId: number;
 }
 
 export interface FlexChoiceEmission {
@@ -22,8 +33,17 @@ export interface FlexChoiceEmission {
     readonly totalWeight: number;
 }
 
-export type FlexEmission = FlexFixedEmission | FlexChoiceEmission;
+export interface FlexRankChoiceEmission {
+    readonly kind: 'rank-choice';
+    readonly profileId: number;
+    readonly alternatives: readonly FlexRankAlternative[];
+    readonly totalWeight: number;
+}
+
+export type FlexEmission = FlexFixedEmission | FlexChoiceEmission | FlexRankFixedEmission | FlexRankChoiceEmission;
 export type FlexProgram = readonly FlexEmission[];
+
+export type FlexRankProfileResolver = (profileId: number, enchantId: number) => PackedEnchant | undefined;
 
 export interface FlexNodeBase {
     readonly id: FlexNodeId;

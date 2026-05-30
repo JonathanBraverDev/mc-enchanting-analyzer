@@ -249,6 +249,37 @@ describe('GroupedFlexSearchRun', () => {
         assertExhaustiveFlexSearch('1.21.11', 'book', 'book', 1, true);
     });
 
+    it('projects rank-profile pooled graphs back to exact V8 results', () => {
+        const exact = runGrouped('1.21.11', 'book', 'book', 1, { exhaustive: true });
+        const rankProfile = runGrouped('1.21.11', 'book', 'book', 1, { exhaustive: true }, { rankProfileMode: true });
+
+        assert.strictEqual(rankProfile.flex.fullyResolved, true);
+        assert.deepStrictEqual(
+            sortedBigIntMapEntries(rankProfile.native.snapshot.results),
+            sortedBigIntMapEntries(exact.native.snapshot.results)
+        );
+        assert.strictEqual(rankProfile.native.resolvedProjectionLoss, exact.native.resolvedProjectionLoss);
+        assert.ok(
+            rankProfile.run.getMemoryStats().graphs.length <= exact.run.getMemoryStats().graphs.length,
+            'rank-profile pooling should not need more structural graphs than exact-pool V8'
+        );
+    });
+
+    it('shares XP 30 book graphs across rank-varying pool profiles', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
+        const exact = new GroupedFlexSearchRun(kernel);
+        const rankProfile = new GroupedFlexSearchRun(kernel, { rankProfileMode: true });
+
+        exact.seedXp(30);
+        rankProfile.seedXp(30);
+
+        assert.ok(
+            rankProfile.getMemoryStats().graphs.length < exact.getMemoryStats().graphs.length,
+            'rank-profile pooling should share structural graphs across exact rank profiles'
+        );
+    });
+
     it('projects exact clue-conditioned grouped results and filters non-clue rows', () => {
         const registry = RegistryFactory.build('1.21.11');
         const kernel = new RegistryKernel({ registry, item: 'sword', material: 'diamond' });
@@ -385,7 +416,9 @@ function edgeChoiceNames(fixture: GroupedGraphFixture, edge: FlexEdge): readonly
     const emission = getLastEmission(fixture, edge);
     const packedEnchants = emission.kind === 'fixed'
         ? [emission.packedEnchant]
-        : emission.alternatives.map(alternative => alternative.packedEnchant);
+        : emission.kind === 'choice'
+            ? emission.alternatives.map(alternative => alternative.packedEnchant)
+            : [];
     return packedEnchants
         .map(packed => fixture.registry.revIdMap[ComboUtils.getEnchantId(packed)]!)
         .sort();
@@ -469,7 +502,8 @@ function runGrouped(
     item: string,
     material: string,
     xp: number,
-    request: Parameters<GroupedFlexSearchRun['searchToCheckpoint']>[0]
+    request: Parameters<GroupedFlexSearchRun['searchToCheckpoint']>[0],
+    runOptions: ConstructorParameters<typeof GroupedFlexSearchRun>[1] = {}
 ): {
     run: GroupedFlexSearchRun;
     flex: FlexRunSnapshot;
@@ -477,7 +511,7 @@ function runGrouped(
 } {
     const registry = RegistryFactory.build(version);
     const kernel = new RegistryKernel({ registry, item, material });
-    const groupedRun = new GroupedFlexSearchRun(kernel);
+    const groupedRun = new GroupedFlexSearchRun(kernel, runOptions);
 
     groupedRun.seedXp(xp);
 
@@ -487,6 +521,12 @@ function runGrouped(
         flex,
         native: groupedRun.buildEngineSnapshot(flex)
     };
+}
+
+function sortedBigIntMapEntries(map: ReadonlyMap<number, bigint>): readonly (readonly [number, string])[] {
+    return [...map.entries()]
+        .sort(([left], [right]) => left - right)
+        .map(([key, value]) => [key, value.toString()] as const);
 }
 
 function comboContainsExactEnchant(combo: PackedCombo, targetClueId: number, indexToEnchant: number[]): boolean {

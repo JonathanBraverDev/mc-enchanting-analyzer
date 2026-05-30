@@ -1,11 +1,12 @@
-import type { PackedCombo } from '#types/index.js';
+import type { PackedCombo, PackedEnchant } from '#types/index.js';
 import { PACKING_CONSTANTS } from '#constants/engine.js';
 import type { PendingClueJointAggregates, PendingFrontierAggregates } from '#lib/search/SearchSnapshot.js';
 import type {
     FlexPendingEntry,
     FlexProgram,
     FlexProjectedPendingAggregateResults,
-    FlexProgramId
+    FlexProgramId,
+    FlexRankProfileResolver
 } from '#lib/search/flex/FlexTypes.js';
 import { FlexProgramStore } from '#lib/search/flex/FlexProgramStore.js';
 
@@ -33,6 +34,7 @@ export interface FlexLazyPendingAggregateOptions {
 export interface FlexProjectionOptions {
     readonly applyBookRemoval?: boolean | undefined;
     readonly targetClueId?: number | undefined;
+    readonly rankProfileResolver?: FlexRankProfileResolver | undefined;
 }
 
 export class FlexProjector {
@@ -247,7 +249,22 @@ export class FlexProjector {
                 continue;
             }
 
-            const targetAlternative = emission.alternatives.find(alternative => alternative.packedEnchant === targetClueId);
+            if (emission.kind === 'rank-fixed') {
+                if (this.getRankPackedEnchant(emission.profileId, emission.enchantId) === targetClueId) {
+                    split = {
+                        projectedMass: mass,
+                        clueIncompatible: 0n,
+                        projectionLoss: 0n,
+                        clueKnownSpace: count > 0 ? mass / BigInt(count) : 0n
+                    };
+                    break;
+                }
+                continue;
+            }
+
+            const targetAlternative = emission.kind === 'choice'
+                ? emission.alternatives.find(alternative => alternative.packedEnchant === targetClueId)
+                : emission.alternatives.find(alternative => this.getRankPackedEnchant(emission.profileId, alternative.enchantId) === targetClueId);
             if (!targetAlternative) continue;
 
             const totalWeight = BigInt(emission.totalWeight);
@@ -331,16 +348,51 @@ export class FlexProjector {
                 return;
             }
 
-            const totalWeight = BigInt(emission.totalWeight);
-            for (const alternative of emission.alternatives) {
-                const packedIndex = this.enchantToIndex.get(alternative.packedEnchant);
+            if (emission.kind === 'rank-fixed') {
+                const packedEnchant = this.getRankPackedEnchant(emission.profileId, emission.enchantId);
+                const packedIndex = this.enchantToIndex.get(packedEnchant);
                 visit(
                     emissionIndex + 1,
                     packedIndex === undefined ? combo : appendPackedComboIndex(combo, packedIndex, count),
                     packedIndex === undefined ? count : count + 1,
-                    numerator * BigInt(alternative.weight),
-                    denominator * totalWeight,
-                    matchesTargetClue || alternative.packedEnchant === this.options.targetClueId
+                    numerator,
+                    denominator,
+                    matchesTargetClue || packedEnchant === this.options.targetClueId
+                );
+                return;
+            }
+
+            const totalWeight = BigInt(emission.totalWeight);
+            if (emission.kind === 'choice') {
+                for (const alternative of emission.alternatives) {
+                    this.visitWeightedAlternative(
+                        visit,
+                        emissionIndex,
+                        combo,
+                        count,
+                        numerator,
+                        denominator,
+                        matchesTargetClue,
+                        totalWeight,
+                        alternative.packedEnchant,
+                        alternative.weight
+                    );
+                }
+                return;
+            }
+
+            for (const alternative of emission.alternatives) {
+                this.visitWeightedAlternative(
+                    visit,
+                    emissionIndex,
+                    combo,
+                    count,
+                    numerator,
+                    denominator,
+                    matchesTargetClue,
+                    totalWeight,
+                    this.getRankPackedEnchant(emission.profileId, alternative.enchantId),
+                    alternative.weight
                 );
             }
         };
@@ -379,11 +431,35 @@ export class FlexProjector {
                 continue;
             }
 
+            if (emission.kind === 'rank-fixed') {
+                this.addPendingEmissionAggregate(
+                    pendingAggregates,
+                    this.getRankPackedEnchant(emission.profileId, emission.enchantId),
+                    mass,
+                    clueSlotMass,
+                    count
+                );
+                continue;
+            }
+
             const totalWeight = BigInt(emission.totalWeight);
+            if (emission.kind === 'choice') {
+                for (const alternative of emission.alternatives) {
+                    this.addPendingEmissionAggregate(
+                        pendingAggregates,
+                        alternative.packedEnchant,
+                        (mass * BigInt(alternative.weight)) / totalWeight,
+                        (clueSlotMass * BigInt(alternative.weight)) / totalWeight,
+                        count
+                    );
+                }
+                continue;
+            }
+
             for (const alternative of emission.alternatives) {
                 this.addPendingEmissionAggregate(
                     pendingAggregates,
-                    alternative.packedEnchant,
+                    this.getRankPackedEnchant(emission.profileId, alternative.enchantId),
                     (mass * BigInt(alternative.weight)) / totalWeight,
                     (clueSlotMass * BigInt(alternative.weight)) / totalWeight,
                     count
@@ -437,17 +513,41 @@ export class FlexProjector {
                 continue;
             }
 
-            const targetAlternative = emission.alternatives.find(alternative => alternative.packedEnchant === targetClueId);
+            if (emission.kind === 'rank-fixed') {
+                this.addPendingClueJointEmissionAggregate(
+                    clueJoint,
+                    this.getRankPackedEnchant(emission.profileId, emission.enchantId),
+                    clueMass,
+                    count
+                );
+                continue;
+            }
+
+            const targetAlternative = emission.kind === 'choice'
+                ? emission.alternatives.find(alternative => alternative.packedEnchant === targetClueId)
+                : emission.alternatives.find(alternative => this.getRankPackedEnchant(emission.profileId, alternative.enchantId) === targetClueId);
             if (targetAlternative) {
                 this.addPendingClueJointEmissionAggregate(clueJoint, targetClueId, clueMass, count);
                 continue;
             }
 
             const totalWeight = BigInt(emission.totalWeight);
+            if (emission.kind === 'choice') {
+                for (const alternative of emission.alternatives) {
+                    this.addPendingClueJointEmissionAggregate(
+                        clueJoint,
+                        alternative.packedEnchant,
+                        (clueMass * BigInt(alternative.weight)) / totalWeight,
+                        count
+                    );
+                }
+                continue;
+            }
+
             for (const alternative of emission.alternatives) {
                 this.addPendingClueJointEmissionAggregate(
                     clueJoint,
-                    alternative.packedEnchant,
+                    this.getRankPackedEnchant(emission.profileId, alternative.enchantId),
                     (clueMass * BigInt(alternative.weight)) / totalWeight,
                     count
                 );
@@ -505,6 +605,44 @@ export class FlexProjector {
         }
 
         return freezePendingAggregates(pendingAggregates, clueJoint);
+    }
+
+    private visitWeightedAlternative(
+        visit: (
+            emissionIndex: number,
+            combo: PackedCombo,
+            count: number,
+            numerator: bigint,
+            denominator: bigint,
+            matchesTargetClue: boolean
+        ) => void,
+        emissionIndex: number,
+        combo: PackedCombo,
+        count: number,
+        numerator: bigint,
+        denominator: bigint,
+        matchesTargetClue: boolean,
+        totalWeight: bigint,
+        packedEnchant: PackedEnchant,
+        weight: number
+    ): void {
+        const packedIndex = this.enchantToIndex.get(packedEnchant);
+        visit(
+            emissionIndex + 1,
+            packedIndex === undefined ? combo : appendPackedComboIndex(combo, packedIndex, count),
+            packedIndex === undefined ? count : count + 1,
+            numerator * BigInt(weight),
+            denominator * totalWeight,
+            matchesTargetClue || packedEnchant === this.options.targetClueId
+        );
+    }
+
+    private getRankPackedEnchant(profileId: number, enchantId: number): PackedEnchant {
+        const packedEnchant = this.options.rankProfileResolver?.(profileId, enchantId);
+        if (packedEnchant === undefined) {
+            throw new Error(`Missing Flex rank profile mapping for profile ${profileId}, enchant ${enchantId}.`);
+        }
+        return packedEnchant;
     }
 
 }
