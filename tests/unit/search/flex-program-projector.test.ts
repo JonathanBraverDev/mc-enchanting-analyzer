@@ -229,6 +229,32 @@ describe('FlexProjector', () => {
         assert.strictEqual(store.hasRankMerge(fullProgram), true);
     });
 
+    it('projects combined Rank and Conflict choices with profile-level correlation', () => {
+        const store = new FlexProgramStore();
+        const profile = createRankProfile();
+        const projector = new FlexProjector(store, enchantToIndex, {
+            rankProfiles: { get: () => profile }
+        });
+        const damage = store.appendRankChoice(store.empty, [
+            { enchantId: sharpness >> 8, weight: 1 },
+            { enchantId: smite >> 8, weight: 2 }
+        ], profile.id);
+        const fullProgram = store.appendRank(damage, unbreaking >> 8, profile.id);
+
+        const projected = projector.projectResults(new Map([[fullProgram, 150n]]));
+
+        assert.strictEqual(projected.results.get(combo(sharpnessThree, unbreakingTwo)), 20n);
+        assert.strictEqual(projected.results.get(combo(smite, unbreakingTwo)), 40n);
+        assert.strictEqual(projected.results.get(combo(sharpness, unbreaking)), 30n);
+        assert.strictEqual(projected.results.get(combo(smite, unbreaking)), 60n);
+        assert.strictEqual(projected.results.has(combo(sharpnessThree, unbreaking)), false);
+        assert.strictEqual(projected.results.has(combo(sharpness, unbreakingTwo)), false);
+        assert.strictEqual(projected.projectedMass, 150n);
+        assert.strictEqual(projected.projectionLoss, 0n);
+        assert.strictEqual(store.hasChoice(fullProgram), true);
+        assert.strictEqual(store.hasRankMerge(fullProgram), true);
+    });
+
     it('keeps only exact clue matches inside a choice emission', () => {
         const store = new FlexProgramStore();
         const projector = new FlexProjector(store, enchantToIndex, { targetClueId: sharpness });
@@ -645,9 +671,16 @@ function createRankProfile(): FlexRankProfile {
                     Object.freeze({ packedEnchant: unbreaking, weight: 3n })
                 ]),
                 sourcePackedEnchants: Object.freeze([unbreakingTwo, unbreaking])
+            }),
+            Object.freeze({
+                enchantId: smite >> 8,
+                alternatives: Object.freeze([
+                    Object.freeze({ packedEnchant: smite, weight: 5n })
+                ]),
+                sourcePackedEnchants: Object.freeze([smite, smite])
             })
         ]),
         rankVariantEnchantCount: 2,
-        rankAlternativeCount: 4
+        rankAlternativeCount: 5
     });
 }

@@ -93,7 +93,20 @@ export interface FlexRankEmission {
     readonly profileId: FlexRankProfileId;
 }
 
-export type FlexEmission = FlexFixedEmission | FlexChoiceEmission | FlexRankEmission;
+export interface FlexRankChoiceAlternative {
+    readonly enchantId: number;
+    readonly weight: number;
+}
+
+export interface FlexRankChoiceEmission {
+    readonly kind: 'rankChoice';
+    readonly profileId: FlexRankProfileId;
+    readonly alternatives: readonly FlexRankChoiceAlternative[];
+    readonly totalWeight: number;
+    readonly mergeFlags: FlexMergeFlags;
+}
+
+export type FlexEmission = FlexFixedEmission | FlexChoiceEmission | FlexRankEmission | FlexRankChoiceEmission;
 export type FlexProgram = readonly FlexEmission[];
 
 export interface FlexNode {

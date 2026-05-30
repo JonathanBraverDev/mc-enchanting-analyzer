@@ -257,7 +257,7 @@ export class FlexProjector {
                 }
                 continue;
             }
-            if (emission.kind === 'rank') continue;
+            if (emission.kind === 'rank' || emission.kind === 'rankChoice') continue;
 
             const targetAlternative = emission.alternatives.find(alternative => alternative.packedEnchant === targetClueId);
             if (!targetAlternative) continue;
@@ -381,6 +381,48 @@ export class FlexProjector {
                 return;
             }
 
+            if (emission.kind === 'rankChoice') {
+                const profile = this.getRankProfile(emission.profileId);
+                const profileKey = emission.profileId as number;
+                const choiceTotalWeight = BigInt(emission.totalWeight);
+                const assignedSourceIndex = assignedProfileSources.get(profileKey);
+                if (assignedSourceIndex !== undefined) {
+                    for (const alternative of emission.alternatives) {
+                        const packedEnchant = getProfilePackedEnchant(profile, alternative.enchantId, assignedSourceIndex);
+                        const packedIndex = this.enchantToIndex.get(packedEnchant);
+                        visit(
+                            emissionIndex + 1,
+                            packedIndex === undefined ? combo : appendPackedComboIndex(combo, packedIndex, count),
+                            packedIndex === undefined ? count : count + 1,
+                            numerator * BigInt(alternative.weight),
+                            denominator * choiceTotalWeight,
+                            matchesTargetClue || packedEnchant === this.options.targetClueId
+                        );
+                    }
+                    return;
+                }
+
+                const profileTotalWeight = profile.totalWeight;
+                for (let sourceIndex = 0; sourceIndex < profile.sources.length; sourceIndex++) {
+                    const source = profile.sources[sourceIndex]!;
+                    assignedProfileSources.set(profileKey, sourceIndex);
+                    for (const alternative of emission.alternatives) {
+                        const packedEnchant = getProfilePackedEnchant(profile, alternative.enchantId, sourceIndex);
+                        const packedIndex = this.enchantToIndex.get(packedEnchant);
+                        visit(
+                            emissionIndex + 1,
+                            packedIndex === undefined ? combo : appendPackedComboIndex(combo, packedIndex, count),
+                            packedIndex === undefined ? count : count + 1,
+                            numerator * source.profileWeight * BigInt(alternative.weight),
+                            denominator * profileTotalWeight * choiceTotalWeight,
+                            matchesTargetClue || packedEnchant === this.options.targetClueId
+                        );
+                    }
+                    assignedProfileSources.delete(profileKey);
+                }
+                return;
+            }
+
             const totalWeight = BigInt(emission.totalWeight);
             for (const alternative of emission.alternatives) {
                 const packedIndex = this.enchantToIndex.get(alternative.packedEnchant);
@@ -432,7 +474,7 @@ export class FlexProjector {
                 );
                 continue;
             }
-            if (emission.kind === 'rank') continue;
+            if (emission.kind === 'rank' || emission.kind === 'rankChoice') continue;
 
             const totalWeight = BigInt(emission.totalWeight);
             for (const alternative of emission.alternatives) {
@@ -495,7 +537,7 @@ export class FlexProjector {
                 this.addPendingClueJointEmissionAggregate(clueJoint, emission.packedEnchant, clueMass, count);
                 continue;
             }
-            if (emission.kind === 'rank') continue;
+            if (emission.kind === 'rank' || emission.kind === 'rankChoice') continue;
 
             const targetAlternative = emission.alternatives.find(alternative => alternative.packedEnchant === targetClueId);
             if (targetAlternative) {
@@ -700,6 +742,41 @@ export class FlexProjector {
                         denominator * profile.totalWeight
                     );
                     packedScratch.pop();
+                    assignedProfileSources.delete(profileKey);
+                }
+                return;
+            }
+
+            if (emission.kind === 'rankChoice') {
+                const profile = this.getRankProfile(emission.profileId);
+                const profileKey = emission.profileId as number;
+                const totalWeight = BigInt(emission.totalWeight);
+                const assignedSourceIndex = assignedProfileSources.get(profileKey);
+                if (assignedSourceIndex !== undefined) {
+                    for (const alternative of emission.alternatives) {
+                        packedScratch.push(getProfilePackedEnchant(profile, alternative.enchantId, assignedSourceIndex));
+                        visit(
+                            emissionIndex + 1,
+                            numerator * BigInt(alternative.weight),
+                            denominator * totalWeight
+                        );
+                        packedScratch.pop();
+                    }
+                    return;
+                }
+
+                for (let sourceIndex = 0; sourceIndex < profile.sources.length; sourceIndex++) {
+                    const source = profile.sources[sourceIndex]!;
+                    assignedProfileSources.set(profileKey, sourceIndex);
+                    for (const alternative of emission.alternatives) {
+                        packedScratch.push(getProfilePackedEnchant(profile, alternative.enchantId, sourceIndex));
+                        visit(
+                            emissionIndex + 1,
+                            numerator * source.profileWeight * BigInt(alternative.weight),
+                            denominator * profile.totalWeight * totalWeight
+                        );
+                        packedScratch.pop();
+                    }
                     assignedProfileSources.delete(profileKey);
                 }
                 return;

@@ -718,6 +718,14 @@ export class GroupedFlexGraph implements FlexGraph {
 
         this.preparedChoiceEmissionCount++;
         this.preparedChoiceAlternativeCount += alternatives.length;
+        if (this.rankProfileId !== undefined) {
+            return this.programs.prepareCanonicalRankChoiceFromPackedArrays(
+                alternatives,
+                alternativeWeights,
+                alternatives.length,
+                this.rankProfileId
+            );
+        }
         return this.programs.prepareCanonicalChoiceFromArrays(alternatives, alternativeWeights, alternatives.length);
     }
 

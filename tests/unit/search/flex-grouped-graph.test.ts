@@ -379,6 +379,23 @@ describe('GroupedFlexSearchRun', () => {
         assert.ok(rank.resolvedProjectionLoss <= 2n);
     });
 
+    it('keeps Conflict grouping available inside Rank-merged graphs', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'pickaxe', material: 'diamond' });
+        const rankRun = new GroupedFlexSearchRun(kernel, {
+            optimizationControls: { allowRankMerge: true }
+        });
+
+        rankRun.seedXp(30);
+        const rankState = rankRun.searchToCheckpoint({ exhaustive: true, probabilityFloor: 0n });
+        const rankMemory = rankRun.getMemoryStats();
+
+        assert.strictEqual(rankState.fullyResolved, true);
+        assert.ok(rankMemory.rankMerge.usedFamilyGroupCount > 0);
+        assert.ok(rankMemory.rankProfiles.profileCount > 0);
+        assert.ok(hasConflictRankSourceProgram(rankRun, rankState), 'rank-merged search should resolve at least one combined Conflict+Rank program');
+    });
+
     it('keeps incremental residue diagnostics aligned with a full residue scan', () => {
         const registry = RegistryFactory.build('1.21.11');
         const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
@@ -600,6 +617,18 @@ function hasRankSourceProgram(
         if (run.programs.hasRankMerge(programId)) return true;
     }
     return state.pendingEntries?.some(entry => run.programs.hasRankMerge(entry.programId)) ?? false;
+}
+
+function hasConflictRankSourceProgram(
+    run: GroupedFlexSearchRun,
+    state: Pick<FlexRunSnapshot, 'results'> & Partial<Pick<FlexRunSnapshot, 'pendingEntries'>>
+): boolean {
+    for (const programId of state.results.keys()) {
+        if (run.programs.hasChoice(programId) && run.programs.hasRankMerge(programId)) return true;
+    }
+    return state.pendingEntries?.some(entry =>
+        run.programs.hasChoice(entry.programId) && run.programs.hasRankMerge(entry.programId)
+    ) ?? false;
 }
 
 function totalResultDiff(

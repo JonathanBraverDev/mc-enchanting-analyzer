@@ -300,7 +300,7 @@ export class GroupedFlexSearchRun {
                 stateIdentityMode: 'program',
                 rankProfileId: profile.id,
                 optimizationControls: {
-                    allowConflictMerge: false,
+                    allowConflictMerge: this.optimizationControls?.allowConflictMerge ?? true,
                     allowRankMerge: true
                 }
             })
@@ -348,8 +348,19 @@ export class GroupedFlexSearchRun {
         emission: FlexEmission,
         profileId: FlexRankProfile['id']
     ): FlexEmission | undefined {
-        if (emission.kind !== 'fixed') return undefined;
-        return this.programs.prepareRankEmission(emission.packedEnchant >> PACKING_CONSTANTS.ENCHANT_SHIFT, profileId);
+        if (emission.kind === 'fixed') {
+            return this.programs.prepareRankEmission(emission.packedEnchant >> PACKING_CONSTANTS.ENCHANT_SHIFT, profileId);
+        }
+        if (emission.kind === 'choice') {
+            return this.programs.prepareCanonicalRankChoice(
+                emission.alternatives.map(alternative => ({
+                    enchantId: alternative.packedEnchant >> PACKING_CONSTANTS.ENCHANT_SHIFT,
+                    weight: alternative.weight
+                })),
+                profileId
+            );
+        }
+        return undefined;
     }
 
     private isTargetClueReachableById(graphId: number, nodeId: number): boolean | undefined {
