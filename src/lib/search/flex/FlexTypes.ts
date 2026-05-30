@@ -123,6 +123,7 @@ export interface FlexSearchExpansion {
     readonly edgeCount: number;
     readonly edgeWeights: ArrayLike<number>;
     readonly edgeChildIds: ArrayLike<number>;
+    readonly edgeGraphIds?: ArrayLike<number> | undefined;
     readonly clueIncompatibleWeight?: number | undefined;
     readonly terminalReason: FlexTerminalReason;
 }

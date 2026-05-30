@@ -350,7 +350,12 @@ export class FlexCoordinator {
             nextResidueNumerator += edgeResidue;
             if (oldResidue !== 0n) promotedMass += childMass - (baseNumerator / totalWeight);
             pendingMass += childMass;
-            this.pushPending(graphId, expansion.edgeChildIds[edgeIndex]! as FlexNodeId, childMass);
+            const edgeGraphId = expansion.edgeGraphIds?.[edgeIndex];
+            this.pushPending(
+                edgeGraphId === undefined || edgeGraphId < 0 ? graphId : edgeGraphId,
+                expansion.edgeChildIds[edgeIndex]! as FlexNodeId,
+                childMass
+            );
         }
 
         if (clueIncompatibleWeight > 0) {

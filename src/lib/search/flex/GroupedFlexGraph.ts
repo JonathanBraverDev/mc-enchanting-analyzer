@@ -13,6 +13,7 @@ import type {
     FlexNodeId,
     FlexOptimizationControls,
     FlexProgramId,
+    FlexRankProfileId,
     FlexSearchExpansion,
     FlexSearchExpansionConsumer,
     FlexStateIdentityMode
@@ -23,6 +24,7 @@ import { FLEX_GRAPH_INDEX_CONFIG, FLEX_GRAPH_TRAVERSAL, FLEX_HASH_CONFIG, FLEX_I
 const FLEX_NODE_STATE_COUNT_STRIDE = ENGINE_LIMITS.MAX_ENCHANTS_PER_ITEM + 1;
 const EMPTY_EDGE_WEIGHTS = new Uint32Array(0);
 const EMPTY_EDGE_CHILD_IDS = new Int32Array(0);
+const SAME_GRAPH_EDGE_ID = -1;
 const REDUCED_IDENTITY_PROGRAM_ID = 0 as FlexProgramId;
 const INITIAL_EXPANSION_NODE_ID = 0 as FlexNodeId;
 const INITIAL_EXPANSION_PROGRAM_ID = REDUCED_IDENTITY_PROGRAM_ID;
@@ -53,8 +55,29 @@ interface MutableFlexSearchExpansion {
     edgeCount: number;
     edgeWeights: ArrayLike<number>;
     edgeChildIds: ArrayLike<number>;
+    edgeGraphIds?: ArrayLike<number> | undefined;
     clueIncompatibleWeight?: number | undefined;
     terminalReason: FlexExpansion['terminalReason'];
+}
+
+export interface GroupedFlexChildRouteRequest {
+    readonly pool: SearchPool;
+    readonly parentNodeId: FlexNodeId;
+    readonly parentProgramId: FlexProgramId;
+    readonly childProgramId: FlexProgramId;
+    readonly childExclusionMask: bigint;
+    readonly childLevel: number;
+    readonly childCount: number;
+}
+
+export interface GroupedFlexChildRoute {
+    readonly graphId: number;
+    readonly nodeId: FlexNodeId;
+}
+
+interface InternalGroupedFlexChildRoute {
+    readonly graphId: number;
+    readonly nodeId: FlexNodeId;
 }
 
 class FlexNodeIndex {
@@ -216,6 +239,8 @@ export interface GroupedFlexGraphOptions {
     readonly stateIdentityMode?: FlexStateIdentityMode | undefined;
     readonly targetClueId?: number | undefined;
     readonly optimizationControls?: FlexOptimizationControls | undefined;
+    readonly rankProfileId?: FlexRankProfileId | undefined;
+    readonly routeChild?: ((request: GroupedFlexChildRouteRequest) => GroupedFlexChildRoute | undefined) | undefined;
 }
 
 
@@ -249,6 +274,7 @@ export class GroupedFlexGraph implements FlexGraph {
     private scratchEntryNextIndexes = new Int32Array(0);
     private scratchEdgeWeights = EMPTY_EDGE_WEIGHTS;
     private scratchEdgeChildIds = EMPTY_EDGE_CHILD_IDS;
+    private scratchEdgeGraphIds = new Int32Array(0);
     private readonly scratchExpansion: MutableFlexSearchExpansion = {
         nodeId: INITIAL_EXPANSION_NODE_ID,
         programId: INITIAL_EXPANSION_PROGRAM_ID,
@@ -259,11 +285,14 @@ export class GroupedFlexGraph implements FlexGraph {
         edgeCount: INITIAL_EXPANSION_EDGE_COUNT,
         edgeWeights: EMPTY_EDGE_WEIGHTS,
         edgeChildIds: EMPTY_EDGE_CHILD_IDS,
+        edgeGraphIds: undefined,
         clueIncompatibleWeight: INITIAL_EXPANSION_CLUE_INCOMPATIBLE_WEIGHT,
         terminalReason: null
     };
     private readonly stateIdentityMode: FlexStateIdentityMode;
     private readonly allowConflictMerge: boolean;
+    private readonly rankProfileId: FlexRankProfileId | undefined;
+    private readonly routeChild: ((request: GroupedFlexChildRouteRequest) => GroupedFlexChildRoute | undefined) | undefined;
     private readonly targetClueId: number | undefined;
     private readonly targetClueEnchantId: number | undefined;
     private readonly targetClueConflictBitset: bigint;
@@ -298,6 +327,8 @@ export class GroupedFlexGraph implements FlexGraph {
         options: GroupedFlexGraphOptions = {}
     ) {
         this.pool = pool;
+        this.rankProfileId = options.rankProfileId;
+        this.routeChild = options.routeChild;
         this.allowConflictMerge = options.optimizationControls?.allowConflictMerge ?? true;
         this.stateIdentityMode = this.allowConflictMerge
             ? options.stateIdentityMode ?? 'reduced'
@@ -368,6 +399,15 @@ export class GroupedFlexGraph implements FlexGraph {
     public getNodeExclusionMask(nodeId: FlexNodeId): bigint {
         this.assertNode(nodeId);
         return this.exclusionMasks[nodeId as number]!;
+    }
+
+    public getOrCreateRoutedNode(
+        exclusionMask: bigint,
+        currentLevel: number,
+        count: number,
+        programId: FlexProgramId
+    ): FlexNode {
+        return this.createNode(this.getOrCreateNodeId(exclusionMask, currentLevel, count, programId));
     }
 
     public getMemoryStats(): FlexGraphMemoryStats {
@@ -517,12 +557,19 @@ export class GroupedFlexGraph implements FlexGraph {
     ): FlexSearchExpansion {
         const edgeWeights = this.getScratchEdgeWeights(shape.groupCount);
         const edgeChildIds = this.getScratchEdgeChildIds(shape.groupCount);
+        const edgeGraphIds = this.routeChild === undefined ? undefined : this.getScratchEdgeGraphIds(shape.groupCount);
+        let hasRoutedEdges = false;
 
         for (let groupIndex = 0; groupIndex < shape.groupCount; groupIndex++) {
+            const childRoute = this.createGroupedChildRoute(shape, groupIndex, parentNodeIndex, childLevel, childCount);
             edgeWeights[groupIndex] = shape.edgeWeights[groupIndex]!;
-            edgeChildIds[groupIndex] = this.createGroupedChildId(shape, groupIndex, parentNodeIndex, childLevel, childCount) as number;
+            edgeChildIds[groupIndex] = childRoute.nodeId as number;
+            if (edgeGraphIds !== undefined) {
+                edgeGraphIds[groupIndex] = childRoute.graphId;
+                if (childRoute.graphId !== SAME_GRAPH_EDGE_ID) hasRoutedEdges = true;
+            }
         }
-        sortEdgeArrays(edgeWeights, edgeChildIds, shape.groupCount);
+        sortEdgeArrays(edgeWeights, edgeChildIds, shape.groupCount, edgeGraphIds);
 
         return this.createSearchExpansion(
             nodeId,
@@ -532,7 +579,8 @@ export class GroupedFlexGraph implements FlexGraph {
             edgeChildIds,
             shape.groupCount,
             shape.clueIncompatibleWeight,
-            terminalReason
+            terminalReason,
+            hasRoutedEdges ? edgeGraphIds : undefined
         );
     }
 
@@ -550,18 +598,25 @@ export class GroupedFlexGraph implements FlexGraph {
         const { totalWeight, clueIncompatibleWeight } = this.buildScratchGroups(parentExclusionMask, clueRestricted, collectAlternatives);
         const edgeWeights = this.getScratchEdgeWeights(this.groupCount);
         const edgeChildIds = this.getScratchEdgeChildIds(this.groupCount);
+        const edgeGraphIds = this.routeChild === undefined ? undefined : this.getScratchEdgeGraphIds(this.groupCount);
+        let hasRoutedEdges = false;
 
         for (let groupIndex = 0; groupIndex < this.groupCount; groupIndex++) {
-            edgeWeights[groupIndex] = this.scratchGroupWeights[groupIndex]!;
-            edgeChildIds[groupIndex] = this.createGroupedChildIdFromScratch(
+            const childRoute = this.createGroupedChildRouteFromScratch(
                 groupIndex,
                 parentNodeIndex,
                 childLevel,
                 childCount,
                 collectAlternatives
-            ) as number;
+            );
+            edgeWeights[groupIndex] = this.scratchGroupWeights[groupIndex]!;
+            edgeChildIds[groupIndex] = childRoute.nodeId as number;
+            if (edgeGraphIds !== undefined) {
+                edgeGraphIds[groupIndex] = childRoute.graphId;
+                if (childRoute.graphId !== SAME_GRAPH_EDGE_ID) hasRoutedEdges = true;
+            }
         }
-        sortEdgeArrays(edgeWeights, edgeChildIds, this.groupCount);
+        sortEdgeArrays(edgeWeights, edgeChildIds, this.groupCount, edgeGraphIds);
 
         return this.createSearchExpansion(
             nodeId,
@@ -571,7 +626,8 @@ export class GroupedFlexGraph implements FlexGraph {
             edgeChildIds,
             this.groupCount,
             clueIncompatibleWeight,
-            terminalReason
+            terminalReason,
+            hasRoutedEdges ? edgeGraphIds : undefined
         );
     }
 
@@ -657,7 +713,7 @@ export class GroupedFlexGraph implements FlexGraph {
         const alternativeWeights = this.scratchGroupAlternativeWeights[groupIndex]!;
         if (alternatives.length === 1) {
             this.preparedFixedEmissionCount++;
-            return this.programs.prepareFixedEmission(alternatives[0]! as PackedEnchant);
+            return this.prepareSingletonEmission(alternatives[0]! as PackedEnchant);
         }
 
         this.preparedChoiceEmissionCount++;
@@ -674,7 +730,7 @@ export class GroupedFlexGraph implements FlexGraph {
         const alternativeCount = this.scratchGroupAlternativeCounts[groupIndex] ?? 0;
         if (alternativeCount === 1) {
             this.preparedFixedEmissionCount++;
-            return this.programs.prepareFixedEmission(this.scratchGroupFirstPackedEnchants[groupIndex]! as PackedEnchant);
+            return this.prepareSingletonEmission(this.scratchGroupFirstPackedEnchants[groupIndex]! as PackedEnchant);
         }
 
         this.lazyChoiceEmissionScanCount++;
@@ -696,100 +752,153 @@ export class GroupedFlexGraph implements FlexGraph {
         }
     }
 
-    private createGroupedChildIdFromScratch(
+    private prepareSingletonEmission(packedEnchant: PackedEnchant): FlexEmission {
+        return this.rankProfileId === undefined
+            ? this.programs.prepareFixedEmission(packedEnchant)
+            : this.programs.prepareRankEmission(getEnchantId(packedEnchant), this.rankProfileId);
+    }
+
+    private createGroupedChildRouteFromScratch(
         groupIndex: number,
         parentNodeIndex: number,
         childLevel: number,
         childCount: number,
         alternativesCollected: boolean
-    ): FlexNodeId {
+    ): InternalGroupedFlexChildRoute {
         const childExclusionMask = this.scratchGroupMasks[groupIndex]!;
         const childExclusionMaskLow = this.scratchGroupMaskLows[groupIndex]!;
         const childExclusionMaskHigh = this.scratchGroupMaskHighs[groupIndex]!;
+        const parentProgramId = this.programIds[parentNodeIndex]!;
+        const emission = this.createPreparedGroupEmissionFromScratch(groupIndex, alternativesCollected);
+        const childProgramId = this.programs.appendPreparedEmission(parentProgramId, emission);
+        const routed = this.tryRouteChild(
+            parentNodeIndex,
+            parentProgramId,
+            childProgramId,
+            childExclusionMask,
+            childLevel,
+            childCount
+        );
+        if (routed) return routed;
+
         if (this.stateIdentityMode === 'reduced') {
             const identityProgramId = REDUCED_IDENTITY_PROGRAM_ID;
             const stateKey = this.createNodeStateKey(childLevel, childCount);
             const existing = this.nodeIndex.getParts(childExclusionMaskLow, childExclusionMaskHigh, stateKey, identityProgramId);
             if (existing !== undefined) {
                 this.nodeReuseCount++;
-                return existing;
+                return { graphId: SAME_GRAPH_EDGE_ID, nodeId: existing };
             }
-            const parentProgramId = this.programIds[parentNodeIndex]!;
-            const childProgramId = this.programs.appendPreparedEmission(
-                parentProgramId,
-                this.createPreparedGroupEmissionFromScratch(groupIndex, alternativesCollected)
-            );
-            return this.createNodeIdWithParts(
+            return {
+                graphId: SAME_GRAPH_EDGE_ID,
+                nodeId: this.createNodeIdWithParts(
+                    childExclusionMask,
+                    childExclusionMaskLow,
+                    childExclusionMaskHigh,
+                    childLevel,
+                    childCount,
+                    childProgramId,
+                    identityProgramId
+                )
+            };
+        }
+
+        return {
+            graphId: SAME_GRAPH_EDGE_ID,
+            nodeId: this.getOrCreateNodeIdWithParts(
                 childExclusionMask,
                 childExclusionMaskLow,
                 childExclusionMaskHigh,
                 childLevel,
                 childCount,
-                childProgramId,
-                identityProgramId
-            );
-        }
-
-        const parentProgramId = this.programIds[parentNodeIndex]!;
-        const childProgramId = this.programs.appendPreparedEmission(
-            parentProgramId,
-            this.createPreparedGroupEmissionFromScratch(groupIndex, alternativesCollected)
-        );
-        return this.getOrCreateNodeIdWithParts(
-            childExclusionMask,
-            childExclusionMaskLow,
-            childExclusionMaskHigh,
-            childLevel,
-            childCount,
-            childProgramId
-        );
+                childProgramId
+            )
+        };
     }
 
-    private createGroupedChildId(
+    private createGroupedChildRoute(
         shape: GroupedExpansionShape,
         groupIndex: number,
         parentNodeIndex: number,
         childLevel: number,
         childCount: number
-    ): FlexNodeId {
+    ): InternalGroupedFlexChildRoute {
         const childExclusionMask = shape.childExclusionMasks[groupIndex]!;
         const childExclusionMaskLow = shape.childExclusionMaskLows[groupIndex]!;
         const childExclusionMaskHigh = shape.childExclusionMaskHighs[groupIndex]!;
+        const parentProgramId = this.programIds[parentNodeIndex]!;
+        this.shapePreparedEmissionAppendCount++;
+        const childProgramId = this.programs.appendPreparedEmission(parentProgramId, shape.emissions[groupIndex]!);
+        const routed = this.tryRouteChild(
+            parentNodeIndex,
+            parentProgramId,
+            childProgramId,
+            childExclusionMask,
+            childLevel,
+            childCount
+        );
+        if (routed) return routed;
+
         if (this.stateIdentityMode === 'reduced') {
             const identityProgramId = REDUCED_IDENTITY_PROGRAM_ID;
             const stateKey = this.createNodeStateKey(childLevel, childCount);
             const existing = this.nodeIndex.getParts(childExclusionMaskLow, childExclusionMaskHigh, stateKey, identityProgramId);
             if (existing !== undefined) {
                 this.nodeReuseCount++;
-                return existing;
+                return { graphId: SAME_GRAPH_EDGE_ID, nodeId: existing };
             }
-            const parentProgramId = this.programIds[parentNodeIndex]!;
-            this.shapePreparedEmissionAppendCount++;
-            const childProgramId = this.programs.appendPreparedEmission(parentProgramId, shape.emissions[groupIndex]!);
-            return this.createNodeIdWithParts(
+            return {
+                graphId: SAME_GRAPH_EDGE_ID,
+                nodeId: this.createNodeIdWithParts(
+                    childExclusionMask,
+                    childExclusionMaskLow,
+                    childExclusionMaskHigh,
+                    childLevel,
+                    childCount,
+                    childProgramId,
+                    identityProgramId
+                )
+            };
+        }
+
+        return {
+            graphId: SAME_GRAPH_EDGE_ID,
+            nodeId: this.getOrCreateNodeIdWithParts(
                 childExclusionMask,
                 childExclusionMaskLow,
                 childExclusionMaskHigh,
                 childLevel,
                 childCount,
-                childProgramId,
-                identityProgramId
-            );
-        }
+                childProgramId
+            )
+        };
+    }
 
-        const parentProgramId = this.programIds[parentNodeIndex]!;
-        this.shapePreparedEmissionAppendCount++;
-        const childProgramId = this.programs.appendPreparedEmission(parentProgramId, shape.emissions[groupIndex]!);
-        const childId = this.getOrCreateNodeIdWithParts(
+    private tryRouteChild(
+        parentNodeIndex: number,
+        parentProgramId: FlexProgramId,
+        childProgramId: FlexProgramId,
+        childExclusionMask: bigint,
+        childLevel: number,
+        childCount: number
+    ): InternalGroupedFlexChildRoute | undefined {
+        const routeChild = this.routeChild;
+        if (routeChild === undefined) return undefined;
+
+        const routed = routeChild({
+            pool: this.pool,
+            parentNodeId: parentNodeIndex as FlexNodeId,
+            parentProgramId,
+            childProgramId,
             childExclusionMask,
-            childExclusionMaskLow,
-            childExclusionMaskHigh,
             childLevel,
-            childCount,
-            childProgramId
-        );
-
-        return childId;
+            childCount
+        });
+        if (routed === undefined) return undefined;
+        return {
+            graphId: routed.graphId,
+            nodeId: routed.nodeId
+        };
     }
 
     private createSearchExpansion(
@@ -800,7 +909,8 @@ export class GroupedFlexGraph implements FlexGraph {
         edgeChildIds: ArrayLike<number>,
         edgeCount: number,
         clueIncompatibleWeight: number,
-        terminalReason: FlexExpansion['terminalReason']
+        terminalReason: FlexExpansion['terminalReason'],
+        edgeGraphIds?: ArrayLike<number> | undefined
     ): FlexSearchExpansion {
         const programId = this.getProgramId(nodeId);
         this.searchExpansionCount++;
@@ -814,6 +924,7 @@ export class GroupedFlexGraph implements FlexGraph {
         this.scratchExpansion.edgeCount = edgeCount;
         this.scratchExpansion.edgeWeights = edgeWeights;
         this.scratchExpansion.edgeChildIds = edgeChildIds;
+        this.scratchExpansion.edgeGraphIds = edgeGraphIds;
         this.scratchExpansion.clueIncompatibleWeight = clueIncompatibleWeight;
         this.scratchExpansion.terminalReason = terminalReason;
         return this.scratchExpansion;
@@ -831,6 +942,14 @@ export class GroupedFlexGraph implements FlexGraph {
             this.scratchEdgeChildIds = new Int32Array(required);
         }
         return this.scratchEdgeChildIds;
+    }
+
+    private getScratchEdgeGraphIds(required: number): Int32Array {
+        if (this.scratchEdgeGraphIds.length < required) {
+            this.scratchEdgeGraphIds = new Int32Array(required);
+        }
+        this.scratchEdgeGraphIds.fill(SAME_GRAPH_EDGE_ID, 0, required);
+        return this.scratchEdgeGraphIds;
     }
 
     private createDebugExpansion(expansion: FlexSearchExpansion): FlexExpansion {
@@ -1079,10 +1198,20 @@ function exclusionMaskHigh(exclusionMask: bigint): number {
     return Number((exclusionMask >> FLEX_HASH_CONFIG.HIGH_32_BITS_SHIFT) & FLEX_HASH_CONFIG.LOW_32_BITS_MASK) >>> 0;
 }
 
-function sortEdgeArrays(edgeWeights: Uint32Array, edgeChildIds: Int32Array, edgeCount: number): void {
+function getEnchantId(packedEnchant: PackedEnchant): number {
+    return packedEnchant >> PACKING_CONSTANTS.ENCHANT_SHIFT;
+}
+
+function sortEdgeArrays(
+    edgeWeights: Uint32Array,
+    edgeChildIds: Int32Array,
+    edgeCount: number,
+    edgeGraphIds?: Int32Array | undefined
+): void {
     for (let index = 1; index < edgeCount; index++) {
         const weight = edgeWeights[index]!;
         const childId = edgeChildIds[index]!;
+        const graphId = edgeGraphIds?.[index];
         let cursor = index - 1;
         while (
             cursor >= 0
@@ -1091,9 +1220,11 @@ function sortEdgeArrays(edgeWeights: Uint32Array, edgeChildIds: Int32Array, edge
         ) {
             edgeWeights[cursor + 1] = edgeWeights[cursor]!;
             edgeChildIds[cursor + 1] = edgeChildIds[cursor]!;
+            if (edgeGraphIds !== undefined) edgeGraphIds[cursor + 1] = edgeGraphIds[cursor]!;
             cursor--;
         }
         edgeWeights[cursor + 1] = weight;
         edgeChildIds[cursor + 1] = childId;
+        if (edgeGraphIds !== undefined) edgeGraphIds[cursor + 1] = graphId ?? SAME_GRAPH_EDGE_ID;
     }
 }

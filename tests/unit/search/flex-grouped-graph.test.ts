@@ -339,7 +339,7 @@ describe('GroupedFlexSearchRun', () => {
         assert.strictEqual(stats.fallbackFamilyGroupCount, 0);
     });
 
-    it('keeps rank-merge opt-in on the exact path until profile-aware merging is safe', () => {
+    it('routes opt-in rank-merge rows through correlated Rank programs', () => {
         const registry = RegistryFactory.build('1.21.11');
         const kernel = new RegistryKernel({ registry, item: 'pickaxe', material: 'diamond' });
         const split = PRECISION / 2n;
@@ -365,16 +365,18 @@ describe('GroupedFlexSearchRun', () => {
         const rankState = rankRun.searchToCheckpointState({ exhaustive: true, probabilityFloor: 0n });
         const rank = rankRun.buildEngineSnapshot(rankState);
 
-        assert.strictEqual(rankStats.usedFamilyGroupCount, 0);
-        assert.strictEqual(rankStats.fallbackFamilyGroupCount, 1);
-        assert.strictEqual(rankStats.fallbackExactPoolCount, 2);
+        assert.strictEqual(rankStats.usedFamilyGroupCount, 1);
+        assert.strictEqual(rankStats.usedExactPoolCount, 2);
+        assert.strictEqual(rankStats.usedLevelCount, 2);
+        assert.strictEqual(rankStats.fallbackFamilyGroupCount, 0);
         assert.strictEqual(rankMemory.rankProfiles.profileCount, 1);
         assert.strictEqual(rankMemory.rankProfiles.sourceExactPoolCount, 2);
         assert.strictEqual(rankMemory.rankProfiles.sourceLevelCount, 2);
         assert.strictEqual(rankMemory.rankProfiles.rankVariantEnchantCount, 1);
-        assert.strictEqual(rankMemory.graphs.length, exactRun.getMemoryStats().graphs.length);
-        assert.deepStrictEqual(rank.snapshot.results, exact.snapshot.results);
-        assert.strictEqual(rank.resolvedProjectionLoss, exact.resolvedProjectionLoss);
+        assert.strictEqual(rankMemory.graphs.length, exactRun.getMemoryStats().graphs.length + 1);
+        assert.ok(hasRankSourceProgram(rankRun, rankState), 'rank-merged search should resolve at least one Rank program');
+        assert.ok(totalResultDiff(rank.snapshot.results, exact.snapshot.results) <= 2n);
+        assert.ok(rank.resolvedProjectionLoss <= 2n);
     });
 
     it('keeps incremental residue diagnostics aligned with a full residue scan', () => {
@@ -588,4 +590,27 @@ function hasPlexSourceProgram(run: GroupedFlexSearchRun, snapshot: FlexRunSnapsh
         if (run.programs.hasChoice(programId)) return true;
     }
     return snapshot.pendingEntries.some(entry => run.programs.hasChoice(entry.programId));
+}
+
+function hasRankSourceProgram(
+    run: GroupedFlexSearchRun,
+    state: Pick<FlexRunSnapshot, 'results'> & Partial<Pick<FlexRunSnapshot, 'pendingEntries'>>
+): boolean {
+    for (const programId of state.results.keys()) {
+        if (run.programs.hasRankMerge(programId)) return true;
+    }
+    return state.pendingEntries?.some(entry => run.programs.hasRankMerge(entry.programId)) ?? false;
+}
+
+function totalResultDiff(
+    left: ReadonlyMap<PackedCombo, bigint>,
+    right: ReadonlyMap<PackedCombo, bigint>
+): bigint {
+    const keys = new Set([...left.keys(), ...right.keys()]);
+    let total = 0n;
+    for (const key of keys) {
+        const diff = (left.get(key) ?? 0n) - (right.get(key) ?? 0n);
+        total += diff < 0n ? -diff : diff;
+    }
+    return total;
 }
