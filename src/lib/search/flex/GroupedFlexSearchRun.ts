@@ -15,6 +15,7 @@ import type {
 } from '#lib/search/flex/FlexTypes.js';
 import { FlexCoordinator } from '#lib/search/flex/FlexCoordinator.js';
 import { FlexProgramStore } from '#lib/search/flex/FlexProgramStore.js';
+import { FlexRankProfileStore } from '#lib/search/flex/FlexRankProfileStore.js';
 import { FlexProjector } from '#lib/search/flex/FlexProjector.js';
 import { GroupedFlexGraph } from '#lib/search/flex/GroupedFlexGraph.js';
 import { FlexSnapshotBuilder, type FlexNativeCheckpoint } from '#lib/search/flex/FlexSnapshotBuilder.js';
@@ -85,6 +86,7 @@ export interface GroupedFlexSearchRunOptions {
  */
 export class GroupedFlexSearchRun {
     public readonly programs: FlexProgramStore;
+    public readonly rankProfiles = new FlexRankProfileStore();
 
     private readonly distributionService: ModifiedLevelDistributionService;
     private readonly graphsBySignature = new Map<SearchPoolSignature, GroupedFlexGraphRecord>();
@@ -193,6 +195,7 @@ export class GroupedFlexSearchRun {
         return {
             coordinator: this.coordinator.getMemoryStats(),
             programs: this.programs.getMemoryStats(),
+            rankProfiles: this.rankProfiles.getMemoryStats(),
             graphs: this.graphs.map(graph => graph.getMemoryStats()),
             rankMerge: this.rankMergeStats
         };
@@ -223,6 +226,16 @@ export class GroupedFlexSearchRun {
         const usage = createEmptyRankMergeUsageStats();
         for (const group of groupRankMergeCandidates(candidates)) {
             if (group.exactKeys.size > 1) {
+                this.rankProfiles.getOrCreate({
+                    familyKey: group.familyKey,
+                    childLevel: group.childLevel,
+                    sources: group.candidates.map(candidate => ({
+                        pool: candidate.pool,
+                        level: candidate.level,
+                        sourceMass: candidate.mass,
+                        profileWeight: candidate.mass
+                    }))
+                });
                 addRankMergeUsage(usage, group, 'fallback');
             }
             for (const candidate of group.candidates) this.seedExactCandidate(candidate);

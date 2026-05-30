@@ -360,14 +360,19 @@ describe('GroupedFlexSearchRun', () => {
             optimizationControls: { allowRankMerge: true }
         });
         rankRun.seedXp(30);
-        const rankStats = rankRun.getMemoryStats().rankMerge;
+        const rankMemory = rankRun.getMemoryStats();
+        const rankStats = rankMemory.rankMerge;
         const rankState = rankRun.searchToCheckpointState({ exhaustive: true, probabilityFloor: 0n });
         const rank = rankRun.buildEngineSnapshot(rankState);
 
         assert.strictEqual(rankStats.usedFamilyGroupCount, 0);
         assert.strictEqual(rankStats.fallbackFamilyGroupCount, 1);
         assert.strictEqual(rankStats.fallbackExactPoolCount, 2);
-        assert.strictEqual(rankRun.getMemoryStats().graphs.length, exactRun.getMemoryStats().graphs.length);
+        assert.strictEqual(rankMemory.rankProfiles.profileCount, 1);
+        assert.strictEqual(rankMemory.rankProfiles.sourceExactPoolCount, 2);
+        assert.strictEqual(rankMemory.rankProfiles.sourceLevelCount, 2);
+        assert.strictEqual(rankMemory.rankProfiles.rankVariantEnchantCount, 1);
+        assert.strictEqual(rankMemory.graphs.length, exactRun.getMemoryStats().graphs.length);
         assert.deepStrictEqual(rank.snapshot.results, exact.snapshot.results);
         assert.strictEqual(rank.resolvedProjectionLoss, exact.resolvedProjectionLoss);
     });

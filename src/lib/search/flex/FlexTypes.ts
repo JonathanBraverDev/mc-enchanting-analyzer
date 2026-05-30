@@ -216,6 +216,7 @@ export interface FlexRankMergeMemoryStats {
 export interface FlexRunMemoryStats {
     readonly coordinator: FlexCoordinatorMemoryStats;
     readonly programs: FlexProgramStoreMemoryStats;
+    readonly rankProfiles: FlexRankProfileStoreMemoryStats;
     readonly graphs: readonly FlexGraphMemoryStats[];
     readonly rankMerge: FlexRankMergeMemoryStats;
 }

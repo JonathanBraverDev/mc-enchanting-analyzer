@@ -18,6 +18,7 @@ interface CliOptions {
 
 interface SummedFlexGroupingStats {
     readonly programCount: number;
+    readonly familyCount: number;
     readonly cachedProgramCount: number;
     readonly graphCount: number;
     readonly graphNodeCount: number;
@@ -58,6 +59,17 @@ interface SummedFlexGroupingStats {
     readonly rankMergeFallbackExactPoolCount: number;
     readonly rankMergeFallbackLevelCount: number;
     readonly rankMergeFallbackMass: string;
+    readonly rankProfileCount: number;
+    readonly rankProfileSourceExactPoolCount: number;
+    readonly rankProfileSourceLevelCount: number;
+    readonly rankProfileSourceMass: string;
+    readonly rankProfileWeight: string;
+    readonly rankProfileVariantEnchantCount: number;
+    readonly rankProfileAlternativeCount: number;
+    readonly rankProfileMaxExactPoolCount: number;
+    readonly rankProfileMaxLevelCount: number;
+    readonly rankProfileMaxVariantEnchantCount: number;
+    readonly rankProfileMaxAlternativeCount: number;
 }
 
 const DEFAULT_OPTIONS: CliOptions = {
@@ -209,8 +221,10 @@ function parseProbability(value: string, label: string): number {
 
 function sumStats(memory: FlexRunMemoryStats): SummedFlexGroupingStats {
     const rankMerge = memory.rankMerge;
+    const rankProfiles = memory.rankProfiles;
     return {
         programCount: memory.programs.programCount,
+        familyCount: memory.programs.familyCount,
         cachedProgramCount: memory.programs.cachedProgramCount,
         graphCount: memory.graphs.length,
         graphNodeCount: sum(memory.graphs.map(graph => graph.nodeCount)),
@@ -250,7 +264,18 @@ function sumStats(memory: FlexRunMemoryStats): SummedFlexGroupingStats {
         rankMergeFallbackFamilyGroupCount: rankMerge.fallbackFamilyGroupCount,
         rankMergeFallbackExactPoolCount: rankMerge.fallbackExactPoolCount,
         rankMergeFallbackLevelCount: rankMerge.fallbackLevelCount,
-        rankMergeFallbackMass: rankMerge.fallbackMass.toString()
+        rankMergeFallbackMass: rankMerge.fallbackMass.toString(),
+        rankProfileCount: rankProfiles.profileCount,
+        rankProfileSourceExactPoolCount: rankProfiles.sourceExactPoolCount,
+        rankProfileSourceLevelCount: rankProfiles.sourceLevelCount,
+        rankProfileSourceMass: rankProfiles.sourceMass.toString(),
+        rankProfileWeight: rankProfiles.profileWeight.toString(),
+        rankProfileVariantEnchantCount: rankProfiles.rankVariantEnchantCount,
+        rankProfileAlternativeCount: rankProfiles.rankAlternativeCount,
+        rankProfileMaxExactPoolCount: rankProfiles.maxExactPoolCount,
+        rankProfileMaxLevelCount: rankProfiles.maxLevelCount,
+        rankProfileMaxVariantEnchantCount: rankProfiles.maxRankVariantEnchantCount,
+        rankProfileMaxAlternativeCount: rankProfiles.maxRankAlternativeCount
     };
 }
 
@@ -258,6 +283,7 @@ function printableStats(phase: string, stats: SummedFlexGroupingStats): Record<s
     return {
         phase,
         programs: stats.programCount,
+        families: stats.familyCount,
         cachedPrograms: stats.cachedProgramCount,
         graphNodes: stats.graphNodeCount,
         solidNodes: stats.solidNodeCount,
@@ -300,7 +326,18 @@ function printableStats(phase: string, stats: SummedFlexGroupingStats): Record<s
         rankFallbackFamilies: stats.rankMergeFallbackFamilyGroupCount,
         rankFallbackExactPools: stats.rankMergeFallbackExactPoolCount,
         rankFallbackLevels: stats.rankMergeFallbackLevelCount,
-        rankFallbackMass: stats.rankMergeFallbackMass
+        rankFallbackMass: stats.rankMergeFallbackMass,
+        rankProfiles: stats.rankProfileCount,
+        rankProfileSources: stats.rankProfileSourceExactPoolCount,
+        rankProfileLevels: stats.rankProfileSourceLevelCount,
+        rankProfileMass: stats.rankProfileSourceMass,
+        rankProfileWeight: stats.rankProfileWeight,
+        rankProfileVariants: stats.rankProfileVariantEnchantCount,
+        rankProfileAlternatives: stats.rankProfileAlternativeCount,
+        maxRankProfileSources: stats.rankProfileMaxExactPoolCount,
+        maxRankProfileLevels: stats.rankProfileMaxLevelCount,
+        maxRankProfileVariants: stats.rankProfileMaxVariantEnchantCount,
+        maxRankProfileAlternatives: stats.rankProfileMaxAlternativeCount
     };
 }
 
