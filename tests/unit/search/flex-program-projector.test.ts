@@ -118,6 +118,8 @@ describe('FlexProgramStore', () => {
 
     it('tracks rank-only choice flags without promoting the legacy Plex kind', () => {
         const store = new FlexProgramStore();
+        const sharpThreeProgram = store.appendFixed(store.empty, sharpnessThree);
+        const sharpFourProgram = store.appendFixed(store.empty, sharpness);
         const rankProgram = store.appendCanonicalChoice(store.empty, [
             { packedEnchant: sharpnessThree, weight: 1 },
             { packedEnchant: sharpness, weight: 2 }
@@ -129,6 +131,25 @@ describe('FlexProgramStore', () => {
         assert.strictEqual(rankNode.kind, 'solid');
         assert.strictEqual(store.hasChoice(rankProgram), false);
         assert.strictEqual(store.hasRankMerge(rankProgram), true);
+        assert.strictEqual(store.getFamilyId(sharpThreeProgram), store.getFamilyId(sharpFourProgram));
+        assert.strictEqual(store.getFamilyId(rankProgram), store.getFamilyId(sharpThreeProgram));
+        assert.strictEqual(rankNode.familyId, store.getFamilyId(sharpThreeProgram));
+    });
+
+    it('collapses exact-rank program variants to the same family ID', () => {
+        const store = new FlexProgramStore();
+        const sharpFourChoice = store.appendChoice(store.empty, [
+            { packedEnchant: sharpness, weight: 1 },
+            { packedEnchant: smite, weight: 2 }
+        ]);
+        const sharpThreeChoice = store.appendChoice(store.empty, [
+            { packedEnchant: sharpnessThree, weight: 1 },
+            { packedEnchant: smite, weight: 2 }
+        ]);
+
+        assert.notStrictEqual(sharpFourChoice, sharpThreeChoice);
+        assert.strictEqual(store.getFamilyId(sharpFourChoice), store.getFamilyId(sharpThreeChoice));
+        assert.ok(store.getMemoryStats().familyCount < store.getMemoryStats().programCount);
     });
 });
 

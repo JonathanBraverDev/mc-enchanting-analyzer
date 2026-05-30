@@ -1,6 +1,7 @@
 export * from './FlexTypes.js';
 export * from './FlexConstants.js';
 export * from './FlexProgramStore.js';
+export * from './FlexRankProfileStore.js';
 export * from './FlexProjector.js';
 export * from './FlexSnapshotBuilder.js';
 export * from './FlexCoordinator.js';

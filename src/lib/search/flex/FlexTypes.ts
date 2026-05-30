@@ -4,6 +4,8 @@ import type { PendingFrontierAggregates } from '#lib/search/SearchSnapshot.js';
 
 export type FlexNodeId = number & { readonly __brand: 'FlexNodeId' };
 export type FlexProgramId = number & { readonly __brand: 'FlexProgramId' };
+export type FlexFamilyId = number & { readonly __brand: 'FlexFamilyId' };
+export type FlexRankProfileId = number & { readonly __brand: 'FlexRankProfileId' };
 export type FlexStateIdentityMode = 'reduced' | 'program';
 export type FlexNodeKind = 'solid' | 'plex';
 
@@ -44,6 +46,36 @@ export interface FlexAlternative {
     readonly weight: number;
 }
 
+export interface FlexRankProfileAlternative {
+    readonly packedEnchant: PackedEnchant;
+    readonly weight: bigint;
+}
+
+export interface FlexRankProfileEnchant {
+    readonly enchantId: number;
+    readonly alternatives: readonly FlexRankProfileAlternative[];
+}
+
+export interface FlexRankProfileSource {
+    readonly exactKey: string;
+    readonly levelCount: number;
+    readonly sourceMass: bigint;
+    readonly profileWeight: bigint;
+}
+
+export interface FlexRankProfile {
+    readonly id: FlexRankProfileId;
+    readonly familyKey: string;
+    readonly childLevel: number;
+    readonly sources: readonly FlexRankProfileSource[];
+    readonly totalSourceMass: bigint;
+    readonly totalWeight: bigint;
+    readonly weightGcd: bigint;
+    readonly enchants: readonly FlexRankProfileEnchant[];
+    readonly rankVariantEnchantCount: number;
+    readonly rankAlternativeCount: number;
+}
+
 export interface FlexFixedEmission {
     readonly kind: 'fixed';
     readonly packedEnchant: PackedEnchant;
@@ -62,6 +94,7 @@ export type FlexProgram = readonly FlexEmission[];
 export interface FlexNode {
     readonly id: FlexNodeId;
     readonly programId: FlexProgramId;
+    readonly familyId: FlexFamilyId;
     readonly count: number;
     readonly mergeFlags: FlexMergeFlags;
     /** Legacy diagnostic classification. Prefer `mergeFlags` for new behavior. */
@@ -147,7 +180,22 @@ export interface FlexCoordinatorMemoryStats {
 
 export interface FlexProgramStoreMemoryStats {
     readonly programCount: number;
+    readonly familyCount: number;
     readonly cachedProgramCount: number;
+}
+
+export interface FlexRankProfileStoreMemoryStats {
+    readonly profileCount: number;
+    readonly sourceExactPoolCount: number;
+    readonly sourceLevelCount: number;
+    readonly sourceMass: bigint;
+    readonly profileWeight: bigint;
+    readonly rankVariantEnchantCount: number;
+    readonly rankAlternativeCount: number;
+    readonly maxExactPoolCount: number;
+    readonly maxLevelCount: number;
+    readonly maxRankVariantEnchantCount: number;
+    readonly maxRankAlternativeCount: number;
 }
 
 export interface FlexRankMergeMemoryStats {

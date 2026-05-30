@@ -1,9 +1,11 @@
 import type { PackedEnchant } from '#types/index.js';
+import { PACKING_CONSTANTS } from '#constants/engine.js';
 import {
     type FlexAlternative,
     type FlexChoiceEmission,
     type FlexEmission,
     type FlexFixedEmission,
+    type FlexFamilyId,
     FLEX_MERGE_FLAGS_CONFLICT,
     FLEX_MERGE_FLAGS_NONE,
     type FlexMergeFlags,
@@ -18,6 +20,8 @@ interface FlexProgramRecord {
     readonly id: FlexProgramId;
     readonly parentId: FlexProgramId | null;
     readonly emission: FlexEmission | null;
+    readonly familyId: FlexFamilyId;
+    readonly familyKey: string;
     readonly mergeFlags: FlexMergeFlags;
     readonly slotCount: number;
 }
@@ -49,7 +53,9 @@ interface FlexEmissionVisitResult {
 }
 
 const EMPTY_PROGRAM_ID = 0 as FlexProgramId;
+const EMPTY_FAMILY_ID = 0 as FlexFamilyId;
 const FIRST_EMISSION_ID = 1;
+const EMPTY_FAMILY_KEY = '';
 
 export class FlexProgramStore {
     public readonly empty: FlexProgramId = EMPTY_PROGRAM_ID;
@@ -58,10 +64,13 @@ export class FlexProgramStore {
         id: EMPTY_PROGRAM_ID,
         parentId: null,
         emission: null,
+        familyId: EMPTY_FAMILY_ID,
+        familyKey: EMPTY_FAMILY_KEY,
         mergeFlags: FLEX_MERGE_FLAGS_NONE,
         slotCount: 0
     })];
     private readonly idsByTransition: Array<Array<FlexProgramId | undefined> | undefined> = [];
+    private readonly familyIdsByKey = new Map<string, FlexFamilyId>([[EMPTY_FAMILY_KEY, EMPTY_FAMILY_ID]]);
     private readonly fixedEmissions = new Map<PackedEnchant, FlexFixedEmission>();
     private readonly choiceInternRoot: FlexChoiceInternNode = {};
     private readonly programInternRoot: FlexProgramInternNode = { programId: EMPTY_PROGRAM_ID };
@@ -136,11 +145,14 @@ export class FlexProgramStore {
         if (existing !== undefined) return existing;
 
         const parent = this.records[parentId]!;
+        const familyKey = this.createNextFamilyKey(parent.familyKey, canonical);
         const id = this.records.length as FlexProgramId;
         const record = Object.freeze({
             id,
             parentId,
             emission: canonical,
+            familyId: this.getOrCreateFamilyId(familyKey),
+            familyKey,
             mergeFlags: this.createMergeFlags(parent.mergeFlags, canonical),
             slotCount: parent.slotCount + 1
         });
@@ -227,6 +239,11 @@ export class FlexProgramStore {
         return this.records[id]!.mergeFlags;
     }
 
+    public getFamilyId(id: FlexProgramId): FlexFamilyId {
+        this.assertProgram(id);
+        return this.records[id]!.familyId;
+    }
+
     public getSlotCount(id: FlexProgramId): number {
         this.assertProgram(id);
         return this.records[id]!.slotCount;
@@ -238,6 +255,7 @@ export class FlexProgramStore {
         return Object.freeze({
             id,
             programId,
+            familyId: this.getFamilyId(programId),
             count,
             mergeFlags,
             kind: mergeFlags.conflictMerge ? 'plex' : 'solid'
@@ -252,6 +270,7 @@ export class FlexProgramStore {
 
         return {
             programCount: this.records.length,
+            familyCount: this.familyIdsByKey.size,
             cachedProgramCount
         };
     }
@@ -430,11 +449,14 @@ export class FlexProgramStore {
         const parentId = this.getOrCreateProgram(program.slice(0, -1));
         const parent = this.records[parentId]!;
         const emission = program[program.length - 1]!;
+        const familyKey = this.createNextFamilyKey(parent.familyKey, emission);
         const id = this.records.length as FlexProgramId;
         const record = Object.freeze({
             id,
             parentId,
             emission,
+            familyId: this.getOrCreateFamilyId(familyKey),
+            familyKey,
             mergeFlags: this.createMergeFlags(parent.mergeFlags, emission),
             slotCount: parent.slotCount + 1
         });
@@ -485,6 +507,35 @@ export class FlexProgramStore {
             .join(',')}`;
     }
 
+    private createNextFamilyKey(parentKey: string, emission: FlexEmission): string {
+        const emissionKey = this.createFamilyEmissionKey(emission);
+        return parentKey === EMPTY_FAMILY_KEY ? emissionKey : `${parentKey}/${emissionKey}`;
+    }
+
+    private createFamilyEmissionKey(emission: FlexEmission): string {
+        if (emission.kind === 'fixed') return `f:${String(getEnchantId(emission.packedEnchant))}`;
+
+        const weightsByEnchant = new Map<number, number>();
+        for (const alternative of emission.alternatives) {
+            const enchantId = getEnchantId(alternative.packedEnchant);
+            weightsByEnchant.set(enchantId, (weightsByEnchant.get(enchantId) ?? 0) + alternative.weight);
+        }
+
+        const alternatives = [...weightsByEnchant.entries()]
+            .sort(([left], [right]) => left - right);
+        if (alternatives.length === 1) return `f:${String(alternatives[0]![0])}`;
+        return `c:${alternatives.map(([enchantId, weight]) => `${String(enchantId)}:${String(weight)}`).join(',')}`;
+    }
+
+    private getOrCreateFamilyId(key: string): FlexFamilyId {
+        const existing = this.familyIdsByKey.get(key);
+        if (existing !== undefined) return existing;
+
+        const id = this.familyIdsByKey.size as FlexFamilyId;
+        this.familyIdsByKey.set(key, id);
+        return id;
+    }
+
     private getEmissionId(emission: FlexEmission): number {
         const id = this.emissionIds.get(emission);
         if (id === undefined) throw new Error('Flex emission was not interned before use.');
@@ -515,6 +566,10 @@ export class FlexProgramStore {
             throw new Error(`Unknown Flex program ID ${String(id)}.`);
         }
     }
+}
+
+function getEnchantId(packedEnchant: PackedEnchant): number {
+    return packedEnchant >> PACKING_CONSTANTS.ENCHANT_SHIFT;
 }
 
 function getOrCreateChoiceInternNode(parent: FlexChoiceInternNode, key: number): FlexChoiceInternNode {
