@@ -105,7 +105,7 @@ The rank-specific `rank-fixed` and `rank-choice` variants from the prototype are
 
 - [`search-engine.md`](search-engine.md)
 - [`../ARCHITECTURE.md`](../ARCHITECTURE.md)
-- Prototype branch: `codex/rank-parametric-pools`
+- Prototype branch: `prototype/rank-parametric-pool-factors`
 
 ## Owner / Maintainer
 
