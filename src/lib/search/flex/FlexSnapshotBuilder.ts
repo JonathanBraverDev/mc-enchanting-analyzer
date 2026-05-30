@@ -5,7 +5,7 @@ import type { MassAccountingBreakdown, MassAccountingDetailBucket, MassAccountin
 import { type PackedCombo, type PackedEnchant } from '#types/index.js';
 import { ComboUtils, ProbUtils } from '#utils/index.js';
 import type { FlexCoordinator } from '#lib/search/flex/FlexCoordinator.js';
-import type { FlexProgramId, FlexRunState } from '#lib/search/flex/FlexTypes.js';
+import type { FlexResultId, FlexRunState } from '#lib/search/flex/FlexTypes.js';
 import { FlexProjector } from '#lib/search/flex/FlexProjector.js';
 
 type MutableComboMassAggregates = {
@@ -33,7 +33,7 @@ export interface FlexNativeCheckpoint {
 }
 
 export class FlexSnapshotBuilder {
-    private readonly projectedMasses = new Map<FlexProgramId, bigint>();
+    private readonly projectedMasses = new Map<FlexResultId, bigint>();
     private readonly comboRows = new Map<PackedCombo, bigint>();
     private readonly resolvedAggregates = createMutableComboMassAggregates();
     private readonly resolvedTotals: ProjectionTotals = {
@@ -89,16 +89,16 @@ export class FlexSnapshotBuilder {
         });
     }
 
-    private refreshResolvedProjection(results: ReadonlyMap<FlexProgramId, bigint>): void {
-        for (const [programId, mass] of results) {
-            const previous = this.projectedMasses.get(programId) ?? 0n;
-            this.projectResultProgramDelta(programId, previous, mass);
-            this.projectedMasses.set(programId, mass);
+    private refreshResolvedProjection(results: ReadonlyMap<FlexResultId, bigint>): void {
+        for (const [resultId, mass] of results) {
+            const previous = this.projectedMasses.get(resultId) ?? 0n;
+            this.projectResultProgramDelta(resultId, previous, mass);
+            this.projectedMasses.set(resultId, mass);
         }
     }
 
     private projectResultProgramDelta(
-        programId: FlexProgramId,
+        resultId: FlexResultId,
         previousMass: bigint,
         currentMass: bigint
     ): void {
@@ -109,7 +109,7 @@ export class FlexSnapshotBuilder {
         const previousMassIsZero = previousMass === 0n;
         this.resolvedTotals.sourceMass += sourceDelta;
 
-        this.projector.visitResultProgramFactors(programId, (combo, count, numerator, denominator, matchesTargetClue) => {
+        this.projector.visitResultKeyFactors(resultId, (combo, count, numerator, denominator, matchesTargetClue) => {
             const shareDelta = previousMassIsZero
                 ? (currentMass * numerator) / denominator
                 : ((currentMass * numerator) / denominator) - ((previousMass * numerator) / denominator);
@@ -131,9 +131,9 @@ export class FlexSnapshotBuilder {
 
     private projectPending(): PendingProjection {
         const projected = this.projector.projectPendingLazyAggregatesFromCursor(visitor => {
-            this.coordinator.forEachPending((graphId, nodeId, programId, mass, count, _nodeKind) => {
+            this.coordinator.forEachPending((graphId, nodeId, programId, poolProfileId, mass, count, _nodeKind) => {
                 const targetClueReachable = this.getTargetClueReachable(graphId, nodeId as number);
-                visitor(programId, mass, count, targetClueReachable);
+                visitor(programId, poolProfileId, mass, count, targetClueReachable);
             });
         });
 

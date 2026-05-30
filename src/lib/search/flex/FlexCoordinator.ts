@@ -9,11 +9,14 @@ import type {
     FlexNodeId,
     FlexPendingEntry,
     FlexPendingEntryVisitor,
+    FlexPoolProfileId,
     FlexProgramId,
+    FlexResultId,
     FlexRunState,
     FlexRunSnapshot,
     FlexSearchExpansion
 } from '#lib/search/flex/FlexTypes.js';
+import { FlexResultKeyStore } from '#lib/search/flex/FlexResultKeyStore.js';
 import { FLEX_FRONTIER_CONFIG, FLEX_HASH_CONFIG, FLEX_INDEX_SENTINELS } from '#lib/search/flex/FlexConstants.js';
 
 const SYSTEM_PROBABILITY_FLOOR = ProbUtils.toBigInt(ENGINE_LIMITS.SYSTEM_THRESHOLD_FLOOR);
@@ -47,7 +50,7 @@ interface FlexForwardingResidueRecord {
 }
 
 export class FlexCoordinator {
-    public readonly results = new Map<FlexProgramId, bigint>();
+    public readonly results = new Map<FlexResultId, bigint>();
     public readonly mass = new ProbabilityMassAccountant();
     private readonly seedMass = this.mass.forSearchOperation(SEARCH_MASS_OPERATION.Seed);
     private readonly frontierMass = this.mass.forSearchOperation(SEARCH_MASS_OPERATION.Frontier);
@@ -75,7 +78,10 @@ export class FlexCoordinator {
     private _lastExpandedMass = 0n;
     private _exitReason: EngineExitReason | undefined;
 
-    public constructor(private readonly graphs: readonly FlexGraph[]) {}
+    public constructor(
+        private readonly graphs: readonly FlexGraph[],
+        private readonly resultKeys: FlexResultKeyStore
+    ) {}
 
     public seedPending(graphId: number, nodeId: FlexNodeId, mass: bigint): void {
         this.assertGraph(graphId);
@@ -150,6 +156,7 @@ export class FlexCoordinator {
                 graphId,
                 nodeId,
                 this.getNodeProgramId(graph, nodeId),
+                this.getNodePoolProfileId(graph, nodeId),
                 mass,
                 this.getNodeCount(graph, nodeId),
                 this.getNodeKind(graph, nodeId)
@@ -286,13 +293,13 @@ export class FlexCoordinator {
             }
 
             if (expansion.count === 0 && (expansion.totalWeight <= 0 || expansion.edgeCount === 0)) {
-                this.recordResolved(expansion.programId, current.mass);
+                this.recordResolved(expansion.programId, expansion.poolProfileId, current.mass);
                 return;
             }
 
             const probStop = ProbUtils.scale(current.mass, PRECISION - expansion.probContinue);
             const probForward = current.mass - probStop;
-            this.recordResolved(expansion.programId, probStop);
+            this.recordResolved(expansion.programId, expansion.poolProfileId, probStop);
 
             if (probForward === 0n) return;
             if (expansion.terminalReason === 'overflow') {
@@ -301,7 +308,7 @@ export class FlexCoordinator {
             }
 
             if (expansion.totalWeight <= 0 || expansion.edgeCount === 0) {
-                this.recordResolved(expansion.programId, probForward);
+                this.recordResolved(expansion.programId, expansion.poolProfileId, probForward);
                 return;
             }
 
@@ -384,9 +391,10 @@ export class FlexCoordinator {
         this.recordResiduePromotion(promotedMass);
     }
 
-    private recordResolved(programId: FlexProgramId, mass: bigint): void {
+    private recordResolved(programId: FlexProgramId, poolProfileId: FlexPoolProfileId, mass: bigint): void {
         if (mass === 0n) return;
-        this.results.set(programId, (this.results.get(programId) ?? 0n) + mass);
+        const resultId = this.resultKeys.getOrCreate(programId, poolProfileId);
+        this.results.set(resultId, (this.results.get(resultId) ?? 0n) + mass);
         this.resolveMass.record(SEARCH_MASS_BUCKET.Resolved, mass);
     }
 
@@ -403,6 +411,7 @@ export class FlexCoordinator {
                 graphId,
                 nodeId,
                 programId: this.getNodeProgramId(graph, nodeId),
+                poolProfileId: this.getNodePoolProfileId(graph, nodeId),
                 mass,
                 count: this.getNodeCount(graph, nodeId),
                 nodeKind: this.getNodeKind(graph, nodeId)
@@ -490,6 +499,10 @@ export class FlexCoordinator {
 
     private getNodeProgramId(graph: FlexGraph, nodeId: FlexNodeId): FlexProgramId {
         return graph.getProgramId(nodeId);
+    }
+
+    private getNodePoolProfileId(graph: FlexGraph, nodeId: FlexNodeId): FlexPoolProfileId {
+        return graph.getPoolProfileId(nodeId);
     }
 
     private getNodeCount(graph: FlexGraph, nodeId: FlexNodeId): number {

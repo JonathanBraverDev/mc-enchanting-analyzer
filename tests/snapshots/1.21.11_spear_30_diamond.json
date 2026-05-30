@@ -476,17 +476,17 @@
     "sieved": 0,
     "overflow": 0.000008650657760711153,
     "capped": 0,
-    "rounding": 9.445569326693715e-16,
+    "rounding": 9.75781955236954e-16,
     "recoveredRounding": 2.645453300864631e-16,
     "recoveredSieved": 0,
     "units": {
-      "resolved": "1152911531077484569",
+      "resolved": "1152911531077484533",
       "clueIncompatible": "0",
       "pending": "0",
       "sieved": "0",
       "overflow": "9973529361318",
       "capped": "0",
-      "rounding": "1089",
+      "rounding": "1125",
       "recoveredRounding": "305",
       "recoveredSieved": "0"
     },
@@ -570,11 +570,11 @@
             },
             "projected": {
               "value": 0.9999913493422383,
-              "units": "1152911531077484569"
+              "units": "1152911531077484533"
             },
             "loss": {
-              "value": 1.5525775109992423e-16,
-              "units": "179"
+              "value": 1.8648277366750676e-16,
+              "units": "215"
             }
           },
           "operations": {
@@ -586,11 +586,11 @@
                 },
                 "projected": {
                   "value": 0.9999913493422383,
-                  "units": "1152911531077484569"
+                  "units": "1152911531077484533"
                 },
                 "loss": {
-                  "value": 1.5525775109992423e-16,
-                  "units": "179"
+                  "value": 1.8648277366750676e-16,
+                  "units": "215"
                 }
               }
             }

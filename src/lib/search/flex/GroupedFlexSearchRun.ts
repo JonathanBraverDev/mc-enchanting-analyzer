@@ -1,15 +1,13 @@
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
 import { BIGINT_CONSTANTS, PACKING_CONSTANTS } from '#constants/engine.js';
-import type { SearchPool, SearchPoolSignature } from '#lib/search/registry/RegistryKernel.js';
+import type { SearchPool } from '#lib/search/registry/RegistryKernel.js';
 import { RegistryKernel } from '#lib/search/registry/RegistryKernel.js';
 import { PRECISION, ProbUtils } from '#utils/index.js';
 import type {
     FlexCheckpointRequest,
-    FlexEmission,
     FlexNodeId,
     FlexOptimizationControls,
-    FlexProgramId,
-    FlexRankProfile,
+    FlexPoolProfile,
     FlexRankMergeMemoryStats,
     FlexRunState,
     FlexRunSnapshot,
@@ -18,7 +16,8 @@ import type {
 } from '#lib/search/flex/FlexTypes.js';
 import { FlexCoordinator } from '#lib/search/flex/FlexCoordinator.js';
 import { FlexProgramStore } from '#lib/search/flex/FlexProgramStore.js';
-import { FlexRankProfileStore } from '#lib/search/flex/FlexRankProfileStore.js';
+import { FlexPoolProfileStore } from '#lib/search/flex/FlexPoolProfileStore.js';
+import { FlexResultKeyStore } from '#lib/search/flex/FlexResultKeyStore.js';
 import { FlexProjector } from '#lib/search/flex/FlexProjector.js';
 import { GroupedFlexGraph, type GroupedFlexChildRouteRequest } from '#lib/search/flex/GroupedFlexGraph.js';
 import { FlexSnapshotBuilder, type FlexNativeCheckpoint } from '#lib/search/flex/FlexSnapshotBuilder.js';
@@ -46,8 +45,7 @@ interface RankMergeCandidateGroup {
 }
 
 interface RankMergeRuntimeGroup {
-    readonly profile: FlexRankProfile;
-    readonly graph: GroupedFlexGraphRecord;
+    readonly profile: FlexPoolProfile;
 }
 
 interface RankMergeUsageStats {
@@ -94,14 +92,15 @@ export interface GroupedFlexSearchRunOptions {
  */
 export class GroupedFlexSearchRun {
     public readonly programs: FlexProgramStore;
-    public readonly rankProfiles = new FlexRankProfileStore();
+    public readonly poolProfiles = new FlexPoolProfileStore();
+    public readonly rankProfiles = this.poolProfiles;
+    public readonly resultKeys = new FlexResultKeyStore();
 
     private readonly distributionService: ModifiedLevelDistributionService;
-    private readonly graphsBySignature = new Map<SearchPoolSignature, GroupedFlexGraphRecord>();
-    private readonly rankGraphsByProfile = new Map<number, GroupedFlexGraphRecord>();
+    private readonly graphsBySignature = new Map<string, GroupedFlexGraphRecord>();
     private readonly rankRuntimeGroups = new Map<string, RankMergeRuntimeGroup>();
     private readonly graphs: GroupedFlexGraph[] = [];
-    private readonly coordinator = new FlexCoordinator(this.graphs);
+    private readonly coordinator = new FlexCoordinator(this.graphs, this.resultKeys);
     private readonly projector: FlexProjector;
     private readonly snapshotBuilder: FlexSnapshotBuilder;
     private readonly targetClueId: number | undefined;
@@ -126,7 +125,8 @@ export class GroupedFlexSearchRun {
         this.projector = new FlexProjector(this.programs, this.kernel.registry.enchantToIndex, {
             applyBookRemoval: this.kernel.item === 'book',
             targetClueId: this.targetClueId,
-            rankProfiles: this.rankProfiles
+            poolProfiles: this.poolProfiles,
+            resultKeys: this.resultKeys
         });
         this.snapshotBuilder = new FlexSnapshotBuilder(
             this.coordinator,
@@ -206,7 +206,7 @@ export class GroupedFlexSearchRun {
         return {
             coordinator: this.coordinator.getMemoryStats(),
             programs: this.programs.getMemoryStats(),
-            rankProfiles: this.rankProfiles.getMemoryStats(),
+            rankProfiles: this.poolProfiles.getMemoryStats(),
             graphs: this.graphs.map(graph => graph.getMemoryStats()),
             rankMerge: this.rankMergeStats
         };
@@ -247,10 +247,8 @@ export class GroupedFlexSearchRun {
                         profileWeight: this.getPostFirstContinueProfileWeight(candidate)
                     }))
                 });
-                const graph = this.graphForRankProfile(profile, group.candidates[0]!.pool);
                 this.rankRuntimeGroups.set(createRankCandidateGroupKey(group.familyKey, group.childLevel), {
-                    profile,
-                    graph
+                    profile
                 });
                 addRankMergeUsage(usage, group, 'used');
             }
@@ -266,17 +264,21 @@ export class GroupedFlexSearchRun {
 
     private seedExactCandidate(candidate: RankMergeCandidate): void {
         const graph = this.graphForPool(candidate.pool);
-        const root = graph.graph.getRootNode(candidate.level);
+        const profile = this.poolProfiles.getOrCreateSingle(candidate.pool);
+        const root = graph.graph.getRootNode(candidate.level, profile.id);
         this.coordinator.seedPending(graph.id, root.id, candidate.mass);
     }
 
     private graphForPool(pool: SearchPool): GroupedFlexGraphRecord {
-        const existing = this.graphsBySignature.get(pool.signature);
+        const key = this.optimizationControls?.allowRankMerge === true && this.targetClueId === undefined
+            ? pool.familySignature
+            : pool.signature;
+        const existing = this.graphsBySignature.get(key);
         if (existing) return existing;
 
         const record = Object.freeze({
             id: this.graphs.length,
-            graph: new GroupedFlexGraph(this.kernel, pool, this.programs, {
+            graph: new GroupedFlexGraph(this.kernel, pool, this.programs, this.poolProfiles, {
                 stateIdentityMode: this.stateIdentityMode,
                 targetClueId: this.targetClueId,
                 optimizationControls: this.optimizationControls,
@@ -286,27 +288,7 @@ export class GroupedFlexSearchRun {
             })
         });
         this.graphs.push(record.graph);
-        this.graphsBySignature.set(pool.signature, record);
-        return record;
-    }
-
-    private graphForRankProfile(profile: FlexRankProfile, representativePool: SearchPool): GroupedFlexGraphRecord {
-        const existing = this.rankGraphsByProfile.get(profile.id as number);
-        if (existing) return existing;
-
-        const record = Object.freeze({
-            id: this.graphs.length,
-            graph: new GroupedFlexGraph(this.kernel, representativePool, this.programs, {
-                stateIdentityMode: 'program',
-                rankProfileId: profile.id,
-                optimizationControls: {
-                    allowConflictMerge: this.optimizationControls?.allowConflictMerge ?? true,
-                    allowRankMerge: true
-                }
-            })
-        });
-        this.graphs.push(record.graph);
-        this.rankGraphsByProfile.set(profile.id as number, record);
+        this.graphsBySignature.set(key, record);
         return record;
     }
 
@@ -316,51 +298,18 @@ export class GroupedFlexSearchRun {
         const group = this.rankRuntimeGroups.get(createRankCandidateGroupKey(request.pool.familySignature, request.childLevel));
         if (group === undefined) return undefined;
 
-        const rankProgramId = this.createRankProgram(request.childProgramId, group.profile.id);
-        if (rankProgramId === undefined) return undefined;
-
-        const node = group.graph.graph.getOrCreateRoutedNode(
+        const graph = this.graphForPool(request.pool);
+        const node = graph.graph.getOrCreateRoutedNode(
             request.childExclusionMask,
             request.childLevel,
             request.childCount,
-            rankProgramId
+            request.childProgramId,
+            group.profile.id
         );
         return {
-            graphId: group.graph.id,
+            graphId: graph.id,
             nodeId: node.id
         };
-    }
-
-    private createRankProgram(
-        exactProgramId: FlexProgramId,
-        profileId: FlexRankProfile['id']
-    ): FlexProgramId | undefined {
-        let rankProgramId = this.programs.empty;
-        for (const emission of this.programs.getProgram(exactProgramId)) {
-            const rankEmission = this.createRankEmissionFromExact(emission, profileId);
-            if (rankEmission === undefined) return undefined;
-            rankProgramId = this.programs.appendPreparedEmission(rankProgramId, rankEmission);
-        }
-        return rankProgramId;
-    }
-
-    private createRankEmissionFromExact(
-        emission: FlexEmission,
-        profileId: FlexRankProfile['id']
-    ): FlexEmission | undefined {
-        if (emission.kind === 'fixed') {
-            return this.programs.prepareRankEmission(emission.packedEnchant >> PACKING_CONSTANTS.ENCHANT_SHIFT, profileId);
-        }
-        if (emission.kind === 'choice') {
-            return this.programs.prepareCanonicalRankChoice(
-                emission.alternatives.map(alternative => ({
-                    enchantId: alternative.packedEnchant >> PACKING_CONSTANTS.ENCHANT_SHIFT,
-                    weight: alternative.weight
-                })),
-                profileId
-            );
-        }
-        return undefined;
     }
 
     private isTargetClueReachableById(graphId: number, nodeId: number): boolean | undefined {

@@ -4,8 +4,10 @@ import type { PendingFrontierAggregates } from '#lib/search/SearchSnapshot.js';
 
 export type FlexNodeId = number & { readonly __brand: 'FlexNodeId' };
 export type FlexProgramId = number & { readonly __brand: 'FlexProgramId' };
+export type FlexResultId = number & { readonly __brand: 'FlexResultId' };
 export type FlexFamilyId = number & { readonly __brand: 'FlexFamilyId' };
-export type FlexRankProfileId = number & { readonly __brand: 'FlexRankProfileId' };
+export type FlexPoolProfileId = number & { readonly __brand: 'FlexPoolProfileId' };
+export type FlexRankProfileId = FlexPoolProfileId;
 export type FlexStateIdentityMode = 'reduced' | 'program';
 export type FlexNodeKind = 'solid' | 'plex';
 
@@ -19,7 +21,7 @@ export type FlexMergeFlags = number;
 export interface FlexOptimizationControls {
     /** Current Plex-style grouping by shared child exclusion state. */
     readonly allowConflictMerge?: boolean | undefined;
-    /** Reserved for rank-only pool-family sharing; currently accepted but not implemented. */
+    /** Rank-only pool-family sharing through pool-profile metadata. */
     readonly allowRankMerge?: boolean | undefined;
 }
 
@@ -40,44 +42,50 @@ export function hasFlexRankMerge(flags: FlexMergeFlags): boolean {
 }
 
 export interface FlexAlternative {
-    readonly packedEnchant: PackedEnchant;
+    readonly enchantId: number;
     readonly weight: number;
 }
 
-export interface FlexRankProfileAlternative {
+export interface FlexPoolProfileAlternative {
     readonly packedEnchant: PackedEnchant;
     readonly weight: bigint;
 }
 
-export interface FlexRankProfileEnchant {
+export interface FlexPoolProfileEnchant {
     readonly enchantId: number;
-    readonly alternatives: readonly FlexRankProfileAlternative[];
+    readonly alternatives: readonly FlexPoolProfileAlternative[];
     readonly sourcePackedEnchants: readonly PackedEnchant[];
 }
 
-export interface FlexRankProfileSource {
+export interface FlexPoolProfileSource {
     readonly exactKey: string;
     readonly levelCount: number;
     readonly sourceMass: bigint;
     readonly profileWeight: bigint;
 }
 
-export interface FlexRankProfile {
-    readonly id: FlexRankProfileId;
+export interface FlexPoolProfile {
+    readonly id: FlexPoolProfileId;
     readonly familyKey: string;
     readonly childLevel: number;
-    readonly sources: readonly FlexRankProfileSource[];
+    readonly sources: readonly FlexPoolProfileSource[];
     readonly totalSourceMass: bigint;
     readonly totalWeight: bigint;
     readonly weightGcd: bigint;
-    readonly enchants: readonly FlexRankProfileEnchant[];
+    readonly enchants: readonly FlexPoolProfileEnchant[];
     readonly rankVariantEnchantCount: number;
     readonly rankAlternativeCount: number;
+    readonly mergeFlags: FlexMergeFlags;
 }
+
+export type FlexRankProfileAlternative = FlexPoolProfileAlternative;
+export type FlexRankProfileEnchant = FlexPoolProfileEnchant;
+export type FlexRankProfileSource = FlexPoolProfileSource;
+export type FlexRankProfile = FlexPoolProfile;
 
 export interface FlexFixedEmission {
     readonly kind: 'fixed';
-    readonly packedEnchant: PackedEnchant;
+    readonly enchantId: number;
 }
 
 export interface FlexChoiceEmission {
@@ -109,9 +117,16 @@ export interface FlexRankChoiceEmission {
 export type FlexEmission = FlexFixedEmission | FlexChoiceEmission | FlexRankEmission | FlexRankChoiceEmission;
 export type FlexProgram = readonly FlexEmission[];
 
+export interface FlexResultKey {
+    readonly id: FlexResultId;
+    readonly programId: FlexProgramId;
+    readonly poolProfileId: FlexPoolProfileId;
+}
+
 export interface FlexNode {
     readonly id: FlexNodeId;
     readonly programId: FlexProgramId;
+    readonly poolProfileId: FlexPoolProfileId;
     readonly familyId: FlexFamilyId;
     readonly count: number;
     readonly mergeFlags: FlexMergeFlags;
@@ -129,6 +144,7 @@ export type FlexTerminalReason = 'overflow' | null;
 export interface FlexSearchExpansion {
     readonly nodeId: FlexNodeId;
     readonly programId: FlexProgramId;
+    readonly poolProfileId: FlexPoolProfileId;
     readonly nodeKind: FlexNodeKind;
     readonly count: number;
     readonly probContinue: bigint;
@@ -156,6 +172,7 @@ export interface FlexGraph {
     getExpansion(nodeId: FlexNodeId): FlexExpansion;
     withSearchExpansion<T>(nodeId: FlexNodeId, consumer: FlexSearchExpansionConsumer<T>): T;
     getProgramId(nodeId: FlexNodeId): FlexProgramId;
+    getPoolProfileId(nodeId: FlexNodeId): FlexPoolProfileId;
     getNodeCount(nodeId: FlexNodeId): number;
     getNodeKind(nodeId: FlexNodeId): FlexNodeKind;
     getNode(nodeId: FlexNodeId): FlexNode;
@@ -217,6 +234,8 @@ export interface FlexRankProfileStoreMemoryStats {
     readonly maxRankAlternativeCount: number;
 }
 
+export type FlexPoolProfileStoreMemoryStats = FlexRankProfileStoreMemoryStats;
+
 export interface FlexRankMergeMemoryStats {
     readonly eligibleFamilyGroupCount: number;
     readonly eligibleExactPoolCount: number;
@@ -260,6 +279,7 @@ export interface FlexPendingEntry {
     readonly graphId: number;
     readonly nodeId: FlexNodeId;
     readonly programId: FlexProgramId;
+    readonly poolProfileId: FlexPoolProfileId;
     readonly mass: bigint;
     readonly count: number;
     readonly nodeKind: FlexNodeKind;
@@ -270,13 +290,14 @@ export type FlexPendingEntryVisitor = (
     graphId: number,
     nodeId: FlexNodeId,
     programId: FlexProgramId,
+    poolProfileId: FlexPoolProfileId,
     mass: bigint,
     count: number,
     nodeKind: FlexNodeKind
 ) => void;
 
 export interface FlexRunState {
-    readonly results: ReadonlyMap<FlexProgramId, bigint>;
+    readonly results: ReadonlyMap<FlexResultId, bigint>;
     readonly mass: MassAccountingBreakdown;
     readonly massDetails?: MassAccountingDetails | undefined;
     readonly iterations: number;

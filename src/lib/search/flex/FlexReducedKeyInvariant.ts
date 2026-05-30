@@ -124,7 +124,7 @@ export function checkFlexReducedKeyInvariant(request: FlexReducedKeyInvariantReq
         for (const edge of groupedEdges) {
             transitionCount++;
             const childProgramId = edge.alternatives.length === 1
-                ? programs.appendFixed(current.programId, edge.alternatives[0]!.packedEnchant)
+                ? programs.appendFixed(current.programId, edge.alternatives[0]!.enchantId)
                 : programs.appendChoice(current.programId, edge.alternatives);
             stack.push(Object.freeze({
                 graphId: current.graphId,
@@ -186,17 +186,17 @@ function buildGroupedEdges(entries: readonly SearchPoolEntry[], parentExclusionM
 }
 
 function addAlternative(group: PendingGroupedEdge, entry: SearchPoolEntry): void {
-    const existing = group.alternatives.find(alternative => alternative.packedEnchant === entry.packedEnchant);
+    const existing = group.alternatives.find(alternative => alternative.enchantId === entry.enchantId);
     if (existing) {
         const index = group.alternatives.indexOf(existing);
         group.alternatives[index] = Object.freeze({
-            packedEnchant: entry.packedEnchant,
+            enchantId: entry.enchantId,
             weight: existing.weight + entry.weight
         });
         return;
     }
 
-    group.alternatives.push(Object.freeze({ packedEnchant: entry.packedEnchant, weight: entry.weight }));
+    group.alternatives.push(Object.freeze({ enchantId: entry.enchantId, weight: entry.weight }));
 }
 
 function isTerminalState(kernel: RegistryKernel, count: number): boolean {
@@ -211,7 +211,7 @@ function createStateKey(graphId: number, exclusionMask: bigint, currentLevel: nu
 function createCanonicalProgramKey(program: FlexProgram): string {
     const fixed = program
         .filter((emission): emission is Extract<FlexEmission, { readonly kind: 'fixed' }> => emission.kind === 'fixed')
-        .map(emission => String(emission.packedEnchant))
+        .map(emission => String(emission.enchantId))
         .sort((left, right) => Number(left) - Number(right));
     const choices = program
         .filter((emission): emission is Extract<FlexEmission, { readonly kind: 'choice' }> => emission.kind === 'choice')
@@ -223,6 +223,6 @@ function createCanonicalProgramKey(program: FlexProgram): string {
 
 function createChoiceEmissionKey(emission: Extract<FlexEmission, { readonly kind: 'choice' }>): string {
     return emission.alternatives
-        .map(alternative => `${String(alternative.packedEnchant)}:${String(alternative.weight)}`)
+        .map(alternative => `${String(alternative.enchantId)}:${String(alternative.weight)}`)
         .join(',');
 }

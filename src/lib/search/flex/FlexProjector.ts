@@ -3,13 +3,15 @@ import { PACKING_CONSTANTS } from '#constants/engine.js';
 import type { PendingClueJointAggregates, PendingFrontierAggregates } from '#lib/search/SearchSnapshot.js';
 import type {
     FlexPendingEntry,
+    FlexPoolProfileId,
     FlexProgram,
     FlexProjectedPendingAggregateResults,
     FlexProgramId,
-    FlexRankProfile,
-    FlexRankProfileId
+    FlexResultId
 } from '#lib/search/flex/FlexTypes.js';
 import { FlexProgramStore } from '#lib/search/flex/FlexProgramStore.js';
+import { FlexPoolProfileStore } from '#lib/search/flex/FlexPoolProfileStore.js';
+import { FlexResultKeyStore } from '#lib/search/flex/FlexResultKeyStore.js';
 
 type FlexProjectionFactorVisitor = (
     combo: PackedCombo,
@@ -23,6 +25,7 @@ export type FlexResultProjectionFactorVisitor = FlexProjectionFactorVisitor;
 
 export type FlexPendingAggregateVisitor = (
     programId: FlexProgramId,
+    poolProfileId: FlexPoolProfileId,
     mass: bigint,
     count: number,
     targetClueReachable?: boolean | undefined
@@ -35,24 +38,20 @@ export interface FlexLazyPendingAggregateOptions {
 export interface FlexProjectionOptions {
     readonly applyBookRemoval?: boolean | undefined;
     readonly targetClueId?: number | undefined;
-    readonly rankProfiles?: FlexRankProfileLookup | undefined;
-}
-
-export interface FlexRankProfileLookup {
-    get(id: FlexRankProfileId): FlexRankProfile;
+    readonly poolProfiles: FlexPoolProfileStore;
+    readonly resultKeys: FlexResultKeyStore;
 }
 
 export class FlexProjector {
     public constructor(
         private readonly programs: FlexProgramStore,
         private readonly enchantToIndex: Map<number, number>,
-        private readonly options: FlexProjectionOptions = {}
+        private readonly options: FlexProjectionOptions
     ) {}
 
-    private readonly pendingProgramScratch: FlexProgram[number][] = [];
     private readonly concreteProgramScratch: number[] = [];
 
-    public projectResults(results: ReadonlyMap<FlexProgramId, bigint>): {
+    public projectResults(results: ReadonlyMap<FlexResultId, bigint>): {
         readonly results: ReadonlyMap<PackedCombo, bigint>;
         readonly projectionLoss: bigint;
         readonly clueIncompatible: bigint;
@@ -65,11 +64,12 @@ export class FlexProjector {
         let projectionLoss = 0n;
         let clueIncompatible = 0n;
 
-        for (const [programId, mass] of results) {
+        for (const [resultId, mass] of results) {
             sourceMass += mass;
+            const key = this.options.resultKeys.get(resultId);
 
             let assigned = 0n;
-            this.visitResultProgramFactors(programId, (combo, _count, numerator, denominator, matchesTargetClue) => {
+            this.visitResultProgramFactors(key.programId, key.poolProfileId, (combo, _count, numerator, denominator, matchesTargetClue) => {
                 const share = (mass * numerator) / denominator;
                 assigned += share;
                 if (share === 0n) return;
@@ -96,8 +96,17 @@ export class FlexProjector {
         });
     }
 
-    public visitResultProgramFactors(programId: FlexProgramId, visitor: FlexResultProjectionFactorVisitor): void {
-        this.forEachResultProgramFactor(this.programs.getProgram(programId), visitor);
+    public visitResultProgramFactors(
+        programId: FlexProgramId,
+        poolProfileId: FlexPoolProfileId,
+        visitor: FlexResultProjectionFactorVisitor
+    ): void {
+        this.forEachResultProgramFactor(this.programs.getProgram(programId), poolProfileId, visitor);
+    }
+
+    public visitResultKeyFactors(resultId: FlexResultId, visitor: FlexResultProjectionFactorVisitor): void {
+        const key = this.options.resultKeys.get(resultId);
+        this.visitResultProgramFactors(key.programId, key.poolProfileId, visitor);
     }
 
     public isResultClueCompatible(matchesTargetClue: boolean): boolean {
@@ -107,7 +116,7 @@ export class FlexProjector {
     public projectPendingAggregates(entries: readonly FlexPendingEntry[]): FlexProjectedPendingAggregateResults {
         return this.projectPendingAggregatesFromCursor(visitor => {
             for (const entry of entries) {
-                visitor(entry.programId, entry.mass, entry.count, entry.targetClueReachable);
+                visitor(entry.programId, entry.poolProfileId, entry.mass, entry.count, entry.targetClueReachable);
             }
         });
     }
@@ -124,12 +133,12 @@ export class FlexProjector {
         let projectionLoss = 0n;
         let clueIncompatible = 0n;
 
-        visitEntries((programId, mass, count, targetClueReachable) => {
+        visitEntries((programId, poolProfileId, mass, count, targetClueReachable) => {
             sourceMass += mass;
             if (mass === 0n) return;
 
             if (clueJoint) {
-                const split = this.getPendingClueSplit(programId, mass, count, targetClueReachable);
+                const split = this.getPendingClueSplit(programId, poolProfileId, mass, count, targetClueReachable);
                 projectedMass += split.projectedMass;
                 clueIncompatible += split.clueIncompatible;
                 projectionLoss += split.projectionLoss;
@@ -139,7 +148,7 @@ export class FlexProjector {
                         clueJoint.targetClueId,
                         (pendingAggregates.shownClueDistribution.get(clueJoint.targetClueId) ?? 0n) + split.clueKnownSpace
                     );
-                    this.addPendingClueJointAggregate(clueJoint, programId, split.clueKnownSpace, count);
+                    this.addPendingClueJointAggregate(clueJoint, programId, poolProfileId, split.clueKnownSpace, count);
                 }
                 return;
             }
@@ -148,6 +157,7 @@ export class FlexProjector {
             this.addPendingProgramAggregate(
                 pendingAggregates,
                 programId,
+                poolProfileId,
                 mass,
                 count
             );
@@ -168,6 +178,7 @@ export class FlexProjector {
     ): FlexProjectedPendingAggregateResults {
         const captured: CapturedPendingAggregateEntries = {
             programIds: [],
+            poolProfileIds: [],
             masses: [],
             counts: []
         };
@@ -180,8 +191,9 @@ export class FlexProjector {
         let projectionLoss = 0n;
         let clueIncompatible = 0n;
 
-        visitEntries((programId, mass, count, targetClueReachable) => {
+        visitEntries((programId, poolProfileId, mass, count, targetClueReachable) => {
             captured.programIds.push(programId);
+            captured.poolProfileIds.push(poolProfileId);
             captured.masses.push(mass);
             captured.counts.push(count);
 
@@ -196,7 +208,7 @@ export class FlexProjector {
                 return;
             }
 
-            const split = this.getPendingClueSplit(programId, mass, count, targetClueReachable);
+            const split = this.getPendingClueSplit(programId, poolProfileId, mass, count, targetClueReachable);
             projectedMass += split.projectedMass;
             clueIncompatible += split.clueIncompatible;
             projectionLoss += split.projectionLoss;
@@ -218,6 +230,7 @@ export class FlexProjector {
 
     private getPendingClueSplit(
         programId: FlexProgramId,
+        poolProfileId: FlexPoolProfileId,
         mass: bigint,
         count: number,
         targetClueReachable: boolean | undefined
@@ -231,74 +244,41 @@ export class FlexProjector {
         if (targetClueId === undefined) {
             return { projectedMass: mass, clueIncompatible: 0n, projectionLoss: 0n, clueKnownSpace: 0n };
         }
-        if (this.programs.hasRankMerge(programId)) {
-            return this.getRankPendingClueSplit(programId, mass, count, targetClueReachable);
-        }
 
-        let split: {
-            projectedMass: bigint;
-            clueIncompatible: bigint;
-            projectionLoss: bigint;
-            clueKnownSpace: bigint;
-        } | undefined;
+        let targetMass = 0n;
+        let nonTargetMass = 0n;
+        let assignedMass = 0n;
 
-        const programLength = this.programs.writeProgramEmissions(programId, this.pendingProgramScratch);
-        for (let emissionIndex = 0; emissionIndex < programLength; emissionIndex++) {
-            const emission = this.pendingProgramScratch[emissionIndex]!;
-            if (emission.kind === 'fixed') {
-                if (emission.packedEnchant === targetClueId) {
-                    split = {
-                        projectedMass: mass,
-                        clueIncompatible: 0n,
-                        projectionLoss: 0n,
-                        clueKnownSpace: count > 0 ? mass / BigInt(count) : 0n
-                    };
-                    break;
-                }
-                continue;
-            }
-            if (emission.kind === 'rank' || emission.kind === 'rankChoice') continue;
+        this.visitConcreteProgramFactors(this.programs.getProgram(programId), poolProfileId, (packedEnchants, numerator, denominator) => {
+            const share = (mass * numerator) / denominator;
+            assignedMass += share;
+            if (packedEnchants.includes(targetClueId)) targetMass += share;
+            else nonTargetMass += share;
+        });
 
-            const targetAlternative = emission.alternatives.find(alternative => alternative.packedEnchant === targetClueId);
-            if (!targetAlternative) continue;
-
-            const totalWeight = BigInt(emission.totalWeight);
-            const targetWeight = BigInt(targetAlternative.weight);
-            const nonTargetWeight = totalWeight - targetWeight;
-            const targetMass = (mass * targetWeight) / totalWeight;
-            const nonTargetMass = (mass * nonTargetWeight) / totalWeight;
-            const splitLoss = mass - targetMass - nonTargetMass;
-            const nonTargetCanStillReachClue = targetClueReachable === true;
-
-            split = {
-                projectedMass: targetMass + (nonTargetCanStillReachClue ? nonTargetMass : 0n),
-                clueIncompatible: nonTargetCanStillReachClue ? 0n : nonTargetMass,
-                projectionLoss: splitLoss,
-                clueKnownSpace: count > 0 ? targetMass / BigInt(count) : 0n
-            };
-            break;
-        }
-
-        if (split) return split;
-
-        return targetClueReachable === true
-            ? { projectedMass: mass, clueIncompatible: 0n, projectionLoss: 0n, clueKnownSpace: 0n }
-            : { projectedMass: 0n, clueIncompatible: mass, projectionLoss: 0n, clueKnownSpace: 0n };
+        const nonTargetCanStillReachClue = targetClueReachable === true;
+        return {
+            projectedMass: targetMass + (nonTargetCanStillReachClue ? nonTargetMass : 0n),
+            clueIncompatible: nonTargetCanStillReachClue ? 0n : nonTargetMass,
+            projectionLoss: mass - assignedMass,
+            clueKnownSpace: count > 0 ? targetMass / BigInt(count) : 0n
+        };
     }
 
     private forEachResultProgramFactor(
         program: FlexProgram,
+        poolProfileId: FlexPoolProfileId,
         visitor: FlexProjectionFactorVisitor
     ): void {
         if (this.options.applyBookRemoval && program.length >= 2) {
             const slotDenominator = BigInt(program.length);
             for (let removedEmissionIndex = 0; removedEmissionIndex < program.length; removedEmissionIndex++) {
-                this.visitProgramFactors(program, visitor, removedEmissionIndex, slotDenominator);
+                this.visitProgramFactors(program, poolProfileId, visitor, removedEmissionIndex, slotDenominator);
             }
             return;
         }
 
-        this.visitProgramFactors(program, visitor);
+        this.visitProgramFactors(program, poolProfileId, visitor);
     }
 
     private isClueCompatible(matchesTargetClue: boolean): boolean {
@@ -307,12 +287,14 @@ export class FlexProjector {
 
     private visitProgramFactors(
         program: FlexProgram,
+        poolProfileId: FlexPoolProfileId,
         visitor: FlexProjectionFactorVisitor,
         removedEmissionIndex?: number,
         initialDenominator: bigint = 1n
     ): void {
-        const assignedProfileSources = new Map<number, number>();
+        const profile = this.options.poolProfiles.get(poolProfileId);
         const visit = (
+            sourceIndex: number,
             emissionIndex: number,
             combo: PackedCombo,
             count: number,
@@ -326,167 +308,75 @@ export class FlexProjector {
             }
 
             if (emissionIndex === removedEmissionIndex) {
-                visit(emissionIndex + 1, combo, count, numerator, denominator, matchesTargetClue);
+                visit(sourceIndex, emissionIndex + 1, combo, count, numerator, denominator, matchesTargetClue);
                 return;
             }
 
             const emission = program[emissionIndex]!;
-            if (emission.kind === 'fixed') {
-                const packedIndex = this.enchantToIndex.get(emission.packedEnchant);
+            if (emission.kind === 'fixed' || emission.kind === 'rank') {
+                const packedEnchant = this.options.poolProfiles.getPackedEnchant(poolProfileId, emission.enchantId, sourceIndex);
+                const packedIndex = this.enchantToIndex.get(packedEnchant);
                 visit(
+                    sourceIndex,
                     emissionIndex + 1,
                     packedIndex === undefined ? combo : appendPackedComboIndex(combo, packedIndex, count),
                     packedIndex === undefined ? count : count + 1,
                     numerator,
                     denominator,
-                    matchesTargetClue || emission.packedEnchant === this.options.targetClueId
+                    matchesTargetClue || packedEnchant === this.options.targetClueId
                 );
-                return;
-            }
-
-            if (emission.kind === 'rank') {
-                const profile = this.getRankProfile(emission.profileId);
-                const profileKey = emission.profileId as number;
-                const assignedSourceIndex = assignedProfileSources.get(profileKey);
-                if (assignedSourceIndex !== undefined) {
-                    const packedEnchant = getProfilePackedEnchant(profile, emission.enchantId, assignedSourceIndex);
-                    const packedIndex = this.enchantToIndex.get(packedEnchant);
-                    visit(
-                        emissionIndex + 1,
-                        packedIndex === undefined ? combo : appendPackedComboIndex(combo, packedIndex, count),
-                        packedIndex === undefined ? count : count + 1,
-                        numerator,
-                        denominator,
-                        matchesTargetClue || packedEnchant === this.options.targetClueId
-                    );
-                    return;
-                }
-
-                const totalWeight = profile.totalWeight;
-                for (let sourceIndex = 0; sourceIndex < profile.sources.length; sourceIndex++) {
-                    const source = profile.sources[sourceIndex]!;
-                    const packedEnchant = getProfilePackedEnchant(profile, emission.enchantId, sourceIndex);
-                    const packedIndex = this.enchantToIndex.get(packedEnchant);
-                    assignedProfileSources.set(profileKey, sourceIndex);
-                    visit(
-                        emissionIndex + 1,
-                        packedIndex === undefined ? combo : appendPackedComboIndex(combo, packedIndex, count),
-                        packedIndex === undefined ? count : count + 1,
-                        numerator * source.profileWeight,
-                        denominator * totalWeight,
-                        matchesTargetClue || packedEnchant === this.options.targetClueId
-                    );
-                    assignedProfileSources.delete(profileKey);
-                }
-                return;
-            }
-
-            if (emission.kind === 'rankChoice') {
-                const profile = this.getRankProfile(emission.profileId);
-                const profileKey = emission.profileId as number;
-                const choiceTotalWeight = BigInt(emission.totalWeight);
-                const assignedSourceIndex = assignedProfileSources.get(profileKey);
-                if (assignedSourceIndex !== undefined) {
-                    for (const alternative of emission.alternatives) {
-                        const packedEnchant = getProfilePackedEnchant(profile, alternative.enchantId, assignedSourceIndex);
-                        const packedIndex = this.enchantToIndex.get(packedEnchant);
-                        visit(
-                            emissionIndex + 1,
-                            packedIndex === undefined ? combo : appendPackedComboIndex(combo, packedIndex, count),
-                            packedIndex === undefined ? count : count + 1,
-                            numerator * BigInt(alternative.weight),
-                            denominator * choiceTotalWeight,
-                            matchesTargetClue || packedEnchant === this.options.targetClueId
-                        );
-                    }
-                    return;
-                }
-
-                const profileTotalWeight = profile.totalWeight;
-                for (let sourceIndex = 0; sourceIndex < profile.sources.length; sourceIndex++) {
-                    const source = profile.sources[sourceIndex]!;
-                    assignedProfileSources.set(profileKey, sourceIndex);
-                    for (const alternative of emission.alternatives) {
-                        const packedEnchant = getProfilePackedEnchant(profile, alternative.enchantId, sourceIndex);
-                        const packedIndex = this.enchantToIndex.get(packedEnchant);
-                        visit(
-                            emissionIndex + 1,
-                            packedIndex === undefined ? combo : appendPackedComboIndex(combo, packedIndex, count),
-                            packedIndex === undefined ? count : count + 1,
-                            numerator * source.profileWeight * BigInt(alternative.weight),
-                            denominator * profileTotalWeight * choiceTotalWeight,
-                            matchesTargetClue || packedEnchant === this.options.targetClueId
-                        );
-                    }
-                    assignedProfileSources.delete(profileKey);
-                }
                 return;
             }
 
             const totalWeight = BigInt(emission.totalWeight);
             for (const alternative of emission.alternatives) {
-                const packedIndex = this.enchantToIndex.get(alternative.packedEnchant);
+                const packedEnchant = this.options.poolProfiles.getPackedEnchant(poolProfileId, alternative.enchantId, sourceIndex);
+                const packedIndex = this.enchantToIndex.get(packedEnchant);
                 visit(
+                    sourceIndex,
                     emissionIndex + 1,
                     packedIndex === undefined ? combo : appendPackedComboIndex(combo, packedIndex, count),
                     packedIndex === undefined ? count : count + 1,
                     numerator * BigInt(alternative.weight),
                     denominator * totalWeight,
-                    matchesTargetClue || alternative.packedEnchant === this.options.targetClueId
+                    matchesTargetClue || packedEnchant === this.options.targetClueId
                 );
             }
         };
 
-        visit(0, 0 as PackedCombo, 0, 1n, initialDenominator, false);
+        for (let sourceIndex = 0; sourceIndex < profile.sources.length; sourceIndex++) {
+            const source = profile.sources[sourceIndex]!;
+            visit(
+                sourceIndex,
+                0,
+                0 as PackedCombo,
+                0,
+                source.profileWeight,
+                initialDenominator * profile.totalWeight,
+                false
+            );
+        }
     }
 
     private addPendingProgramAggregate(
         pendingAggregates: MutablePendingFrontierAggregates,
         programId: FlexProgramId,
+        poolProfileId: FlexPoolProfileId,
         mass: bigint,
         count: number
     ): void {
-        if (mass <= 0n) return;
-        if (this.programs.hasRankMerge(programId)) {
-            this.addRankPendingProgramAggregate(pendingAggregates, programId, mass, count);
-            return;
-        }
-
         const displayCount = this.options.applyBookRemoval && count > 1 ? count - 1 : count;
         addArrayMass(pendingAggregates.count, displayCount, mass);
         if (count <= 0) return;
 
-        const clueQuotient = mass / BigInt(count);
-        const clueRemainder = Number(mass % BigInt(count));
-
-        const programLength = this.programs.writeProgramEmissions(programId, this.pendingProgramScratch);
-        for (let emissionIndex = 0; emissionIndex < programLength; emissionIndex++) {
-            const emission = this.pendingProgramScratch[emissionIndex]!;
-            const clueSlotMass = clueQuotient + (emissionIndex < clueRemainder ? 1n : 0n);
-
-            if (emission.kind === 'fixed') {
-                this.addPendingEmissionAggregate(
-                    pendingAggregates,
-                    emission.packedEnchant,
-                    mass,
-                    clueSlotMass,
-                    count
-                );
-                continue;
+        this.visitConcreteProgramFactors(this.programs.getProgram(programId), poolProfileId, (packedEnchants, numerator, denominator) => {
+            const share = (mass * numerator) / denominator;
+            if (share <= 0n) return;
+            const clueMass = share / BigInt(count);
+            for (const packedEnchant of packedEnchants) {
+                this.addPendingEmissionAggregate(pendingAggregates, packedEnchant, share, clueMass, count);
             }
-            if (emission.kind === 'rank' || emission.kind === 'rankChoice') continue;
-
-            const totalWeight = BigInt(emission.totalWeight);
-            for (const alternative of emission.alternatives) {
-                this.addPendingEmissionAggregate(
-                    pendingAggregates,
-                    alternative.packedEnchant,
-                    (mass * BigInt(alternative.weight)) / totalWeight,
-                    (clueSlotMass * BigInt(alternative.weight)) / totalWeight,
-                    count
-                );
-            }
-        }
+        });
     }
 
     private addPendingEmissionAggregate(
@@ -516,117 +406,7 @@ export class FlexProjector {
     private addPendingClueJointAggregate(
         clueJoint: MutablePendingClueJointAggregates,
         programId: FlexProgramId,
-        clueMass: bigint,
-        count: number
-    ): void {
-        if (clueMass <= 0n) return;
-        if (this.programs.hasRankMerge(programId)) {
-            this.addRankPendingClueJointAggregate(clueJoint, programId, clueMass, count);
-            return;
-        }
-
-        clueJoint.knownSpace += clueMass;
-        const displayCount = this.options.applyBookRemoval && count > 1 ? count - 1 : count;
-        addArrayMass(clueJoint.count, displayCount, clueMass);
-
-        const targetClueId = clueJoint.targetClueId;
-        const programLength = this.programs.writeProgramEmissions(programId, this.pendingProgramScratch);
-        for (let emissionIndex = 0; emissionIndex < programLength; emissionIndex++) {
-            const emission = this.pendingProgramScratch[emissionIndex]!;
-            if (emission.kind === 'fixed') {
-                this.addPendingClueJointEmissionAggregate(clueJoint, emission.packedEnchant, clueMass, count);
-                continue;
-            }
-            if (emission.kind === 'rank' || emission.kind === 'rankChoice') continue;
-
-            const targetAlternative = emission.alternatives.find(alternative => alternative.packedEnchant === targetClueId);
-            if (targetAlternative) {
-                this.addPendingClueJointEmissionAggregate(clueJoint, targetClueId, clueMass, count);
-                continue;
-            }
-
-            const totalWeight = BigInt(emission.totalWeight);
-            for (const alternative of emission.alternatives) {
-                this.addPendingClueJointEmissionAggregate(
-                    clueJoint,
-                    alternative.packedEnchant,
-                    (clueMass * BigInt(alternative.weight)) / totalWeight,
-                    count
-                );
-            }
-        }
-    }
-
-    private addPendingClueJointEmissionAggregate(
-        clueJoint: MutablePendingClueJointAggregates,
-        packedEnchant: number,
-        mass: bigint,
-        count: number
-    ): void {
-        if (mass <= 0n || !this.enchantToIndex.has(packedEnchant)) return;
-
-        const aggregateMass = this.options.applyBookRemoval && count > 1
-            ? (mass * BigInt(count - 1)) / BigInt(count)
-            : mass;
-        const id = packedEnchant >> PACKING_CONSTANTS.ENCHANT_SHIFT;
-        addArrayMass(clueJoint.any, id, aggregateMass);
-        addArrayMass(clueJoint.ranks, packedEnchant, aggregateMass);
-    }
-
-    private getRankPendingClueSplit(
-        programId: FlexProgramId,
-        mass: bigint,
-        count: number,
-        targetClueReachable: boolean | undefined
-    ): {
-        readonly projectedMass: bigint;
-        readonly clueIncompatible: bigint;
-        readonly projectionLoss: bigint;
-        readonly clueKnownSpace: bigint;
-    } {
-        let targetMass = 0n;
-        let nonTargetMass = 0n;
-        let assignedMass = 0n;
-
-        this.visitConcreteProgramFactors(this.programs.getProgram(programId), (packedEnchants, numerator, denominator) => {
-            const share = (mass * numerator) / denominator;
-            assignedMass += share;
-            if (packedEnchants.includes(this.options.targetClueId!)) targetMass += share;
-            else nonTargetMass += share;
-        });
-
-        const nonTargetCanStillReachClue = targetClueReachable === true;
-        return {
-            projectedMass: targetMass + (nonTargetCanStillReachClue ? nonTargetMass : 0n),
-            clueIncompatible: nonTargetCanStillReachClue ? 0n : nonTargetMass,
-            projectionLoss: mass - assignedMass,
-            clueKnownSpace: count > 0 ? targetMass / BigInt(count) : 0n
-        };
-    }
-
-    private addRankPendingProgramAggregate(
-        pendingAggregates: MutablePendingFrontierAggregates,
-        programId: FlexProgramId,
-        mass: bigint,
-        count: number
-    ): void {
-        const displayCount = this.options.applyBookRemoval && count > 1 ? count - 1 : count;
-        addArrayMass(pendingAggregates.count, displayCount, mass);
-        if (count <= 0) return;
-
-        this.visitConcreteProgramFactors(this.programs.getProgram(programId), (packedEnchants, numerator, denominator) => {
-            const share = (mass * numerator) / denominator;
-            if (share <= 0n) return;
-            const clueMass = share / BigInt(count);
-            for (const packedEnchant of packedEnchants) {
-                this.addPendingEmissionAggregate(pendingAggregates, packedEnchant, share, clueMass, count);
-            }
-        });
-    }
-
-    private addRankPendingClueJointAggregate(
-        clueJoint: MutablePendingClueJointAggregates,
-        programId: FlexProgramId,
+        poolProfileId: FlexPoolProfileId,
         clueMass: bigint,
         count: number
     ): void {
@@ -638,7 +418,7 @@ export class FlexProjector {
         let targetFactorNumerator = 0n;
         let denominatorMismatch = false;
         const matchingFactors: Array<readonly [readonly number[], bigint, bigint]> = [];
-        this.visitConcreteProgramFactors(this.programs.getProgram(programId), (packedEnchants, numerator, denominator) => {
+        this.visitConcreteProgramFactors(this.programs.getProgram(programId), poolProfileId, (packedEnchants, numerator, denominator) => {
             if (!packedEnchants.includes(clueJoint.targetClueId)) return;
             matchingFactors.push(Object.freeze([Object.freeze([...packedEnchants]), numerator, denominator]));
             if (commonDenominator === undefined) {
@@ -659,6 +439,22 @@ export class FlexProjector {
         }
     }
 
+    private addPendingClueJointEmissionAggregate(
+        clueJoint: MutablePendingClueJointAggregates,
+        packedEnchant: number,
+        mass: bigint,
+        count: number
+    ): void {
+        if (mass <= 0n || !this.enchantToIndex.has(packedEnchant)) return;
+
+        const aggregateMass = this.options.applyBookRemoval && count > 1
+            ? (mass * BigInt(count - 1)) / BigInt(count)
+            : mass;
+        const id = packedEnchant >> PACKING_CONSTANTS.ENCHANT_SHIFT;
+        addArrayMass(clueJoint.any, id, aggregateMass);
+        addArrayMass(clueJoint.ranks, packedEnchant, aggregateMass);
+    }
+
     private buildCapturedPendingAggregates(captured: CapturedPendingAggregateEntries): PendingFrontierAggregates {
         const pendingAggregates = createPendingAggregates();
         const targetClueId = this.options.targetClueId;
@@ -668,6 +464,7 @@ export class FlexProjector {
 
         for (let index = 0; index < captured.programIds.length; index++) {
             const programId = captured.programIds[index]!;
+            const poolProfileId = captured.poolProfileIds[index]!;
             const mass = captured.masses[index]!;
             const count = captured.counts[index]!;
             if (mass <= 0n) continue;
@@ -679,7 +476,7 @@ export class FlexProjector {
                         clueJoint.targetClueId,
                         (pendingAggregates.shownClueDistribution.get(clueJoint.targetClueId) ?? 0n) + clueKnownSpace
                     );
-                    this.addPendingClueJointAggregate(clueJoint, programId, clueKnownSpace, count);
+                    this.addPendingClueJointAggregate(clueJoint, programId, poolProfileId, clueKnownSpace, count);
                 }
                 continue;
             }
@@ -687,6 +484,7 @@ export class FlexProjector {
             this.addPendingProgramAggregate(
                 pendingAggregates,
                 programId,
+                poolProfileId,
                 mass,
                 count
             );
@@ -697,13 +495,15 @@ export class FlexProjector {
 
     private visitConcreteProgramFactors(
         program: FlexProgram,
+        poolProfileId: FlexPoolProfileId,
         visitor: (packedEnchants: readonly number[], numerator: bigint, denominator: bigint) => void
     ): void {
-        const assignedProfileSources = new Map<number, number>();
+        const profile = this.options.poolProfiles.get(poolProfileId);
         const packedScratch = this.concreteProgramScratch;
         packedScratch.length = 0;
 
         const visit = (
+            sourceIndex: number,
             emissionIndex: number,
             numerator: bigint,
             denominator: bigint
@@ -714,78 +514,18 @@ export class FlexProjector {
             }
 
             const emission = program[emissionIndex]!;
-            if (emission.kind === 'fixed') {
-                packedScratch.push(emission.packedEnchant);
-                visit(emissionIndex + 1, numerator, denominator);
+            if (emission.kind === 'fixed' || emission.kind === 'rank') {
+                packedScratch.push(this.options.poolProfiles.getPackedEnchant(poolProfileId, emission.enchantId, sourceIndex));
+                visit(sourceIndex, emissionIndex + 1, numerator, denominator);
                 packedScratch.pop();
-                return;
-            }
-
-            if (emission.kind === 'rank') {
-                const profile = this.getRankProfile(emission.profileId);
-                const profileKey = emission.profileId as number;
-                const assignedSourceIndex = assignedProfileSources.get(profileKey);
-                if (assignedSourceIndex !== undefined) {
-                    packedScratch.push(getProfilePackedEnchant(profile, emission.enchantId, assignedSourceIndex));
-                    visit(emissionIndex + 1, numerator, denominator);
-                    packedScratch.pop();
-                    return;
-                }
-
-                for (let sourceIndex = 0; sourceIndex < profile.sources.length; sourceIndex++) {
-                    const source = profile.sources[sourceIndex]!;
-                    assignedProfileSources.set(profileKey, sourceIndex);
-                    packedScratch.push(getProfilePackedEnchant(profile, emission.enchantId, sourceIndex));
-                    visit(
-                        emissionIndex + 1,
-                        numerator * source.profileWeight,
-                        denominator * profile.totalWeight
-                    );
-                    packedScratch.pop();
-                    assignedProfileSources.delete(profileKey);
-                }
-                return;
-            }
-
-            if (emission.kind === 'rankChoice') {
-                const profile = this.getRankProfile(emission.profileId);
-                const profileKey = emission.profileId as number;
-                const totalWeight = BigInt(emission.totalWeight);
-                const assignedSourceIndex = assignedProfileSources.get(profileKey);
-                if (assignedSourceIndex !== undefined) {
-                    for (const alternative of emission.alternatives) {
-                        packedScratch.push(getProfilePackedEnchant(profile, alternative.enchantId, assignedSourceIndex));
-                        visit(
-                            emissionIndex + 1,
-                            numerator * BigInt(alternative.weight),
-                            denominator * totalWeight
-                        );
-                        packedScratch.pop();
-                    }
-                    return;
-                }
-
-                for (let sourceIndex = 0; sourceIndex < profile.sources.length; sourceIndex++) {
-                    const source = profile.sources[sourceIndex]!;
-                    assignedProfileSources.set(profileKey, sourceIndex);
-                    for (const alternative of emission.alternatives) {
-                        packedScratch.push(getProfilePackedEnchant(profile, alternative.enchantId, sourceIndex));
-                        visit(
-                            emissionIndex + 1,
-                            numerator * source.profileWeight * BigInt(alternative.weight),
-                            denominator * profile.totalWeight * totalWeight
-                        );
-                        packedScratch.pop();
-                    }
-                    assignedProfileSources.delete(profileKey);
-                }
                 return;
             }
 
             const totalWeight = BigInt(emission.totalWeight);
             for (const alternative of emission.alternatives) {
-                packedScratch.push(alternative.packedEnchant);
+                packedScratch.push(this.options.poolProfiles.getPackedEnchant(poolProfileId, alternative.enchantId, sourceIndex));
                 visit(
+                    sourceIndex,
                     emissionIndex + 1,
                     numerator * BigInt(alternative.weight),
                     denominator * totalWeight
@@ -794,21 +534,16 @@ export class FlexProjector {
             }
         };
 
-        visit(0, 1n, 1n);
-    }
-
-    private getRankProfile(profileId: FlexRankProfileId): FlexRankProfile {
-        const rankProfiles = this.options.rankProfiles;
-        if (rankProfiles === undefined) {
-            throw new Error('Flex rank emission projection requires a rank profile store.');
+        for (let sourceIndex = 0; sourceIndex < profile.sources.length; sourceIndex++) {
+            const source = profile.sources[sourceIndex]!;
+            visit(sourceIndex, 0, source.profileWeight, profile.totalWeight);
         }
-        return rankProfiles.get(profileId);
     }
-
 }
 
 interface CapturedPendingAggregateEntries {
     readonly programIds: FlexProgramId[];
+    readonly poolProfileIds: FlexPoolProfileId[];
     readonly masses: bigint[];
     readonly counts: number[];
     clueKnownSpaces?: bigint[] | undefined;
@@ -826,18 +561,6 @@ function appendPackedComboIndex(combo: PackedCombo, packedIndex: number, count: 
     const lowerDigits = combo % insertMultiplier;
     const shiftedDigits = (combo - lowerDigits) * PACKING_CONSTANTS.BYTE_BASIS;
     return (lowerDigits + packedIndex * insertMultiplier + shiftedDigits) as PackedCombo;
-}
-
-function getProfilePackedEnchant(profile: FlexRankProfile, enchantId: number, sourceIndex: number): number {
-    const enchant = profile.enchants.find(candidate => candidate.enchantId === enchantId);
-    if (enchant === undefined) {
-        throw new Error(`Rank profile ${String(profile.id)} does not include enchant ${String(enchantId)}.`);
-    }
-    const packedEnchant = enchant.sourcePackedEnchants[sourceIndex];
-    if (packedEnchant === undefined) {
-        throw new Error(`Rank profile ${String(profile.id)} does not include source ${String(sourceIndex)} for enchant ${String(enchantId)}.`);
-    }
-    return packedEnchant;
 }
 
 type MutablePendingFrontierAggregates = {

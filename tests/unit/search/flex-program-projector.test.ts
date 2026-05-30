@@ -2,27 +2,40 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { PackedCombo, PackedEnchant } from '#types/index.js';
 import type { PendingFrontierAggregates } from '#lib/search/SearchSnapshot.js';
+import type { SearchPool, SearchPoolFamilySignature, SearchPoolSignature } from '#lib/search/registry/RegistryKernel.js';
 import { ComboUtils } from '#utils/index.js';
 import {
     FLEX_MERGE_FLAGS_CONFLICT,
     FLEX_MERGE_FLAGS_NONE,
     FLEX_MERGE_FLAGS_RANK,
+    FlexPoolProfileStore,
     FlexProgramStore,
     FlexProjector,
+    FlexResultKeyStore,
+    hasFlexRankMerge,
     type FlexNodeId,
     type FlexPendingEntry,
-    type FlexRankProfile
+    type FlexPoolProfileId,
+    type FlexProgramId,
+    type FlexProjectionOptions
 } from '#lib/search/flex/index.js';
 
 const packed = (id: number, rank = 1): PackedEnchant => ((id << 8) | rank) as PackedEnchant;
+const enchantId = (packedEnchant: PackedEnchant): number => packedEnchant >> 8;
 const nodeId = (id: number): FlexNodeId => id as FlexNodeId;
+const testProfileId = 0 as FlexPoolProfileId;
 
-const sharpness = packed(1, 4);
-const smite = packed(2, 4);
-const looting = packed(3, 3);
-const unbreaking = packed(4, 3);
-const sharpnessThree = packed(1, 3);
-const unbreakingTwo = packed(4, 2);
+const SHARPNESS_ID = 1;
+const SMITE_ID = 2;
+const LOOTING_ID = 3;
+const UNBREAKING_ID = 4;
+
+const sharpness = packed(SHARPNESS_ID, 4);
+const smite = packed(SMITE_ID, 4);
+const looting = packed(LOOTING_ID, 3);
+const unbreaking = packed(UNBREAKING_ID, 3);
+const sharpnessThree = packed(SHARPNESS_ID, 3);
+const unbreakingTwo = packed(UNBREAKING_ID, 2);
 const enchantToIndex = new Map<number, number>([
     [sharpness, 1],
     [smite, 2],
@@ -32,20 +45,25 @@ const enchantToIndex = new Map<number, number>([
     [unbreakingTwo, 6]
 ]);
 
+const exactPool = createPool('exact', [sharpness, smite, looting, unbreaking]);
+const rankPoolLow = createPool('rank-low', [sharpnessThree, smite, looting, unbreakingTwo]);
+const rankPoolHigh = createPool('rank-high', [sharpness, smite, looting, unbreaking]);
+
 const combo = (...enchants: PackedEnchant[]) => ComboUtils.pack([...enchants], enchantToIndex);
+const alt = (packedEnchant: PackedEnchant, weight: number) => ({ enchantId: enchantId(packedEnchant), weight });
 
 describe('FlexProgramStore', () => {
-    it('interns equivalent scoped program transitions without module-global identity', () => {
+    it('interns equivalent scoped structural transitions without module-global identity', () => {
         const first = new FlexProgramStore();
-        const fixed = first.appendFixed(first.empty, sharpness);
-        const sameFixed = first.appendFixed(first.empty, sharpness);
+        const fixed = first.appendFixed(first.empty, SHARPNESS_ID);
+        const sameFixed = first.appendFixed(first.empty, SHARPNESS_ID);
         const choice = first.appendChoice(first.empty, [
-            { packedEnchant: smite, weight: 2 },
-            { packedEnchant: sharpness, weight: 1 }
+            { enchantId: SMITE_ID, weight: 2 },
+            { enchantId: SHARPNESS_ID, weight: 1 }
         ]);
         const sameChoice = first.appendChoice(first.empty, [
-            { packedEnchant: sharpness, weight: 1 },
-            { packedEnchant: smite, weight: 2 }
+            { enchantId: SHARPNESS_ID, weight: 1 },
+            { enchantId: SMITE_ID, weight: 2 }
         ]);
 
         assert.strictEqual(fixed, sameFixed);
@@ -55,26 +73,26 @@ describe('FlexProgramStore', () => {
         assert.strictEqual(choiceEmission?.kind, 'choice');
         if (choiceEmission?.kind === 'choice') {
             assert.deepStrictEqual(
-                choiceEmission.alternatives.map(alternative => alternative.packedEnchant),
-                [sharpness, smite]
+                choiceEmission.alternatives.map(alternative => alternative.enchantId),
+                [SHARPNESS_ID, SMITE_ID]
             );
             assert.strictEqual(choiceEmission.totalWeight, 3);
         }
 
         const second = new FlexProgramStore();
-        assert.strictEqual(second.appendFixed(second.empty, sharpness), fixed);
+        assert.strictEqual(second.appendFixed(second.empty, SHARPNESS_ID), fixed);
     });
 
-    it('canonicalizes equivalent program emission order when requested', () => {
+    it('canonicalizes equivalent structural program emission order when requested', () => {
         const store = new FlexProgramStore({ canonicalizeProgramOrder: true });
-        const sharpThenChoice = store.appendChoice(store.appendFixed(store.empty, sharpness), [
-            { packedEnchant: looting, weight: 1 },
-            { packedEnchant: unbreaking, weight: 3 }
+        const sharpThenChoice = store.appendChoice(store.appendFixed(store.empty, SHARPNESS_ID), [
+            { enchantId: LOOTING_ID, weight: 1 },
+            { enchantId: UNBREAKING_ID, weight: 3 }
         ]);
         const choiceThenSharp = store.appendFixed(store.appendChoice(store.empty, [
-            { packedEnchant: unbreaking, weight: 3 },
-            { packedEnchant: looting, weight: 1 }
-        ]), sharpness);
+            { enchantId: UNBREAKING_ID, weight: 3 },
+            { enchantId: LOOTING_ID, weight: 1 }
+        ]), SHARPNESS_ID);
 
         assert.strictEqual(sharpThenChoice, choiceThenSharp);
         assert.deepStrictEqual(store.getProgram(sharpThenChoice).map(emission => emission.kind), ['fixed', 'choice']);
@@ -83,36 +101,36 @@ describe('FlexProgramStore', () => {
     it('uses already-canonical grouped choices without changing choice identity', () => {
         const store = new FlexProgramStore();
         const canonical = store.appendCanonicalChoice(store.empty, [
-            { packedEnchant: sharpness, weight: 1 },
-            { packedEnchant: smite, weight: 2 }
+            { enchantId: SHARPNESS_ID, weight: 1 },
+            { enchantId: SMITE_ID, weight: 2 }
         ]);
         const normalized = store.appendChoice(store.empty, [
-            { packedEnchant: smite, weight: 2 },
-            { packedEnchant: sharpness, weight: 1 }
+            { enchantId: SMITE_ID, weight: 2 },
+            { enchantId: SHARPNESS_ID, weight: 1 }
         ]);
 
         assert.strictEqual(canonical, normalized);
         assert.throws(
             () => store.appendCanonicalChoice(store.empty, [
-                { packedEnchant: smite, weight: 2 },
-                { packedEnchant: sharpness, weight: 1 }
+                { enchantId: SMITE_ID, weight: 2 },
+                { enchantId: SHARPNESS_ID, weight: 1 }
             ]),
             /unique and sorted/
         );
     });
 
-    it('classifies legacy node kind from program merge flags', () => {
+    it('classifies legacy node kind from sticky conflict merge flags', () => {
         const store = new FlexProgramStore();
-        const solidProgram = store.appendFixed(store.empty, sharpness);
+        const solidProgram = store.appendFixed(store.empty, SHARPNESS_ID);
         const plexProgram = store.appendChoice(solidProgram, [
-            { packedEnchant: looting, weight: 1 },
-            { packedEnchant: unbreaking, weight: 1 }
+            { enchantId: LOOTING_ID, weight: 1 },
+            { enchantId: UNBREAKING_ID, weight: 1 }
         ]);
-        const solidAfterPlexProgram = store.appendFixed(plexProgram, smite);
+        const solidAfterPlexProgram = store.appendFixed(plexProgram, SMITE_ID);
 
-        const solidNode = store.createNode(nodeId(1), solidProgram);
-        const plexNode = store.createNode(nodeId(2), plexProgram);
-        const solidAfterPlexNode = store.createNode(nodeId(3), solidAfterPlexProgram);
+        const solidNode = createProgramNode(store, nodeId(1), solidProgram);
+        const plexNode = createProgramNode(store, nodeId(2), plexProgram);
+        const solidAfterPlexNode = createProgramNode(store, nodeId(3), solidAfterPlexProgram);
 
         assert.strictEqual(solidNode.mergeFlags, FLEX_MERGE_FLAGS_NONE);
         assert.strictEqual(plexNode.mergeFlags, FLEX_MERGE_FLAGS_CONFLICT);
@@ -122,49 +140,39 @@ describe('FlexProgramStore', () => {
         assert.strictEqual(solidAfterPlexNode.kind, 'plex');
     });
 
-    it('tracks rank-only choice flags without promoting the legacy Plex kind', () => {
+    it('treats Rank as profile metadata instead of a program emission kind', () => {
         const store = new FlexProgramStore();
-        const sharpThreeProgram = store.appendFixed(store.empty, sharpnessThree);
-        const sharpFourProgram = store.appendFixed(store.empty, sharpness);
-        const rankProgram = store.appendCanonicalChoice(store.empty, [
-            { packedEnchant: sharpnessThree, weight: 1 },
-            { packedEnchant: sharpness, weight: 2 }
-        ], FLEX_MERGE_FLAGS_RANK);
-
-        const rankNode = store.createNode(nodeId(1), rankProgram);
+        const sharpProgram = store.appendFixed(store.empty, SHARPNESS_ID);
+        const rankNode = createProgramNode(store, nodeId(1), sharpProgram, FLEX_MERGE_FLAGS_RANK);
 
         assert.strictEqual(rankNode.mergeFlags, FLEX_MERGE_FLAGS_RANK);
         assert.strictEqual(rankNode.kind, 'solid');
-        assert.strictEqual(store.hasChoice(rankProgram), false);
-        assert.strictEqual(store.hasRankMerge(rankProgram), true);
-        assert.strictEqual(store.getFamilyId(sharpThreeProgram), store.getFamilyId(sharpFourProgram));
-        assert.strictEqual(store.getFamilyId(rankProgram), store.getFamilyId(sharpThreeProgram));
-        assert.strictEqual(rankNode.familyId, store.getFamilyId(sharpThreeProgram));
+        assert.strictEqual(store.hasChoice(sharpProgram), false);
+        assert.strictEqual(store.hasRankMerge(sharpProgram), false);
+        assert.strictEqual(store.getFamilyId(sharpProgram), store.getFamilyId(store.appendFixed(store.empty, SHARPNESS_ID)));
     });
 
-    it('collapses exact-rank program variants to the same family ID', () => {
+    it('uses structural enchant identity for ranks that differ only by pool profile', () => {
         const store = new FlexProgramStore();
         const sharpFourChoice = store.appendChoice(store.empty, [
-            { packedEnchant: sharpness, weight: 1 },
-            { packedEnchant: smite, weight: 2 }
+            { enchantId: enchantId(sharpness), weight: 1 },
+            { enchantId: enchantId(smite), weight: 2 }
         ]);
         const sharpThreeChoice = store.appendChoice(store.empty, [
-            { packedEnchant: sharpnessThree, weight: 1 },
-            { packedEnchant: smite, weight: 2 }
+            { enchantId: enchantId(sharpnessThree), weight: 1 },
+            { enchantId: enchantId(smite), weight: 2 }
         ]);
 
-        assert.notStrictEqual(sharpFourChoice, sharpThreeChoice);
+        assert.strictEqual(sharpFourChoice, sharpThreeChoice);
         assert.strictEqual(store.getFamilyId(sharpFourChoice), store.getFamilyId(sharpThreeChoice));
-        assert.ok(store.getMemoryStats().familyCount < store.getMemoryStats().programCount);
     });
 });
 
 describe('FlexProjector', () => {
     it('projects fixed-only programs to one concrete combo row', () => {
-        const store = new FlexProgramStore();
-        const projector = new FlexProjector(store, enchantToIndex);
-        const program = store.appendFixed(store.empty, sharpness);
-        const projected = projector.projectResults(new Map([[program, 10n]]));
+        const fixture = createProjectionFixture();
+        const program = fixture.store.appendFixed(fixture.store.empty, SHARPNESS_ID);
+        const projected = projectResults(fixture, program, 10n);
 
         assert.strictEqual(projected.results.get(combo(sharpness)), 10n);
         assert.strictEqual(projected.projectedMass, 10n);
@@ -172,13 +180,12 @@ describe('FlexProjector', () => {
     });
 
     it('projects weighted choices and records integer projection loss', () => {
-        const store = new FlexProgramStore();
-        const projector = new FlexProjector(store, enchantToIndex);
-        const program = store.appendChoice(store.empty, [
-            { packedEnchant: sharpness, weight: 1 },
-            { packedEnchant: smite, weight: 2 }
+        const fixture = createProjectionFixture();
+        const program = fixture.store.appendChoice(fixture.store.empty, [
+            alt(sharpness, 1),
+            alt(smite, 2)
         ]);
-        const projected = projector.projectResults(new Map([[program, 10n]]));
+        const projected = projectResults(fixture, program, 10n);
 
         assert.strictEqual(projected.results.get(combo(sharpness)), 3n);
         assert.strictEqual(projected.results.get(combo(smite)), 6n);
@@ -187,18 +194,17 @@ describe('FlexProjector', () => {
     });
 
     it('projects independent choice factors as a product', () => {
-        const store = new FlexProgramStore();
-        const projector = new FlexProjector(store, enchantToIndex);
-        const damage = store.appendChoice(store.empty, [
-            { packedEnchant: sharpness, weight: 1 },
-            { packedEnchant: smite, weight: 1 }
+        const fixture = createProjectionFixture();
+        const damage = fixture.store.appendChoice(fixture.store.empty, [
+            alt(sharpness, 1),
+            alt(smite, 1)
         ]);
-        const fullProgram = store.appendChoice(damage, [
-            { packedEnchant: looting, weight: 1 },
-            { packedEnchant: unbreaking, weight: 3 }
+        const fullProgram = fixture.store.appendChoice(damage, [
+            alt(looting, 1),
+            alt(unbreaking, 3)
         ]);
 
-        const projected = projector.projectResults(new Map([[fullProgram, 24n]]));
+        const projected = projectResults(fixture, fullProgram, 24n);
 
         assert.strictEqual(projected.results.get(combo(sharpness, looting)), 3n);
         assert.strictEqual(projected.results.get(combo(sharpness, unbreaking)), 9n);
@@ -209,16 +215,13 @@ describe('FlexProjector', () => {
         assert.strictEqual(projected.projectionLoss, 0n);
     });
 
-    it('projects Rank emissions with profile-level correlation', () => {
-        const store = new FlexProgramStore();
-        const profile = createRankProfile();
-        const projector = new FlexProjector(store, enchantToIndex, {
-            rankProfiles: { get: () => profile }
-        });
-        const damage = store.appendRank(store.empty, sharpness >> 8, profile.id);
-        const fullProgram = store.appendRank(damage, unbreaking >> 8, profile.id);
+    it('projects Rank profiles with source-level correlation', () => {
+        const fixture = createProjectionFixture();
+        const profile = createRankProfile(fixture.poolProfiles);
+        const damage = fixture.store.appendFixed(fixture.store.empty, SHARPNESS_ID);
+        const fullProgram = fixture.store.appendFixed(damage, UNBREAKING_ID);
 
-        const projected = projector.projectResults(new Map([[fullProgram, 50n]]));
+        const projected = projectResults(fixture, fullProgram, 50n, profile.id);
 
         assert.strictEqual(projected.results.get(combo(sharpnessThree, unbreakingTwo)), 20n);
         assert.strictEqual(projected.results.get(combo(sharpness, unbreaking)), 30n);
@@ -226,22 +229,19 @@ describe('FlexProjector', () => {
         assert.strictEqual(projected.results.has(combo(sharpness, unbreakingTwo)), false);
         assert.strictEqual(projected.projectedMass, 50n);
         assert.strictEqual(projected.projectionLoss, 0n);
-        assert.strictEqual(store.hasRankMerge(fullProgram), true);
+        assert.strictEqual(hasFlexRankMerge(profile.mergeFlags), true);
     });
 
     it('projects combined Rank and Conflict choices with profile-level correlation', () => {
-        const store = new FlexProgramStore();
-        const profile = createRankProfile();
-        const projector = new FlexProjector(store, enchantToIndex, {
-            rankProfiles: { get: () => profile }
-        });
-        const damage = store.appendRankChoice(store.empty, [
-            { enchantId: sharpness >> 8, weight: 1 },
-            { enchantId: smite >> 8, weight: 2 }
-        ], profile.id);
-        const fullProgram = store.appendRank(damage, unbreaking >> 8, profile.id);
+        const fixture = createProjectionFixture();
+        const profile = createRankProfile(fixture.poolProfiles);
+        const damage = fixture.store.appendChoice(fixture.store.empty, [
+            { enchantId: SHARPNESS_ID, weight: 1 },
+            { enchantId: SMITE_ID, weight: 2 }
+        ]);
+        const fullProgram = fixture.store.appendFixed(damage, UNBREAKING_ID);
 
-        const projected = projector.projectResults(new Map([[fullProgram, 150n]]));
+        const projected = projectResults(fixture, fullProgram, 150n, profile.id);
 
         assert.strictEqual(projected.results.get(combo(sharpnessThree, unbreakingTwo)), 20n);
         assert.strictEqual(projected.results.get(combo(smite, unbreakingTwo)), 40n);
@@ -251,20 +251,19 @@ describe('FlexProjector', () => {
         assert.strictEqual(projected.results.has(combo(sharpness, unbreakingTwo)), false);
         assert.strictEqual(projected.projectedMass, 150n);
         assert.strictEqual(projected.projectionLoss, 0n);
-        assert.strictEqual(store.hasChoice(fullProgram), true);
-        assert.strictEqual(store.hasRankMerge(fullProgram), true);
+        assert.strictEqual(fixture.store.hasChoice(fullProgram), true);
+        assert.strictEqual(hasFlexRankMerge(profile.mergeFlags), true);
     });
 
     it('keeps only exact clue matches inside a choice emission', () => {
-        const store = new FlexProgramStore();
-        const projector = new FlexProjector(store, enchantToIndex, { targetClueId: sharpness });
-        const fixed = store.appendFixed(store.empty, looting);
-        const program = store.appendChoice(fixed, [
-            { packedEnchant: sharpness, weight: 2 },
-            { packedEnchant: smite, weight: 1 }
+        const fixture = createProjectionFixture({ targetClueId: sharpness });
+        const fixed = fixture.store.appendFixed(fixture.store.empty, LOOTING_ID);
+        const program = fixture.store.appendChoice(fixed, [
+            alt(sharpness, 2),
+            alt(smite, 1)
         ]);
 
-        const projected = projector.projectResults(new Map([[program, 12n]]));
+        const projected = projectResults(fixture, program, 12n);
 
         assert.strictEqual(projected.results.get(combo(sharpness, looting)), 8n);
         assert.strictEqual(projected.results.has(combo(smite, looting)), false);
@@ -275,15 +274,14 @@ describe('FlexProjector', () => {
     });
 
     it('lets a fixed matching clue survive all choice alternatives', () => {
-        const store = new FlexProgramStore();
-        const projector = new FlexProjector(store, enchantToIndex, { targetClueId: sharpness });
-        const fixed = store.appendFixed(store.empty, sharpness);
-        const program = store.appendChoice(fixed, [
-            { packedEnchant: looting, weight: 1 },
-            { packedEnchant: unbreaking, weight: 3 }
+        const fixture = createProjectionFixture({ targetClueId: sharpness });
+        const fixed = fixture.store.appendFixed(fixture.store.empty, SHARPNESS_ID);
+        const program = fixture.store.appendChoice(fixed, [
+            alt(looting, 1),
+            alt(unbreaking, 3)
         ]);
 
-        const projected = projector.projectResults(new Map([[program, 12n]]));
+        const projected = projectResults(fixture, program, 12n);
 
         assert.strictEqual(projected.results.get(combo(sharpness, looting)), 3n);
         assert.strictEqual(projected.results.get(combo(sharpness, unbreaking)), 9n);
@@ -292,11 +290,10 @@ describe('FlexProjector', () => {
     });
 
     it('does not treat higher ranks as matching a lower exact table clue', () => {
-        const store = new FlexProgramStore();
-        const projector = new FlexProjector(store, enchantToIndex, { targetClueId: sharpnessThree });
-        const program = store.appendFixed(store.empty, sharpness);
+        const fixture = createProjectionFixture({ targetClueId: sharpnessThree });
+        const program = fixture.store.appendFixed(fixture.store.empty, SHARPNESS_ID);
 
-        const projected = projector.projectResults(new Map([[program, 10n]]));
+        const projected = projectResults(fixture, program, 10n);
 
         assert.strictEqual(projected.results.size, 0);
         assert.strictEqual(projected.projectedMass, 0n);
@@ -306,12 +303,11 @@ describe('FlexProjector', () => {
     });
 
     it('applies book removal uniformly across fixed generated slots', () => {
-        const store = new FlexProgramStore();
-        const projector = new FlexProjector(store, enchantToIndex, { applyBookRemoval: true });
-        const first = store.appendFixed(store.empty, sharpness);
-        const program = store.appendFixed(first, smite);
+        const fixture = createProjectionFixture({ applyBookRemoval: true });
+        const first = fixture.store.appendFixed(fixture.store.empty, SHARPNESS_ID);
+        const program = fixture.store.appendFixed(first, SMITE_ID);
 
-        const projected = projector.projectResults(new Map([[program, 11n]]));
+        const projected = projectResults(fixture, program, 11n);
 
         assert.strictEqual(projected.results.get(combo(sharpness)), 5n);
         assert.strictEqual(projected.results.get(combo(smite)), 5n);
@@ -321,15 +317,14 @@ describe('FlexProjector', () => {
     });
 
     it('treats a weighted choice as one removable book slot', () => {
-        const store = new FlexProgramStore();
-        const projector = new FlexProjector(store, enchantToIndex, { applyBookRemoval: true });
-        const first = store.appendFixed(store.empty, sharpness);
-        const program = store.appendChoice(first, [
-            { packedEnchant: looting, weight: 1 },
-            { packedEnchant: unbreaking, weight: 3 }
+        const fixture = createProjectionFixture({ applyBookRemoval: true });
+        const first = fixture.store.appendFixed(fixture.store.empty, SHARPNESS_ID);
+        const program = fixture.store.appendChoice(first, [
+            alt(looting, 1),
+            alt(unbreaking, 3)
         ]);
 
-        const projected = projector.projectResults(new Map([[program, 24n]]));
+        const projected = projectResults(fixture, program, 24n);
 
         assert.strictEqual(projected.results.get(combo(sharpness)), 12n);
         assert.strictEqual(projected.results.get(combo(looting)), 3n);
@@ -339,15 +334,14 @@ describe('FlexProjector', () => {
     });
 
     it('treats book-removal outcomes that drop the exact clue as clue-incompatible', () => {
-        const store = new FlexProgramStore();
-        const projector = new FlexProjector(store, enchantToIndex, {
+        const fixture = createProjectionFixture({
             applyBookRemoval: true,
             targetClueId: sharpness
         });
-        const first = store.appendFixed(store.empty, sharpness);
-        const program = store.appendFixed(first, smite);
+        const first = fixture.store.appendFixed(fixture.store.empty, SHARPNESS_ID);
+        const program = fixture.store.appendFixed(first, SMITE_ID);
 
-        const projected = projector.projectResults(new Map([[program, 10n]]));
+        const projected = projectResults(fixture, program, 10n);
 
         assert.strictEqual(projected.results.get(combo(sharpness)), 5n);
         assert.strictEqual(projected.results.has(combo(smite)), false);
@@ -358,38 +352,29 @@ describe('FlexProjector', () => {
     });
 
     it('does not expose the empty program as public combo row zero', () => {
-        const store = new FlexProgramStore();
-        const projector = new FlexProjector(store, enchantToIndex);
-        const projected = projector.projectResults(new Map([[store.empty, 5n]]));
+        const fixture = createProjectionFixture();
+        const projected = projectResults(fixture, fixture.store.empty, 5n);
 
         assert.strictEqual(projected.results.has(0 as PackedCombo), false);
         assert.strictEqual(projected.projectedMass, 5n);
     });
 
     it('harvests aggregate pending stats without materializing pending rows', () => {
-        const store = new FlexProgramStore();
-        const projector = new FlexProjector(store, enchantToIndex);
-        const fixed = store.appendFixed(store.empty, sharpness);
-        const program = store.appendChoice(fixed, [
-            { packedEnchant: smite, weight: 1 },
-            { packedEnchant: looting, weight: 3 }
+        const fixture = createProjectionFixture();
+        const fixed = fixture.store.appendFixed(fixture.store.empty, SHARPNESS_ID);
+        const program = fixture.store.appendChoice(fixed, [
+            alt(smite, 1),
+            alt(looting, 3)
         ]);
-        const pending: FlexPendingEntry[] = [{
-            graphId: 0,
-            nodeId: nodeId(12),
-            programId: program,
-            mass: 8n,
-            count: 2,
-            nodeKind: 'plex'
-        }];
+        const pending: FlexPendingEntry[] = [createPendingEntry(fixture, program, 8n, 2, 'plex')];
 
-        const projected = projector.projectPendingAggregates(pending);
+        const projected = fixture.projector.projectPendingAggregates(pending);
 
         assert.strictEqual(projected.projectedMass, 8n);
         assert.strictEqual(projected.projectionLoss, 0n);
-        assert.strictEqual(projected.pendingAggregates.any[sharpness >> 8], 8n);
-        assert.strictEqual(projected.pendingAggregates.any[smite >> 8], 2n);
-        assert.strictEqual(projected.pendingAggregates.any[looting >> 8], 6n);
+        assert.strictEqual(projected.pendingAggregates.any[SHARPNESS_ID], 8n);
+        assert.strictEqual(projected.pendingAggregates.any[SMITE_ID], 2n);
+        assert.strictEqual(projected.pendingAggregates.any[LOOTING_ID], 6n);
         assert.strictEqual(projected.pendingAggregates.ranks[sharpness], 8n);
         assert.strictEqual(projected.pendingAggregates.ranks[smite], 2n);
         assert.strictEqual(projected.pendingAggregates.ranks[looting], 6n);
@@ -400,25 +385,17 @@ describe('FlexProjector', () => {
     });
 
     it('uses book pending aggregate survival rates without applying result book removal', () => {
-        const store = new FlexProgramStore();
-        const projector = new FlexProjector(store, enchantToIndex, { applyBookRemoval: true });
-        const first = store.appendFixed(store.empty, sharpness);
-        const program = store.appendFixed(first, smite);
-        const pending: FlexPendingEntry[] = [{
-            graphId: 0,
-            nodeId: nodeId(14),
-            programId: program,
-            mass: 10n,
-            count: 2,
-            nodeKind: 'solid'
-        }];
+        const fixture = createProjectionFixture({ applyBookRemoval: true });
+        const first = fixture.store.appendFixed(fixture.store.empty, SHARPNESS_ID);
+        const program = fixture.store.appendFixed(first, SMITE_ID);
+        const pending: FlexPendingEntry[] = [createPendingEntry(fixture, program, 10n, 2, 'solid')];
 
-        const projected = projector.projectPendingAggregates(pending);
+        const projected = fixture.projector.projectPendingAggregates(pending);
 
         assert.strictEqual(projected.projectedMass, 10n);
         assert.strictEqual(projected.projectionLoss, 0n);
-        assert.strictEqual(projected.pendingAggregates.any[sharpness >> 8], 5n);
-        assert.strictEqual(projected.pendingAggregates.any[smite >> 8], 5n);
+        assert.strictEqual(projected.pendingAggregates.any[SHARPNESS_ID], 5n);
+        assert.strictEqual(projected.pendingAggregates.any[SMITE_ID], 5n);
         assert.strictEqual(projected.pendingAggregates.ranks[sharpness], 5n);
         assert.strictEqual(projected.pendingAggregates.ranks[smite], 5n);
         assert.strictEqual(projected.pendingAggregates.count[1], 10n);
@@ -427,24 +404,18 @@ describe('FlexProjector', () => {
     });
 
     it('splits clue-choice pending aggregates without expanding independent alternatives', () => {
-        const store = new FlexProgramStore();
-        const projector = new FlexProjector(store, enchantToIndex, { targetClueId: sharpness });
-        const fixed = store.appendFixed(store.empty, looting);
-        const program = store.appendChoice(fixed, [
-            { packedEnchant: sharpness, weight: 2 },
-            { packedEnchant: smite, weight: 1 }
+        const fixture = createProjectionFixture({ targetClueId: sharpness });
+        const fixed = fixture.store.appendFixed(fixture.store.empty, LOOTING_ID);
+        const program = fixture.store.appendChoice(fixed, [
+            alt(sharpness, 2),
+            alt(smite, 1)
         ]);
         const pending: FlexPendingEntry[] = [{
-            graphId: 0,
-            nodeId: nodeId(15),
-            programId: program,
-            mass: 12n,
-            count: 2,
-            nodeKind: 'plex',
+            ...createPendingEntry(fixture, program, 12n, 2, 'plex'),
             targetClueReachable: false
         }];
 
-        const projected = projector.projectPendingAggregates(pending);
+        const projected = fixture.projector.projectPendingAggregates(pending);
         const clueJoint = projected.pendingAggregates.clueJoint;
 
         assert.strictEqual(projected.projectedMass, 8n);
@@ -455,34 +426,26 @@ describe('FlexProjector', () => {
         assert.strictEqual(clueJoint.targetClueId, sharpness);
         assert.strictEqual(clueJoint.knownSpace, 4n);
         assert.strictEqual(clueJoint.count[2], 4n);
-        assert.strictEqual(clueJoint.any[sharpness >> 8], 4n);
-        assert.strictEqual(clueJoint.any[looting >> 8], 4n);
-        assert.strictEqual(clueJoint.any[smite >> 8] ?? 0n, 0n);
+        assert.strictEqual(clueJoint.any[SHARPNESS_ID], 4n);
+        assert.strictEqual(clueJoint.any[LOOTING_ID], 4n);
+        assert.strictEqual(clueJoint.any[SMITE_ID] ?? 0n, 0n);
         assert.strictEqual(clueJoint.ranks[sharpness], 4n);
         assert.strictEqual(clueJoint.ranks[looting], 4n);
     });
 
     it('tracks clue-incompatible pending source mass without book removal', () => {
-        const store = new FlexProgramStore();
-        const projector = new FlexProjector(store, enchantToIndex, {
+        const fixture = createProjectionFixture({
             applyBookRemoval: true,
             targetClueId: sharpness
         });
-        const fixed = store.appendFixed(store.empty, looting);
-        const program = store.appendChoice(fixed, [
-            { packedEnchant: sharpness, weight: 2 },
-            { packedEnchant: smite, weight: 1 }
+        const fixed = fixture.store.appendFixed(fixture.store.empty, LOOTING_ID);
+        const program = fixture.store.appendChoice(fixed, [
+            alt(sharpness, 2),
+            alt(smite, 1)
         ]);
-        const pending: FlexPendingEntry[] = [{
-            graphId: 0,
-            nodeId: nodeId(13),
-            programId: program,
-            mass: 12n,
-            count: 2,
-            nodeKind: 'plex'
-        }];
+        const pending: FlexPendingEntry[] = [createPendingEntry(fixture, program, 12n, 2, 'plex')];
 
-        const projected = projector.projectPendingAggregates(pending);
+        const projected = fixture.projector.projectPendingAggregates(pending);
         const clueJoint = projected.pendingAggregates.clueJoint;
 
         assert.strictEqual(projected.projectedMass, 8n);
@@ -495,20 +458,14 @@ describe('FlexProjector', () => {
     });
 
     it('keeps pending branches that can still reach the exact clue', () => {
-        const store = new FlexProgramStore();
-        const projector = new FlexProjector(store, enchantToIndex, { targetClueId: sharpness });
-        const program = store.appendFixed(store.empty, looting);
+        const fixture = createProjectionFixture({ targetClueId: sharpness });
+        const program = fixture.store.appendFixed(fixture.store.empty, LOOTING_ID);
         const pending: FlexPendingEntry[] = [{
-            graphId: 0,
-            nodeId: nodeId(17),
-            programId: program,
-            mass: 10n,
-            count: 1,
-            nodeKind: 'solid',
+            ...createPendingEntry(fixture, program, 10n, 1, 'solid'),
             targetClueReachable: true
         }];
 
-        const projected = projector.projectPendingAggregates(pending);
+        const projected = fixture.projector.projectPendingAggregates(pending);
 
         assert.strictEqual(projected.projectedMass, 10n);
         assert.strictEqual(projected.clueIncompatible, 0n);
@@ -517,36 +474,23 @@ describe('FlexProjector', () => {
     });
 
     it('builds lazy pending aggregate buckets only when read and reuses them', () => {
-        const store = new FlexProgramStore();
-        const projector = new FlexProjector(store, enchantToIndex, { applyBookRemoval: true });
-        const fixed = store.appendFixed(store.empty, sharpness);
-        const program = store.appendChoice(fixed, [
-            { packedEnchant: smite, weight: 1 },
-            { packedEnchant: looting, weight: 3 }
+        const fixture = createProjectionFixture({ applyBookRemoval: true });
+        const fixed = fixture.store.appendFixed(fixture.store.empty, SHARPNESS_ID);
+        const program = fixture.store.appendChoice(fixed, [
+            alt(smite, 1),
+            alt(looting, 3)
         ]);
         const pending: FlexPendingEntry[] = [
-            {
-                graphId: 0,
-                nodeId: nodeId(18),
-                programId: program,
-                mass: 24n,
-                count: 2,
-                nodeKind: 'plex'
-            },
-            {
-                graphId: 0,
-                nodeId: nodeId(19),
-                programId: fixed,
-                mass: 5n,
-                count: 1,
-                nodeKind: 'solid'
-            }
+            createPendingEntry(fixture, program, 24n, 2, 'plex'),
+            createPendingEntry(fixture, fixed, 5n, 1, 'solid')
         ];
 
-        const eager = projector.projectPendingAggregates(pending);
+        const eager = fixture.projector.projectPendingAggregates(pending);
         let buildCount = 0;
-        const lazy = projector.projectPendingLazyAggregatesFromCursor(visitor => {
-            for (const entry of pending) visitor(entry.programId, entry.mass, entry.count, entry.targetClueReachable);
+        const lazy = fixture.projector.projectPendingLazyAggregatesFromCursor(visitor => {
+            for (const entry of pending) {
+                visitor(entry.programId, entry.poolProfileId, entry.mass, entry.count, entry.targetClueReachable);
+            }
         }, {
             onBuild: () => { buildCount++; }
         });
@@ -566,27 +510,23 @@ describe('FlexProjector', () => {
     });
 
     it('keeps lazy clue pending aggregates exact and snapshot-stable', () => {
-        const store = new FlexProgramStore();
-        const projector = new FlexProjector(store, enchantToIndex, { targetClueId: sharpness });
-        const fixed = store.appendFixed(store.empty, looting);
-        const program = store.appendChoice(fixed, [
-            { packedEnchant: sharpness, weight: 2 },
-            { packedEnchant: smite, weight: 1 }
+        const fixture = createProjectionFixture({ targetClueId: sharpness });
+        const fixed = fixture.store.appendFixed(fixture.store.empty, LOOTING_ID);
+        const program = fixture.store.appendChoice(fixed, [
+            alt(sharpness, 2),
+            alt(smite, 1)
         ]);
         const pending: FlexPendingEntry[] = [{
-            graphId: 0,
-            nodeId: nodeId(20),
-            programId: program,
-            mass: 13n,
-            count: 2,
-            nodeKind: 'plex',
+            ...createPendingEntry(fixture, program, 13n, 2, 'plex'),
             targetClueReachable: false
         }];
 
-        const eager = projector.projectPendingAggregates(pending);
+        const eager = fixture.projector.projectPendingAggregates(pending);
         let buildCount = 0;
-        const lazy = projector.projectPendingLazyAggregatesFromCursor(visitor => {
-            for (const entry of pending) visitor(entry.programId, entry.mass, entry.count, entry.targetClueReachable);
+        const lazy = fixture.projector.projectPendingLazyAggregatesFromCursor(visitor => {
+            for (const entry of pending) {
+                visitor(entry.programId, entry.poolProfileId, entry.mass, entry.count, entry.targetClueReachable);
+            }
         }, {
             onBuild: () => { buildCount++; }
         });
@@ -600,6 +540,120 @@ describe('FlexProjector', () => {
         assert.strictEqual(buildCount, 1);
     });
 });
+
+interface ProjectionFixture {
+    readonly store: FlexProgramStore;
+    readonly poolProfiles: FlexPoolProfileStore;
+    readonly resultKeys: FlexResultKeyStore;
+    readonly profileId: FlexPoolProfileId;
+    readonly projector: FlexProjector;
+}
+
+function createProjectionFixture(
+    options: Omit<FlexProjectionOptions, 'poolProfiles' | 'resultKeys'> = {}
+): ProjectionFixture {
+    const store = new FlexProgramStore();
+    const poolProfiles = new FlexPoolProfileStore();
+    const resultKeys = new FlexResultKeyStore();
+    const profile = poolProfiles.getOrCreateSingle(exactPool);
+    const projector = new FlexProjector(store, enchantToIndex, {
+        poolProfiles,
+        resultKeys,
+        ...options
+    });
+
+    return {
+        store,
+        poolProfiles,
+        resultKeys,
+        profileId: profile.id,
+        projector
+    };
+}
+
+function projectResults(
+    fixture: ProjectionFixture,
+    programId: FlexProgramId,
+    mass: bigint,
+    poolProfileId = fixture.profileId
+): ReturnType<FlexProjector['projectResults']> {
+    return fixture.projector.projectResults(new Map([
+        [fixture.resultKeys.getOrCreate(programId, poolProfileId), mass]
+    ]));
+}
+
+function createPendingEntry(
+    fixture: ProjectionFixture,
+    programId: FlexProgramId,
+    mass: bigint,
+    count: number,
+    nodeKind: FlexPendingEntry['nodeKind']
+): FlexPendingEntry {
+    return Object.freeze({
+        graphId: 0,
+        nodeId: nodeId(12),
+        programId,
+        poolProfileId: fixture.profileId,
+        mass,
+        count,
+        nodeKind
+    });
+}
+
+function createProgramNode(
+    store: FlexProgramStore,
+    id: FlexNodeId,
+    programId: FlexProgramId,
+    mergeFlags = store.getMergeFlags(programId)
+) {
+    return store.createNode(id, programId, testProfileId, mergeFlags);
+}
+
+function createRankProfile(poolProfiles: FlexPoolProfileStore) {
+    return poolProfiles.getOrCreate({
+        familyKey: 'test-family',
+        childLevel: 5,
+        sources: Object.freeze([
+            Object.freeze({
+                pool: rankPoolLow,
+                level: 10,
+                sourceMass: 20n,
+                profileWeight: 2n
+            }),
+            Object.freeze({
+                pool: rankPoolHigh,
+                level: 11,
+                sourceMass: 30n,
+                profileWeight: 3n
+            })
+        ])
+    });
+}
+
+function createPool(signature: string, packedEnchants: readonly PackedEnchant[]): SearchPool {
+    const entries = packedEnchants.map((packedEnchant, index) => {
+        const idBit = 1n << BigInt(index);
+        return Object.freeze({
+            packedEnchant,
+            enchantId: enchantId(packedEnchant),
+            rank: packedEnchant & 0xff,
+            weight: 1,
+            comboIndex: enchantToIndex.get(packedEnchant) ?? 0,
+            idBit,
+            conflictBitset: 0n,
+            blocksBitset: idBit
+        });
+    });
+
+    return Object.freeze({
+        item: 'test',
+        level: 5,
+        signature: signature as SearchPoolSignature,
+        familySignature: 'test-family' as SearchPoolFamilySignature,
+        entries: Object.freeze(entries),
+        totalWeight: entries.length
+    });
+}
 
 function assertAggregatesEqual(
     actual: PendingFrontierAggregates,
@@ -631,56 +685,4 @@ function toMapRecord(source: ReadonlyMap<number, bigint>): Record<string, string
         if (mass !== 0n) result[key] = mass.toString();
     }
     return result;
-}
-
-function createRankProfile(): FlexRankProfile {
-    return Object.freeze({
-        id: 0 as FlexRankProfile['id'],
-        familyKey: 'test-family',
-        childLevel: 5,
-        sources: Object.freeze([
-            Object.freeze({
-                exactKey: 'pool:a',
-                levelCount: 1,
-                sourceMass: 20n,
-                profileWeight: 2n
-            }),
-            Object.freeze({
-                exactKey: 'pool:b',
-                levelCount: 1,
-                sourceMass: 30n,
-                profileWeight: 3n
-            })
-        ]),
-        totalSourceMass: 50n,
-        totalWeight: 5n,
-        weightGcd: 1n,
-        enchants: Object.freeze([
-            Object.freeze({
-                enchantId: sharpness >> 8,
-                alternatives: Object.freeze([
-                    Object.freeze({ packedEnchant: sharpnessThree, weight: 2n }),
-                    Object.freeze({ packedEnchant: sharpness, weight: 3n })
-                ]),
-                sourcePackedEnchants: Object.freeze([sharpnessThree, sharpness])
-            }),
-            Object.freeze({
-                enchantId: unbreaking >> 8,
-                alternatives: Object.freeze([
-                    Object.freeze({ packedEnchant: unbreakingTwo, weight: 2n }),
-                    Object.freeze({ packedEnchant: unbreaking, weight: 3n })
-                ]),
-                sourcePackedEnchants: Object.freeze([unbreakingTwo, unbreaking])
-            }),
-            Object.freeze({
-                enchantId: smite >> 8,
-                alternatives: Object.freeze([
-                    Object.freeze({ packedEnchant: smite, weight: 5n })
-                ]),
-                sourcePackedEnchants: Object.freeze([smite, smite])
-            })
-        ]),
-        rankVariantEnchantCount: 2,
-        rankAlternativeCount: 5
-    });
 }

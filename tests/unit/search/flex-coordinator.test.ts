@@ -6,14 +6,18 @@ import { PRECISION, ProbUtils } from '#utils/index.js';
 import {
     FlexCoordinator,
     FlexProgramStore,
+    FlexResultKeyStore,
     type FlexExpansion,
     type FlexGraph,
     type FlexNodeId,
+    type FlexPoolProfileId,
+    type FlexProgramId,
     type FlexSearchExpansion
 } from '#lib/search/flex/index.js';
 
 const packed = (id: number, rank = 1): PackedEnchant => ((id << 8) | rank) as PackedEnchant;
 const nodeId = (id: number): FlexNodeId => id as FlexNodeId;
+const PROFILE_ID = 0 as FlexPoolProfileId;
 const units = (snapshot: ReturnType<FlexCoordinator['snapshot']>) => snapshot.mass.units!;
 const SYSTEM_FLOOR_UNITS = ProbUtils.toBigInt(ENGINE_LIMITS.SYSTEM_THRESHOLD_FLOOR);
 
@@ -35,6 +39,7 @@ class TestFlexGraph implements FlexGraph {
         return consumer({
             nodeId: expansion.node.id,
             programId: expansion.node.programId,
+            poolProfileId: expansion.node.poolProfileId,
             nodeKind: expansion.node.kind,
             count: expansion.node.count,
             probContinue: expansion.probContinue,
@@ -55,6 +60,10 @@ class TestFlexGraph implements FlexGraph {
         return this.getNode(nodeIdValue).programId;
     }
 
+    public getPoolProfileId(nodeIdValue: FlexNodeId): FlexExpansion['node']['poolProfileId'] {
+        return this.getNode(nodeIdValue).poolProfileId;
+    }
+
     public getNodeCount(nodeIdValue: FlexNodeId): number {
         return this.getNode(nodeIdValue).count;
     }
@@ -66,12 +75,31 @@ class TestFlexGraph implements FlexGraph {
 
 function terminalExpansion(store: FlexProgramStore, id: FlexNodeId, programId = store.empty): FlexExpansion {
     return Object.freeze({
-        node: store.createNode(id, programId),
+        node: createNode(store, id, programId),
         probContinue: 0n,
         totalWeight: 0,
         edges: Object.freeze([]),
         terminalReason: null
     });
+}
+
+function createNode(store: FlexProgramStore, id: FlexNodeId, programId = store.empty): FlexExpansion['node'] {
+    return store.createNode(id, programId, PROFILE_ID, store.getMergeFlags(programId));
+}
+
+function createCoordinator(graph: FlexGraph): {
+    readonly run: FlexCoordinator;
+    readonly resultKeys: FlexResultKeyStore;
+} {
+    const resultKeys = new FlexResultKeyStore();
+    return {
+        run: new FlexCoordinator([graph], resultKeys),
+        resultKeys
+    };
+}
+
+function resultId(resultKeys: FlexResultKeyStore, programId: FlexProgramId) {
+    return resultKeys.getOrCreate(programId, PROFILE_ID);
 }
 
 describe('FlexCoordinator', () => {
@@ -81,7 +109,7 @@ describe('FlexCoordinator', () => {
         const smiteProgram = store.appendFixed(store.empty, packed(2));
         const graph = new TestFlexGraph();
         graph.set(nodeId(0), Object.freeze({
-            node: store.createNode(nodeId(0), store.empty),
+            node: createNode(store, nodeId(0), store.empty),
             probContinue: PRECISION,
             totalWeight: 4,
             edges: Object.freeze([
@@ -93,14 +121,14 @@ describe('FlexCoordinator', () => {
         graph.set(nodeId(1), terminalExpansion(store, nodeId(1), sharpnessProgram));
         graph.set(nodeId(2), terminalExpansion(store, nodeId(2), smiteProgram));
 
-        const run = new FlexCoordinator([graph]);
+        const { run, resultKeys } = createCoordinator(graph);
         run.seedPending(0, nodeId(0), 100n);
         const snapshot = run.searchToCheckpoint({ maxIterations: 2 });
 
         assert.strictEqual(snapshot.exitReason, 'iterations');
         assert.strictEqual(snapshot.iterations, 2);
-        assert.strictEqual(snapshot.results.get(sharpnessProgram), 75n);
-        assert.strictEqual(snapshot.results.get(smiteProgram), undefined);
+        assert.strictEqual(snapshot.results.get(resultId(resultKeys, sharpnessProgram)), 75n);
+        assert.strictEqual(snapshot.results.get(resultId(resultKeys, smiteProgram)), undefined);
         assert.strictEqual(snapshot.pendingEntries.length, 1);
         assert.strictEqual(snapshot.pendingEntries[0]!.programId, smiteProgram);
         assert.strictEqual(snapshot.pendingEntries[0]!.mass, 25n);
@@ -110,12 +138,12 @@ describe('FlexCoordinator', () => {
     it('counts expanded Solid and Plex nodes for diagnostics', () => {
         const store = new FlexProgramStore();
         const choiceProgram = store.appendChoice(store.empty, [
-            { packedEnchant: packed(1), weight: 1 },
-            { packedEnchant: packed(2), weight: 1 }
+            { enchantId: 1, weight: 1 },
+            { enchantId: 2, weight: 1 }
         ]);
         const graph = new TestFlexGraph();
         graph.set(nodeId(0), Object.freeze({
-            node: store.createNode(nodeId(0), store.empty),
+            node: createNode(store, nodeId(0), store.empty),
             probContinue: PRECISION,
             totalWeight: 1,
             edges: Object.freeze([{ weight: 1, childId: nodeId(1) }]),
@@ -123,7 +151,7 @@ describe('FlexCoordinator', () => {
         }));
         graph.set(nodeId(1), terminalExpansion(store, nodeId(1), choiceProgram));
 
-        const run = new FlexCoordinator([graph]);
+        const { run } = createCoordinator(graph);
         run.seedPending(0, nodeId(0), 100n);
         const snapshot = run.searchToCheckpoint({ maxIterations: 2 });
         const stats = run.getMemoryStats();
@@ -139,7 +167,7 @@ describe('FlexCoordinator', () => {
         const secondProgram = store.appendFixed(store.empty, packed(2));
         const graph = new TestFlexGraph();
         graph.set(nodeId(0), Object.freeze({
-            node: store.createNode(nodeId(0), store.empty),
+            node: createNode(store, nodeId(0), store.empty),
             probContinue: PRECISION,
             totalWeight: 2,
             edges: Object.freeze([
@@ -151,14 +179,14 @@ describe('FlexCoordinator', () => {
         graph.set(nodeId(1), terminalExpansion(store, nodeId(1), firstProgram));
         graph.set(nodeId(2), terminalExpansion(store, nodeId(2), secondProgram));
 
-        const capped = new FlexCoordinator([graph]);
+        const { run: capped } = createCoordinator(graph);
         capped.seedPending(0, nodeId(0), 100n);
         const cappedSnapshot = capped.searchToCheckpoint({ maxIterations: 2 });
         assert.strictEqual(cappedSnapshot.exitReason, 'iterations');
         assert.strictEqual(cappedSnapshot.iterations, 2);
         assert.strictEqual(cappedSnapshot.pendingEntries.length, 1);
 
-        const drained = new FlexCoordinator([graph]);
+        const { run: drained, resultKeys } = createCoordinator(graph);
         drained.seedPending(0, nodeId(0), 100n);
         const drainedSnapshot = drained.searchToCheckpoint({
             maxIterations: 2,
@@ -166,8 +194,8 @@ describe('FlexCoordinator', () => {
         });
         assert.strictEqual(drainedSnapshot.exitReason, 'empty');
         assert.strictEqual(drainedSnapshot.iterations, 3);
-        assert.strictEqual(drainedSnapshot.results.get(firstProgram), 50n);
-        assert.strictEqual(drainedSnapshot.results.get(secondProgram), 50n);
+        assert.strictEqual(drainedSnapshot.results.get(resultId(resultKeys, firstProgram)), 50n);
+        assert.strictEqual(drainedSnapshot.results.get(resultId(resultKeys, secondProgram)), 50n);
         assert.strictEqual(drainedSnapshot.pendingCount, 0);
     });
 
@@ -177,14 +205,14 @@ describe('FlexCoordinator', () => {
         const secondProgram = store.appendFixed(firstProgram, packed(2));
         const graph = new TestFlexGraph();
         graph.set(nodeId(0), Object.freeze({
-            node: store.createNode(nodeId(0), store.empty),
+            node: createNode(store, nodeId(0), store.empty),
             probContinue: PRECISION,
             totalWeight: 1,
             edges: Object.freeze([{ weight: 1, childId: nodeId(1) }]),
             terminalReason: null
         }));
         graph.set(nodeId(1), Object.freeze({
-            node: store.createNode(nodeId(1), firstProgram),
+            node: createNode(store, nodeId(1), firstProgram),
             probContinue: PRECISION,
             totalWeight: 1,
             edges: Object.freeze([{ weight: 1, childId: nodeId(2) }]),
@@ -192,7 +220,7 @@ describe('FlexCoordinator', () => {
         }));
         graph.set(nodeId(2), terminalExpansion(store, nodeId(2), secondProgram));
 
-        const run = new FlexCoordinator([graph]);
+        const { run, resultKeys } = createCoordinator(graph);
         run.seedPending(0, nodeId(0), 100n);
         const snapshot = await run.searchToCheckpointAsync({
             maxIterations: 3,
@@ -202,7 +230,7 @@ describe('FlexCoordinator', () => {
 
         assert.strictEqual(snapshot.exitReason, 'empty');
         assert.strictEqual(snapshot.iterations, 3);
-        assert.strictEqual(snapshot.results.get(secondProgram), 100n);
+        assert.strictEqual(snapshot.results.get(resultId(resultKeys, secondProgram)), 100n);
         assert.strictEqual(snapshot.pendingCount, 0);
     });
 
@@ -210,7 +238,7 @@ describe('FlexCoordinator', () => {
         const store = new FlexProgramStore();
         const graph = new TestFlexGraph();
         graph.set(nodeId(0), Object.freeze({
-            node: store.createNode(nodeId(0), store.empty),
+            node: createNode(store, nodeId(0), store.empty),
             probContinue: PRECISION,
             totalWeight: 2,
             edges: Object.freeze([
@@ -222,7 +250,7 @@ describe('FlexCoordinator', () => {
         graph.set(nodeId(1), terminalExpansion(store, nodeId(1)));
         graph.set(nodeId(2), terminalExpansion(store, nodeId(2)));
 
-        const run = new FlexCoordinator([graph]);
+        const { run } = createCoordinator(graph);
         run.seedPending(0, nodeId(0), 1n);
         const first = run.searchToCheckpoint({ maxIterations: 1 });
 
@@ -245,7 +273,7 @@ describe('FlexCoordinator', () => {
         const graph = new TestFlexGraph();
         graph.set(nodeId(0), terminalExpansion(store, nodeId(0)));
 
-        const thresholdRun = new FlexCoordinator([graph]);
+        const { run: thresholdRun } = createCoordinator(graph);
         thresholdRun.seedPending(0, nodeId(0), 1n);
         const threshold = thresholdRun.searchToCheckpoint({ threshold: 2n });
         assert.strictEqual(threshold.exitReason, 'threshold');
@@ -255,20 +283,20 @@ describe('FlexCoordinator', () => {
 
         const massGraph = new TestFlexGraph();
         massGraph.set(nodeId(0), Object.freeze({
-            node: store.createNode(nodeId(0), store.empty),
+            node: createNode(store, nodeId(0), store.empty),
             probContinue: PRECISION / 2n,
             totalWeight: 1,
             edges: Object.freeze([{ weight: 1, childId: nodeId(1) }]),
             terminalReason: null
         }));
         massGraph.set(nodeId(1), terminalExpansion(store, nodeId(1)));
-        const massRun = new FlexCoordinator([massGraph]);
+        const { run: massRun, resultKeys } = createCoordinator(massGraph);
         massRun.seedPending(0, nodeId(0), 10n);
         const mass = massRun.searchToCheckpoint({ targetClassifiedMass: 5n, maxIterations: 10 });
         assert.strictEqual(mass.exitReason, 'mass');
-        assert.strictEqual(mass.results.get(store.empty), 5n);
+        assert.strictEqual(mass.results.get(resultId(resultKeys, store.empty)), 5n);
 
-        const emptyRun = new FlexCoordinator([graph]);
+        const { run: emptyRun } = createCoordinator(graph);
         emptyRun.seedPending(0, nodeId(0), 4n);
         const empty = emptyRun.searchToCheckpoint({ exhaustive: true });
         assert.strictEqual(empty.exitReason, 'empty');
@@ -281,7 +309,7 @@ describe('FlexCoordinator', () => {
         const pendingMass = SYSTEM_FLOOR_UNITS - 1n;
         const graph = new TestFlexGraph();
         graph.set(nodeId(0), Object.freeze({
-            node: store.createNode(nodeId(0), store.empty),
+            node: createNode(store, nodeId(0), store.empty),
             probContinue: PRECISION,
             totalWeight: 1,
             edges: Object.freeze([{ weight: 1, childId: nodeId(1) }]),
@@ -289,7 +317,7 @@ describe('FlexCoordinator', () => {
         }));
         graph.set(nodeId(1), terminalExpansion(store, nodeId(1), childProgram));
 
-        const run = new FlexCoordinator([graph]);
+        const { run } = createCoordinator(graph);
         run.seedPending(0, nodeId(0), pendingMass);
         const snapshot = run.searchToCheckpoint({
             threshold: SYSTEM_FLOOR_UNITS,
@@ -310,14 +338,14 @@ describe('FlexCoordinator', () => {
         const belowFloorMass = SYSTEM_FLOOR_UNITS - 1n;
         const graph = new TestFlexGraph();
         graph.set(nodeId(0), Object.freeze({
-            node: store.createNode(nodeId(0), store.empty),
+            node: createNode(store, nodeId(0), store.empty),
             probContinue: PRECISION,
             totalWeight: 1,
             edges: Object.freeze([{ weight: 1, childId: nodeId(1) }]),
             terminalReason: null
         }));
         graph.set(nodeId(1), Object.freeze({
-            node: store.createNode(nodeId(1), firstProgram),
+            node: createNode(store, nodeId(1), firstProgram),
             probContinue: PRECISION,
             totalWeight: 1,
             edges: Object.freeze([{ weight: 1, childId: nodeId(2) }]),
@@ -325,7 +353,7 @@ describe('FlexCoordinator', () => {
         }));
         graph.set(nodeId(2), terminalExpansion(store, nodeId(2), secondProgram));
 
-        const run = new FlexCoordinator([graph]);
+        const { run } = createCoordinator(graph);
         run.seedPending(0, nodeId(0), belowFloorMass);
         const snapshot = run.searchToCheckpoint({ threshold: 0n, maxIterations: 10 });
 
@@ -337,7 +365,7 @@ describe('FlexCoordinator', () => {
         assert.strictEqual(units(snapshot).resolved, '0');
         assert.strictEqual(units(snapshot).sieved, String(belowFloorMass));
 
-        const parityRun = new FlexCoordinator([graph]);
+        const { run: parityRun, resultKeys } = createCoordinator(graph);
         parityRun.seedPending(0, nodeId(0), belowFloorMass);
         const paritySnapshot = parityRun.searchToCheckpoint({
             threshold: 0n,
@@ -347,7 +375,7 @@ describe('FlexCoordinator', () => {
 
         assert.strictEqual(paritySnapshot.exitReason, 'empty');
         assert.strictEqual(paritySnapshot.iterations, 3);
-        assert.strictEqual(paritySnapshot.results.get(secondProgram), belowFloorMass);
+        assert.strictEqual(paritySnapshot.results.get(resultId(resultKeys, secondProgram)), belowFloorMass);
         assert.strictEqual(units(paritySnapshot).resolved, String(belowFloorMass));
         assert.strictEqual(units(paritySnapshot).sieved, '0');
     });
