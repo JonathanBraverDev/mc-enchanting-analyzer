@@ -115,7 +115,8 @@ export class GroupedFlexSearchRun {
         });
         this.projector = new FlexProjector(this.programs, this.kernel.registry.enchantToIndex, {
             applyBookRemoval: this.kernel.item === 'book',
-            targetClueId: this.targetClueId
+            targetClueId: this.targetClueId,
+            rankProfiles: this.rankProfiles
         });
         this.snapshotBuilder = new FlexSnapshotBuilder(
             this.coordinator,

@@ -179,6 +179,13 @@ export class FlexRankProfileStore {
         return Object.freeze([...weightsByEnchant.entries()]
             .sort(([left], [right]) => left - right)
             .map(([enchantId, weightsByPacked]) => {
+                const sourcePackedEnchants = Object.freeze(sources.map(source => {
+                    const entry = source.pool.entries.find(candidate => candidate.enchantId === enchantId);
+                    if (entry === undefined) {
+                        throw new Error(`Rank profile source ${source.exactKey} is missing enchant ${String(enchantId)}.`);
+                    }
+                    return entry.packedEnchant;
+                }));
                 const alternatives = Object.freeze([...weightsByPacked.entries()]
                     .sort(([left], [right]) => Number(left) - Number(right))
                     .map(([packedEnchant, weight]) => Object.freeze({
@@ -191,7 +198,8 @@ export class FlexRankProfileStore {
                 }
                 return Object.freeze({
                     enchantId,
-                    alternatives
+                    alternatives,
+                    sourcePackedEnchants
                 } satisfies FlexRankProfileEnchant);
             }));
     }

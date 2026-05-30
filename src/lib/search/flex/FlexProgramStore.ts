@@ -8,6 +8,7 @@ import {
     type FlexFamilyId,
     FLEX_MERGE_FLAGS_CONFLICT,
     FLEX_MERGE_FLAGS_NONE,
+    FLEX_MERGE_FLAGS_RANK,
     hasFlexConflictMerge,
     hasFlexRankMerge,
     type FlexMergeFlags,
@@ -15,6 +16,8 @@ import {
     type FlexNodeId,
     type FlexProgram,
     type FlexProgramId,
+    type FlexRankEmission,
+    type FlexRankProfileId,
     type FlexProgramStoreMemoryStats
 } from '#lib/search/flex/FlexTypes.js';
 
@@ -39,7 +42,7 @@ export interface FlexProgramStoreOptions {
 
 interface FlexChoiceInternNode {
     children?: Map<number, FlexChoiceInternNode> | undefined;
-    emission?: FlexChoiceEmission | undefined;
+    emission?: FlexChoiceEmission | FlexRankEmission | undefined;
 }
 
 interface FlexProgramInternNode {
@@ -74,6 +77,7 @@ export class FlexProgramStore {
     private readonly idsByTransition: Array<Array<FlexProgramId | undefined> | undefined> = [];
     private readonly familyIdsByKey = new Map<string, FlexFamilyId>([[EMPTY_FAMILY_KEY, EMPTY_FAMILY_ID]]);
     private readonly fixedEmissions = new Map<PackedEnchant, FlexFixedEmission>();
+    private readonly rankInternRoot: FlexChoiceInternNode = {};
     private readonly choiceInternRoot: FlexChoiceInternNode = {};
     private readonly programInternRoot: FlexProgramInternNode = { programId: EMPTY_PROGRAM_ID };
     private readonly emissionIds = new WeakMap<FlexEmission, number>();
@@ -91,6 +95,14 @@ export class FlexProgramStore {
         alternatives: readonly FlexAlternative[]
     ): FlexProgramId {
         return this.appendEmission(parentId, this.canonicalizeChoice(alternatives, FLEX_MERGE_FLAGS_CONFLICT));
+    }
+
+    public appendRank(
+        parentId: FlexProgramId,
+        enchantId: number,
+        profileId: FlexRankProfileId
+    ): FlexProgramId {
+        return this.appendCanonicalEmission(parentId, this.getRankEmission(enchantId, profileId));
     }
 
     public appendCanonicalChoice(
@@ -117,6 +129,10 @@ export class FlexProgramStore {
 
     public prepareFixedEmission(packedEnchant: PackedEnchant): FlexFixedEmission {
         return this.getFixedEmission(packedEnchant);
+    }
+
+    public prepareRankEmission(enchantId: number, profileId: FlexRankProfileId): FlexRankEmission {
+        return this.getRankEmission(enchantId, profileId);
     }
 
     public prepareCanonicalChoiceFromArrays(
@@ -212,6 +228,8 @@ export class FlexProgramStore {
                 return;
             }
 
+            if (emission.kind === 'rank') return;
+
             if (emission.alternatives.length > 0
                 && emission.alternatives.every(alternative => alternative.packedEnchant === targetClueId)) {
                 guaranteed = true;
@@ -281,6 +299,9 @@ export class FlexProgramStore {
         if (emission.kind === 'fixed') {
             return this.getFixedEmission(emission.packedEnchant);
         }
+        if (emission.kind === 'rank') {
+            return this.getRankEmission(emission.enchantId, emission.profileId);
+        }
 
         const canonical = this.canonicalizeChoice(emission.alternatives, emission.mergeFlags);
         if (canonical.totalWeight !== emission.totalWeight) {
@@ -290,7 +311,11 @@ export class FlexProgramStore {
     }
 
     private createMergeFlags(parent: FlexMergeFlags, emission: FlexEmission): FlexMergeFlags {
-        const emissionFlags = emission.kind === 'choice' ? emission.mergeFlags : FLEX_MERGE_FLAGS_NONE;
+        const emissionFlags = emission.kind === 'choice'
+            ? emission.mergeFlags
+            : emission.kind === 'rank'
+                ? FLEX_MERGE_FLAGS_RANK
+                : FLEX_MERGE_FLAGS_NONE;
         return parent | emissionFlags;
     }
 
@@ -330,6 +355,30 @@ export class FlexProgramStore {
         return emission;
     }
 
+    private getRankEmission(enchantId: number, profileId: FlexRankProfileId): FlexRankEmission {
+        if (!Number.isInteger(enchantId) || enchantId < 0) {
+            throw new Error(`Flex rank emission enchant ID must be a non-negative integer, got ${String(enchantId)}.`);
+        }
+
+        let node = this.rankInternRoot;
+        node = getOrCreateChoiceInternNode(node, profileId as number);
+        node = getOrCreateChoiceInternNode(node, enchantId);
+        if (node.emission !== undefined) {
+            const emission = node.emission;
+            if (emission.kind !== 'rank') throw new Error('Flex rank interner collided with a non-rank emission.');
+            return emission;
+        }
+
+        const emission = Object.freeze({
+            kind: 'rank' as const,
+            enchantId,
+            profileId
+        });
+        node.emission = emission;
+        this.emissionIds.set(emission, this.nextEmissionId++);
+        return emission;
+    }
+
     private getChoiceEmission(
         alternatives: readonly FlexAlternative[],
         mergeFlags: FlexMergeFlags
@@ -344,7 +393,10 @@ export class FlexProgramStore {
             totalWeight += alternative.weight;
         }
 
-        if (node.emission) return node.emission;
+        if (node.emission) {
+            if (node.emission.kind !== 'choice') throw new Error('Flex choice interner collided with a non-choice emission.');
+            return node.emission;
+        }
 
         const canonicalAlternatives = Object.freeze([...alternatives]);
         const emission = Object.freeze({
@@ -376,7 +428,10 @@ export class FlexProgramStore {
             totalWeight += weight;
         }
 
-        if (node.emission) return node.emission;
+        if (node.emission) {
+            if (node.emission.kind !== 'choice') throw new Error('Flex choice interner collided with a non-choice emission.');
+            return node.emission;
+        }
 
         const canonicalAlternatives = new Array<FlexAlternative>(length);
         for (let index = 0; index < length; index++) {
@@ -487,13 +542,14 @@ export class FlexProgramStore {
     }
 
     private compareEmissions(left: FlexEmission, right: FlexEmission): number {
-        if (left.kind !== right.kind) return left.kind === 'fixed' ? -1 : 1;
+        if (left.kind !== right.kind) return getEmissionKindOrder(left.kind) - getEmissionKindOrder(right.kind);
         if (left.kind === 'fixed' && right.kind === 'fixed') return Number(left.packedEnchant) - Number(right.packedEnchant);
         return this.createEmissionKey(left).localeCompare(this.createEmissionKey(right));
     }
 
     private createEmissionKey(emission: FlexEmission): string {
         if (emission.kind === 'fixed') return `f:${String(emission.packedEnchant)}`;
+        if (emission.kind === 'rank') return `r:${String(emission.profileId)}:${String(emission.enchantId)}`;
         const flags = `${hasFlexConflictMerge(emission.mergeFlags) ? 'c' : '-'}${hasFlexRankMerge(emission.mergeFlags) ? 'r' : '-'}`;
         return `c:${flags}:${emission.alternatives
             .map(alternative => `${String(alternative.packedEnchant)}:${alternative.weight}`)
@@ -507,6 +563,7 @@ export class FlexProgramStore {
 
     private createFamilyEmissionKey(emission: FlexEmission): string {
         if (emission.kind === 'fixed') return `f:${String(getEnchantId(emission.packedEnchant))}`;
+        if (emission.kind === 'rank') return `f:${String(emission.enchantId)}`;
 
         const weightsByEnchant = new Map<number, number>();
         for (const alternative of emission.alternatives) {
@@ -563,6 +620,17 @@ export class FlexProgramStore {
 
 function getEnchantId(packedEnchant: PackedEnchant): number {
     return packedEnchant >> PACKING_CONSTANTS.ENCHANT_SHIFT;
+}
+
+function getEmissionKindOrder(kind: FlexEmission['kind']): number {
+    switch (kind) {
+        case 'fixed':
+            return 0;
+        case 'rank':
+            return 1;
+        case 'choice':
+            return 2;
+    }
 }
 
 function getOrCreateChoiceInternNode(parent: FlexChoiceInternNode, key: number): FlexChoiceInternNode {

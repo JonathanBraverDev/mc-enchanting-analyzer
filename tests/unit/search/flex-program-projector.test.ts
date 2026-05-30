@@ -10,7 +10,8 @@ import {
     FlexProgramStore,
     FlexProjector,
     type FlexNodeId,
-    type FlexPendingEntry
+    type FlexPendingEntry,
+    type FlexRankProfile
 } from '#lib/search/flex/index.js';
 
 const packed = (id: number, rank = 1): PackedEnchant => ((id << 8) | rank) as PackedEnchant;
@@ -21,11 +22,14 @@ const smite = packed(2, 4);
 const looting = packed(3, 3);
 const unbreaking = packed(4, 3);
 const sharpnessThree = packed(1, 3);
+const unbreakingTwo = packed(4, 2);
 const enchantToIndex = new Map<number, number>([
     [sharpness, 1],
     [smite, 2],
     [looting, 3],
-    [unbreaking, 4]
+    [unbreaking, 4],
+    [sharpnessThree, 5],
+    [unbreakingTwo, 6]
 ]);
 
 const combo = (...enchants: PackedEnchant[]) => ComboUtils.pack([...enchants], enchantToIndex);
@@ -203,6 +207,26 @@ describe('FlexProjector', () => {
         assert.strictEqual(projected.projectedMass, 24n);
         assert.strictEqual(projected.clueIncompatible, 0n);
         assert.strictEqual(projected.projectionLoss, 0n);
+    });
+
+    it('projects Rank emissions with profile-level correlation', () => {
+        const store = new FlexProgramStore();
+        const profile = createRankProfile();
+        const projector = new FlexProjector(store, enchantToIndex, {
+            rankProfiles: { get: () => profile }
+        });
+        const damage = store.appendRank(store.empty, sharpness >> 8, profile.id);
+        const fullProgram = store.appendRank(damage, unbreaking >> 8, profile.id);
+
+        const projected = projector.projectResults(new Map([[fullProgram, 50n]]));
+
+        assert.strictEqual(projected.results.get(combo(sharpnessThree, unbreakingTwo)), 20n);
+        assert.strictEqual(projected.results.get(combo(sharpness, unbreaking)), 30n);
+        assert.strictEqual(projected.results.has(combo(sharpnessThree, unbreaking)), false);
+        assert.strictEqual(projected.results.has(combo(sharpness, unbreakingTwo)), false);
+        assert.strictEqual(projected.projectedMass, 50n);
+        assert.strictEqual(projected.projectionLoss, 0n);
+        assert.strictEqual(store.hasRankMerge(fullProgram), true);
     });
 
     it('keeps only exact clue matches inside a choice emission', () => {
@@ -581,4 +605,49 @@ function toMapRecord(source: ReadonlyMap<number, bigint>): Record<string, string
         if (mass !== 0n) result[key] = mass.toString();
     }
     return result;
+}
+
+function createRankProfile(): FlexRankProfile {
+    return Object.freeze({
+        id: 0 as FlexRankProfile['id'],
+        familyKey: 'test-family',
+        childLevel: 5,
+        sources: Object.freeze([
+            Object.freeze({
+                exactKey: 'pool:a',
+                levelCount: 1,
+                sourceMass: 20n,
+                profileWeight: 2n
+            }),
+            Object.freeze({
+                exactKey: 'pool:b',
+                levelCount: 1,
+                sourceMass: 30n,
+                profileWeight: 3n
+            })
+        ]),
+        totalSourceMass: 50n,
+        totalWeight: 5n,
+        weightGcd: 1n,
+        enchants: Object.freeze([
+            Object.freeze({
+                enchantId: sharpness >> 8,
+                alternatives: Object.freeze([
+                    Object.freeze({ packedEnchant: sharpnessThree, weight: 2n }),
+                    Object.freeze({ packedEnchant: sharpness, weight: 3n })
+                ]),
+                sourcePackedEnchants: Object.freeze([sharpnessThree, sharpness])
+            }),
+            Object.freeze({
+                enchantId: unbreaking >> 8,
+                alternatives: Object.freeze([
+                    Object.freeze({ packedEnchant: unbreakingTwo, weight: 2n }),
+                    Object.freeze({ packedEnchant: unbreaking, weight: 3n })
+                ]),
+                sourcePackedEnchants: Object.freeze([unbreakingTwo, unbreaking])
+            })
+        ]),
+        rankVariantEnchantCount: 2,
+        rankAlternativeCount: 4
+    });
 }

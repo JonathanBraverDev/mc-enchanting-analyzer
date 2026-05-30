@@ -473,7 +473,9 @@ function edgeChoiceNames(fixture: GroupedGraphFixture, edge: FlexEdge): readonly
     const emission = getLastEmission(fixture, edge);
     const packedEnchants = emission.kind === 'fixed'
         ? [emission.packedEnchant]
-        : emission.alternatives.map(alternative => alternative.packedEnchant);
+        : emission.kind === 'choice'
+            ? emission.alternatives.map(alternative => alternative.packedEnchant)
+            : [];
     return packedEnchants
         .map(packed => fixture.registry.revIdMap[ComboUtils.getEnchantId(packed)]!)
         .sort();
