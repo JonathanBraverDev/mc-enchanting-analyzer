@@ -16,6 +16,7 @@ This note records the design conclusion from the rank-parametric pool prototype 
 - [Absorbing Merge Invariant](#absorbing-merge-invariant)
 - [Order-Agnostic Pick History](#order-agnostic-pick-history)
 - [Identity Axes](#identity-axes)
+- [Current Profile ID Meaning](#current-profile-id-meaning)
 - [Current Prototype Mismatch](#current-prototype-mismatch)
 - [Ownership Boundaries](#ownership-boundaries)
 - [Merge Plan](#merge-plan)
@@ -277,6 +278,20 @@ This also clarifies the role of nodes: a structural node does not need to know e
 
 The current `RegistryKernel.familySignature` is only a prototype input for this axis. It is rank-agnostic, but it still hashes entries in pool order. Real rank-family identity should canonicalize by structural enchant facts, such as sorted `(enchantId, weight, conflictBitset)` entries, because enchant list order is not part of the merge predicate.
 
+## Current Profile ID Meaning
+
+In the current prototype, `profileId` is an internal compression ID for an exact pool signature.
+
+`GroupedFlexSearchRun` assigns it from `pool.signature`, stores the exact `SearchPool`, and gives the projector a resolver:
+
+```text
+(profileId, enchantId) -> exact packed enchant
+```
+
+So `profileId` is not the durable semantic identity for rank merge. It is currently a convenient handle for one exact modified-level lens. Multiple modified levels with identical exact pools can share one profile ID; multiple rank-variant pools in the same family get different profile IDs.
+
+The long-term model can keep this compression internally, but the design should describe the semantic payload as a modified-level/profile lens mix. Projection needs the ability to resolve each abstract picked factor through every exact lens represented by the merged history.
+
 ## Current Prototype Mismatch
 
 The current rank-parametric prototype is useful, but it protects correctness by putting `profileId` into too many structural places:
@@ -295,6 +310,13 @@ So the merge cannot be "drop `profileId` from nodes" by itself. The selected-his
 
 There is also a current-code shape issue around `programId`. A node stores one `programId`, and reduced-mode frontier merging is keyed by graph/node identity. If a profile branch reuses a node first created by another profile branch, the reuse path must not keep only the first branch's selected history. Either the converged `programId` has to represent a canonical merged history object, or the frontier key must keep history/mix identity while sharing the structural expansion. Reusing the current exact-program meaning for rank-family merging would conflate two different identities.
 
+The frontier and residue tables have the same issue. `FlexCoordinator` currently forwards and merges mass by `(graphId, nodeId)`, then recovers `programId` from the node for pending projection. Forwarding residues are also keyed by `(graphId, nodeId)`. A rank-family implementation that lets multiple histories share one structural node must either:
+
+- make the node's history handle represent the full merged profile mix; or
+- re-key frontier and residue state by a history-aware key, such as `(graphId, nodeId, historyId/profileMixId)`.
+
+Dropping `profileId` from graph keys without changing frontier/residue identity would merge arithmetic and projection state too early.
+
 ## Ownership Boundaries
 
 Use this split as the rule when deciding where a detail goes:
@@ -306,6 +328,7 @@ Use this split as the rule when deciding where a detail goes:
 | Rank-family merge eligibility | Structural family ID / rank-family table |
 | Structural future state | `GroupedFlexGraph` node identity |
 | Weighted frontier mass | `FlexCoordinator` |
+| Frontier/residue identity | `FlexCoordinator`, keyed by structural node plus history/mix if histories can share nodes |
 | Selected pick history | `FlexProgramStore` behind `programId` |
 | Exact rank rehydration | `FlexProjector` |
 | Probe counters and temporary flags | `GroupedFlexSearchRun` diagnostics |
@@ -323,6 +346,7 @@ Useful acceptance checks:
 - `rankProfileMode: true` produces exact parity with default mode.
 - Clue snapshots still match exact mode.
 - Pending aggregate projection still conserves source mass across `projectedMass + clueIncompatible + projectionLoss`.
+- The reversed candidate-order family-signature test is flipped or replaced for the final merge key, because candidate order is not part of rank-family identity.
 
 Do not present this phase as a performance merge. It is a payload/projection proof.
 
@@ -410,6 +434,8 @@ If multiple profiles resolve to the same packed enchant, combine them.
 
 This is the missing bridge between "shared graph node" and "exact output rows".
 
+Clue filtering should happen at the exact-lens boundary before a profile enters the merged path when the target clue is an exact ranked enchant. If a modified-level lens cannot expose the target packed enchant at all, that lens can be counted as clue-incompatible immediately. The graph should not carry exact clue ranks in structural identity just to make this pruning convenient.
+
 ### Phase 5: Split Family Identity From Exact Program Identity
 
 Introduce the naming and storage boundary before changing graph keys:
@@ -433,7 +459,7 @@ Only after the factor-set and profile-mix representation is in place:
 
 This is the first phase that should be expected to reduce graph shape or node counts.
 
-An incremental implementation may share graph expansion first while keeping `(nodeId, historyId/profileSetId)` on the frontier. That is easier to reason about than forcing one structural node to own one selected-history `programId` immediately.
+An incremental implementation may share graph expansion first while keeping `(nodeId, historyId/profileSetId)` on the frontier and residue tables. That is easier to reason about than forcing one structural node to own one selected-history `programId` immediately.
 
 ### Phase 7: Add Diagnostics And Guardrails
 
@@ -483,6 +509,7 @@ Avoid carrying forward:
 5. What exact parity suite should gate the first merge: full snapshots, clue snapshots, pending aggregates, or all of them?
 6. Should the current `programId` keep exact-program semantics while a new `familyId` drives rank merge, or should `programId` be redefined as a merged history handle?
 7. Should the existing `familySignature` become order-agnostic, or should the final merge introduce a new canonical `familyId` while preserving the current signature for prototype diagnostics?
+8. Should the rank-family implementation be built as a parallel 8.1-style engine until parity is proven, then replace the current grouped engine instead of mutating it in place?
 
 ## Implementation Direction
 
@@ -492,6 +519,8 @@ The preferred follow-up is to keep the architectural slot that V8 currently call
 - replace exact packed fixed/choice emissions with interned generic pick factors;
 - split rank-family identity from exact program/history identity;
 - canonicalize rank-family identity independently of pool list order;
+- re-key frontier and residue state if structural nodes can be shared by multiple history/profile mixes;
+- do exact clue-rank pruning at the modified-level/profile lens boundary;
 - keep picked factors order-agnostic when they describe the same selected set;
 - attach `profileSetId` / `profileMixId` beside the factor set, not inside the factor;
 - keep graph nodes structural and pool-free;
