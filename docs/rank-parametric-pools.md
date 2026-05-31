@@ -260,7 +260,7 @@ not inside every factor. The current prototype's `rank-fixed` and `rank-choice` 
 
 The merge needs at least two separate identity axes:
 
-- family identity: rank-agnostic structural pool behavior;
+- family identity: rank-agnostic, order-agnostic structural pool behavior;
 - exact program identity: exact concrete pool/rank history for lanes that are truly identical;
 - merged history identity: canonical picked-factor set plus the profile/lens mix that currently shares that abstract path.
 
@@ -275,6 +275,8 @@ The important invariant is that structural reuse is gated by family identity, wh
 
 This also clarifies the role of nodes: a structural node does not need to know every concrete modified level it represents. It only needs a handle whose resolved history can say which modified-level lenses currently share this abstract picked-factor path.
 
+The current `RegistryKernel.familySignature` is only a prototype input for this axis. It is rank-agnostic, but it still hashes entries in pool order. Real rank-family identity should canonicalize by structural enchant facts, such as sorted `(enchantId, weight, conflictBitset)` entries, because enchant list order is not part of the merge predicate.
+
 ## Current Prototype Mismatch
 
 The current rank-parametric prototype is useful, but it protects correctness by putting `profileId` into too many structural places:
@@ -283,6 +285,7 @@ The current rank-parametric prototype is useful, but it protects correctness by 
 - `GroupedFlexGraph` registers rank profiles and emits `rank-fixed` / `rank-choice`, which is also useful.
 - `GroupedFlexGraph.createNodeStateKey()` includes `profileId`, which prevents cross-profile node reuse.
 - `GroupedFlexGraph.createGroupedExpansionShapeKey()` also includes `profileId`, which prevents shape reuse across rank-only variants.
+- `RegistryKernel.familySignature` is rank-agnostic but order-sensitive. That is fine for the current prototype, but not for the final rank-family merge key.
 
 That means the prototype mostly proves that the projector can rehydrate exact ranks from a profile lens. It does not yet prove the actual rank merge, because graph identity still treats profiles as separate structural state.
 
@@ -411,7 +414,7 @@ This is the missing bridge between "shared graph node" and "exact output rows".
 
 Introduce the naming and storage boundary before changing graph keys:
 
-- `familyId` / `poolFamilyId`: rank-agnostic structural pool behavior, built from enchant IDs, weights, conflicts, and continuation-relevant behavior, not packed ranks;
+- `familyId` / `poolFamilyId`: rank-agnostic structural pool behavior, built from a canonical order of enchant IDs, weights, conflicts, and continuation-relevant behavior, not packed ranks or registry order;
 - `programId`: exact concrete generated history if retaining the current meaning;
 - `historyId` / merged `programId`: canonical picked-factor set plus profile/lens mix if the program handle is redefined.
 
@@ -422,6 +425,7 @@ The exact names can follow the codebase, but the meanings should stay separate. 
 Only after the factor-set and profile-mix representation is in place:
 
 - key graphs by `pool.familySignature`;
+- make the family key order-agnostic before relying on it for final merge eligibility;
 - keep exact pool/program identity out of the family key;
 - key shape cache by structural inputs, not profile ID;
 - key node identity by exclusion mask, current level, count, and structural pool family, not profile ID;
@@ -447,7 +451,7 @@ The `origin/codex/rank-mux-probes` branch has useful probe counters and fallback
 
 From this branch:
 
-- `RegistryKernel.familySignature`;
+- the `RegistryKernel.familySignature` concept, with final canonicalization changed to be order-agnostic;
 - profile registration and exact lookup by `(profileId, enchantId)`;
 - projector support for resolving rank-parametric factors;
 - current `FlexProgramStore` canonicalization and interning patterns;
@@ -467,6 +471,7 @@ Avoid carrying forward:
 - storing whole pools on nodes;
 - storing `profileId` inside each picked factor;
 - using exact `programId` as the rank-family merge key;
+- using an order-sensitive pool list as the final rank-family key;
 - putting profile identity in structural keys once the profile-mix payload exists.
 
 ## Open Questions
@@ -477,6 +482,7 @@ Avoid carrying forward:
 4. Can the first real merge be restricted to singleton structural choices, leaving conflict-choice rank mixes for a later phase?
 5. What exact parity suite should gate the first merge: full snapshots, clue snapshots, pending aggregates, or all of them?
 6. Should the current `programId` keep exact-program semantics while a new `familyId` drives rank merge, or should `programId` be redefined as a merged history handle?
+7. Should the existing `familySignature` become order-agnostic, or should the final merge introduce a new canonical `familyId` while preserving the current signature for prototype diagnostics?
 
 ## Implementation Direction
 
@@ -485,6 +491,7 @@ The preferred follow-up is to keep the architectural slot that V8 currently call
 - keep structural graph nodes independent from exact ranked enchants;
 - replace exact packed fixed/choice emissions with interned generic pick factors;
 - split rank-family identity from exact program/history identity;
+- canonicalize rank-family identity independently of pool list order;
 - keep picked factors order-agnostic when they describe the same selected set;
 - attach `profileSetId` / `profileMixId` beside the factor set, not inside the factor;
 - keep graph nodes structural and pool-free;
