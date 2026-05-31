@@ -13,6 +13,7 @@ This note records the design conclusion from the rank-parametric pool prototype 
 - [Exact Enchant Resolution](#exact-enchant-resolution)
 - [Rank Merge Goal](#rank-merge-goal)
 - [Convergence Model](#convergence-model)
+- [Absorbing Merge Invariant](#absorbing-merge-invariant)
 - [Order-Agnostic Pick History](#order-agnostic-pick-history)
 - [Identity Axes](#identity-axes)
 - [Current Prototype Mismatch](#current-prototype-mismatch)
@@ -190,6 +191,21 @@ Fortune / Silk Touch conflict group
 ```
 
 paths that pick `Unbreaking` then the `Fortune/Silk Touch` choice, and paths that pick the same factors in the opposite order, should converge once the same abstract factors are present and the same continuation level has been reached.
+
+## Absorbing Merge Invariant
+
+Once two lanes reach the same rank-merged node, the merge is absorbing for future structural search.
+
+At that point the represented modified levels have:
+
+- the same canonical picked-factor set;
+- the same excluded enchant IDs;
+- the same effective continuation level and picked count;
+- the same remaining structural choices by enchant ID, weight, and conflict behavior.
+
+Every future decision emitted from that node applies to every modified-level profile in the profile mix. The graph does not need to replay or branch per modified level for those future decisions; the selected-history handle only needs to remember that the shared abstract path is resolved through multiple modified-level lenses during projection.
+
+This does not mean exact output ranks are merged away. It means the future structural decision is shared, while projection still evaluates the same picked factors once per modified-level lens and weights those exact results by the lane mass that reached the merged node.
 
 ## Order-Agnostic Pick History
 
