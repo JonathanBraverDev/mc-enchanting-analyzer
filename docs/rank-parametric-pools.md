@@ -194,14 +194,20 @@ paths that pick `Unbreaking` then the `Fortune/Silk Touch` choice, and paths tha
 
 ## Absorbing Merge Invariant
 
-Once two lanes reach the same rank-merged node, the merge is absorbing for future structural search.
+A rank-merged node exists only when all represented lanes already satisfy the merge predicate.
 
-At that point the represented modified levels have:
+All merged lanes must have:
 
+- the same rank-agnostic enchant ID pool;
 - the same canonical picked-factor set;
 - the same excluded enchant IDs;
 - the same effective continuation level and picked count;
+- the same `probContinue` behavior;
 - the same remaining structural choices by enchant ID, weight, and conflict behavior.
+
+Any deviation in one of those fields makes lanes similar, but not mergeable. They may still share diagnostics, family analysis, or future optimization ideas, but they cannot be represented as one runtime node.
+
+Once lanes do satisfy the merge predicate and reach the same rank-merged node, the merge is absorbing for future structural search.
 
 Every future decision emitted from that node applies to every modified-level profile in the profile mix. The graph does not need to replay or branch per modified level for those future decisions; the selected-history handle only needs to remember that the shared abstract path is resolved through multiple modified-level lenses during projection.
 
