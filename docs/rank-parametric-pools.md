@@ -16,7 +16,7 @@ This note records the design conclusion from the rank-parametric pool prototype 
 - [Absorbing Merge Invariant](#absorbing-merge-invariant)
 - [Order-Agnostic Pick History](#order-agnostic-pick-history)
 - [Identity Axes](#identity-axes)
-- [Current Profile ID Meaning](#current-profile-id-meaning)
+- [Current Exact Lens Handle](#current-exact-lens-handle)
 - [Current Prototype Mismatch](#current-prototype-mismatch)
 - [Ownership Boundaries](#ownership-boundaries)
 - [Merge Plan](#merge-plan)
@@ -63,11 +63,11 @@ The refined model keeps V8's ownership split and uses modified level as the pool
 
 Each weighted search root already comes from a modified level. That modified level defines the exact eligible bucket for projection. Different modified levels may share the same graph structure when their future behavior is equivalent, but the original modified level remains the semantic key for exact enchant recovery.
 
-The intended program-history record is a canonical set of generic pick factors plus a profile/lens set:
+The intended program-history record is a canonical set of generic pick factors plus an exact-lens mix:
 
 ```ts
 interface ProgramHistoryKey {
-  readonly profileSetId: number;
+  readonly lensMixId: number;
   readonly factors: readonly PickFactorId[];
 }
 
@@ -101,7 +101,7 @@ This keeps the main cost tradeoff favorable:
 
 - discovery still scans real pool entries and can aggregate them by `enchantId`;
 - program history can store abstract type-level factors;
-- projection pays a cached lookup by `(profileId/modifiedLevel, enchantId)`;
+- projection pays a cached lookup by `(modifiedLevel/exactLensId, enchantId)`;
 - exact result rows remain recoverable without storing full pools on nodes.
 
 If multiple modified levels share identical eligible buckets, caching can later use a pool or bucket signature. The semantic key should remain modified level unless and until equivalence is proven.
@@ -129,7 +129,7 @@ Only the exact packed rank differs. That difference belongs to selected-history 
 
 The rank merge is successful only if both statements stay true:
 
-- the graph can reuse structural nodes across rank profiles;
+- the graph can reuse structural nodes across exact rank lenses;
 - exact result rows, clue behavior, and pending aggregates still resolve to exact packed enchants.
 
 ## Convergence Model
@@ -173,7 +173,7 @@ For modern mechanics where the divisor is `2`, adjacent levels converge naturall
 
 So levels `12` and `13` must start as distinct roots, but after the first picked factor they can reach the same continuation level. Levels `14` and `15` do the same, and later the `6` and `7` groups can converge again.
 
-A rank-merged node is valid when every represented modified-level profile has reached the same structural continuation state:
+A rank-merged node is valid when every represented modified-level lens has reached the same structural continuation state:
 
 - same `currentLevel`;
 - same picked-factor count;
@@ -181,7 +181,7 @@ A rank-merged node is valid when every represented modified-level profile has re
 - same remaining structural entries by `enchantId`, weight, and conflict behavior;
 - same rational continuation behavior from this point forward.
 
-Exact packed ranks are not part of structural identity. They are profile-specific projection payload.
+Exact packed ranks are not part of structural identity. They are exact-lens projection payload.
 
 Small-pool items should benefit most. For a pickaxe-like pool such as:
 
@@ -210,7 +210,7 @@ Any deviation in one of those fields makes lanes similar, but not mergeable. The
 
 Once lanes do satisfy the merge predicate and reach the same rank-merged node, the merge is absorbing for future structural search.
 
-Every future decision emitted from that node applies to every modified-level profile in the profile mix. The graph does not need to replay or branch per modified level for those future decisions; the selected-history handle only needs to remember that the shared abstract path is resolved through multiple modified-level lenses during projection.
+Every future decision emitted from that node applies to every exact lens in the lens mix. The graph does not need to replay or branch per modified level for those future decisions; the selected-history handle only needs to remember that the shared abstract path is resolved through multiple modified-level lenses during projection.
 
 This does not mean exact output ranks are merged away. It means the future structural decision is shared, while projection still evaluates the same picked factors once per modified-level lens and weights those exact results by the lane mass that reached the merged node.
 
@@ -240,19 +240,19 @@ interface PickAlternative {
 }
 
 interface ProgramHistoryKey {
-  readonly profileSetId: number;
+  readonly lensMixId: number;
   readonly factors: readonly PickFactorId[]; // canonical sorted order
 }
 ```
 
-A solid picked enchant is a one-alternative factor. A conflict/Plex choice is a multi-alternative factor. A factor is keyed by abstract `enchantId`, not packed rank, so it can be shared by rank profiles.
+A solid picked enchant is a one-alternative factor. A conflict/Plex choice is a multi-alternative factor. A factor is keyed by abstract `enchantId`, not packed rank, so it can be shared by rank lenses.
 
 Do not encode this as a concrete `PackedEnchant`. A packed enchant is a resolved leaf: `enchantId + rank`. A pick factor is a projection factor: one or more abstract enchant IDs plus weights.
 
-Profile identity should sit beside the factor set:
+Exact-lens identity should sit beside the factor set:
 
 ```text
-profileSet/profileMix + unordered picked factors
+lensMix + unordered picked factors
 ```
 
 not inside every factor. The current prototype's `rank-fixed` and `rank-choice` put `profileId` inside the emission identity; that protects correctness, but prevents true convergence.
@@ -263,24 +263,34 @@ The merge needs at least two separate identity axes:
 
 - family identity: rank-agnostic, order-agnostic structural pool behavior;
 - exact program identity: exact concrete pool/rank history for lanes that are truly identical;
-- merged history identity: canonical picked-factor set plus the profile/lens mix that currently shares that abstract path.
+- merged history identity: canonical picked-factor set plus the exact-lens mix that currently shares that abstract path.
 
-Current `programId` is useful for Plex-style merging where lanes share the same exact generated factors. Rank merge is different. Two lanes can share the same family identity while still resolving factors through different modified-level lenses.
+Current `programId` is useful for Plex-style merging where lanes share the same exact generated factors. Rank merge is different. Two lanes can share the same family identity while still resolving factors through different exact lenses.
 
 So the implementation should not make `programId` mean both "exact same program" and "rank family that can converge". Either:
 
 - keep `programId` for exact program identity and add a separate `familyId` / `historyFamilyId` for rank-agnostic structural merging; or
-- redefine the program handle to point at a merged history object that explicitly contains the profile/lens mix.
+- redefine the program handle to point at a merged history object that explicitly contains the exact-lens mix.
 
-The important invariant is that structural reuse is gated by family identity, while exact projection is gated by the profile/lens mix. If two pools have different family IDs, they cannot merge just because they have enough future depth. If two lanes share both family identity and exact program identity, they are the same concrete tree and can merge completely.
+The important invariant is that structural reuse is gated by family identity, while exact projection is gated by the exact-lens mix. If two pools have different family IDs, they cannot merge just because they have enough future depth. If two lanes share both family identity and exact program identity, they are the same concrete tree and can merge completely.
 
-This also clarifies the role of nodes: a structural node does not need to know every concrete modified level it represents. It only needs a handle whose resolved history can say which modified-level lenses currently share this abstract picked-factor path.
+This also clarifies the role of nodes: a structural node does not need to know every concrete modified level it represents. It only needs a handle whose resolved history can say which exact lenses currently share this abstract picked-factor path.
 
 The current `RegistryKernel.familySignature` is only a prototype input for this axis. It is rank-agnostic, but it still hashes entries in pool order. Real rank-family identity should canonicalize by structural enchant facts, such as sorted `(enchantId, weight, conflictBitset)` entries, because enchant list order is not part of the merge predicate.
 
-## Current Profile ID Meaning
+## Current Exact Lens Handle
 
-In the current prototype, `profileId` is an internal compression ID for an exact pool signature.
+The final design should not depend on a concept named `profileId`. It needs exact lenses.
+
+An exact lens is whatever compact handle can answer:
+
+```text
+(lens, enchantId) -> exact packed enchant
+```
+
+The semantic lens is a modified-level pool. An implementation may compress multiple modified levels with identical exact pools into one internal exact-lens ID, but that is storage detail, not the design concept.
+
+In the current prototype, `profileId` is such a storage detail: an internal compression ID for an exact pool signature.
 
 `GroupedFlexSearchRun` assigns it from `pool.signature`, stores the exact `SearchPool`, and gives the projector a resolver:
 
@@ -290,7 +300,7 @@ In the current prototype, `profileId` is an internal compression ID for an exact
 
 So `profileId` is not the durable semantic identity for rank merge. It is currently a convenient handle for one exact modified-level lens. Multiple modified levels with identical exact pools can share one profile ID; multiple rank-variant pools in the same family get different profile IDs.
 
-The long-term model can keep this compression internally, but the design should describe the semantic payload as a modified-level/profile lens mix. Projection needs the ability to resolve each abstract picked factor through every exact lens represented by the merged history.
+The long-term model can keep this compression internally, but the design should describe the semantic payload as an exact-lens mix. Projection needs the ability to resolve each abstract picked factor through every exact lens represented by the merged history.
 
 ## Current Prototype Mismatch
 
@@ -298,22 +308,22 @@ The current rank-parametric prototype is useful, but it protects correctness by 
 
 - `GroupedFlexSearchRun` keys graphs by `pool.familySignature`, which is the right direction.
 - `GroupedFlexGraph` registers rank profiles and emits `rank-fixed` / `rank-choice`, which is also useful.
-- `GroupedFlexGraph.createNodeStateKey()` includes `profileId`, which prevents cross-profile node reuse.
+- `GroupedFlexGraph.createNodeStateKey()` includes `profileId`, which prevents cross-lens node reuse.
 - `GroupedFlexGraph.createGroupedExpansionShapeKey()` also includes `profileId`, which prevents shape reuse across rank-only variants.
 - `RegistryKernel.familySignature` is rank-agnostic but order-sensitive. That is fine for the current prototype, but not for the final rank-family merge key.
 
-That means the prototype mostly proves that the projector can rehydrate exact ranks from a profile lens. It does not yet prove the actual rank merge, because graph identity still treats profiles as separate structural state.
+That means the prototype mostly proves that the projector can rehydrate exact ranks from an exact lens. It does not yet prove the actual rank merge, because graph identity still treats exact lenses as separate structural state.
 
-The opposite mistake would be removing `profileId` from graph identity while leaving only a single `profileId` on each program emission. That would merge mass whose exact-rank lens differs, but the surviving node would point at only one profile's history. Projection would then silently assign some mass to the wrong exact rank.
+The opposite mistake would be removing `profileId` from graph identity while leaving only a single `profileId` on each program emission. That would merge mass whose exact-rank lens differs, but the surviving node would point at only one exact lens's history. Projection would then silently assign some mass to the wrong exact rank.
 
-So the merge cannot be "drop `profileId` from nodes" by itself. The selected-history side must carry a profile set/mix or modified-level lens for the mass that reached the merged structural node.
+So the merge cannot be "drop `profileId` from nodes" by itself. The selected-history side must carry an exact-lens mix for the mass that reached the merged structural node.
 
 There is also a current-code shape issue around `programId`. A node stores one `programId`, and reduced-mode frontier merging is keyed by graph/node identity. If a profile branch reuses a node first created by another profile branch, the reuse path must not keep only the first branch's selected history. Either the converged `programId` has to represent a canonical merged history object, or the frontier key must keep history/mix identity while sharing the structural expansion. Reusing the current exact-program meaning for rank-family merging would conflate two different identities.
 
 The frontier and residue tables have the same issue. `FlexCoordinator` currently forwards and merges mass by `(graphId, nodeId)`, then recovers `programId` from the node for pending projection. Forwarding residues are also keyed by `(graphId, nodeId)`. A rank-family implementation that lets multiple histories share one structural node must either:
 
-- make the node's history handle represent the full merged profile mix; or
-- re-key frontier and residue state by a history-aware key, such as `(graphId, nodeId, historyId/profileMixId)`.
+- make the node's history handle represent the full merged lens mix; or
+- re-key frontier and residue state by a history-aware key, such as `(graphId, nodeId, historyId/lensMixId)`.
 
 Dropping `profileId` from graph keys without changing frontier/residue identity would merge arithmetic and projection state too early.
 
@@ -328,7 +338,7 @@ Use this split as the rule when deciding where a detail goes:
 | Rank-family merge eligibility | Structural family ID / rank-family table |
 | Structural future state | `GroupedFlexGraph` node identity |
 | Weighted frontier mass | `FlexCoordinator` |
-| Frontier/residue identity | `FlexCoordinator`, keyed by structural node plus history/mix if histories can share nodes |
+| Frontier/residue identity | `FlexCoordinator`, keyed by structural node plus history/lens mix if histories can share nodes |
 | Selected pick history | `FlexProgramStore` behind `programId` |
 | Exact rank rehydration | `FlexProjector` |
 | Probe counters and temporary flags | `GroupedFlexSearchRun` diagnostics |
@@ -358,7 +368,7 @@ Preferred conceptual payload:
 
 ```ts
 interface ProgramHistoryKey {
-  readonly profileSetId: number;
+  readonly lensMixId: number;
   readonly factors: readonly PickFactorId[];
 }
 
@@ -374,7 +384,7 @@ interface PickAlternative {
 }
 ```
 
-For implementation, `profileSetId` can point to compressed profile IDs, but those profiles must map back to exact modified-level pools and projection must explain the mapping. The semantic model should stay modified-level-first because exact rank recovery is defined by the original pool lens.
+For implementation, `lensMixId` can point to compressed exact-lens IDs, but those lenses must map back to exact modified-level pools and projection must explain the mapping. The semantic model should stay modified-level-first because exact rank recovery is defined by the original pool lens.
 
 The old names map as:
 
@@ -401,21 +411,21 @@ This phase should reuse the current `FlexProgramStore` interning pattern:
 - intern each abstract pick factor;
 - sort factor IDs in a canonical order;
 - intern the resulting factor list;
-- keep profile set/mix identity outside the factor itself.
+- keep exact-lens mix identity outside the factor itself.
 
-### Phase 4: Add Profile Mix Before Cross-Profile Node Reuse
+### Phase 4: Add Lens Mix Before Cross-Lens Node Reuse
 
-Before `profileId` can be removed from node identity, the program history must be able to represent merged rank lenses.
+Before exact-lens identity can be removed from node identity, the program history must be able to represent merged rank lenses.
 
 Conceptual shape:
 
 ```ts
 interface RankLensMix {
-  readonly profiles: readonly RankLensWeight[];
+  readonly lenses: readonly RankLensWeight[];
 }
 
 interface RankLensWeight {
-  readonly profileId: number;
+  readonly lensId: number;
   readonly weight: bigint | number;
 }
 ```
@@ -425,16 +435,16 @@ The mix is conditional composition at that program point, not global source prob
 Projection uses the mix like this:
 
 ```text
-for each profile in mix:
-  packedEnchant = resolve(profileId, enchantId)
-  add profile weight to that exact packed enchant
+for each lens in mix:
+  packedEnchant = resolve(lensId, enchantId)
+  add lens weight to that exact packed enchant
 ```
 
-If multiple profiles resolve to the same packed enchant, combine them.
+If multiple lenses resolve to the same packed enchant, combine them.
 
 This is the missing bridge between "shared graph node" and "exact output rows".
 
-Clue filtering should happen at the exact-lens boundary before a profile enters the merged path when the target clue is an exact ranked enchant. If a modified-level lens cannot expose the target packed enchant at all, that lens can be counted as clue-incompatible immediately. The graph should not carry exact clue ranks in structural identity just to make this pruning convenient.
+Clue filtering should happen at the exact-lens boundary before a lens enters the merged path when the target clue is an exact ranked enchant. If a modified-level lens cannot expose the target packed enchant at all, that lens can be counted as clue-incompatible immediately. The graph should not carry exact clue ranks in structural identity just to make this pruning convenient.
 
 ### Phase 5: Split Family Identity From Exact Program Identity
 
@@ -442,24 +452,24 @@ Introduce the naming and storage boundary before changing graph keys:
 
 - `familyId` / `poolFamilyId`: rank-agnostic structural pool behavior, built from a canonical order of enchant IDs, weights, conflicts, and continuation-relevant behavior, not packed ranks or registry order;
 - `programId`: exact concrete generated history if retaining the current meaning;
-- `historyId` / merged `programId`: canonical picked-factor set plus profile/lens mix if the program handle is redefined.
+- `historyId` / merged `programId`: canonical picked-factor set plus exact-lens mix if the program handle is redefined.
 
-The exact names can follow the codebase, but the meanings should stay separate. A family ID answers "can these lanes share future structure?" A program/history ID answers "what already got picked, and which profiles resolve it?"
+The exact names can follow the codebase, but the meanings should stay separate. A family ID answers "can these lanes share future structure?" A program/history ID answers "what already got picked, and which exact lenses resolve it?"
 
 ### Phase 6: Enable Structural Node Reuse
 
-Only after the factor-set and profile-mix representation is in place:
+Only after the factor-set and lens-mix representation is in place:
 
 - key graphs by `pool.familySignature`;
 - make the family key order-agnostic before relying on it for final merge eligibility;
 - keep exact pool/program identity out of the family key;
-- key shape cache by structural inputs, not profile ID;
-- key node identity by exclusion mask, current level, count, and structural pool family, not profile ID;
-- keep profile/lens information only in the selected-history payload.
+- key shape cache by structural inputs, not exact-lens ID;
+- key node identity by exclusion mask, current level, count, and structural pool family, not exact-lens ID;
+- keep exact-lens information only in the selected-history payload.
 
 This is the first phase that should be expected to reduce graph shape or node counts.
 
-An incremental implementation may share graph expansion first while keeping `(nodeId, historyId/profileSetId)` on the frontier and residue tables. That is easier to reason about than forcing one structural node to own one selected-history `programId` immediately.
+An incremental implementation may share graph expansion first while keeping `(nodeId, historyId/lensMixId)` on the frontier and residue tables. That is easier to reason about than forcing one structural node to own one selected-history `programId` immediately.
 
 ### Phase 7: Add Diagnostics And Guardrails
 
@@ -478,7 +488,7 @@ The `origin/codex/rank-mux-probes` branch has useful probe counters and fallback
 From this branch:
 
 - the `RegistryKernel.familySignature` concept, with final canonicalization changed to be order-agnostic;
-- profile registration and exact lookup by `(profileId, enchantId)`;
+- exact-lens registration and lookup by `(lensId, enchantId)`;
 - projector support for resolving rank-parametric factors;
 - current `FlexProgramStore` canonicalization and interning patterns;
 - tests that assert exact clue matching does not degrade into `rank >= target`.
@@ -498,13 +508,13 @@ Avoid carrying forward:
 - storing `profileId` inside each picked factor;
 - using exact `programId` as the rank-family merge key;
 - using an order-sensitive pool list as the final rank-family key;
-- putting profile identity in structural keys once the profile-mix payload exists.
+- putting exact-lens identity in structural keys once the lens-mix payload exists.
 
 ## Open Questions
 
-1. Is `modifiedLevel` the durable semantic key in program factors, with `profileId` only an internal compression, or should the implementation expose only profile IDs internally?
-2. Where should profile mixes be interned: `FlexProgramStore`, `GroupedFlexSearchRun`, or a small side table owned by the projector?
-3. Should the first implementation share structural expansions while keeping `(nodeId, historyId/profileSetId)` on the frontier?
+1. Is `modifiedLevel` the durable semantic key for exact lenses, with `lensId` only an internal compression, or should all runtime payloads use compressed exact-lens IDs?
+2. Where should lens mixes be interned: `FlexProgramStore`, the new rank-family run, or a small side table owned by the projector?
+3. Should the first implementation share structural expansions while keeping `(nodeId, historyId/lensMixId)` on the frontier?
 4. Can the first real merge be restricted to singleton structural choices, leaving conflict-choice rank mixes for a later phase?
 5. What exact parity suite should gate the first merge: full snapshots, clue snapshots, pending aggregates, or all of them?
 6. Should the current `programId` keep exact-program semantics while a new `familyId` drives rank merge, or should `programId` be redefined as a merged history handle?
@@ -519,10 +529,10 @@ The preferred follow-up is to keep the architectural slot that V8 currently call
 - replace exact packed fixed/choice emissions with interned generic pick factors;
 - split rank-family identity from exact program/history identity;
 - canonicalize rank-family identity independently of pool list order;
-- re-key frontier and residue state if structural nodes can be shared by multiple history/profile mixes;
-- do exact clue-rank pruning at the modified-level/profile lens boundary;
+- re-key frontier and residue state if structural nodes can be shared by multiple history/lens mixes;
+- do exact clue-rank pruning at the exact-lens boundary;
 - keep picked factors order-agnostic when they describe the same selected set;
-- attach `profileSetId` / `profileMixId` beside the factor set, not inside the factor;
+- attach `lensMixId` beside the factor set, not inside the factor;
 - keep graph nodes structural and pool-free;
 - let the projector resolve exact ranked enchants from the modified-level lens.
 
