@@ -6,6 +6,8 @@ export * from './FlexSnapshotBuilder.js';
 export * from './FlexCoordinator.js';
 export * from './RankPoolStore.js';
 export * from './RankSelectionStore.js';
+export * from './RankFamilyGraph.js';
+export * from './RankFamilySearchRun.js';
 export * from './GroupedFlexGraph.js';
 export * from './GroupedFlexSearchRun.js';
 export * from './FlexReducedKeyInvariant.js';
