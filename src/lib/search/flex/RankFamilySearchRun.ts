@@ -56,6 +56,7 @@ export interface RankFamilyPendingEntry {
 interface RankFamilyPendingRecord extends RankFamilyPendingEntry {
     readonly key: string;
     readonly sequence: number;
+    heapIndex: number;
 }
 
 interface RankFamilyPendingInput extends RankFamilyPendingEntry {
@@ -471,7 +472,7 @@ export class RankFamilySearchRun {
 
 class RankFamilyFrontier {
     private readonly heap: RankFamilyPendingRecord[] = [];
-    private readonly positionsByKey = new Map<string, number>();
+    private readonly recordsByKey = new Map<string, RankFamilyPendingRecord>();
     private nextSequence = 0;
 
     public get size(): number {
@@ -479,8 +480,7 @@ class RankFamilyFrontier {
     }
 
     public get(key: string): RankFamilyPendingRecord | undefined {
-        const position = this.positionsByKey.get(key);
-        return position === undefined ? undefined : this.heap[position];
+        return this.recordsByKey.get(key);
     }
 
     public values(): Iterable<RankFamilyPendingRecord> {
@@ -496,37 +496,41 @@ class RankFamilyFrontier {
         if (!first) return undefined;
 
         const last = this.heap.pop()!;
-        this.positionsByKey.delete(first.key);
+        this.recordsByKey.delete(first.key);
         if (this.heap.length > 0) {
             this.heap[0] = last;
-            this.positionsByKey.set(last.key, 0);
+            last.heapIndex = 0;
             this.sinkDown(0);
         }
         return first;
     }
 
     public set(record: RankFamilyPendingInput): void {
-        const existingPosition = this.positionsByKey.get(record.key);
-        if (existingPosition === undefined) {
-            this.heap.push(Object.freeze({
+        const existing = this.recordsByKey.get(record.key);
+        if (!existing) {
+            const pendingRecord = {
                 ...record,
-                sequence: this.nextSequence++
-            }));
-            this.positionsByKey.set(record.key, this.heap.length - 1);
-            this.bubbleUp(this.heap.length - 1);
+                sequence: this.nextSequence++,
+                heapIndex: this.heap.length
+            };
+            this.heap.push(pendingRecord);
+            this.recordsByKey.set(record.key, pendingRecord);
+            this.bubbleUp(pendingRecord.heapIndex);
             return;
         }
 
-        const previous = this.heap[existingPosition]!;
-        const updated = Object.freeze({
+        const previousMass = existing.mass;
+        const updated = {
             ...record,
-            sequence: previous.sequence
-        });
-        this.heap[existingPosition] = updated;
-        if (comparePendingRecords(updated, previous) > 0) {
-            this.bubbleUp(existingPosition);
+            sequence: existing.sequence,
+            heapIndex: existing.heapIndex
+        };
+        this.heap[existing.heapIndex] = updated;
+        this.recordsByKey.set(record.key, updated);
+        if (updated.mass >= previousMass) {
+            this.bubbleUp(updated.heapIndex);
         } else {
-            this.sinkDown(existingPosition);
+            this.sinkDown(updated.heapIndex);
         }
     }
 
@@ -565,8 +569,8 @@ class RankFamilyFrontier {
         const rightRecord = this.heap[right]!;
         this.heap[left] = rightRecord;
         this.heap[right] = leftRecord;
-        this.positionsByKey.set(rightRecord.key, left);
-        this.positionsByKey.set(leftRecord.key, right);
+        rightRecord.heapIndex = left;
+        leftRecord.heapIndex = right;
     }
 }
 
