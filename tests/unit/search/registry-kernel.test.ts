@@ -67,7 +67,7 @@ describe('RegistryKernel', () => {
         assert.strictEqual(modern.additionalEnchantmentLevelDivisor, 2);
     });
 
-    it('includes ordered base candidates in family signatures', () => {
+    it('keeps rank-family signatures stable across candidate order', () => {
         const forward = RegistryFactory.buildWithMutations('1.21.11', [
             { type: 'removeEnchantableItemRule', selector: { item: 'sword', valid_from: '1.0' } },
             {
@@ -97,7 +97,8 @@ describe('RegistryKernel', () => {
         const forwardPool = new RegistryKernel({ registry: forward, item: 'sword', material: 'diamond' }).getPool(30);
         const reversedPool = new RegistryKernel({ registry: reversed, item: 'sword', material: 'diamond' }).getPool(30);
 
-        assert.notStrictEqual(forwardPool.familySignature, reversedPool.familySignature);
+        assert.notStrictEqual(forwardPool.signature, reversedPool.signature);
+        assert.strictEqual(forwardPool.familySignature, reversedPool.familySignature);
     });
 
     it('projects packed pool entries needed by shared search graphs', () => {
