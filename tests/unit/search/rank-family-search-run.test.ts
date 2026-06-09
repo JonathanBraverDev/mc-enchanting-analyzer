@@ -119,6 +119,23 @@ describe('RankFamilySearchRun', () => {
         assertMassConserved(run);
     });
 
+    it('replays reopened frontier keys through cached structural expansions', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'sword', material: 'diamond' });
+        const run = new RankFamilySearchRun(kernel);
+        run.seedXp(30);
+
+        while (run.getPendingEntries().length > 0) {
+            assert.strictEqual(run.advance(1), 1);
+        }
+
+        const stats = run.getMemoryStats();
+        const expansionBuilds = stats.graphs.reduce((sum, graph) => sum + graph.expansionBuildCount, 0);
+        assert.ok(stats.lateForwardCount > 0);
+        assert.strictEqual(stats.iterations, expansionBuilds);
+        assertMassConserved(run);
+    });
+
     it('projects tiny exhaustive sword results with Flex parity', () => {
         assertRankFamilyProjectionParity('1.21.11', 'sword', 'diamond', 1);
     });

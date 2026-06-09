@@ -343,6 +343,16 @@ frontier: merged by (graphId, graphNodeId, factorSetId)
 residue bucket: same key, but numerators split by rankPoolId
 ```
 
+Reopened frontier keys are not counted as new structural iterations. If a late parent sends mass into a key that was already expanded, and that key is the next key the existing max-mass scheduler would pop, the runtime replays that mass through the cached expansion immediately and increments `lateForwardCount`. This preserves Flex-style processing order and integer residue timing while separating:
+
+```text
+iterations: first structural frontier expansion for a key
+lateForwardCount: cached replay for late mass into an already-expanded key
+expansionBuildCount: unique structural expansion construction
+```
+
+Do not replace this with count-order/topological batching unless rank-family intentionally adopts a new canonical mass model. Count-order batching eliminates more pending churn, but it changes tiny integer projection parity because stop/continue floors and residue recovery are order-sensitive.
+
 ## Projection Model
 
 Projection is the exact-rank boundary for the standalone rank-family runtime.
@@ -509,6 +519,7 @@ Pushed slices:
 - rank-free frontier keys `(graphId, graphNodeId, factorSetId)`;
 - mass diagnostics: `seededMass`, `pendingMass`, `resolvedMass`, `overflowMass`, and `roundingLoss`;
 - Flex-style frontier residue recovery with per-`rankPoolId` numerator preservation;
+- cached late-forward replay for already-expanded frontier keys, reported as `lateForwardCount`;
 - `RankFamilyProjector`;
 - exact tiny exhaustive projection parity tests for sword and book XP1.
 
@@ -519,11 +530,12 @@ Do not over-conserve edge splits by distributing integer remainders.
 Do not drop residues by simple flooring.
 Use Flex-style per-frontier-edge residues, keyed by the rank-free frontier identity.
 Within each residue bucket, keep numerators split by rankPoolId.
+Replayed late mass may use an existing cached expansion, but only when it is the next key under the same max-mass ordering.
 ```
 
 Known limitation:
 
-- Exhaustive sword XP10+ now has the same projected combo row set as Flex, but still has tiny integer mass differences on some rows. For `1.21.11 sword/diamond XP30`, the row count matches (`415`), but local comparison still found small per-row differences after per-rank-pool residue recovery. Do not wire rank-family into the public engine path until this is explained or eliminated.
+- Exhaustive sword XP10+ now has the same projected combo row set as Flex, but still has tiny integer mass differences on some rows. For `1.21.11 sword/diamond XP30`, the row count matches (`415`), but local comparison still found `124` differing rows with total absolute delta `144` and max row delta `3` after per-rank-pool residue recovery. Cached late-forward replay preserves that known diff while reducing structural iterations from `684` to `383` and reporting `301` late forwards. Do not wire rank-family into the public engine path until the parity difference is explained or eliminated.
 
 Current remaining work:
 

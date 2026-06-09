@@ -68,6 +68,7 @@ export interface RankFamilySearchRunMemoryStats {
     readonly resolvedMass: bigint;
     readonly overflowMass: bigint;
     readonly iterations: number;
+    readonly lateForwardCount: number;
     readonly roundingLoss: bigint;
     readonly graphs: readonly RankFamilyGraphMemoryStats[];
 }
@@ -92,12 +93,14 @@ export class RankFamilySearchRun {
     private readonly graphsByFamily = new Map<SearchPoolFamilySignature, RankFamilyGraphRecord>();
     private readonly graphs: RankFamilyGraph[] = [];
     private readonly pendingByKey = new Map<string, RankFamilyPendingEntry>();
+    private readonly expandedKeys = new Set<string>();
     private readonly residuesByKey = new Map<string, RankFamilyResidueRecord>();
     private readonly resolvedByFactorSet = new Map<FactorSetId, RankFamilyResolvedRecord>();
     private seededMass = 0n;
     private overflowMass = 0n;
     private pendingMergeCount = 0;
     private iterations = 0;
+    private lateForwardCount = 0;
     private roundingLoss = 0n;
     private seeded = false;
 
@@ -188,6 +191,7 @@ export class RankFamilySearchRun {
             resolvedMass,
             overflowMass: this.overflowMass,
             iterations: this.iterations,
+            lateForwardCount: this.lateForwardCount,
             roundingLoss: this.roundingLoss,
             graphs: this.graphs.map(graph => graph.getMemoryStats())
         };
@@ -197,37 +201,42 @@ export class RankFamilySearchRun {
         const current = this.popNextPending();
         if (!current) return false;
 
-        const graph = this.getGraph(current.entry.graphId);
-        const expansion = graph.getExpansion(current.entry.nodeId);
+        this.expandedKeys.add(current.key);
+        this.processEntry(current.key, current.entry);
+        this.iterations++;
+        this.drainLateForwardEntries();
+        return true;
+    }
+
+    private processEntry(key: string, entry: RankFamilyPendingEntry): void {
+        const graph = this.getGraph(entry.graphId);
+        const expansion = graph.getExpansion(entry.nodeId);
         this.assertRankPoolMixTotal(
-            this.selections.getRankPoolMix(current.entry.rankPoolMixId),
-            current.entry.mass
+            this.selections.getRankPoolMix(entry.rankPoolMixId),
+            entry.mass
         );
-        const split = this.splitByContinueProbability(current.entry.rankPoolMixId, expansion.probContinue);
+        const split = this.splitByContinueProbability(entry.rankPoolMixId, expansion.probContinue);
 
         if (split.stopMass > 0n) {
-            this.recordResolved(current.entry.factorSetId, split.stopMixId!, split.stopMass);
+            this.recordResolved(entry.factorSetId, split.stopMixId!, split.stopMass);
         }
 
         if (split.forwardMass > 0n) {
             if (expansion.terminalReason === 'overflow') {
                 this.overflowMass += split.forwardMass;
             } else if (expansion.totalWeight <= 0 || expansion.edges.length === 0) {
-                this.recordResolved(current.entry.factorSetId, split.forwardMixId!, split.forwardMass);
+                this.recordResolved(entry.factorSetId, split.forwardMixId!, split.forwardMass);
             } else {
                 this.forwardMass(
-                    current.key,
-                    current.entry.graphId,
-                    current.entry.factorSetId,
+                    key,
+                    entry.graphId,
+                    entry.factorSetId,
                     split.forwardMixId!,
                     expansion.edges,
                     expansion.totalWeight
                 );
             }
         }
-
-        this.iterations++;
-        return true;
     }
 
     private graphForPool(pool: SearchPool): RankFamilyGraphRecord {
@@ -244,6 +253,12 @@ export class RankFamilySearchRun {
     }
 
     private popNextPending(): { readonly key: string; readonly entry: RankFamilyPendingEntry } | undefined {
+        const selected = this.selectNextPending();
+        if (selected) this.pendingByKey.delete(selected.key);
+        return selected;
+    }
+
+    private selectNextPending(): { readonly key: string; readonly entry: RankFamilyPendingEntry } | undefined {
         let selectedKey: string | undefined;
         let selectedEntry: RankFamilyPendingEntry | undefined;
         for (const [key, entry] of this.pendingByKey.entries()) {
@@ -253,8 +268,18 @@ export class RankFamilySearchRun {
             }
         }
 
-        if (selectedKey) this.pendingByKey.delete(selectedKey);
         return selectedKey && selectedEntry ? { key: selectedKey, entry: selectedEntry } : undefined;
+    }
+
+    private drainLateForwardEntries(): void {
+        while (true) {
+            const current = this.selectNextPending();
+            if (!current || !this.expandedKeys.has(current.key)) return;
+
+            this.pendingByKey.delete(current.key);
+            this.lateForwardCount++;
+            this.processEntry(current.key, current.entry);
+        }
     }
 
     private forwardMass(
