@@ -30,6 +30,15 @@ export interface FactorSet {
     readonly factors: readonly FactorId[];
 }
 
+interface FactorSetRecord {
+    readonly id: FactorSetId;
+    readonly parentId: FactorSetId | undefined;
+    readonly appendedFactorId: FactorId | undefined;
+    readonly length: number;
+    readonly key: string;
+    factors?: readonly FactorId[] | undefined;
+}
+
 export interface Selection {
     readonly id: SelectionId;
     readonly factorSetId: FactorSetId;
@@ -59,8 +68,12 @@ export class RankSelectionStore {
 
     private readonly factors: PickFactor[] = [];
     private readonly factorIdsByKey = new Map<string, FactorId>();
-    private readonly factorSets: FactorSet[] = [Object.freeze({
+    private readonly factorSets: FactorSetRecord[] = [Object.freeze({
         id: EMPTY_FACTOR_SET_ID,
+        parentId: undefined,
+        appendedFactorId: undefined,
+        length: 0,
+        key: '',
         factors: Object.freeze([])
     })];
     private readonly factorSetIdsByKey = new Map<string, FactorSetId>([['', EMPTY_FACTOR_SET_ID]]);
@@ -73,7 +86,7 @@ export class RankSelectionStore {
         id: EMPTY_SELECTION_ID,
         factorSetId: EMPTY_FACTOR_SET_ID,
         rankPoolMixId: this.emptyRankPoolMixId,
-        factors: Object.freeze([])
+        factors: this.getFactorSetFactors(EMPTY_FACTOR_SET_ID)
     })];
     private readonly selectionIdsByKey = new Map<string, SelectionId>([
         [createSelectionKey(this.emptyRankPoolMixId, EMPTY_FACTOR_SET_ID), EMPTY_SELECTION_ID]
@@ -179,17 +192,7 @@ export class RankSelectionStore {
 
     public getOrCreateFactorSet(factors: readonly FactorId[]): FactorSetId {
         const canonicalFactors = this.canonicalizeFactorIds(factors);
-        const key = createFactorSetKey(canonicalFactors);
-        const existing = this.factorSetIdsByKey.get(key);
-        if (existing !== undefined) return existing;
-
-        const id = this.factorSets.length as FactorSetId;
-        this.factorSets.push(Object.freeze({
-            id,
-            factors: Object.freeze(canonicalFactors)
-        }));
-        this.factorSetIdsByKey.set(key, id);
-        return id;
+        return this.getOrCreateCanonicalFactorSet(canonicalFactors);
     }
 
     public appendFactorToSet(factorSetId: FactorSetId, factorId: FactorId): FactorSetId {
@@ -197,11 +200,14 @@ export class RankSelectionStore {
         const existing = this.appendedFactorSetIdsByBase.get(factorSetId)?.get(factorId);
         if (existing !== undefined) return existing;
 
-        const factorSet = this.getFactorSet(factorSetId);
-        if (factorSet.factors.includes(factorId)) {
+        const factorSet = this.getFactorSetRecord(factorSetId);
+        if (factorSetContains(factorSet.key, factorId)) {
             throw new Error(`Factor set ${factorSetId} already contains factor ${factorId}.`);
         }
-        const appended = this.getOrCreateFactorSet([...factorSet.factors, factorId]);
+        const appended = this.getOrCreateFactorSetFromKey(
+            insertFactorIdIntoFactorSetKey(factorSet.key, factorId),
+            factorSet.length + 1
+        );
         let appends = this.appendedFactorSetIdsByBase.get(factorSetId);
         if (!appends) {
             appends = new Map();
@@ -212,9 +218,11 @@ export class RankSelectionStore {
     }
 
     public getFactorSet(id: FactorSetId): FactorSet {
-        const factorSet = this.factorSets[id as number];
-        if (!factorSet) throw new Error(`Unknown factor set ID ${id}.`);
-        return factorSet;
+        const record = this.getFactorSetRecord(id);
+        return Object.freeze({
+            id: record.id,
+            factors: this.getFactorSetFactors(id)
+        });
     }
 
     public getOrCreateSelection(rankPoolMixId: RankPoolMixId, factorSetId: FactorSetId): SelectionId {
@@ -229,7 +237,7 @@ export class RankSelectionStore {
             id,
             factorSetId,
             rankPoolMixId,
-            factors: factorSet.factors
+            factors: this.getFactorSetFactors(factorSet.id)
         }));
         this.selectionIdsByKey.set(key, id);
         return id;
@@ -319,6 +327,53 @@ export class RankSelectionStore {
     private assertRankPoolMix(id: RankPoolMixId): void {
         if (!this.rankPoolMixes[id as number]) throw new Error(`Unknown rank pool mix ID ${id}.`);
     }
+
+    private getOrCreateCanonicalFactorSet(canonicalFactors: readonly FactorId[]): FactorSetId {
+        const key = createFactorSetKey(canonicalFactors);
+        return this.getOrCreateFactorSetFromKey(key, canonicalFactors.length);
+    }
+
+    private getFactorSetRecord(id: FactorSetId): FactorSetRecord {
+        const factorSet = this.factorSets[id as number];
+        if (!factorSet) throw new Error(`Unknown factor set ID ${id}.`);
+        return factorSet;
+    }
+
+    private getOrCreateFactorSetFromKey(key: string, length: number): FactorSetId {
+        const existing = this.factorSetIdsByKey.get(key);
+        if (existing !== undefined) return existing;
+
+        const appendedFactorId = getLastFactorIdFromKey(key);
+        const parentId = appendedFactorId === undefined
+            ? undefined
+            : this.getOrCreateFactorSetFromKey(removeLastFactorIdFromKey(key), length - 1);
+        const id = this.factorSets.length as FactorSetId;
+        this.factorSets.push({
+            id,
+            parentId,
+            appendedFactorId,
+            length,
+            key
+        });
+        this.factorSetIdsByKey.set(key, id);
+        return id;
+    }
+
+    public getFactorSetFactors(id: FactorSetId): readonly FactorId[] {
+        const factorSet = this.getFactorSetRecord(id);
+        if (factorSet.factors) return factorSet.factors;
+
+        const factors = new Array<FactorId>(factorSet.length);
+        let current: FactorSetRecord | undefined = factorSet;
+        let index = factorSet.length - 1;
+        while (current && current.appendedFactorId !== undefined) {
+            factors[index] = current.appendedFactorId;
+            current = current.parentId === undefined ? undefined : this.getFactorSetRecord(current.parentId);
+            index--;
+        }
+        factorSet.factors = Object.freeze(factors);
+        return factorSet.factors;
+    }
 }
 
 function createFactorKey(alternatives: readonly PickAlternative[]): string {
@@ -335,6 +390,48 @@ function createRankPoolMixKey(pools: readonly RankPoolWeight[]): string {
 
 function createFactorSetKey(factors: readonly FactorId[]): string {
     return factors.map(String).join(',');
+}
+
+function factorSetContains(key: string, factorId: FactorId): boolean {
+    if (key === '') return false;
+    const needle = String(factorId);
+    let start = 0;
+    while (start <= key.length) {
+        const end = key.indexOf(',', start);
+        const part = end === -1 ? key.slice(start) : key.slice(start, end);
+        if (part === needle) return true;
+        if (end === -1) return false;
+        start = end + 1;
+    }
+    return false;
+}
+
+function insertFactorIdIntoFactorSetKey(key: string, factorId: FactorId): string {
+    if (key === '') return String(factorId);
+
+    const factor = String(factorId);
+    let start = 0;
+    while (start <= key.length) {
+        const end = key.indexOf(',', start);
+        const part = end === -1 ? key.slice(start) : key.slice(start, end);
+        if (factorId < Number(part)) {
+            return `${key.slice(0, start)}${factor},${key.slice(start)}`;
+        }
+        if (end === -1) return `${key},${factor}`;
+        start = end + 1;
+    }
+    return `${key},${factor}`;
+}
+
+function getLastFactorIdFromKey(key: string): FactorId | undefined {
+    if (key === '') return undefined;
+    const lastSeparator = key.lastIndexOf(',');
+    return Number(lastSeparator === -1 ? key : key.slice(lastSeparator + 1)) as FactorId;
+}
+
+function removeLastFactorIdFromKey(key: string): string {
+    const lastSeparator = key.lastIndexOf(',');
+    return lastSeparator === -1 ? '' : key.slice(0, lastSeparator);
 }
 
 function createSelectionKey(rankPoolMixId: RankPoolMixId, factorSetId: FactorSetId): string {

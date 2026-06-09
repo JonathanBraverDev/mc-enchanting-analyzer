@@ -178,6 +178,7 @@ export class RankFamilySearchRun {
         while (advanced < maxSteps && this.step()) {
             advanced++;
         }
+        if (this.pending.size === 0) this.releaseCompletedFrontierState();
         return advanced;
     }
 
@@ -460,6 +461,11 @@ export class RankFamilySearchRun {
         if (mix.totalWeight !== expected) {
             throw new Error(`Rank-family mix total ${mix.totalWeight} does not match expected mass ${expected}.`);
         }
+    }
+
+    private releaseCompletedFrontierState(): void {
+        this.expandedKeys.clear();
+        this.residuesByKey.clear();
     }
 }
 
