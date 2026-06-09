@@ -9,4 +9,4 @@ Start here when you need the maintained project documentation:
 - [`../MASS_HANDLING.md`](../MASS_HANDLING.md) - probability mass accounting and residue rules.
 - [`public-api.md`](public-api.md) - supported library API boundary and release review policy.
 - [`search-engine.md`](search-engine.md) - search engine and factorized-tree reference.
-- [`rank-parametric-pools.md`](rank-parametric-pools.md) - clean rank-merge implementation plan.
+- [`rank-family-merge.md`](rank-family-merge.md) - clean rank-family merge implementation plan.

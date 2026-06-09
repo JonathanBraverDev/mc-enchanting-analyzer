@@ -1,8 +1,8 @@
-# Rank-Parametric Pool Design Note
+# Rank-Family Merge Plan
 
 ## Common Description
 
-This note records the clean rank-merge plan for V8 grouped search. The current prototype branch is useful archaeology for exact rank rehydration, but it should not drive the implementation architecture. The final design must keep graph structure, selected abstract factors, exact ranked pools, and projection ownership separate.
+This note records the clean rank-family merge plan for V8 grouped search. The current rank-parametric prototype branch is useful archaeology for exact rank rehydration, but it should not drive the implementation architecture. The final design must keep graph structure, selected abstract factors, exact ranked pools, and projection ownership separate.
 
 ## Table of Contents
 
@@ -25,7 +25,7 @@ This note records the clean rank-merge plan for V8 grouped search. The current p
 
 ## Purpose / Scope
 
-The goal is to let grouped search share future structure across modified levels whose pools differ only by exact enchant rank, while preserving exact user-facing result rows, clue behavior, and probability mass accounting.
+The goal is to let grouped search share rank-family future structure across modified levels whose pools differ only by exact enchant rank, while preserving exact user-facing result rows, clue behavior, and probability mass accounting.
 
 This document is an implementation plan, not a public API contract. It intentionally drops the old `profileId`, `lensId`, and `programId` framing from the clean design. Those names describe prototype mechanics or overloaded V8 internals, not the final ownership model.
 
