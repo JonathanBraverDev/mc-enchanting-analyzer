@@ -1,6 +1,7 @@
 import type { RankPoolId } from '#lib/search/flex/RankPoolStore.js';
 
 export type FactorId = number & { readonly __brand: 'FactorId' };
+export type FactorSetId = number & { readonly __brand: 'FactorSetId' };
 export type RankPoolMixId = number & { readonly __brand: 'RankPoolMixId' };
 export type SelectionId = number & { readonly __brand: 'SelectionId' };
 
@@ -24,39 +25,57 @@ export interface RankPoolMix {
     readonly totalWeight: bigint;
 }
 
+export interface FactorSet {
+    readonly id: FactorSetId;
+    readonly factors: readonly FactorId[];
+}
+
 export interface Selection {
     readonly id: SelectionId;
+    readonly factorSetId: FactorSetId;
     readonly rankPoolMixId: RankPoolMixId;
     readonly factors: readonly FactorId[];
 }
 
 export interface RankSelectionStoreMemoryStats {
     readonly factorCount: number;
+    readonly factorSetCount: number;
     readonly rankPoolMixCount: number;
     readonly selectionCount: number;
 }
 
+const EMPTY_FACTOR_SET_ID = 0 as FactorSetId;
 const EMPTY_SELECTION_ID = 0 as SelectionId;
 
 /**
  * Interns rank-agnostic picked factors and selected-state identities.
  *
- * `selectionId` is destination-state identity: factor order is canonicalized,
- * while exact rank-pool context is preserved through `rankPoolMixId`.
+ * `factorSetId` is the rank-agnostic selected-state component used for
+ * frontier merging. `selectionId` adds exact rank-pool context for projection.
  */
 export class RankSelectionStore {
+    public readonly emptyFactorSet: FactorSetId = EMPTY_FACTOR_SET_ID;
     public readonly emptySelection: SelectionId = EMPTY_SELECTION_ID;
 
     private readonly factors: PickFactor[] = [];
     private readonly factorIdsByKey = new Map<string, FactorId>();
-    private readonly rankPoolMixes: RankPoolMix[] = [];
-    private readonly rankPoolMixIdsByKey = new Map<string, RankPoolMixId>();
-    private readonly selections: Selection[] = [Object.freeze({
-        id: EMPTY_SELECTION_ID,
-        rankPoolMixId: this.getOrCreateRankPoolMix([]),
+    private readonly factorSets: FactorSet[] = [Object.freeze({
+        id: EMPTY_FACTOR_SET_ID,
         factors: Object.freeze([])
     })];
-    private readonly selectionIdsByKey = new Map<string, SelectionId>([['0|', EMPTY_SELECTION_ID]]);
+    private readonly factorSetIdsByKey = new Map<string, FactorSetId>([['', EMPTY_FACTOR_SET_ID]]);
+    private readonly rankPoolMixes: RankPoolMix[] = [];
+    private readonly rankPoolMixIdsByKey = new Map<string, RankPoolMixId>();
+    private readonly emptyRankPoolMixId = this.getOrCreateRankPoolMix([]);
+    private readonly selections: Selection[] = [Object.freeze({
+        id: EMPTY_SELECTION_ID,
+        factorSetId: EMPTY_FACTOR_SET_ID,
+        rankPoolMixId: this.emptyRankPoolMixId,
+        factors: Object.freeze([])
+    })];
+    private readonly selectionIdsByKey = new Map<string, SelectionId>([
+        [createSelectionKey(this.emptyRankPoolMixId, EMPTY_FACTOR_SET_ID), EMPTY_SELECTION_ID]
+    ]);
 
     public getOrCreateFactor(alternatives: readonly PickAlternative[]): FactorId {
         const canonical = this.canonicalizeAlternatives(alternatives);
@@ -108,30 +127,72 @@ export class RankSelectionStore {
         return mix;
     }
 
-    public getOrCreateSelection(rankPoolMixId: RankPoolMixId, factors: readonly FactorId[]): SelectionId {
-        this.assertRankPoolMix(rankPoolMixId);
+    public mergeRankPoolMixes(mixes: readonly RankPoolMixId[]): RankPoolMixId {
+        const pools: RankPoolWeight[] = [];
+        for (const mixId of mixes) {
+            const mix = this.getRankPoolMix(mixId);
+            pools.push(...mix.pools);
+        }
+        return this.getOrCreateRankPoolMix(pools);
+    }
+
+    public getOrCreateFactorSet(factors: readonly FactorId[]): FactorSetId {
         const canonicalFactors = this.canonicalizeFactorIds(factors);
-        const key = createSelectionKey(rankPoolMixId, canonicalFactors);
+        const key = createFactorSetKey(canonicalFactors);
+        const existing = this.factorSetIdsByKey.get(key);
+        if (existing !== undefined) return existing;
+
+        const id = this.factorSets.length as FactorSetId;
+        this.factorSets.push(Object.freeze({
+            id,
+            factors: Object.freeze(canonicalFactors)
+        }));
+        this.factorSetIdsByKey.set(key, id);
+        return id;
+    }
+
+    public appendFactorToSet(factorSetId: FactorSetId, factorId: FactorId): FactorSetId {
+        this.assertFactor(factorId);
+        const factorSet = this.getFactorSet(factorSetId);
+        if (factorSet.factors.includes(factorId)) {
+            throw new Error(`Factor set ${factorSetId} already contains factor ${factorId}.`);
+        }
+        return this.getOrCreateFactorSet([...factorSet.factors, factorId]);
+    }
+
+    public getFactorSet(id: FactorSetId): FactorSet {
+        const factorSet = this.factorSets[id as number];
+        if (!factorSet) throw new Error(`Unknown factor set ID ${id}.`);
+        return factorSet;
+    }
+
+    public getOrCreateSelection(rankPoolMixId: RankPoolMixId, factorSetId: FactorSetId): SelectionId {
+        this.assertRankPoolMix(rankPoolMixId);
+        const factorSet = this.getFactorSet(factorSetId);
+        const key = createSelectionKey(rankPoolMixId, factorSetId);
         const existing = this.selectionIdsByKey.get(key);
         if (existing !== undefined) return existing;
 
         const id = this.selections.length as SelectionId;
         this.selections.push(Object.freeze({
             id,
+            factorSetId,
             rankPoolMixId,
-            factors: Object.freeze(canonicalFactors)
+            factors: factorSet.factors
         }));
         this.selectionIdsByKey.set(key, id);
         return id;
     }
 
+    public getOrCreateSelectionForFactors(rankPoolMixId: RankPoolMixId, factors: readonly FactorId[]): SelectionId {
+        return this.getOrCreateSelection(rankPoolMixId, this.getOrCreateFactorSet(factors));
+    }
+
     public appendFactor(selectionId: SelectionId, factorId: FactorId): SelectionId {
         this.assertFactor(factorId);
         const selection = this.getSelection(selectionId);
-        if (selection.factors.includes(factorId)) {
-            throw new Error(`Selection ${selectionId} already contains factor ${factorId}.`);
-        }
-        return this.getOrCreateSelection(selection.rankPoolMixId, [...selection.factors, factorId]);
+        const factorSetId = this.appendFactorToSet(selection.factorSetId, factorId);
+        return this.getOrCreateSelection(selection.rankPoolMixId, factorSetId);
     }
 
     public getSelection(id: SelectionId): Selection {
@@ -143,6 +204,7 @@ export class RankSelectionStore {
     public getMemoryStats(): RankSelectionStoreMemoryStats {
         return {
             factorCount: this.factors.length,
+            factorSetCount: this.factorSets.length,
             rankPoolMixCount: this.rankPoolMixes.length,
             selectionCount: this.selections.length
         };
@@ -218,6 +280,10 @@ function createRankPoolMixKey(pools: readonly RankPoolWeight[]): string {
         .join(',');
 }
 
-function createSelectionKey(rankPoolMixId: RankPoolMixId, factors: readonly FactorId[]): string {
-    return `${String(rankPoolMixId)}|${factors.map(String).join(',')}`;
+function createFactorSetKey(factors: readonly FactorId[]): string {
+    return factors.map(String).join(',');
+}
+
+function createSelectionKey(rankPoolMixId: RankPoolMixId, factorSetId: FactorSetId): string {
+    return `${String(rankPoolMixId)}|${String(factorSetId)}`;
 }

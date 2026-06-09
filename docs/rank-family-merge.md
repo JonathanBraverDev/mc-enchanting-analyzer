@@ -107,23 +107,31 @@ interface PickAlternative {
 
 A solid enchant pick is a one-alternative factor. A conflict/Plex-style pick can be a multi-alternative factor. The factor stores abstract enchant IDs and weights, not packed ranks.
 
-### `selectionId`
+### `factorSetId`
 
-`selectionId` identifies the canonical selected abstract state.
+`factorSetId` identifies the canonical selected abstract factor set.
 
 It answers:
 
 ```text
-What selected abstract factors have we accumulated, and through which rank-pool mix?
+What selected abstract factors have we accumulated?
 ```
+
+`factorSetId` is deliberately not a path. It does not encode traversal order. Two different traversal orders that reach the same selected factor set must intern to the same `factorSetId`.
+
+The frontier merge key uses `factorSetId`, not `selectionId`, so rank-pool mixes can merge when two lanes reach the same structural future with the same abstract picks.
+
+### `selectionId`
+
+`selectionId` identifies the exact projection state.
 
 Definition:
 
 ```text
-selectionId = canonical selected factor set + rankPoolMixId
+selectionId = factorSetId + rankPoolMixId
 ```
 
-`selectionId` is deliberately not a path. It does not encode traversal order. Two different traversal orders that reach the same selected factor set and the same rank-pool mix must intern to the same `selectionId`.
+It is used when exact rank-pool context is required, especially projection and final result ownership.
 
 ### Removed Clean-Plan Concepts
 
@@ -132,8 +140,8 @@ Do not use these as clean-plan identities:
 - `programId`: overloaded old V8 handle. It mixed selected history, projection identity, and structural reuse pressure.
 - `profileId`: prototype compression handle for exact pool signatures.
 - `lensId`: old naming for exact modified-level/rank-pool resolution. Use `rankPoolId`.
-- `historyId`: too vague. Use `selectionId` for canonical selected state.
-- `pathId`: implies traversal order matters. Use `selectionId`.
+- `historyId`: too vague. Use `factorSetId` for canonical selected state and `selectionId` for projection state.
+- `pathId`: implies traversal order matters. Use `factorSetId`.
 
 ## Ownership Boundaries
 
@@ -144,7 +152,7 @@ Do not use these as clean-plan identities:
 | Rank-agnostic structural family | family table keyed by `familyId` |
 | Structural future state | grouped graph node identity |
 | Weighted frontier mass and residue | coordinator/frontier |
-| Abstract selected factors | selection/factor store |
+| Abstract selected factors | factor-set store |
 | Rank-pool mix internment | selection/factor store or adjacent rank-mix table |
 | Exact rank rehydration | projector |
 | Diagnostics and probes | run/coordinator diagnostics |
@@ -158,13 +166,13 @@ A merged runtime node is valid only when every represented lane already satisfie
 All merged lanes must have:
 
 - the same rank-agnostic enchant ID pool;
-- the same canonical selected `factorId` set;
+- the same canonical selected `factorSetId`;
 - the same excluded enchant IDs;
 - the same effective continuation level;
 - the same picked-factor count;
 - the same `probContinue` behavior;
 - the same remaining structural choices by enchant ID, weight, and conflict behavior;
-- the same projection-safe `rankPoolMixId`.
+- compatible exact rank-pool mixes that can be combined into a new `rankPoolMixId`.
 
 Any deviation makes lanes similar, but not mergeable. Similar lanes may share diagnostics or family analysis, but they cannot be represented as one runtime node.
 
@@ -223,22 +231,21 @@ Fortune / Silk Touch conflict group
 
 paths that pick `Unbreaking` then the `Fortune/Silk Touch` choice, and paths that pick the same factors in the opposite order, should converge once the same abstract factors are present and the same continuation level has been reached.
 
-## Selection Identity
+## Factor Set And Selection Identity
 
-Selected identity is destination-state identity, not traversal history.
+Selected factor-set identity is destination-state identity, not traversal history.
 
-These two paths must resolve to the same selected identity when the rank-pool mix is also the same:
+These two paths must resolve to the same factor-set identity:
 
 ```text
 pick Sharpness, then Unbreaking
 pick Unbreaking, then Sharpness
 ```
 
-The selected state should intern factors in canonical order:
+The selected factor set should intern factors in canonical order:
 
 ```ts
-interface SelectionKey {
-  readonly rankPoolMixId: number;
+interface FactorSetKey {
   readonly factors: readonly FactorId[]; // canonical sorted order
 }
 ```
@@ -246,16 +253,22 @@ interface SelectionKey {
 The frontier key should therefore be:
 
 ```text
-(graphNodeId, selectionId)
+(graphNodeId, factorSetId)
 ```
 
 or, if graph identity remains split during migration:
 
 ```text
-(graphId, graphNodeId, selectionId)
+(graphId, graphNodeId, factorSetId)
 ```
 
-It should not be keyed only by graph node. A shared structural node can be reached by multiple selected states that are not mergeable.
+It should not include `rankPoolMixId`. If the rank-pool mix is part of the frontier key, rank-variant lanes never meet and the optimization is nullified. Instead, a frontier entry carries mass plus `rankPoolMixId`; when another lane reaches the same `(graphId, graphNodeId, factorSetId)`, the coordinator merges mass and combines the rank-pool mixes.
+
+Projection then uses:
+
+```text
+selectionId = factorSetId + rankPoolMixId
+```
 
 ## Rank Pool Resolution
 

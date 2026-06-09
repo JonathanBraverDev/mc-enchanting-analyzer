@@ -57,13 +57,32 @@ describe('RankSelectionStore', () => {
             { enchantId: 3, weight: 1 }
         ]);
 
-        const firstPath = store.getOrCreateSelection(rankPoolMixId, [unbreaking, fortuneOrSilk]);
-        const secondPath = store.getOrCreateSelection(rankPoolMixId, [fortuneOrSilk, unbreaking]);
+        const firstFactorSet = store.getOrCreateFactorSet([unbreaking, fortuneOrSilk]);
+        const secondFactorSet = store.getOrCreateFactorSet([fortuneOrSilk, unbreaking]);
+        const firstPath = store.getOrCreateSelection(rankPoolMixId, firstFactorSet);
+        const secondPath = store.getOrCreateSelection(rankPoolMixId, secondFactorSet);
         const selection = store.getSelection(firstPath);
 
+        assert.strictEqual(firstFactorSet, secondFactorSet);
         assert.strictEqual(firstPath, secondPath);
         assert.deepStrictEqual(selection.factors, [unbreaking, fortuneOrSilk]);
+        assert.strictEqual(selection.factorSetId, firstFactorSet);
         assert.strictEqual(selection.rankPoolMixId, rankPoolMixId);
+    });
+
+    it('lets frontier identity ignore rank-pool mix while projection identity preserves it', () => {
+        const store = new RankSelectionStore();
+        const firstMix = store.getOrCreateSinglePoolMix(rankPoolId(1), 1n);
+        const secondMix = store.getOrCreateSinglePoolMix(rankPoolId(2), 1n);
+        const factor = store.getOrCreateSingletonFactor(4, 9);
+        const factorSet = store.getOrCreateFactorSet([factor]);
+
+        const firstSelection = store.getOrCreateSelection(firstMix, factorSet);
+        const secondSelection = store.getOrCreateSelection(secondMix, factorSet);
+
+        assert.strictEqual(store.getSelection(firstSelection).factorSetId, factorSet);
+        assert.strictEqual(store.getSelection(secondSelection).factorSetId, factorSet);
+        assert.notStrictEqual(firstSelection, secondSelection);
     });
 
     it('keeps equivalent factor sets separate when rank-pool mix differs', () => {
@@ -71,17 +90,37 @@ describe('RankSelectionStore', () => {
         const firstMix = store.getOrCreateSinglePoolMix(rankPoolId(1), 1n);
         const secondMix = store.getOrCreateSinglePoolMix(rankPoolId(2), 1n);
         const factor = store.getOrCreateSingletonFactor(4, 9);
+        const factorSet = store.getOrCreateFactorSet([factor]);
 
         assert.notStrictEqual(
-            store.getOrCreateSelection(firstMix, [factor]),
-            store.getOrCreateSelection(secondMix, [factor])
+            store.getOrCreateSelection(firstMix, factorSet),
+            store.getOrCreateSelection(secondMix, factorSet)
         );
+    });
+
+    it('merges rank-pool mixes for converged frontier entries', () => {
+        const store = new RankSelectionStore();
+        const firstMix = store.getOrCreateRankPoolMix([
+            { rankPoolId: rankPoolId(1), weight: 3n },
+            { rankPoolId: rankPoolId(2), weight: 5n }
+        ]);
+        const secondMix = store.getOrCreateRankPoolMix([
+            { rankPoolId: rankPoolId(2), weight: 7n },
+            { rankPoolId: rankPoolId(3), weight: 11n }
+        ]);
+        const merged = store.mergeRankPoolMixes([firstMix, secondMix]);
+
+        assert.deepStrictEqual(store.getRankPoolMix(merged).pools, [
+            { rankPoolId: rankPoolId(1), weight: 3n },
+            { rankPoolId: rankPoolId(2), weight: 12n },
+            { rankPoolId: rankPoolId(3), weight: 11n }
+        ]);
     });
 
     it('appends factors while preserving selected-state convergence', () => {
         const store = new RankSelectionStore();
         const rankPoolMixId = store.getOrCreateSinglePoolMix(rankPoolId(4), 1n);
-        const base = store.getOrCreateSelection(rankPoolMixId, []);
+        const base = store.getOrCreateSelection(rankPoolMixId, store.emptyFactorSet);
         const first = store.getOrCreateSingletonFactor(1, 1);
         const second = store.getOrCreateSingletonFactor(2, 1);
 
