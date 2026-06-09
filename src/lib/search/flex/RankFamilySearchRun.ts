@@ -347,24 +347,17 @@ export class RankFamilySearchRun {
             }
 
             const baseMass = sumRankPoolWeights(basePools);
-            if (baseMass > 0n) {
-                this.pushPending(
-                    graphId,
-                    edge.childId,
-                    factorSetId,
-                    this.selections.getOrCreateRankPoolMix(basePools),
-                    baseMass
-                );
-            }
-
             const promotedMass = sumRankPoolWeights(promotedPools);
-            if (promotedMass > 0n) {
+            const childMass = baseMass + promotedMass;
+            if (childMass > 0n) {
                 this.pushPending(
                     graphId,
                     edge.childId,
                     factorSetId,
-                    this.selections.getOrCreateRankPoolMix(promotedPools),
-                    promotedMass
+                    this.selections.getOrCreateRankPoolMix(
+                        promotedMass > 0n ? [...basePools, ...promotedPools] : basePools
+                    ),
+                    childMass
                 );
             }
 
