@@ -64,8 +64,10 @@ export class RankSelectionStore {
         factors: Object.freeze([])
     })];
     private readonly factorSetIdsByKey = new Map<string, FactorSetId>([['', EMPTY_FACTOR_SET_ID]]);
+    private readonly appendedFactorSetIdsByBase = new Map<FactorSetId, Map<FactorId, FactorSetId>>();
     private readonly rankPoolMixes: RankPoolMix[] = [];
     private readonly rankPoolMixIdsByKey = new Map<string, RankPoolMixId>();
+    private readonly mergedRankPoolMixPairIdsByLeft = new Map<RankPoolMixId, Map<RankPoolMixId, RankPoolMixId>>();
     private readonly emptyRankPoolMixId = this.getOrCreateRankPoolMix([]);
     private readonly selections: Selection[] = [Object.freeze({
         id: EMPTY_SELECTION_ID,
@@ -104,6 +106,10 @@ export class RankSelectionStore {
 
     public getOrCreateRankPoolMix(pools: readonly RankPoolWeight[]): RankPoolMixId {
         const canonical = this.canonicalizeRankPoolWeights(pools);
+        return this.getOrCreateCanonicalRankPoolMix(canonical);
+    }
+
+    private getOrCreateCanonicalRankPoolMix(canonical: readonly RankPoolWeight[]): RankPoolMixId {
         const key = createRankPoolMixKey(canonical);
         const existing = this.rankPoolMixIdsByKey.get(key);
         if (existing !== undefined) return existing;
@@ -128,12 +134,37 @@ export class RankSelectionStore {
     }
 
     public mergeRankPoolMixes(mixes: readonly RankPoolMixId[]): RankPoolMixId {
-        const pools: RankPoolWeight[] = [];
-        for (const mixId of mixes) {
-            const mix = this.getRankPoolMix(mixId);
-            pools.push(...mix.pools);
+        if (mixes.length === 0) return this.emptyRankPoolMixId;
+        if (mixes.length === 1) return mixes[0]!;
+        if (mixes.length === 2) {
+            return this.mergeRankPoolMixPair(mixes[0]!, mixes[1]!);
         }
-        return this.getOrCreateRankPoolMix(pools);
+
+        let merged = this.getRankPoolMix(mixes[0]!).pools;
+        for (let index = 1; index < mixes.length; index++) {
+            merged = mergeCanonicalRankPoolWeights(merged, this.getRankPoolMix(mixes[index]!).pools);
+        }
+        return this.getOrCreateCanonicalRankPoolMix(merged);
+    }
+
+    public mergeRankPoolMixPair(left: RankPoolMixId, right: RankPoolMixId): RankPoolMixId {
+        if (left === this.emptyRankPoolMixId) return right;
+        if (right === this.emptyRankPoolMixId) return left;
+        const [first, second] = left < right ? [left, right] : [right, left];
+        const cached = this.mergedRankPoolMixPairIdsByLeft.get(first)?.get(second);
+        if (cached !== undefined) return cached;
+
+        const merged = this.getOrCreateCanonicalRankPoolMix(mergeCanonicalRankPoolWeights(
+            this.getRankPoolMix(left).pools,
+            this.getRankPoolMix(right).pools
+        ));
+        let inner = this.mergedRankPoolMixPairIdsByLeft.get(first);
+        if (!inner) {
+            inner = new Map();
+            this.mergedRankPoolMixPairIdsByLeft.set(first, inner);
+        }
+        inner.set(second, merged);
+        return merged;
     }
 
     public scaleRankPoolMix(mixId: RankPoolMixId, targetWeight: bigint): RankPoolMixId {
@@ -163,11 +194,21 @@ export class RankSelectionStore {
 
     public appendFactorToSet(factorSetId: FactorSetId, factorId: FactorId): FactorSetId {
         this.assertFactor(factorId);
+        const existing = this.appendedFactorSetIdsByBase.get(factorSetId)?.get(factorId);
+        if (existing !== undefined) return existing;
+
         const factorSet = this.getFactorSet(factorSetId);
         if (factorSet.factors.includes(factorId)) {
             throw new Error(`Factor set ${factorSetId} already contains factor ${factorId}.`);
         }
-        return this.getOrCreateFactorSet([...factorSet.factors, factorId]);
+        const appended = this.getOrCreateFactorSet([...factorSet.factors, factorId]);
+        let appends = this.appendedFactorSetIdsByBase.get(factorSetId);
+        if (!appends) {
+            appends = new Map();
+            this.appendedFactorSetIdsByBase.set(factorSetId, appends);
+        }
+        appends.set(factorId, appended);
+        return appended;
     }
 
     public getFactorSet(id: FactorSetId): FactorSet {
@@ -243,6 +284,8 @@ export class RankSelectionStore {
     }
 
     private canonicalizeRankPoolWeights(pools: readonly RankPoolWeight[]): RankPoolWeight[] {
+        if (isCanonicalRankPoolWeights(pools)) return [...pools];
+
         const weightsByPool = new Map<RankPoolId, bigint>();
         for (const pool of pools) {
             if (pool.weight <= 0n) throw new Error('Rank pool mix weights must be positive.');
@@ -296,6 +339,47 @@ function createFactorSetKey(factors: readonly FactorId[]): string {
 
 function createSelectionKey(rankPoolMixId: RankPoolMixId, factorSetId: FactorSetId): string {
     return `${String(rankPoolMixId)}|${String(factorSetId)}`;
+}
+
+function isCanonicalRankPoolWeights(pools: readonly RankPoolWeight[]): boolean {
+    let previous = -1;
+    for (const pool of pools) {
+        if (pool.weight <= 0n) throw new Error('Rank pool mix weights must be positive.');
+        const current = Number(pool.rankPoolId);
+        if (current <= previous) return false;
+        previous = current;
+    }
+    return true;
+}
+
+function mergeCanonicalRankPoolWeights(
+    left: readonly RankPoolWeight[],
+    right: readonly RankPoolWeight[]
+): RankPoolWeight[] {
+    const merged: RankPoolWeight[] = [];
+    let leftIndex = 0;
+    let rightIndex = 0;
+
+    while (leftIndex < left.length || rightIndex < right.length) {
+        const leftPool = left[leftIndex];
+        const rightPool = right[rightIndex];
+        if (!rightPool || (leftPool && leftPool.rankPoolId < rightPool.rankPoolId)) {
+            merged.push(leftPool!);
+            leftIndex++;
+        } else if (!leftPool || rightPool.rankPoolId < leftPool.rankPoolId) {
+            merged.push(rightPool);
+            rightIndex++;
+        } else {
+            merged.push(Object.freeze({
+                rankPoolId: leftPool.rankPoolId,
+                weight: leftPool.weight + rightPool.weight
+            }));
+            leftIndex++;
+            rightIndex++;
+        }
+    }
+
+    return merged;
 }
 
 function splitWeightByPools(

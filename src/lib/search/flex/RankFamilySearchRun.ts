@@ -53,6 +53,15 @@ export interface RankFamilyPendingEntry {
     readonly mass: bigint;
 }
 
+interface RankFamilyPendingRecord extends RankFamilyPendingEntry {
+    readonly key: string;
+    readonly sequence: number;
+}
+
+interface RankFamilyPendingInput extends RankFamilyPendingEntry {
+    readonly key: string;
+}
+
 export interface RankFamilySearchRunMemoryStats {
     readonly graphCount: number;
     readonly rankPoolCount: number;
@@ -92,7 +101,7 @@ export class RankFamilySearchRun {
     private readonly distributionService: ModifiedLevelDistributionService;
     private readonly graphsByFamily = new Map<SearchPoolFamilySignature, RankFamilyGraphRecord>();
     private readonly graphs: RankFamilyGraph[] = [];
-    private readonly pendingByKey = new Map<string, RankFamilyPendingEntry>();
+    private readonly pending = new RankFamilyFrontier();
     private readonly expandedKeys = new Set<string>();
     private readonly residuesByKey = new Map<string, RankFamilyResidueRecord>();
     private readonly resolvedByFactorSet = new Map<FactorSetId, RankFamilyResolvedRecord>();
@@ -140,7 +149,7 @@ export class RankFamilySearchRun {
     }
 
     public getPendingEntries(): readonly RankFamilyPendingEntry[] {
-        return Object.freeze([...this.pendingByKey.values()]);
+        return Object.freeze([...this.pending.values()]);
     }
 
     public getResolvedEntries(): ReadonlyMap<SelectionId, bigint> {
@@ -174,7 +183,7 @@ export class RankFamilySearchRun {
 
     public getMemoryStats(): RankFamilySearchRunMemoryStats {
         const selectionStats = this.selections.getMemoryStats();
-        const pendingMass = sumPendingMass(this.pendingByKey.values());
+        const pendingMass = sumPendingMass(this.pending.values());
         const resolvedMass = sumResolvedMass(this.resolvedByFactorSet.values());
         return {
             graphCount: this.graphs.length,
@@ -183,7 +192,7 @@ export class RankFamilySearchRun {
             factorSetCount: selectionStats.factorSetCount,
             rankPoolMixCount: selectionStats.rankPoolMixCount,
             selectionCount: selectionStats.selectionCount,
-            pendingCount: this.pendingByKey.size,
+            pendingCount: this.pending.size,
             pendingMergeCount: this.pendingMergeCount,
             resolvedCount: this.resolvedByFactorSet.size,
             seededMass: this.seededMass,
@@ -202,7 +211,7 @@ export class RankFamilySearchRun {
         if (!current) return false;
 
         this.expandedKeys.add(current.key);
-        this.processEntry(current.key, current.entry);
+        this.processEntry(current.key, current);
         this.iterations++;
         this.drainLateForwardEntries();
         return true;
@@ -252,23 +261,12 @@ export class RankFamilySearchRun {
         return record;
     }
 
-    private popNextPending(): { readonly key: string; readonly entry: RankFamilyPendingEntry } | undefined {
-        const selected = this.selectNextPending();
-        if (selected) this.pendingByKey.delete(selected.key);
-        return selected;
+    private popNextPending(): RankFamilyPendingRecord | undefined {
+        return this.pending.pop();
     }
 
-    private selectNextPending(): { readonly key: string; readonly entry: RankFamilyPendingEntry } | undefined {
-        let selectedKey: string | undefined;
-        let selectedEntry: RankFamilyPendingEntry | undefined;
-        for (const [key, entry] of this.pendingByKey.entries()) {
-            if (!selectedEntry || entry.mass > selectedEntry.mass) {
-                selectedKey = key;
-                selectedEntry = entry;
-            }
-        }
-
-        return selectedKey && selectedEntry ? { key: selectedKey, entry: selectedEntry } : undefined;
+    private selectNextPending(): RankFamilyPendingRecord | undefined {
+        return this.pending.peek();
     }
 
     private drainLateForwardEntries(): void {
@@ -276,9 +274,9 @@ export class RankFamilySearchRun {
             const current = this.selectNextPending();
             if (!current || !this.expandedKeys.has(current.key)) return;
 
-            this.pendingByKey.delete(current.key);
+            this.pending.pop();
             this.lateForwardCount++;
-            this.processEntry(current.key, current.entry);
+            this.processEntry(current.key, current);
         }
     }
 
@@ -305,19 +303,30 @@ export class RankFamilySearchRun {
 
             const weight = BigInt(edge.weight);
             const oldBucket = oldResidues?.buckets[index];
-            const oldResiduesByPool = new Map<RankPoolId, bigint>(
-                oldBucket?.pools.map(pool => [pool.rankPoolId, pool.numerator]) ?? []
-            );
+            const oldResiduePools = oldBucket?.pools ?? [];
+            let oldResidueIndex = 0;
             const factorSetId = this.selections.appendFactorToSet(currentFactorSetId, edge.factorId);
             const basePools: RankPoolWeight[] = [];
             const promotedPools: RankPoolWeight[] = [];
             const nextResiduePools: RankFamilyResiduePool[] = [];
 
             for (const pool of sourceMix.pools) {
+                while (
+                    oldResidueIndex < oldResiduePools.length
+                    && oldResiduePools[oldResidueIndex]!.rankPoolId < pool.rankPoolId
+                ) {
+                    const staleResidue = oldResiduePools[oldResidueIndex]!;
+                    if (staleResidue.numerator > 0n) nextResiduePools.push(staleResidue);
+                    oldResidueIndex++;
+                }
+
                 const baseNumerator = pool.weight * weight;
                 const baseMass = baseNumerator / totalWeight;
-                const oldResidue = oldResiduesByPool.get(pool.rankPoolId) ?? 0n;
-                oldResiduesByPool.delete(pool.rankPoolId);
+                const matchingOldResidue = oldResiduePools[oldResidueIndex]?.rankPoolId === pool.rankPoolId
+                    ? oldResiduePools[oldResidueIndex]
+                    : undefined;
+                const oldResidue = matchingOldResidue?.numerator ?? 0n;
+                if (matchingOldResidue) oldResidueIndex++;
                 const numerator = baseNumerator + oldResidue;
                 const childMass = numerator / totalWeight;
                 const promotedMass = childMass - baseMass;
@@ -331,8 +340,10 @@ export class RankFamilySearchRun {
                 }));
             }
 
-            for (const [rankPoolId, numerator] of oldResiduesByPool.entries()) {
-                if (numerator > 0n) nextResiduePools.push(Object.freeze({ rankPoolId, numerator }));
+            while (oldResidueIndex < oldResiduePools.length) {
+                const staleResidue = oldResiduePools[oldResidueIndex]!;
+                if (staleResidue.numerator > 0n) nextResiduePools.push(staleResidue);
+                oldResidueIndex++;
             }
 
             const baseMass = sumRankPoolWeights(basePools);
@@ -389,18 +400,19 @@ export class RankFamilySearchRun {
     ): void {
         if (mass === 0n) return;
         const key = createPendingKey(graphId, nodeId, factorSetId);
-        const existing = this.pendingByKey.get(key);
+        const existing = this.pending.get(key);
         if (!existing) {
-            this.pendingByKey.set(key, Object.freeze({ graphId, nodeId, factorSetId, rankPoolMixId, mass }));
+            this.pending.set(Object.freeze({ key, graphId, nodeId, factorSetId, rankPoolMixId, mass }));
             return;
         }
 
         this.pendingMergeCount++;
-        this.pendingByKey.set(key, Object.freeze({
+        this.pending.set(Object.freeze({
+            key,
             graphId,
             nodeId,
             factorSetId,
-            rankPoolMixId: this.selections.mergeRankPoolMixes([existing.rankPoolMixId, rankPoolMixId]),
+            rankPoolMixId: this.selections.mergeRankPoolMixPair(existing.rankPoolMixId, rankPoolMixId),
             mass: existing.mass + mass
         }));
     }
@@ -415,7 +427,7 @@ export class RankFamilySearchRun {
 
         this.resolvedByFactorSet.set(factorSetId, Object.freeze({
             factorSetId,
-            rankPoolMixId: this.selections.mergeRankPoolMixes([existing.rankPoolMixId, scaledMixId]),
+            rankPoolMixId: this.selections.mergeRankPoolMixPair(existing.rankPoolMixId, scaledMixId),
             mass: existing.mass + mass
         }));
     }
@@ -456,6 +468,115 @@ export class RankFamilySearchRun {
             throw new Error(`Rank-family mix total ${mix.totalWeight} does not match expected mass ${expected}.`);
         }
     }
+}
+
+class RankFamilyFrontier {
+    private readonly heap: RankFamilyPendingRecord[] = [];
+    private readonly positionsByKey = new Map<string, number>();
+    private nextSequence = 0;
+
+    public get size(): number {
+        return this.heap.length;
+    }
+
+    public get(key: string): RankFamilyPendingRecord | undefined {
+        const position = this.positionsByKey.get(key);
+        return position === undefined ? undefined : this.heap[position];
+    }
+
+    public values(): Iterable<RankFamilyPendingRecord> {
+        return this.heap.values();
+    }
+
+    public peek(): RankFamilyPendingRecord | undefined {
+        return this.heap[0];
+    }
+
+    public pop(): RankFamilyPendingRecord | undefined {
+        const first = this.heap[0];
+        if (!first) return undefined;
+
+        const last = this.heap.pop()!;
+        this.positionsByKey.delete(first.key);
+        if (this.heap.length > 0) {
+            this.heap[0] = last;
+            this.positionsByKey.set(last.key, 0);
+            this.sinkDown(0);
+        }
+        return first;
+    }
+
+    public set(record: RankFamilyPendingInput): void {
+        const existingPosition = this.positionsByKey.get(record.key);
+        if (existingPosition === undefined) {
+            this.heap.push(Object.freeze({
+                ...record,
+                sequence: this.nextSequence++
+            }));
+            this.positionsByKey.set(record.key, this.heap.length - 1);
+            this.bubbleUp(this.heap.length - 1);
+            return;
+        }
+
+        const previous = this.heap[existingPosition]!;
+        const updated = Object.freeze({
+            ...record,
+            sequence: previous.sequence
+        });
+        this.heap[existingPosition] = updated;
+        if (comparePendingRecords(updated, previous) > 0) {
+            this.bubbleUp(existingPosition);
+        } else {
+            this.sinkDown(existingPosition);
+        }
+    }
+
+    private bubbleUp(position: number): void {
+        let current = position;
+        while (current > 0) {
+            const parent = Math.floor((current - 1) / 2);
+            if (comparePendingRecords(this.heap[parent]!, this.heap[current]!) >= 0) return;
+            this.swap(parent, current);
+            current = parent;
+        }
+    }
+
+    private sinkDown(position: number): void {
+        let current = position;
+        while (true) {
+            const left = current * 2 + 1;
+            const right = left + 1;
+            let largest = current;
+
+            if (left < this.heap.length && comparePendingRecords(this.heap[left]!, this.heap[largest]!) > 0) {
+                largest = left;
+            }
+            if (right < this.heap.length && comparePendingRecords(this.heap[right]!, this.heap[largest]!) > 0) {
+                largest = right;
+            }
+            if (largest === current) return;
+
+            this.swap(current, largest);
+            current = largest;
+        }
+    }
+
+    private swap(left: number, right: number): void {
+        const leftRecord = this.heap[left]!;
+        const rightRecord = this.heap[right]!;
+        this.heap[left] = rightRecord;
+        this.heap[right] = leftRecord;
+        this.positionsByKey.set(rightRecord.key, left);
+        this.positionsByKey.set(leftRecord.key, right);
+    }
+}
+
+function comparePendingRecords(left: RankFamilyPendingRecord, right: RankFamilyPendingRecord): number {
+    if (left.mass > right.mass) return 1;
+    if (left.mass < right.mass) return -1;
+    if (left.sequence < right.sequence) return 1;
+    if (left.sequence > right.sequence) return -1;
+    return 0;
 }
 
 function createPendingKey(graphId: number, nodeId: RankFamilyNodeId, factorSetId: FactorSetId): string {

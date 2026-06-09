@@ -1,5 +1,5 @@
 import type { PackedCombo } from '#types/index.js';
-import { ComboUtils } from '#utils/index.js';
+import { PACKING_CONSTANTS } from '#constants/engine.js';
 import type { RankPoolId, RankPoolStore } from '#lib/search/flex/RankPoolStore.js';
 import type { FactorId, RankSelectionStore, SelectionId } from '#lib/search/flex/RankSelectionStore.js';
 
@@ -134,7 +134,7 @@ export class RankFamilyProjector {
                 const packedIndex = this.enchantToIndex.get(packedEnchant);
                 visit(
                     factorIndex + 1,
-                    packedIndex === undefined ? combo : ComboUtils.packAppendIndex(combo, packedIndex, count),
+                    packedIndex === undefined ? combo : appendPackedComboIndex(combo, packedIndex, count),
                     packedIndex === undefined ? count : count + 1,
                     numerator * BigInt(alternative.weight),
                     denominator * totalWeight,
@@ -149,4 +149,18 @@ export class RankFamilyProjector {
     private isClueCompatible(matchesTargetClue: boolean): boolean {
         return this.options.targetClueId === undefined || matchesTargetClue;
     }
+}
+
+function appendPackedComboIndex(combo: PackedCombo, packedIndex: number, count: number): PackedCombo {
+    if (count === 0) return packedIndex as PackedCombo;
+
+    let insertMultiplier = 1;
+    for (let index = 0; index < count; index++, insertMultiplier *= PACKING_CONSTANTS.BYTE_BASIS) {
+        const current = Math.floor(combo / insertMultiplier) % PACKING_CONSTANTS.BYTE_BASIS;
+        if (packedIndex > current) break;
+    }
+
+    const lowerDigits = combo % insertMultiplier;
+    const shiftedDigits = (combo - lowerDigits) * PACKING_CONSTANTS.BYTE_BASIS;
+    return (lowerDigits + packedIndex * insertMultiplier + shiftedDigits) as PackedCombo;
 }
