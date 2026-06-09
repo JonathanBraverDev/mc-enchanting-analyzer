@@ -136,6 +136,16 @@ export class RankSelectionStore {
         return this.getOrCreateRankPoolMix(pools);
     }
 
+    public scaleRankPoolMix(mixId: RankPoolMixId, targetWeight: bigint): RankPoolMixId {
+        if (targetWeight <= 0n) throw new Error('Scaled rank pool mix weight must be positive.');
+
+        const mix = this.getRankPoolMix(mixId);
+        if (mix.totalWeight <= 0n) throw new Error(`Cannot scale empty rank pool mix ${mixId}.`);
+        if (mix.totalWeight === targetWeight) return mixId;
+
+        return this.getOrCreateRankPoolMix(splitWeightByPools(mix.pools, targetWeight, mix.totalWeight));
+    }
+
     public getOrCreateFactorSet(factors: readonly FactorId[]): FactorSetId {
         const canonicalFactors = this.canonicalizeFactorIds(factors);
         const key = createFactorSetKey(canonicalFactors);
@@ -286,4 +296,45 @@ function createFactorSetKey(factors: readonly FactorId[]): string {
 
 function createSelectionKey(rankPoolMixId: RankPoolMixId, factorSetId: FactorSetId): string {
     return `${String(rankPoolMixId)}|${String(factorSetId)}`;
+}
+
+function splitWeightByPools(
+    pools: readonly RankPoolWeight[],
+    targetWeight: bigint,
+    sourceWeight: bigint
+): RankPoolWeight[] {
+    const split = pools.map(pool => {
+        const scaledNumerator = pool.weight * targetWeight;
+        return {
+            rankPoolId: pool.rankPoolId,
+            weight: scaledNumerator / sourceWeight,
+            remainder: scaledNumerator % sourceWeight
+        };
+    });
+
+    let assigned = split.reduce((sum, pool) => sum + pool.weight, 0n);
+    let remainder = targetWeight - assigned;
+    split.sort((left, right) => {
+        if (left.remainder === right.remainder) return Number(left.rankPoolId) - Number(right.rankPoolId);
+        return left.remainder > right.remainder ? -1 : 1;
+    });
+
+    for (const pool of split) {
+        if (remainder === 0n) break;
+        pool.weight++;
+        assigned++;
+        remainder--;
+    }
+
+    if (assigned !== targetWeight) {
+        throw new Error(`Scaled rank pool mix lost ${targetWeight - assigned} weight units.`);
+    }
+
+    return split
+        .filter(pool => pool.weight > 0n)
+        .sort((left, right) => Number(left.rankPoolId) - Number(right.rankPoolId))
+        .map(pool => Object.freeze({
+            rankPoolId: pool.rankPoolId,
+            weight: pool.weight
+        }));
 }

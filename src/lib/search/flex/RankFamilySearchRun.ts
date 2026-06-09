@@ -1,11 +1,12 @@
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
-import { PRECISION } from '#utils/index.js';
+import { PRECISION, ProbUtils } from '#utils/index.js';
 import type { SearchPool, SearchPoolFamilySignature } from '#lib/search/registry/RegistryKernel.js';
 import type { RegistryKernel } from '#lib/search/registry/RegistryKernel.js';
 import {
     type FactorSetId,
     type RankPoolMixId,
-    type RankSelectionStore
+    type RankSelectionStore,
+    type SelectionId
 } from '#lib/search/flex/RankSelectionStore.js';
 import { RankSelectionStore as DefaultRankSelectionStore } from '#lib/search/flex/RankSelectionStore.js';
 import { RankPoolStore } from '#lib/search/flex/RankPoolStore.js';
@@ -33,6 +34,9 @@ export interface RankFamilySearchRunMemoryStats {
     readonly selectionCount: number;
     readonly pendingCount: number;
     readonly pendingMergeCount: number;
+    readonly resolvedCount: number;
+    readonly iterations: number;
+    readonly roundingLoss: bigint;
     readonly graphs: readonly RankFamilyGraphMemoryStats[];
 }
 
@@ -56,7 +60,10 @@ export class RankFamilySearchRun {
     private readonly graphsByFamily = new Map<SearchPoolFamilySignature, RankFamilyGraphRecord>();
     private readonly graphs: RankFamilyGraph[] = [];
     private readonly pendingByKey = new Map<string, RankFamilyPendingEntry>();
+    private readonly resolved = new Map<SelectionId, bigint>();
     private pendingMergeCount = 0;
+    private iterations = 0;
+    private roundingLoss = 0n;
     private seeded = false;
 
     public constructor(
@@ -97,10 +104,26 @@ export class RankFamilySearchRun {
         return Object.freeze([...this.pendingByKey.values()]);
     }
 
+    public getResolvedEntries(): ReadonlyMap<SelectionId, bigint> {
+        return new Map(this.resolved);
+    }
+
     public getGraph(graphId: number): RankFamilyGraph {
         const graph = this.graphs[graphId];
         if (!graph) throw new Error(`Unknown rank-family graph ID ${graphId}.`);
         return graph;
+    }
+
+    public advance(maxSteps = 1): number {
+        if (!Number.isInteger(maxSteps) || maxSteps < 0) {
+            throw new Error('Rank-family advance step count must be a non-negative integer.');
+        }
+
+        let advanced = 0;
+        while (advanced < maxSteps && this.step()) {
+            advanced++;
+        }
+        return advanced;
     }
 
     public getMemoryStats(): RankFamilySearchRunMemoryStats {
@@ -114,8 +137,51 @@ export class RankFamilySearchRun {
             selectionCount: selectionStats.selectionCount,
             pendingCount: this.pendingByKey.size,
             pendingMergeCount: this.pendingMergeCount,
+            resolvedCount: this.resolved.size,
+            iterations: this.iterations,
+            roundingLoss: this.roundingLoss,
             graphs: this.graphs.map(graph => graph.getMemoryStats())
         };
+    }
+
+    private step(): boolean {
+        const current = this.popNextPending();
+        if (!current) return false;
+
+        const graph = this.getGraph(current.graphId);
+        const expansion = graph.getExpansion(current.nodeId);
+        const stopMass = ProbUtils.scale(current.mass, PRECISION - expansion.probContinue);
+        const forwardMass = current.mass - stopMass;
+
+        if (stopMass > 0n) {
+            this.recordResolved(current.factorSetId, current.rankPoolMixId, stopMass);
+        }
+
+        if (forwardMass > 0n) {
+            if (expansion.terminalReason !== null || expansion.totalWeight <= 0 || expansion.edges.length === 0) {
+                this.recordResolved(current.factorSetId, current.rankPoolMixId, forwardMass);
+            } else {
+                const childMasses = splitMassByWeights(
+                    forwardMass,
+                    expansion.edges.map(edge => edge.weight),
+                    BigInt(expansion.totalWeight)
+                );
+                let assigned = 0n;
+                for (let index = 0; index < expansion.edges.length; index++) {
+                    const childMass = childMasses[index]!;
+                    if (childMass === 0n) continue;
+                    const edge = expansion.edges[index]!;
+                    const factorSetId = this.selections.appendFactorToSet(current.factorSetId, edge.factorId);
+                    const rankPoolMixId = this.selections.scaleRankPoolMix(current.rankPoolMixId, childMass);
+                    this.pushPending(current.graphId, edge.childId, factorSetId, rankPoolMixId, childMass);
+                    assigned += childMass;
+                }
+                this.roundingLoss += forwardMass - assigned;
+            }
+        }
+
+        this.iterations++;
+        return true;
     }
 
     private graphForPool(pool: SearchPool): RankFamilyGraphRecord {
@@ -129,6 +195,20 @@ export class RankFamilySearchRun {
         this.graphs.push(record.graph);
         this.graphsByFamily.set(pool.familySignature, record);
         return record;
+    }
+
+    private popNextPending(): RankFamilyPendingEntry | undefined {
+        let selectedKey: string | undefined;
+        let selectedEntry: RankFamilyPendingEntry | undefined;
+        for (const [key, entry] of this.pendingByKey.entries()) {
+            if (!selectedEntry || entry.mass > selectedEntry.mass) {
+                selectedKey = key;
+                selectedEntry = entry;
+            }
+        }
+
+        if (selectedKey) this.pendingByKey.delete(selectedKey);
+        return selectedEntry;
     }
 
     private pushPending(
@@ -155,8 +235,44 @@ export class RankFamilySearchRun {
             mass: existing.mass + mass
         }));
     }
+
+    private recordResolved(factorSetId: FactorSetId, rankPoolMixId: RankPoolMixId, mass: bigint): void {
+        const scaledMixId = this.selections.scaleRankPoolMix(rankPoolMixId, mass);
+        const selectionId = this.selections.getOrCreateSelection(scaledMixId, factorSetId);
+        this.resolved.set(selectionId, (this.resolved.get(selectionId) ?? 0n) + mass);
+    }
 }
 
 function createPendingKey(graphId: number, nodeId: RankFamilyNodeId, factorSetId: FactorSetId): string {
     return `${graphId}:${String(nodeId)}:${String(factorSetId)}`;
+}
+
+function splitMassByWeights(mass: bigint, weights: readonly number[], totalWeight: bigint): bigint[] {
+    const split = weights.map((weight, index) => {
+        const scaledNumerator = mass * BigInt(weight);
+        return {
+            index,
+            mass: scaledNumerator / totalWeight,
+            remainder: scaledNumerator % totalWeight
+        };
+    });
+
+    let assigned = split.reduce((sum, entry) => sum + entry.mass, 0n);
+    let remainder = mass - assigned;
+    const remainderOrder = [...split].sort((left, right) => {
+        if (left.remainder === right.remainder) return left.index - right.index;
+        return left.remainder > right.remainder ? -1 : 1;
+    });
+
+    for (const entry of remainderOrder) {
+        if (remainder === 0n) break;
+        entry.mass++;
+        assigned++;
+        remainder--;
+    }
+
+    if (assigned !== mass) throw new Error(`Rank-family advance lost ${mass - assigned} mass units.`);
+    return split
+        .sort((left, right) => left.index - right.index)
+        .map(entry => entry.mass);
 }

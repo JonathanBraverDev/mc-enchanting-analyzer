@@ -61,4 +61,38 @@ describe('RankFamilySearchRun', () => {
             assert.ok(run.selections.getRankPoolMix(entry.rankPoolMixId).totalWeight > 0n);
         }
     });
+
+    it('keeps roots separate, then merges after root expansion creates child lanes', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
+        const run = new RankFamilySearchRun(kernel);
+        run.seedXp(30);
+        const rootCount = run.getPendingEntries().length;
+
+        assert.ok(rootCount > 1);
+        assert.strictEqual(run.getMemoryStats().pendingMergeCount, 0);
+
+        run.advance(rootCount);
+        const stats = run.getMemoryStats();
+        assert.ok(stats.pendingMergeCount > 0, 'child lanes should merge once root expansion moves past roots');
+        assert.ok(run.getPendingEntries().some(entry => entry.factorSetId !== run.selections.emptyFactorSet));
+        assert.strictEqual(stats.roundingLoss, 0n);
+    });
+
+    it('records resolved mass while advancing terminal and stopped entries', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
+        const run = new RankFamilySearchRun(kernel);
+        run.seedXp(1);
+
+        for (let steps = 0; steps < 200 && run.getResolvedEntries().size === 0; steps++) {
+            run.advance(1);
+        }
+
+        assert.ok(run.getMemoryStats().iterations > 0);
+        assert.ok(run.getResolvedEntries().size > 0);
+        for (const mass of run.getResolvedEntries().values()) {
+            assert.ok(mass > 0n);
+        }
+    });
 });

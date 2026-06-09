@@ -117,6 +117,21 @@ describe('RankSelectionStore', () => {
         ]);
     });
 
+    it('scales rank-pool mixes while conserving target weight', () => {
+        const store = new RankSelectionStore();
+        const mix = store.getOrCreateRankPoolMix([
+            { rankPoolId: rankPoolId(1), weight: 1n },
+            { rankPoolId: rankPoolId(2), weight: 2n }
+        ]);
+        const scaled = store.scaleRankPoolMix(mix, 10n);
+
+        assert.deepStrictEqual(store.getRankPoolMix(scaled).pools, [
+            { rankPoolId: rankPoolId(1), weight: 3n },
+            { rankPoolId: rankPoolId(2), weight: 7n }
+        ]);
+        assert.strictEqual(store.getRankPoolMix(scaled).totalWeight, 10n);
+    });
+
     it('appends factors while preserving selected-state convergence', () => {
         const store = new RankSelectionStore();
         const rankPoolMixId = store.getOrCreateSinglePoolMix(rankPoolId(4), 1n);
