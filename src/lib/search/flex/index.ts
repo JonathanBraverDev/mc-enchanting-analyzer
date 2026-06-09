@@ -4,6 +4,7 @@ export * from './FlexProgramStore.js';
 export * from './FlexProjector.js';
 export * from './FlexSnapshotBuilder.js';
 export * from './FlexCoordinator.js';
+export * from './RankPoolStore.js';
 export * from './GroupedFlexGraph.js';
 export * from './GroupedFlexSearchRun.js';
 export * from './FlexReducedKeyInvariant.js';
