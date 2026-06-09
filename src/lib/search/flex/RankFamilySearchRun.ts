@@ -4,12 +4,14 @@ import type { SearchPool, SearchPoolFamilySignature } from '#lib/search/registry
 import type { RegistryKernel } from '#lib/search/registry/RegistryKernel.js';
 import {
     type FactorSetId,
+    type RankPoolMix,
     type RankPoolMixId,
+    type RankPoolWeight,
     type RankSelectionStore,
     type SelectionId
 } from '#lib/search/flex/RankSelectionStore.js';
 import { RankSelectionStore as DefaultRankSelectionStore } from '#lib/search/flex/RankSelectionStore.js';
-import { RankPoolStore } from '#lib/search/flex/RankPoolStore.js';
+import { type RankPoolId, RankPoolStore } from '#lib/search/flex/RankPoolStore.js';
 import {
     RankFamilyGraph,
     type RankFamilyEdge,
@@ -29,8 +31,12 @@ interface RankFamilyResolvedRecord {
 }
 
 interface RankFamilyResidueBucket {
+    readonly pools: readonly RankFamilyResiduePool[];
+}
+
+interface RankFamilyResiduePool {
+    readonly rankPoolId: RankPoolId;
     readonly numerator: bigint;
-    readonly rankPoolMixId: RankPoolMixId;
 }
 
 interface RankFamilyResidueRecord {
@@ -193,20 +199,30 @@ export class RankFamilySearchRun {
 
         const graph = this.getGraph(current.entry.graphId);
         const expansion = graph.getExpansion(current.entry.nodeId);
-        const stopMass = ProbUtils.scale(current.entry.mass, PRECISION - expansion.probContinue);
-        const forwardMass = current.entry.mass - stopMass;
+        this.assertRankPoolMixTotal(
+            this.selections.getRankPoolMix(current.entry.rankPoolMixId),
+            current.entry.mass
+        );
+        const split = this.splitByContinueProbability(current.entry.rankPoolMixId, expansion.probContinue);
 
-        if (stopMass > 0n) {
-            this.recordResolved(current.entry.factorSetId, current.entry.rankPoolMixId, stopMass);
+        if (split.stopMass > 0n) {
+            this.recordResolved(current.entry.factorSetId, split.stopMixId!, split.stopMass);
         }
 
-        if (forwardMass > 0n) {
+        if (split.forwardMass > 0n) {
             if (expansion.terminalReason === 'overflow') {
-                this.overflowMass += forwardMass;
+                this.overflowMass += split.forwardMass;
             } else if (expansion.totalWeight <= 0 || expansion.edges.length === 0) {
-                this.recordResolved(current.entry.factorSetId, current.entry.rankPoolMixId, forwardMass);
+                this.recordResolved(current.entry.factorSetId, split.forwardMixId!, split.forwardMass);
             } else {
-                this.forwardMass(current.key, current.entry, expansion.edges, expansion.totalWeight, forwardMass);
+                this.forwardMass(
+                    current.key,
+                    current.entry.graphId,
+                    current.entry.factorSetId,
+                    split.forwardMixId!,
+                    expansion.edges,
+                    expansion.totalWeight
+                );
             }
         }
 
@@ -243,10 +259,11 @@ export class RankFamilySearchRun {
 
     private forwardMass(
         sourceKey: string,
-        current: RankFamilyPendingEntry,
+        graphId: number,
+        currentFactorSetId: FactorSetId,
+        sourceMixId: RankPoolMixId,
         edges: readonly RankFamilyEdge[],
-        totalWeightNumber: number,
-        mass: bigint
+        totalWeightNumber: number
     ): void {
         const totalWeight = BigInt(totalWeightNumber);
         const oldResidues = this.residuesByKey.get(sourceKey);
@@ -255,48 +272,70 @@ export class RankFamilySearchRun {
         }
         const nextBuckets: (RankFamilyResidueBucket | undefined)[] = [];
         let nextResidueNumerator = 0n;
+        const sourceMix = this.selections.getRankPoolMix(sourceMixId);
 
         for (let index = 0; index < edges.length; index++) {
             const edge = edges[index]!;
             if (edge.weight <= 0) continue;
 
             const weight = BigInt(edge.weight);
-            const baseNumerator = mass * weight;
-            const baseMass = baseNumerator / totalWeight;
-            const baseResidue = baseNumerator - (baseMass * totalWeight);
             const oldBucket = oldResidues?.buckets[index];
-            const oldResidue = oldBucket?.numerator ?? 0n;
-            const numerator = baseNumerator + oldResidue;
-            const childMass = numerator / totalWeight;
-            const promotedMass = childMass - baseMass;
-            const edgeResidue = numerator - (childMass * totalWeight);
-            const factorSetId = this.selections.appendFactorToSet(current.factorSetId, edge.factorId);
+            const oldResiduesByPool = new Map<RankPoolId, bigint>(
+                oldBucket?.pools.map(pool => [pool.rankPoolId, pool.numerator]) ?? []
+            );
+            const factorSetId = this.selections.appendFactorToSet(currentFactorSetId, edge.factorId);
+            const basePools: RankPoolWeight[] = [];
+            const promotedPools: RankPoolWeight[] = [];
+            const nextResiduePools: RankFamilyResiduePool[] = [];
 
+            for (const pool of sourceMix.pools) {
+                const baseNumerator = pool.weight * weight;
+                const baseMass = baseNumerator / totalWeight;
+                const oldResidue = oldResiduesByPool.get(pool.rankPoolId) ?? 0n;
+                oldResiduesByPool.delete(pool.rankPoolId);
+                const numerator = baseNumerator + oldResidue;
+                const childMass = numerator / totalWeight;
+                const promotedMass = childMass - baseMass;
+                const edgeResidue = numerator - (childMass * totalWeight);
+
+                if (baseMass > 0n) basePools.push({ rankPoolId: pool.rankPoolId, weight: baseMass });
+                if (promotedMass > 0n) promotedPools.push({ rankPoolId: pool.rankPoolId, weight: promotedMass });
+                if (edgeResidue > 0n) nextResiduePools.push(Object.freeze({
+                    rankPoolId: pool.rankPoolId,
+                    numerator: edgeResidue
+                }));
+            }
+
+            for (const [rankPoolId, numerator] of oldResiduesByPool.entries()) {
+                if (numerator > 0n) nextResiduePools.push(Object.freeze({ rankPoolId, numerator }));
+            }
+
+            const baseMass = sumRankPoolWeights(basePools);
             if (baseMass > 0n) {
                 this.pushPending(
-                    current.graphId,
+                    graphId,
                     edge.childId,
                     factorSetId,
-                    this.selections.scaleRankPoolMix(current.rankPoolMixId, baseMass),
+                    this.selections.getOrCreateRankPoolMix(basePools),
                     baseMass
                 );
             }
 
-            const residueMixId = this.createCombinedResidueMix(current.rankPoolMixId, baseResidue, oldBucket);
+            const promotedMass = sumRankPoolWeights(promotedPools);
             if (promotedMass > 0n) {
                 this.pushPending(
-                    current.graphId,
+                    graphId,
                     edge.childId,
                     factorSetId,
-                    this.selections.scaleRankPoolMix(residueMixId, promotedMass),
+                    this.selections.getOrCreateRankPoolMix(promotedPools),
                     promotedMass
                 );
             }
 
+            const edgeResidue = sumResidueNumerators(nextResiduePools);
             if (edgeResidue > 0n) {
                 nextBuckets[index] = Object.freeze({
-                    numerator: edgeResidue,
-                    rankPoolMixId: this.selections.scaleRankPoolMix(residueMixId, edgeResidue)
+                    pools: Object.freeze(nextResiduePools)
                 });
                 nextResidueNumerator += edgeResidue;
             }
@@ -356,20 +395,41 @@ export class RankFamilySearchRun {
         }));
     }
 
-    private createCombinedResidueMix(
-        currentMixId: RankPoolMixId,
-        currentResidue: bigint,
-        oldBucket: RankFamilyResidueBucket | undefined
-    ): RankPoolMixId {
-        const mixes: RankPoolMixId[] = [];
-        if (currentResidue > 0n) {
-            mixes.push(this.selections.scaleRankPoolMix(currentMixId, currentResidue));
+    private splitByContinueProbability(
+        rankPoolMixId: RankPoolMixId,
+        probContinue: bigint
+    ): {
+        readonly stopMixId: RankPoolMixId | undefined;
+        readonly stopMass: bigint;
+        readonly forwardMixId: RankPoolMixId | undefined;
+        readonly forwardMass: bigint;
+    } {
+        const stopProbability = PRECISION - probContinue;
+        const mix = this.selections.getRankPoolMix(rankPoolMixId);
+        const stopPools: RankPoolWeight[] = [];
+        const forwardPools: RankPoolWeight[] = [];
+
+        for (const pool of mix.pools) {
+            const stopMass = ProbUtils.scale(pool.weight, stopProbability);
+            const forwardMass = pool.weight - stopMass;
+            if (stopMass > 0n) stopPools.push({ rankPoolId: pool.rankPoolId, weight: stopMass });
+            if (forwardMass > 0n) forwardPools.push({ rankPoolId: pool.rankPoolId, weight: forwardMass });
         }
-        if (oldBucket && oldBucket.numerator > 0n) {
-            mixes.push(oldBucket.rankPoolMixId);
+
+        const stopMass = sumRankPoolWeights(stopPools);
+        const forwardMass = sumRankPoolWeights(forwardPools);
+        return {
+            stopMixId: stopMass > 0n ? this.selections.getOrCreateRankPoolMix(stopPools) : undefined,
+            stopMass,
+            forwardMixId: forwardMass > 0n ? this.selections.getOrCreateRankPoolMix(forwardPools) : undefined,
+            forwardMass
+        };
+    }
+
+    private assertRankPoolMixTotal(mix: RankPoolMix, expected: bigint): void {
+        if (mix.totalWeight !== expected) {
+            throw new Error(`Rank-family mix total ${mix.totalWeight} does not match expected mass ${expected}.`);
         }
-        if (mixes.length === 0) return currentMixId;
-        return this.selections.mergeRankPoolMixes(mixes);
     }
 }
 
@@ -387,4 +447,16 @@ function sumResolvedMass(entries: Iterable<RankFamilyResolvedRecord>): bigint {
     let mass = 0n;
     for (const entry of entries) mass += entry.mass;
     return mass;
+}
+
+function sumRankPoolWeights(pools: readonly RankPoolWeight[]): bigint {
+    let mass = 0n;
+    for (const pool of pools) mass += pool.weight;
+    return mass;
+}
+
+function sumResidueNumerators(pools: readonly RankFamilyResiduePool[]): bigint {
+    let numerator = 0n;
+    for (const pool of pools) numerator += pool.numerator;
+    return numerator;
 }

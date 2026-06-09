@@ -328,13 +328,20 @@ Rank-family advance follows the same rule, but residue ownership is keyed by the
 residue key = (graphId, graphNodeId, factorSetId)
 ```
 
-Each residue bucket also carries a `rankPoolMixId`, because recovered rounding must preserve exact-rank payload ownership. The conservation invariant becomes:
+Each residue bucket carries per-`rankPoolId` residue numerators, not one aggregate numerator for the whole merged payload. Recovered rounding must promote per exact rank-pool slice first, then merge the promoted child payload back into the rank-family frontier. If residue numerators are aggregated across rank pools before division, the merged engine can promote units earlier or later than exact Flex.
+
+The conservation invariant becomes:
 
 ```text
 pendingMass + resolvedMass + overflowMass + roundingLoss == seededMass
 ```
 
-This is the same mass-harvesting shape as Flex, with the source payload generalized from one exact `programId` to a weighted `rankPoolMixId`.
+This is the same mass-harvesting shape as Flex, with the source payload generalized from one exact `programId` to a weighted `rankPoolMixId`. The bookkeeping boundary is:
+
+```text
+frontier: merged by (graphId, graphNodeId, factorSetId)
+residue bucket: same key, but numerators split by rankPoolId
+```
 
 ## Projection Model
 
@@ -451,7 +458,7 @@ or, while graph identity remains split:
 (graphId, graphNodeId, factorSetId)
 ```
 
-The key deliberately excludes `rankPoolMixId`. Exact-rank payloads merge as `rankPoolMixId` values on the frontier entry. Residues use the same rank-free key, with per-edge residue payloads that carry their own `rankPoolMixId`.
+The key deliberately excludes `rankPoolMixId`. Exact-rank payloads merge as `rankPoolMixId` values on the frontier entry. Residues use the same rank-free key, with per-edge residue numerators split by exact `rankPoolId`.
 
 This avoids the old bug class where graph-node reuse accidentally keeps only the first branch's selected history, while still allowing exact-rank payloads to converge.
 
@@ -501,7 +508,7 @@ Pushed slices:
 - standalone `RankFamilySearchRun.advance(maxSteps)`;
 - rank-free frontier keys `(graphId, graphNodeId, factorSetId)`;
 - mass diagnostics: `seededMass`, `pendingMass`, `resolvedMass`, `overflowMass`, and `roundingLoss`;
-- Flex-style frontier residue recovery with rank-pool payload preservation;
+- Flex-style frontier residue recovery with per-`rankPoolId` numerator preservation;
 - `RankFamilyProjector`;
 - exact tiny exhaustive projection parity tests for sword and book XP1.
 
@@ -511,14 +518,20 @@ Important correction from implementation:
 Do not over-conserve edge splits by distributing integer remainders.
 Do not drop residues by simple flooring.
 Use Flex-style per-frontier-edge residues, keyed by the rank-free frontier identity.
+Within each residue bucket, keep numerators split by rankPoolId.
 ```
+
+Known limitation:
+
+- Exhaustive sword XP10+ now has the same projected combo row set as Flex, but still has tiny integer mass differences on some rows. For `1.21.11 sword/diamond XP30`, the row count matches (`415`), but local comparison still found small per-row differences after per-rank-pool residue recovery. Do not wire rank-family into the public engine path until this is explained or eliminated.
 
 Current remaining work:
 
-1. clue-conditioned parity, especially exact-rank clue filtering;
-2. pending projection/checkpoint summaries for bounded rank-family runs;
-3. opt-in search-mode integration;
-4. broader snapshot and performance parity before defaulting to this path.
+1. explain or eliminate the remaining exhaustive sword XP10+ tiny integer parity differences;
+2. clue-conditioned parity, especially exact-rank clue filtering;
+3. pending projection/checkpoint summaries for bounded rank-family runs;
+4. opt-in search-mode integration;
+5. broader snapshot and performance parity before defaulting to this path.
 
 ## Prototype Archaeology
 
