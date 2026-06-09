@@ -17,6 +17,12 @@ interface RankFamilyGraphRecord {
     readonly graph: RankFamilyGraph;
 }
 
+interface RankFamilyResolvedRecord {
+    readonly factorSetId: FactorSetId;
+    readonly rankPoolMixId: RankPoolMixId;
+    readonly mass: bigint;
+}
+
 export interface RankFamilyPendingEntry {
     readonly graphId: number;
     readonly nodeId: RankFamilyNodeId;
@@ -35,6 +41,9 @@ export interface RankFamilySearchRunMemoryStats {
     readonly pendingCount: number;
     readonly pendingMergeCount: number;
     readonly resolvedCount: number;
+    readonly seededMass: bigint;
+    readonly pendingMass: bigint;
+    readonly resolvedMass: bigint;
     readonly iterations: number;
     readonly roundingLoss: bigint;
     readonly graphs: readonly RankFamilyGraphMemoryStats[];
@@ -60,7 +69,8 @@ export class RankFamilySearchRun {
     private readonly graphsByFamily = new Map<SearchPoolFamilySignature, RankFamilyGraphRecord>();
     private readonly graphs: RankFamilyGraph[] = [];
     private readonly pendingByKey = new Map<string, RankFamilyPendingEntry>();
-    private readonly resolved = new Map<SelectionId, bigint>();
+    private readonly resolvedByFactorSet = new Map<FactorSetId, RankFamilyResolvedRecord>();
+    private seededMass = 0n;
     private pendingMergeCount = 0;
     private iterations = 0;
     private roundingLoss = 0n;
@@ -98,6 +108,7 @@ export class RankFamilySearchRun {
         }
 
         if (seededMass > PRECISION) throw new Error(`Modified-level distribution overflowed precision by ${seededMass - PRECISION} units.`);
+        this.seededMass = seededMass;
     }
 
     public getPendingEntries(): readonly RankFamilyPendingEntry[] {
@@ -105,7 +116,14 @@ export class RankFamilySearchRun {
     }
 
     public getResolvedEntries(): ReadonlyMap<SelectionId, bigint> {
-        return new Map(this.resolved);
+        const entries = new Map<SelectionId, bigint>();
+        for (const record of this.resolvedByFactorSet.values()) {
+            entries.set(
+                this.selections.getOrCreateSelection(record.rankPoolMixId, record.factorSetId),
+                record.mass
+            );
+        }
+        return entries;
     }
 
     public getGraph(graphId: number): RankFamilyGraph {
@@ -128,6 +146,8 @@ export class RankFamilySearchRun {
 
     public getMemoryStats(): RankFamilySearchRunMemoryStats {
         const selectionStats = this.selections.getMemoryStats();
+        const pendingMass = sumPendingMass(this.pendingByKey.values());
+        const resolvedMass = sumResolvedMass(this.resolvedByFactorSet.values());
         return {
             graphCount: this.graphs.length,
             rankPoolCount: this.rankPools.getMemoryStats().poolCount,
@@ -137,7 +157,10 @@ export class RankFamilySearchRun {
             selectionCount: selectionStats.selectionCount,
             pendingCount: this.pendingByKey.size,
             pendingMergeCount: this.pendingMergeCount,
-            resolvedCount: this.resolved.size,
+            resolvedCount: this.resolvedByFactorSet.size,
+            seededMass: this.seededMass,
+            pendingMass,
+            resolvedMass,
             iterations: this.iterations,
             roundingLoss: this.roundingLoss,
             graphs: this.graphs.map(graph => graph.getMemoryStats())
@@ -238,13 +261,34 @@ export class RankFamilySearchRun {
 
     private recordResolved(factorSetId: FactorSetId, rankPoolMixId: RankPoolMixId, mass: bigint): void {
         const scaledMixId = this.selections.scaleRankPoolMix(rankPoolMixId, mass);
-        const selectionId = this.selections.getOrCreateSelection(scaledMixId, factorSetId);
-        this.resolved.set(selectionId, (this.resolved.get(selectionId) ?? 0n) + mass);
+        const existing = this.resolvedByFactorSet.get(factorSetId);
+        if (!existing) {
+            this.resolvedByFactorSet.set(factorSetId, Object.freeze({ factorSetId, rankPoolMixId: scaledMixId, mass }));
+            return;
+        }
+
+        this.resolvedByFactorSet.set(factorSetId, Object.freeze({
+            factorSetId,
+            rankPoolMixId: this.selections.mergeRankPoolMixes([existing.rankPoolMixId, scaledMixId]),
+            mass: existing.mass + mass
+        }));
     }
 }
 
 function createPendingKey(graphId: number, nodeId: RankFamilyNodeId, factorSetId: FactorSetId): string {
     return `${graphId}:${String(nodeId)}:${String(factorSetId)}`;
+}
+
+function sumPendingMass(entries: Iterable<RankFamilyPendingEntry>): bigint {
+    let mass = 0n;
+    for (const entry of entries) mass += entry.mass;
+    return mass;
+}
+
+function sumResolvedMass(entries: Iterable<RankFamilyResolvedRecord>): bigint {
+    let mass = 0n;
+    for (const entry of entries) mass += entry.mass;
+    return mass;
 }
 
 function splitMassByWeights(mass: bigint, weights: readonly number[], totalWeight: bigint): bigint[] {

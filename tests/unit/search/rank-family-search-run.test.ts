@@ -45,6 +45,9 @@ describe('RankFamilySearchRun', () => {
         assert.ok(rankStats.rankPoolCount > rankStats.graphCount);
         assert.ok(rankStats.graphCount < exactRun.getMemoryStats().graphs.length);
         assert.strictEqual(rankStats.pendingCount, rankRun.getPendingEntries().length);
+        assert.strictEqual(rankStats.pendingMass, rankStats.seededMass);
+        assert.strictEqual(rankStats.resolvedMass, 0n);
+        assertMassConserved(rankRun);
     });
 
     it('keeps initial frontier identity free of rank-pool mix identity', () => {
@@ -77,6 +80,7 @@ describe('RankFamilySearchRun', () => {
         assert.ok(stats.pendingMergeCount > 0, 'child lanes should merge once root expansion moves past roots');
         assert.ok(run.getPendingEntries().some(entry => entry.factorSetId !== run.selections.emptyFactorSet));
         assert.strictEqual(stats.roundingLoss, 0n);
+        assertMassConserved(run);
     });
 
     it('records resolved mass while advancing terminal and stopped entries', () => {
@@ -94,5 +98,39 @@ describe('RankFamilySearchRun', () => {
         for (const mass of run.getResolvedEntries().values()) {
             assert.ok(mass > 0n);
         }
+        assertMassConserved(run);
+    });
+
+    it('conserves rank-pool payload mass during repeated frontier advances', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
+        const run = new RankFamilySearchRun(kernel);
+        run.seedXp(30);
+
+        assertMassConserved(run);
+        for (let steps = 0; steps < 1000; steps++) {
+            assert.strictEqual(run.advance(1), 1);
+            if (steps % 25 === 0) assertMassConserved(run);
+        }
+
+        const stats = run.getMemoryStats();
+        assert.ok(stats.pendingMergeCount > 0);
+        assert.ok(stats.resolvedMass > 0n);
+        assert.strictEqual(stats.roundingLoss, 0n);
+        assertMassConserved(run);
     });
 });
+
+function assertMassConserved(run: RankFamilySearchRun): void {
+    const stats = run.getMemoryStats();
+    assert.strictEqual(stats.pendingMass + stats.resolvedMass + stats.roundingLoss, stats.seededMass);
+
+    for (const entry of run.getPendingEntries()) {
+        assert.strictEqual(run.selections.getRankPoolMix(entry.rankPoolMixId).totalWeight, entry.mass);
+    }
+
+    for (const [selectionId, mass] of run.getResolvedEntries()) {
+        const selection = run.selections.getSelection(selectionId);
+        assert.strictEqual(run.selections.getRankPoolMix(selection.rankPoolMixId).totalWeight, mass);
+    }
+}
