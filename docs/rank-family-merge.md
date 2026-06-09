@@ -12,10 +12,13 @@ This note records the clean rank-family merge plan for V8 grouped search. The cu
 - [Ownership Boundaries](#ownership-boundaries)
 - [Merge Predicate](#merge-predicate)
 - [Convergence Model](#convergence-model)
-- [Selection Identity](#selection-identity)
+- [Factor Set And Selection Identity](#factor-set-and-selection-identity)
 - [Rank Pool Resolution](#rank-pool-resolution)
+- [Mass And Residue Handling](#mass-and-residue-handling)
+- [Projection Model](#projection-model)
 - [Clue Handling](#clue-handling)
 - [Implementation Plan](#implementation-plan)
+- [Current Implementation Status](#current-implementation-status)
 - [Prototype Archaeology](#prototype-archaeology)
 - [Acceptance Gates](#acceptance-gates)
 - [Open Questions](#open-questions)
@@ -289,6 +292,79 @@ The cost tradeoff remains favorable:
 
 If multiple modified levels expose identical exact pools, the runtime may intern them to the same `rankPoolId`.
 
+## Mass And Residue Handling
+
+Rank-pool mix weights are conditional payload weights for the current frontier state. They must move with the same mass split as the frontier entry itself.
+
+This invariant must hold for every pending entry:
+
+```text
+entry.mass == sum(rankPoolMix.poolWeights)
+```
+
+Using only the initial modified-level probabilities after lanes branch is incorrect. Once a lane takes an edge, the exact-rank payload must represent "how much mass from this exact pool reached this state", not "how much mass this exact pool had at the root".
+
+Example:
+
+```text
+root A starts at 60, edge to child has 10% weight -> child contribution A = 6
+root B starts at 40, edge to child has 50% weight -> child contribution B = 20
+merged child payload = { A: 6, B: 20 }
+```
+
+The payload is therefore scaled to child mass before merge. A merge then adds compatible payloads:
+
+```text
+same (graphId, graphNodeId, factorSetId):
+  mass = left.mass + right.mass
+  rankPoolMix = merge(left.rankPoolMix, right.rankPoolMix)
+```
+
+Integer mass splitting must match current Flex semantics. Do not distribute remainders to make each split locally exact. Flex floors edge shares, keeps per-frontier-edge residues, and later recovers those residues when the same source frontier key is expanded again.
+
+Rank-family advance follows the same rule, but residue ownership is keyed by the rank-free frontier identity:
+
+```text
+residue key = (graphId, graphNodeId, factorSetId)
+```
+
+Each residue bucket also carries a `rankPoolMixId`, because recovered rounding must preserve exact-rank payload ownership. The conservation invariant becomes:
+
+```text
+pendingMass + resolvedMass + overflowMass + roundingLoss == seededMass
+```
+
+This is the same mass-harvesting shape as Flex, with the source payload generalized from one exact `programId` to a weighted `rankPoolMixId`.
+
+## Projection Model
+
+Projection is the exact-rank boundary for the standalone rank-family runtime.
+
+Input:
+
+```text
+selectionId = factorSetId + rankPoolMixId
+mass
+```
+
+Projection walks the selected abstract factors. For each represented exact rank pool, it resolves every abstract alternative through:
+
+```text
+rankPools.resolve(rankPoolId, enchantId) -> packedEnchant | null
+```
+
+The projector then packs exact combo rows with the same semantics as `FlexProjector`:
+
+- weighted choices split by factor weights;
+- projection loss records integer floor loss;
+- book result removal tries every removed slot for multi-enchant books;
+- target clues keep only exact packed-rank-compatible rows.
+
+The standalone implementation currently has exact tiny exhaustive parity against current Flex for:
+
+- `1.21.11 sword/diamond XP1`;
+- `1.21.11 book/book XP1`.
+
 ## Clue Handling
 
 Exact clue-rank pruning belongs at the rank-pool boundary.
@@ -359,17 +435,25 @@ Create `selectionId` from:
 canonical sorted factorId set + rankPoolMixId
 ```
 
-This is the selected-state identity carried by frontier/residue/projection.
+This is the selected-state identity carried by projection.
 
 ### Phase 6: Re-Key Frontier And Residue
 
 When structural nodes can be shared by multiple selected states, frontier and residue state must include selected identity:
 
 ```text
-(graphNodeId, selectionId)
+(graphNodeId, factorSetId)
 ```
 
-This avoids the old bug class where graph-node reuse accidentally keeps only the first branch's selected history.
+or, while graph identity remains split:
+
+```text
+(graphId, graphNodeId, factorSetId)
+```
+
+The key deliberately excludes `rankPoolMixId`. Exact-rank payloads merge as `rankPoolMixId` values on the frontier entry. Residues use the same rank-free key, with per-edge residue payloads that carry their own `rankPoolMixId`.
+
+This avoids the old bug class where graph-node reuse accidentally keeps only the first branch's selected history, while still allowing exact-rank payloads to converge.
 
 ### Phase 7: Enable Structural Node Reuse
 
@@ -382,13 +466,19 @@ Only after rank-pool mix and selection identity exist:
 
 This is the first phase expected to reduce graph shape or node counts.
 
-### Phase 8: Start With Singleton Structural Choices
+### Phase 8: Project Exact Results
+
+Add a rank-family projector that converts resolved `selectionId` rows into exact `PackedCombo` rows.
+
+The projector must not fake `FlexProgramId`s. It should walk `factorSetId`, resolve alternatives through `RankPoolStore`, and then apply the same result projection semantics as Flex.
+
+### Phase 9: Start With Singleton Structural Choices
 
 The first real merge can be restricted to singleton structural choices. Conflict/Plex rank mixes can follow after parity and mass checks pass.
 
 This keeps the first implementation small enough to reason about while still validating the ownership model.
 
-### Phase 9: Add Diagnostics
+### Phase 10: Add Diagnostics
 
 Temporary diagnostics should answer:
 
@@ -397,6 +487,38 @@ Temporary diagnostics should answer:
 - how much fell back to exact pool handling;
 - whether fallback came from non-rank structural differences;
 - whether projection produced the same exact snapshots as the non-merged path.
+
+## Current Implementation Status
+
+As of 2026-06-09, the implementation branch is `feature/rank-family-merge`.
+
+Pushed slices:
+
+- order-agnostic rank-family signatures while exact pool signatures remain order-sensitive;
+- `RankPoolStore` for exact `(rankPoolId, enchantId) -> packedEnchant` resolution;
+- `RankSelectionStore` with `FactorId`, `FactorSetId`, `RankPoolMixId`, and `SelectionId`;
+- standalone `RankFamilyGraph`;
+- standalone `RankFamilySearchRun.advance(maxSteps)`;
+- rank-free frontier keys `(graphId, graphNodeId, factorSetId)`;
+- mass diagnostics: `seededMass`, `pendingMass`, `resolvedMass`, `overflowMass`, and `roundingLoss`;
+- Flex-style frontier residue recovery with rank-pool payload preservation;
+- `RankFamilyProjector`;
+- exact tiny exhaustive projection parity tests for sword and book XP1.
+
+Important correction from implementation:
+
+```text
+Do not over-conserve edge splits by distributing integer remainders.
+Do not drop residues by simple flooring.
+Use Flex-style per-frontier-edge residues, keyed by the rank-free frontier identity.
+```
+
+Current remaining work:
+
+1. clue-conditioned parity, especially exact-rank clue filtering;
+2. pending projection/checkpoint summaries for bounded rank-family runs;
+3. opt-in search-mode integration;
+4. broader snapshot and performance parity before defaulting to this path.
 
 ## Prototype Archaeology
 
@@ -451,4 +573,4 @@ Jonathan Braver
 
 ## Last Updated
 
-2026-05-31
+2026-06-09
