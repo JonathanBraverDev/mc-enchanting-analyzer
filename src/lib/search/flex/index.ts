@@ -7,6 +7,7 @@ export * from './FlexCoordinator.js';
 export * from './RankPoolStore.js';
 export * from './RankSelectionStore.js';
 export * from './RankFamilyGraph.js';
+export * from './RankFamilyProjector.js';
 export * from './RankFamilySearchRun.js';
 export * from './GroupedFlexGraph.js';
 export * from './GroupedFlexSearchRun.js';

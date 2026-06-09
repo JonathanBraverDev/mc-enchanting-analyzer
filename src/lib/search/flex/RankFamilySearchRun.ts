@@ -10,7 +10,12 @@ import {
 } from '#lib/search/flex/RankSelectionStore.js';
 import { RankSelectionStore as DefaultRankSelectionStore } from '#lib/search/flex/RankSelectionStore.js';
 import { RankPoolStore } from '#lib/search/flex/RankPoolStore.js';
-import { RankFamilyGraph, type RankFamilyGraphMemoryStats, type RankFamilyNodeId } from '#lib/search/flex/RankFamilyGraph.js';
+import {
+    RankFamilyGraph,
+    type RankFamilyEdge,
+    type RankFamilyGraphMemoryStats,
+    type RankFamilyNodeId
+} from '#lib/search/flex/RankFamilyGraph.js';
 
 interface RankFamilyGraphRecord {
     readonly id: number;
@@ -21,6 +26,17 @@ interface RankFamilyResolvedRecord {
     readonly factorSetId: FactorSetId;
     readonly rankPoolMixId: RankPoolMixId;
     readonly mass: bigint;
+}
+
+interface RankFamilyResidueBucket {
+    readonly numerator: bigint;
+    readonly rankPoolMixId: RankPoolMixId;
+}
+
+interface RankFamilyResidueRecord {
+    readonly denominator: bigint;
+    readonly buckets: readonly (RankFamilyResidueBucket | undefined)[];
+    readonly residueMass: bigint;
 }
 
 export interface RankFamilyPendingEntry {
@@ -44,6 +60,7 @@ export interface RankFamilySearchRunMemoryStats {
     readonly seededMass: bigint;
     readonly pendingMass: bigint;
     readonly resolvedMass: bigint;
+    readonly overflowMass: bigint;
     readonly iterations: number;
     readonly roundingLoss: bigint;
     readonly graphs: readonly RankFamilyGraphMemoryStats[];
@@ -69,8 +86,10 @@ export class RankFamilySearchRun {
     private readonly graphsByFamily = new Map<SearchPoolFamilySignature, RankFamilyGraphRecord>();
     private readonly graphs: RankFamilyGraph[] = [];
     private readonly pendingByKey = new Map<string, RankFamilyPendingEntry>();
+    private readonly residuesByKey = new Map<string, RankFamilyResidueRecord>();
     private readonly resolvedByFactorSet = new Map<FactorSetId, RankFamilyResolvedRecord>();
     private seededMass = 0n;
+    private overflowMass = 0n;
     private pendingMergeCount = 0;
     private iterations = 0;
     private roundingLoss = 0n;
@@ -161,6 +180,7 @@ export class RankFamilySearchRun {
             seededMass: this.seededMass,
             pendingMass,
             resolvedMass,
+            overflowMass: this.overflowMass,
             iterations: this.iterations,
             roundingLoss: this.roundingLoss,
             graphs: this.graphs.map(graph => graph.getMemoryStats())
@@ -171,35 +191,22 @@ export class RankFamilySearchRun {
         const current = this.popNextPending();
         if (!current) return false;
 
-        const graph = this.getGraph(current.graphId);
-        const expansion = graph.getExpansion(current.nodeId);
-        const stopMass = ProbUtils.scale(current.mass, PRECISION - expansion.probContinue);
-        const forwardMass = current.mass - stopMass;
+        const graph = this.getGraph(current.entry.graphId);
+        const expansion = graph.getExpansion(current.entry.nodeId);
+        const stopMass = ProbUtils.scale(current.entry.mass, PRECISION - expansion.probContinue);
+        const forwardMass = current.entry.mass - stopMass;
 
         if (stopMass > 0n) {
-            this.recordResolved(current.factorSetId, current.rankPoolMixId, stopMass);
+            this.recordResolved(current.entry.factorSetId, current.entry.rankPoolMixId, stopMass);
         }
 
         if (forwardMass > 0n) {
-            if (expansion.terminalReason !== null || expansion.totalWeight <= 0 || expansion.edges.length === 0) {
-                this.recordResolved(current.factorSetId, current.rankPoolMixId, forwardMass);
+            if (expansion.terminalReason === 'overflow') {
+                this.overflowMass += forwardMass;
+            } else if (expansion.totalWeight <= 0 || expansion.edges.length === 0) {
+                this.recordResolved(current.entry.factorSetId, current.entry.rankPoolMixId, forwardMass);
             } else {
-                const childMasses = splitMassByWeights(
-                    forwardMass,
-                    expansion.edges.map(edge => edge.weight),
-                    BigInt(expansion.totalWeight)
-                );
-                let assigned = 0n;
-                for (let index = 0; index < expansion.edges.length; index++) {
-                    const childMass = childMasses[index]!;
-                    if (childMass === 0n) continue;
-                    const edge = expansion.edges[index]!;
-                    const factorSetId = this.selections.appendFactorToSet(current.factorSetId, edge.factorId);
-                    const rankPoolMixId = this.selections.scaleRankPoolMix(current.rankPoolMixId, childMass);
-                    this.pushPending(current.graphId, edge.childId, factorSetId, rankPoolMixId, childMass);
-                    assigned += childMass;
-                }
-                this.roundingLoss += forwardMass - assigned;
+                this.forwardMass(current.key, current.entry, expansion.edges, expansion.totalWeight, forwardMass);
             }
         }
 
@@ -220,7 +227,7 @@ export class RankFamilySearchRun {
         return record;
     }
 
-    private popNextPending(): RankFamilyPendingEntry | undefined {
+    private popNextPending(): { readonly key: string; readonly entry: RankFamilyPendingEntry } | undefined {
         let selectedKey: string | undefined;
         let selectedEntry: RankFamilyPendingEntry | undefined;
         for (const [key, entry] of this.pendingByKey.entries()) {
@@ -231,7 +238,82 @@ export class RankFamilySearchRun {
         }
 
         if (selectedKey) this.pendingByKey.delete(selectedKey);
-        return selectedEntry;
+        return selectedKey && selectedEntry ? { key: selectedKey, entry: selectedEntry } : undefined;
+    }
+
+    private forwardMass(
+        sourceKey: string,
+        current: RankFamilyPendingEntry,
+        edges: readonly RankFamilyEdge[],
+        totalWeightNumber: number,
+        mass: bigint
+    ): void {
+        const totalWeight = BigInt(totalWeightNumber);
+        const oldResidues = this.residuesByKey.get(sourceKey);
+        if (oldResidues && oldResidues.denominator !== totalWeight) {
+            throw new Error(`Rank-family residue denominator changed for frontier key ${sourceKey}.`);
+        }
+        const nextBuckets: (RankFamilyResidueBucket | undefined)[] = [];
+        let nextResidueNumerator = 0n;
+
+        for (let index = 0; index < edges.length; index++) {
+            const edge = edges[index]!;
+            if (edge.weight <= 0) continue;
+
+            const weight = BigInt(edge.weight);
+            const baseNumerator = mass * weight;
+            const baseMass = baseNumerator / totalWeight;
+            const baseResidue = baseNumerator - (baseMass * totalWeight);
+            const oldBucket = oldResidues?.buckets[index];
+            const oldResidue = oldBucket?.numerator ?? 0n;
+            const numerator = baseNumerator + oldResidue;
+            const childMass = numerator / totalWeight;
+            const promotedMass = childMass - baseMass;
+            const edgeResidue = numerator - (childMass * totalWeight);
+            const factorSetId = this.selections.appendFactorToSet(current.factorSetId, edge.factorId);
+
+            if (baseMass > 0n) {
+                this.pushPending(
+                    current.graphId,
+                    edge.childId,
+                    factorSetId,
+                    this.selections.scaleRankPoolMix(current.rankPoolMixId, baseMass),
+                    baseMass
+                );
+            }
+
+            const residueMixId = this.createCombinedResidueMix(current.rankPoolMixId, baseResidue, oldBucket);
+            if (promotedMass > 0n) {
+                this.pushPending(
+                    current.graphId,
+                    edge.childId,
+                    factorSetId,
+                    this.selections.scaleRankPoolMix(residueMixId, promotedMass),
+                    promotedMass
+                );
+            }
+
+            if (edgeResidue > 0n) {
+                nextBuckets[index] = Object.freeze({
+                    numerator: edgeResidue,
+                    rankPoolMixId: this.selections.scaleRankPoolMix(residueMixId, edgeResidue)
+                });
+                nextResidueNumerator += edgeResidue;
+            }
+        }
+
+        const oldResidueMass = oldResidues?.residueMass ?? 0n;
+        const newResidueMass = nextResidueNumerator / totalWeight;
+        if (nextResidueNumerator > 0n) {
+            this.residuesByKey.set(sourceKey, Object.freeze({
+                denominator: totalWeight,
+                buckets: Object.freeze(nextBuckets),
+                residueMass: newResidueMass
+            }));
+        } else {
+            this.residuesByKey.delete(sourceKey);
+        }
+        this.roundingLoss += newResidueMass - oldResidueMass;
     }
 
     private pushPending(
@@ -273,6 +355,22 @@ export class RankFamilySearchRun {
             mass: existing.mass + mass
         }));
     }
+
+    private createCombinedResidueMix(
+        currentMixId: RankPoolMixId,
+        currentResidue: bigint,
+        oldBucket: RankFamilyResidueBucket | undefined
+    ): RankPoolMixId {
+        const mixes: RankPoolMixId[] = [];
+        if (currentResidue > 0n) {
+            mixes.push(this.selections.scaleRankPoolMix(currentMixId, currentResidue));
+        }
+        if (oldBucket && oldBucket.numerator > 0n) {
+            mixes.push(oldBucket.rankPoolMixId);
+        }
+        if (mixes.length === 0) return currentMixId;
+        return this.selections.mergeRankPoolMixes(mixes);
+    }
 }
 
 function createPendingKey(graphId: number, nodeId: RankFamilyNodeId, factorSetId: FactorSetId): string {
@@ -289,34 +387,4 @@ function sumResolvedMass(entries: Iterable<RankFamilyResolvedRecord>): bigint {
     let mass = 0n;
     for (const entry of entries) mass += entry.mass;
     return mass;
-}
-
-function splitMassByWeights(mass: bigint, weights: readonly number[], totalWeight: bigint): bigint[] {
-    const split = weights.map((weight, index) => {
-        const scaledNumerator = mass * BigInt(weight);
-        return {
-            index,
-            mass: scaledNumerator / totalWeight,
-            remainder: scaledNumerator % totalWeight
-        };
-    });
-
-    let assigned = split.reduce((sum, entry) => sum + entry.mass, 0n);
-    let remainder = mass - assigned;
-    const remainderOrder = [...split].sort((left, right) => {
-        if (left.remainder === right.remainder) return left.index - right.index;
-        return left.remainder > right.remainder ? -1 : 1;
-    });
-
-    for (const entry of remainderOrder) {
-        if (remainder === 0n) break;
-        entry.mass++;
-        assigned++;
-        remainder--;
-    }
-
-    if (assigned !== mass) throw new Error(`Rank-family advance lost ${mass - assigned} mass units.`);
-    return split
-        .sort((left, right) => left.index - right.index)
-        .map(entry => entry.mass);
 }

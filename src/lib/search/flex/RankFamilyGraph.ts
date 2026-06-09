@@ -106,9 +106,9 @@ export class RankFamilyGraph {
         }
 
         const terminalReason = this.getTerminalReason(node.count);
-        const probContinue = terminalReason === null
-            ? (ProbUtils.PROB_CONTINUE_TABLE[node.currentLevel] ?? PRECISION)
-            : 0n;
+        const probContinue = terminalReason === 'single-book'
+            ? 0n
+            : (ProbUtils.PROB_CONTINUE_TABLE[node.currentLevel] ?? PRECISION);
         if (terminalReason !== null) {
             return Object.freeze({
                 nodeId,
@@ -116,7 +116,7 @@ export class RankFamilyGraph {
                 probContinue,
                 totalWeight: 0,
                 edges: Object.freeze([]),
-                terminalReason
+                terminalReason: terminalReason === 'max-enchants' ? 'overflow' : null
             });
         }
 
@@ -192,11 +192,11 @@ export class RankFamilyGraph {
         return id;
     }
 
-    private getTerminalReason(count: number): RankFamilyTerminalReason {
+    private getTerminalReason(count: number): 'max-enchants' | 'single-book' | null {
         if (this.kernel.item === 'book' && !this.kernel.multiEnchantBooks && count >= FLEX_GRAPH_TRAVERSAL.SINGLE_ENCHANT_BOOK_TERMINAL_COUNT) {
-            return 'overflow';
+            return 'single-book';
         }
-        if (count >= ENGINE_LIMITS.MAX_ENCHANTS_PER_ITEM) return 'overflow';
+        if (count >= ENGINE_LIMITS.MAX_ENCHANTS_PER_ITEM) return 'max-enchants';
         return null;
     }
 }
