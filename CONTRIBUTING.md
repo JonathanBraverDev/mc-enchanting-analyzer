@@ -226,10 +226,10 @@ npx tsx scripts/profile_perf_cases.ts
 These scripts report tree shape, throughput, result counts, active search time, post-processing time, and total engine time.
 
 ### Optimizing the Search
-- Keep Minecraft rule lookup in the registry/core layer, structural graph work in `GroupedFlexGraph`, and weighted probability movement in `FlexCoordinator`.
+- Keep Minecraft rule lookup in the registry/core layer, structural graph work in `FlexSearchGraph`, rank-pool/factor identity in `RankSelectionStore` and `RankPoolStore`, and weighted probability movement in `FlexSearchRun`.
 - Avoid object allocation in hot loops such as graph expansion, weighted fanout, frontier push/pop, and summary aggregation.
 - Prefer dense graph node IDs, packed combos, typed arrays, precomputed `SearchPoolEntry` metadata, and reusable grouped expansion shapes over repeated map/key reconstruction.
-- Measure wall-clock runtime, not only iteration counts. Suffix merging is the current example where fewer frontier pops can still be slower because canonicalization overhead dominates.
+- Measure wall-clock runtime, classified mass, and projection cost, not only iteration counts. Rank merging can reduce frontier work while still exposing projection or canonicalization costs.
 
 ## Mass Conservation Invariants
 

@@ -14,7 +14,7 @@ interface RankPoolRecord {
 }
 
 /**
- * Interns exact ranked pools for rank-family projection.
+ * Interns exact ranked pools for Flex rank-merge projection.
  *
  * The grouped graph can reason about abstract enchant IDs, while projection can
  * recover the exact packed enchantment through `(rankPoolId, enchantId)`.

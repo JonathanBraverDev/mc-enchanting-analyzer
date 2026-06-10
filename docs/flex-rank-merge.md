@@ -1,8 +1,8 @@
-# Rank-Family Merge Plan
+# Flex Rank Merge Design Notes
 
 ## Common Description
 
-This note records the clean rank-family merge plan for V8 grouped search. The current rank-parametric prototype branch is useful archaeology for exact rank rehydration, but it should not drive the implementation architecture. The final design must keep graph structure, selected abstract factors, exact ranked pools, and projection ownership separate.
+This note records the Flex rank-merge design that is now part of the default V8 search engine. The old rank-parametric prototype branch is useful archaeology for exact rank rehydration, but it does not define the implementation architecture. The maintained engine keeps graph structure, selected abstract factors, exact ranked pools, and projection ownership separate.
 
 ## Table of Contents
 
@@ -28,7 +28,7 @@ This note records the clean rank-family merge plan for V8 grouped search. The cu
 
 ## Purpose / Scope
 
-The goal is to let grouped search share rank-family future structure across modified levels whose pools differ only by exact enchant rank, while preserving exact user-facing result rows, clue behavior, and probability mass accounting.
+The goal is to let Flex search share future structure across modified levels whose pools differ only by exact enchant rank, while preserving exact user-facing result rows, clue behavior, and probability mass accounting.
 
 This document is an implementation plan, not a public API contract. It intentionally drops the old `profileId`, `lensId`, and `programId` framing from the clean design. Those names describe prototype mechanics or overloaded V8 internals, not the final ownership model.
 
@@ -322,13 +322,13 @@ same (graphId, graphNodeId, factorSetId):
 
 Integer mass splitting must match current Flex semantics. Do not distribute remainders to make each split locally exact. Flex floors edge shares, keeps per-frontier-edge residues, and later recovers those residues when the same source frontier key is expanded again.
 
-Rank-family advance follows the same rule, but residue ownership is keyed by the rank-free frontier identity:
+Flex search advance follows the same rule, but residue ownership is keyed by the rank-free frontier identity:
 
 ```text
 residue key = (graphId, graphNodeId, factorSetId)
 ```
 
-Each residue bucket carries per-`rankPoolId` residue numerators, not one aggregate numerator for the whole merged payload. Recovered rounding must promote per exact rank-pool slice first, then merge the promoted child payload back into the rank-family frontier. If residue numerators are aggregated across rank pools before division, the merged engine can promote units earlier or later than exact Flex.
+Each residue bucket carries per-`rankPoolId` residue numerators, not one aggregate numerator for the whole merged payload. Recovered rounding must promote per exact rank-pool slice first, then merge the promoted child payload back into the Flex frontier. If residue numerators are aggregated across rank pools before division, the merged engine can promote units earlier or later than exact Flex.
 
 The conservation invariant becomes:
 
@@ -351,11 +351,11 @@ lateForwardCount: cached replay for late mass into an already-expanded key
 expansionBuildCount: unique structural expansion construction
 ```
 
-Do not replace this with count-order/topological batching unless rank-family intentionally adopts a new canonical mass model. Count-order batching eliminates more pending churn, but it changes tiny integer projection parity because stop/continue floors and residue recovery are order-sensitive.
+Do not replace this with count-order/topological batching unless Flex intentionally adopts a new canonical mass model. Count-order batching eliminates more pending churn, but it changes tiny integer projection parity because stop/continue floors and residue recovery are order-sensitive.
 
 ## Projection Model
 
-Projection is the exact-rank boundary for the standalone rank-family runtime.
+Projection is the exact-rank boundary for the Flex search runtime.
 
 Input:
 
@@ -370,7 +370,7 @@ Projection walks the selected abstract factors. For each represented exact rank 
 rankPools.resolve(rankPoolId, enchantId) -> packedEnchant | null
 ```
 
-The projector then packs exact combo rows with the same semantics as `FlexProjector`:
+The projector then packs exact combo rows with the same semantics as `FlexSearchProjector`:
 
 - weighted choices split by factor weights;
 - projection loss records integer floor loss;
@@ -485,9 +485,9 @@ This is the first phase expected to reduce graph shape or node counts.
 
 ### Phase 8: Project Exact Results
 
-Add a rank-family projector that converts resolved `selectionId` rows into exact `PackedCombo` rows.
+Add a Flex projector that converts resolved `selectionId` rows into exact `PackedCombo` rows.
 
-The projector must not fake `FlexProgramId`s. It should walk `factorSetId`, resolve alternatives through `RankPoolStore`, and then apply the same result projection semantics as Flex.
+The projector must not fake concrete selected paths. It should walk `factorSetId`, resolve alternatives through `RankPoolStore`, and then apply the same result projection semantics as Flex.
 
 ### Phase 9: Start With Singleton Structural Choices
 
@@ -503,24 +503,27 @@ Temporary diagnostics should answer:
 - how much actually used a merged structural path;
 - how much fell back to exact pool handling;
 - whether fallback came from non-rank structural differences;
-- whether projection produced the same exact snapshots as the non-merged path.
+- whether projection preserved exact row shape, clue behavior, and mass accounting.
 
 ## Current Implementation Status
 
-As of 2026-06-09, the implementation branch is `feature/rank-family-merge`.
+As of 2026-06-10, this design has been folded into the default Flex search engine. Active runtime classes use `FlexSearch*` names, and rank merge is documented in [`search-engine.md`](search-engine.md) as part of the engine deep dive.
 
 Pushed slices:
 
-- order-agnostic rank-family signatures while exact pool signatures remain order-sensitive;
+- order-agnostic rank-merge signatures while exact pool signatures remain order-sensitive;
 - `RankPoolStore` for exact `(rankPoolId, enchantId) -> packedEnchant` resolution;
 - `RankSelectionStore` with `FactorId`, `FactorSetId`, `RankPoolMixId`, and `SelectionId`;
-- standalone `RankFamilyGraph`;
-- standalone `RankFamilySearchRun.advance(maxSteps)`;
+- `FlexSearchGraph`;
+- `FlexSearchRun.advance(maxSteps)`;
 - rank-free frontier keys `(graphId, graphNodeId, factorSetId)`;
 - mass diagnostics: `seededMass`, `pendingMass`, `resolvedMass`, `overflowMass`, and `roundingLoss`;
 - Flex-style frontier residue recovery with per-`rankPoolId` numerator preservation;
 - cached late-forward replay for already-expanded frontier keys, reported as `lateForwardCount`;
-- `RankFamilyProjector`;
+- `FlexSearchProjector`;
+- Flex checkpoint snapshots with resolved and pending projection details;
+- clue-conditioned pending classification for Flex checkpoints;
+- incremental pending/resolved mass totals for target-classified-mass checkpoints;
 - exact tiny exhaustive projection parity tests for sword and book XP1.
 
 Important correction from implementation:
@@ -533,21 +536,21 @@ Within each residue bucket, keep numerators split by rankPoolId.
 Replayed late mass may use an existing cached expansion, but only when it is the next key under the same max-mass ordering.
 ```
 
-Known limitation:
+Current notes:
 
-- Exhaustive sword XP10+ now has the same projected combo row set as Flex, but still has tiny integer mass differences on some rows. For `1.21.11 sword/diamond XP30`, the row count matches (`415`), but local comparison still found `124` differing rows with total absolute delta `144` and max row delta `3` after per-rank-pool residue recovery. Cached late-forward replay preserves that known diff while reducing structural iterations from `684` to `383` and reporting `301` late forwards. Do not wire rank-family into the public engine path until the parity difference is explained or eliminated.
+- Pre-8.1 grouped-Flex code has been removed now that rank merging is the Flex search implementation. The release gate relies on current Flex invariants, exhaustive row-shape coverage for modern sword XP30, old multi-enchant book XP30, and exact clue-conditioned Sharpness IV, public API/worker tests, and reviewed snapshot diagnostics.
+- Public checkpoint, sequential checkpoint, clue-conditioned, mutated-registry, and exhaustive searches all use Flex search with rank merging.
+- Public snapshot diagnostics use default-engine names for the merge counters: exact pools, shared graphs, merged pools, pending merges, late forwards, rank-pool mixes, and projection loss.
+- Large uncapped modern-book bounded snapshots still materialize the full Flex result projection at checkpoint boundaries. The 8.1 path avoids the target-mass frontier rescan and keeps the release snapshot practical, but incremental result projection remains the next natural optimization.
 
 Current remaining work:
 
-1. explain or eliminate the remaining exhaustive sword XP10+ tiny integer parity differences;
-2. clue-conditioned parity, especially exact-rank clue filtering;
-3. pending projection/checkpoint summaries for bounded rank-family runs;
-4. opt-in search-mode integration;
-5. broader snapshot and performance parity before defaulting to this path.
+1. optimize incremental Flex result projection for large uncapped modern-book bounded snapshots;
+2. continue broadening snapshot and performance coverage now that rank merging is part of the public Flex path.
 
 ## Prototype Archaeology
 
-The current `prototype/rank-parametric-pool-factors` branch should be treated as archaeology and proof material only.
+The old `prototype/rank-parametric-pool-factors` branch should be treated as archaeology and proof material only.
 
 Useful salvage:
 
@@ -569,22 +572,21 @@ Avoid carrying forward:
 
 ## Acceptance Gates
 
-The first real merge should pass:
+The integrated Flex rank-merge path should keep these gates green:
 
-- normal full snapshot parity against the non-merged path;
-- clue snapshot parity, especially exact ranked clues;
+- full release test suite, including engine snapshots and UI workers;
+- public package facade, CLI, packed-package import/declaration, and worker protocol tests;
+- exhaustive row-shape coverage for representative item, book, clue-conditioned, and mutated-registry cases;
 - pending/frontier aggregate mass conservation;
 - projection mass conservation across projected mass, clue-incompatible mass, and projection loss;
-- reversed candidate-order identity test flipped to require equal final `familyId`;
-- diagnostics showing eligible, merged, and fallback mass.
+- reversed candidate-order identity coverage requiring equal structural merge identity;
+- snapshot diagnostics showing exact pools, shared graphs, merged pools, pending merges, late forwards, rank-pool mixes, and projection loss.
 
 ## Open Questions
 
-1. Should `rankPoolId` be a branded numeric handle over exact `SearchPoolSignature`, or should it reuse the exact pool signature directly during the first implementation?
-2. Should `rankPoolMixId` live inside the selection/factor store or in a small adjacent table owned by the grouped runtime?
-3. Should the first implementation be a parallel V8.1-style engine until parity is proven, then replace the current grouped engine?
-4. What is the smallest fixture that proves order-agnostic `selectionId` convergence: pickaxe singleton choices, conflict choices, or both?
-5. Should conflict/Plex factors be disabled for the first merge implementation even if their factor representation is already generic?
+1. Should projection become incremental for large modern-book bounded snapshots?
+2. Which additional snapshot cases best cover rank-merge behavior without making release CI too slow?
+3. Should future diagnostics separate graph-sharing wins from projection materialization costs more explicitly?
 
 ## References / Related Docs
 
@@ -598,4 +600,4 @@ Jonathan Braver
 
 ## Last Updated
 
-2026-06-09
+2026-06-10

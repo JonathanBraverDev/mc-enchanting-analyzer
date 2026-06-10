@@ -5,33 +5,33 @@ import type { SearchPool, SearchPoolEntry } from '#lib/search/registry/RegistryK
 import type { RegistryKernel } from '#lib/search/registry/RegistryKernel.js';
 import { PRECISION, ProbUtils } from '#utils/index.js';
 
-export type RankFamilyNodeId = number & { readonly __brand: 'RankFamilyNodeId' };
+export type FlexSearchNodeId = number & { readonly __brand: 'FlexSearchNodeId' };
 
-export interface RankFamilyNode {
-    readonly id: RankFamilyNodeId;
+export interface FlexSearchNode {
+    readonly id: FlexSearchNodeId;
     readonly exclusionMask: bigint;
     readonly currentLevel: number;
     readonly count: number;
 }
 
-export interface RankFamilyEdge {
+export interface FlexSearchEdge {
     readonly weight: number;
-    readonly childId: RankFamilyNodeId;
+    readonly childId: FlexSearchNodeId;
     readonly factorId: FactorId;
 }
 
-export type RankFamilyTerminalReason = 'overflow' | null;
+export type FlexGraphTerminalReason = 'overflow' | null;
 
-export interface RankFamilyExpansion {
-    readonly nodeId: RankFamilyNodeId;
+export interface FlexGraphExpansion {
+    readonly nodeId: FlexSearchNodeId;
     readonly count: number;
     readonly probContinue: bigint;
     readonly totalWeight: number;
-    readonly edges: readonly RankFamilyEdge[];
-    readonly terminalReason: RankFamilyTerminalReason;
+    readonly edges: readonly FlexSearchEdge[];
+    readonly terminalReason: FlexGraphTerminalReason;
 }
 
-export interface RankFamilyGraphMemoryStats {
+export interface FlexSearchGraphStats {
     readonly nodeCount: number;
     readonly nodeCreateCount: number;
     readonly nodeReuseCount: number;
@@ -47,15 +47,15 @@ interface ScratchGroup {
 }
 
 /**
- * Standalone structural graph for rank-family search.
+ * Structural graph for Flex search rank merging.
  *
- * Unlike `GroupedFlexGraph`, nodes carry only future structural state. Picked
- * factors and exact rank pools stay outside the graph.
+ * Nodes carry only future structural state. Picked factors and exact rank
+ * pools stay outside the graph.
  */
-export class RankFamilyGraph {
-    private readonly nodes: RankFamilyNode[] = [];
-    private readonly nodeIdsByKey = new Map<string, RankFamilyNodeId>();
-    private readonly expansionCache: Array<RankFamilyExpansion | undefined> = [];
+export class FlexSearchGraph {
+    private readonly nodes: FlexSearchNode[] = [];
+    private readonly nodeIdsByKey = new Map<string, FlexSearchNodeId>();
+    private readonly expansionCache: Array<FlexGraphExpansion | undefined> = [];
     private nodeCreateCount = 0;
     private nodeReuseCount = 0;
     private expansionBuildCount = 0;
@@ -68,17 +68,17 @@ export class RankFamilyGraph {
         private readonly selections: RankSelectionStore
     ) {}
 
-    public getRootNodeId(initialLevel: number): RankFamilyNodeId {
+    public getRootNodeId(initialLevel: number): FlexSearchNodeId {
         return this.getOrCreateNodeId(0n, initialLevel, FLEX_GRAPH_TRAVERSAL.ROOT_ENCHANT_COUNT);
     }
 
-    public getNode(id: RankFamilyNodeId): RankFamilyNode {
+    public getNode(id: FlexSearchNodeId): FlexSearchNode {
         const node = this.nodes[id as number];
-        if (!node) throw new Error(`Unknown rank-family graph node ${id}.`);
+        if (!node) throw new Error(`Unknown Flex search graph node ${id}.`);
         return node;
     }
 
-    public getExpansion(nodeId: RankFamilyNodeId): RankFamilyExpansion {
+    public getExpansion(nodeId: FlexSearchNodeId): FlexGraphExpansion {
         const cached = this.expansionCache[nodeId as number];
         if (cached) return cached;
 
@@ -88,7 +88,7 @@ export class RankFamilyGraph {
         return expansion;
     }
 
-    public getMemoryStats(): RankFamilyGraphMemoryStats {
+    public getMemoryStats(): FlexSearchGraphStats {
         return {
             nodeCount: this.nodes.length,
             nodeCreateCount: this.nodeCreateCount,
@@ -99,7 +99,7 @@ export class RankFamilyGraph {
         };
     }
 
-    private createExpansion(nodeId: RankFamilyNodeId): RankFamilyExpansion {
+    private createExpansion(nodeId: FlexSearchNodeId): FlexGraphExpansion {
         const node = this.getNode(nodeId);
         if (node.count === FLEX_GRAPH_TRAVERSAL.ROOT_ENCHANT_COUNT) {
             return this.createExpansionFromNode(node, PRECISION, node.currentLevel, FLEX_GRAPH_TRAVERSAL.ENCHANT_COUNT_INCREMENT, null);
@@ -126,12 +126,12 @@ export class RankFamilyGraph {
     }
 
     private createExpansionFromNode(
-        node: RankFamilyNode,
+        node: FlexSearchNode,
         probContinue: bigint,
         childLevel: number,
         childCount: number,
-        terminalReason: RankFamilyTerminalReason
-    ): RankFamilyExpansion {
+        terminalReason: FlexGraphTerminalReason
+    ): FlexGraphExpansion {
         const groups = this.buildGroups(node.exclusionMask);
         const edges = groups.map(group => {
             const childId = this.getOrCreateNodeId(group.exclusionMask, childLevel, childCount);
@@ -176,7 +176,7 @@ export class RankFamilyGraph {
         return groups;
     }
 
-    private getOrCreateNodeId(exclusionMask: bigint, currentLevel: number, count: number): RankFamilyNodeId {
+    private getOrCreateNodeId(exclusionMask: bigint, currentLevel: number, count: number): FlexSearchNodeId {
         const key = createNodeKey(exclusionMask, currentLevel, count);
         const existing = this.nodeIdsByKey.get(key);
         if (existing !== undefined) {
@@ -184,7 +184,7 @@ export class RankFamilyGraph {
             return existing;
         }
 
-        const id = this.nodes.length as RankFamilyNodeId;
+        const id = this.nodes.length as FlexSearchNodeId;
         this.nodes.push(Object.freeze({ id, exclusionMask, currentLevel, count }));
         this.nodeIdsByKey.set(key, id);
         this.expansionCache.push(undefined);

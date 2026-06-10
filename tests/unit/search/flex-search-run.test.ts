@@ -3,19 +3,18 @@ import { describe, it } from 'node:test';
 import { RegistryFactory } from '#core/factory.js';
 import { RegistryKernel } from '#lib/search/index.js';
 import {
-    GroupedFlexSearchRun,
-    RankFamilyGraph,
-    RankFamilyProjector,
-    RankFamilySearchRun,
+    FlexSearchGraph,
+    FlexSearchProjector,
+    FlexSearchRun,
     RankSelectionStore
 } from '#lib/search/flex/index.js';
 
-describe('RankFamilyGraph', () => {
+describe('FlexSearchGraph', () => {
     it('emits abstract factor edges without packed rank identity', () => {
         const registry = RegistryFactory.build('1.21.11');
         const kernel = new RegistryKernel({ registry, item: 'sword', material: 'diamond' });
         const selections = new RankSelectionStore();
-        const graph = new RankFamilyGraph(kernel, kernel.getPool(30), selections);
+        const graph = new FlexSearchGraph(kernel, kernel.getPool(30), selections);
         const root = graph.getRootNodeId(30);
         const expansion = graph.getExpansion(root);
 
@@ -31,30 +30,26 @@ describe('RankFamilyGraph', () => {
     });
 });
 
-describe('RankFamilySearchRun', () => {
-    it('seeds exact rank pools into fewer rank-family graphs than the current exact-pool runtime', () => {
+describe('FlexSearchRun', () => {
+    it('seeds exact rank pools into shared Flex rank-merge graphs', () => {
         const registry = RegistryFactory.build('1.21.11');
         const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
-        const exactRun = new GroupedFlexSearchRun(kernel);
-        exactRun.seedXp(30);
+        const currentRun = new FlexSearchRun(kernel);
+        currentRun.seedXp(30);
+        const currentStats = currentRun.getMemoryStats();
 
-        const rankRun = new RankFamilySearchRun(kernel);
-        rankRun.seedXp(30);
-        const rankStats = rankRun.getMemoryStats();
-
-        assert.ok(rankStats.graphCount > 0);
-        assert.ok(rankStats.rankPoolCount > rankStats.graphCount);
-        assert.ok(rankStats.graphCount < exactRun.getMemoryStats().graphs.length);
-        assert.strictEqual(rankStats.pendingCount, rankRun.getPendingEntries().length);
-        assert.strictEqual(rankStats.pendingMass, rankStats.seededMass);
-        assert.strictEqual(rankStats.resolvedMass, 0n);
-        assertMassConserved(rankRun);
+        assert.ok(currentStats.graphCount > 0);
+        assert.ok(currentStats.rankPoolCount > currentStats.graphCount);
+        assert.strictEqual(currentStats.pendingCount, currentRun.getPendingEntries().length);
+        assert.strictEqual(currentStats.pendingMass, currentStats.seededMass);
+        assert.strictEqual(currentStats.resolvedMass, 0n);
+        assertMassConserved(currentRun);
     });
 
     it('keeps initial frontier identity free of rank-pool mix identity', () => {
         const registry = RegistryFactory.build('1.21.11');
         const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
-        const run = new RankFamilySearchRun(kernel);
+        const run = new FlexSearchRun(kernel);
         run.seedXp(30);
 
         for (const entry of run.getPendingEntries()) {
@@ -69,7 +64,7 @@ describe('RankFamilySearchRun', () => {
     it('keeps roots separate, then merges after root expansion creates child lanes', () => {
         const registry = RegistryFactory.build('1.21.11');
         const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
-        const run = new RankFamilySearchRun(kernel);
+        const run = new FlexSearchRun(kernel);
         run.seedXp(30);
         const rootCount = run.getPendingEntries().length;
 
@@ -86,7 +81,7 @@ describe('RankFamilySearchRun', () => {
     it('records resolved mass while advancing terminal and stopped entries', () => {
         const registry = RegistryFactory.build('1.21.11');
         const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
-        const run = new RankFamilySearchRun(kernel);
+        const run = new FlexSearchRun(kernel);
         run.seedXp(1);
 
         for (let steps = 0; steps < 200 && run.getResolvedEntries().size === 0; steps++) {
@@ -104,7 +99,7 @@ describe('RankFamilySearchRun', () => {
     it('conserves rank-pool payload mass during repeated frontier advances', () => {
         const registry = RegistryFactory.build('1.21.11');
         const kernel = new RegistryKernel({ registry, item: 'book', material: 'book' });
-        const run = new RankFamilySearchRun(kernel);
+        const run = new FlexSearchRun(kernel);
         run.seedXp(30);
 
         assertMassConserved(run);
@@ -122,7 +117,7 @@ describe('RankFamilySearchRun', () => {
     it('replays reopened frontier keys through cached structural expansions', () => {
         const registry = RegistryFactory.build('1.21.11');
         const kernel = new RegistryKernel({ registry, item: 'sword', material: 'diamond' });
-        const run = new RankFamilySearchRun(kernel);
+        const run = new FlexSearchRun(kernel);
         run.seedXp(30);
 
         while (run.getPendingEntries().length > 0) {
@@ -136,16 +131,54 @@ describe('RankFamilySearchRun', () => {
         assertMassConserved(run);
     });
 
-    it('projects tiny exhaustive sword results with Flex parity', () => {
-        assertRankFamilyProjectionParity('1.21.11', 'sword', 'diamond', 1);
+    it('projects tiny exhaustive sword results from the current Flex path', () => {
+        const projected = projectExhaustive('1.21.11', 'sword', 'diamond', 1);
+
+        assert.strictEqual(projected.pendingCount, 0);
+        assert.strictEqual(projected.massConserved, true);
+        assert.ok(projected.results.size > 0);
+        assert.strictEqual(projected.sourceMass, projected.projectedMass + projected.projectionLoss + projected.clueIncompatible);
     });
 
-    it('projects tiny exhaustive book results with Flex parity', () => {
-        assertRankFamilyProjectionParity('1.21.11', 'book', 'book', 1);
+    it('projects tiny exhaustive book results from the current Flex path', () => {
+        const projected = projectExhaustive('1.21.11', 'book', 'book', 1);
+
+        assert.strictEqual(projected.pendingCount, 0);
+        assert.strictEqual(projected.massConserved, true);
+        assert.ok(projected.results.size > 0);
+        assert.strictEqual(projected.sourceMass, projected.projectedMass + projected.projectionLoss + projected.clueIncompatible);
+    });
+
+    it('projects the modern sword exhaustive row set from the current Flex path', () => {
+        const projected = projectExhaustive('1.21.11', 'sword', 'diamond', 30);
+
+        assert.strictEqual(projected.pendingCount, 0);
+        assert.strictEqual(projected.massConserved, true);
+        assert.strictEqual(projected.results.size, 415);
+        assert.strictEqual(projected.sourceMass, projected.projectedMass + projected.projectionLoss + projected.clueIncompatible);
+    });
+
+    it('projects the old-book exhaustive row set from the current Flex path', () => {
+        const projected = projectExhaustive('1.7.2', 'book', 'book', 30);
+
+        assert.strictEqual(projected.pendingCount, 0);
+        assert.strictEqual(projected.massConserved, true);
+        assert.strictEqual(projected.results.size, 118_384);
+        assert.strictEqual(projected.sourceMass, projected.projectedMass + projected.projectionLoss + projected.clueIncompatible);
+    });
+
+    it('projects exact clue-conditioned rows from the current Flex path', () => {
+        const projected = projectExhaustive('1.21.11', 'sword', 'diamond', 30, 'Sharpness', 4);
+
+        assert.strictEqual(projected.pendingCount, 0);
+        assert.strictEqual(projected.massConserved, true);
+        assert.strictEqual(projected.results.size, 32);
+        assert.ok(projected.clueIncompatible > 0n);
+        assert.strictEqual(projected.sourceMass, projected.projectedMass + projected.projectionLoss + projected.clueIncompatible);
     });
 });
 
-function assertMassConserved(run: RankFamilySearchRun): void {
+function assertMassConserved(run: FlexSearchRun): void {
     const stats = run.getMemoryStats();
     assert.strictEqual(stats.pendingMass + stats.resolvedMass + stats.overflowMass + stats.roundingLoss, stats.seededMass);
 
@@ -159,35 +192,57 @@ function assertMassConserved(run: RankFamilySearchRun): void {
     }
 }
 
-function assertRankFamilyProjectionParity(version: string, item: string, material: string, xp: number): void {
+function projectExhaustive(
+    version: string,
+    item: string,
+    material: string,
+    xp: number,
+    clueName?: string,
+    clueRank?: number
+): FlexSearchProjection {
     const registry = RegistryFactory.build(version);
     const kernel = new RegistryKernel({ registry, item, material });
+    const targetClueId = clueName === undefined || clueRank === undefined
+        ? undefined
+        : ((registry.idMap.get(clueName)! << 8) | clueRank);
 
-    const flexRun = new GroupedFlexSearchRun(kernel);
-    flexRun.seedXp(xp);
-    const flex = flexRun.searchToCheckpoint({ exhaustive: true });
-    const native = flexRun.buildEngineSnapshot(flex);
-
-    const rankRun = new RankFamilySearchRun(kernel);
-    rankRun.seedXp(xp);
-    for (let steps = 0; steps < 100_000 && rankRun.getPendingEntries().length > 0; steps++) {
-        rankRun.advance(1);
+    const currentRun = new FlexSearchRun(kernel);
+    currentRun.seedXp(xp);
+    for (let steps = 0; steps < 100_000 && currentRun.getPendingEntries().length > 0;) {
+        const advanced = currentRun.advance(10_000);
+        steps += advanced;
+        if (advanced === 0) break;
     }
 
-    assert.strictEqual(rankRun.getPendingEntries().length, 0);
-    assertMassConserved(rankRun);
+    assert.strictEqual(currentRun.getPendingEntries().length, 0);
+    assertMassConserved(currentRun);
 
-    const projector = new RankFamilyProjector(
-        rankRun.rankPools,
-        rankRun.selections,
+    const projector = new FlexSearchProjector(
+        currentRun.rankPools,
+        currentRun.selections,
         registry.enchantToIndex,
-        { applyBookRemoval: item === 'book' }
+        { applyBookRemoval: item === 'book', targetClueId }
     );
-    const projected = projector.projectResults(rankRun.getResolvedEntries());
+    const projected = projector.projectResults(currentRun.getResolvedEntries());
+    const memory = currentRun.getMemoryStats();
 
-    assert.deepStrictEqual(projected.results, native.snapshot.results);
-    assert.strictEqual(projected.sourceMass, BigInt(flex.mass.units!.resolved));
-    assert.strictEqual(projected.projectedMass, BigInt(native.snapshot.mass.units!.resolved));
-    assert.strictEqual(projected.projectionLoss, native.resolvedProjectionLoss);
-    assert.strictEqual(projected.clueIncompatible, native.resolvedClueIncompatible);
+    return {
+        results: projected.results,
+        sourceMass: projected.sourceMass,
+        projectedMass: projected.projectedMass,
+        projectionLoss: projected.projectionLoss,
+        clueIncompatible: projected.clueIncompatible,
+        pendingCount: currentRun.getPendingEntries().length,
+        massConserved: memory.pendingMass + memory.resolvedMass + memory.overflowMass + memory.roundingLoss === memory.seededMass
+    };
+}
+
+interface FlexSearchProjection {
+    readonly results: ReadonlyMap<number, bigint>;
+    readonly sourceMass: bigint;
+    readonly projectedMass: bigint;
+    readonly projectionLoss: bigint;
+    readonly clueIncompatible: bigint;
+    readonly pendingCount: number;
+    readonly massConserved: boolean;
 }

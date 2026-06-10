@@ -16,7 +16,7 @@ describe('Minecraft Mechanics Integration Tests', () => {
 
         it('1.7.2+: Books SHOULD allow multi-enchantment', async () => {
             const engine172 = EngineFactory.createForVersion('1.7.2');
-            const stats = await engine172.getStats({ item: 'book', xp: 30, material: 'book', threshold: 0.0001 });
+            const stats = await engine172.getStats({ item: 'book', xp: 30, material: 'book', exhaustive: true });
             assert.ok((stats.count[1] ?? 0) > 0.75, '1.7.2 books should still result in many single-enchant results');
             assert.ok((stats.count[2] ?? 0) > 0.10, '1.7.2 books should allow multiple enchants');
         });

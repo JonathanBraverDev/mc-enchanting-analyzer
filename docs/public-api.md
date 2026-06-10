@@ -129,7 +129,7 @@ The following are repository/internal tools. They can change or disappear when t
 - direct imports of `SearchExecutionService`;
 - direct imports of `EngineFactory` or `RegistryFactory`;
 - direct imports from `src/lib/search/flex/**`;
-- direct use of `GroupedFlexSearchRun`, `FlexCoordinator`, `FlexProjector`, or `FlexProgramStore`;
+- direct use of `FlexSearchRun`, `FlexSearchGraph`, `FlexSearchProjector`, `RankSelectionStore`, `GroupedFlexSearchRun`, `FlexCoordinator`, `FlexProjector`, or `FlexProgramStore`;
 - direct runtime parity scripts and profiling scripts.
 
 ## Engine Replacement Policy

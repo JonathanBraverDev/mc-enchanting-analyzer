@@ -55,7 +55,7 @@ function getPublicAccountingUnits(result: SearchResult, label: string): Accounti
     return output;
 }
 
-function foldFlexDetailUnits(result: SearchResult, label: string): AccountingUnitBreakdown {
+function foldSearchDetailUnits(result: SearchResult, label: string): AccountingUnitBreakdown {
     assert.ok(result.snapshot.mass.details, `${label}: missing detailed mass accounting`);
 
     assert.strictEqual(
@@ -127,11 +127,11 @@ interface CacheFillCase {
 }
 
 interface SearchExecutionServiceInternals {
-    readonly flexRunCache: { readonly size: number };
+    readonly flexSearchRunCache: { readonly size: number };
 }
 
 describe('Search execution service', () => {
-    it('uses the grouped Flex runtime as the default execution path', async () => {
+    it('uses the merged factorized runtime as the default execution path', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
         const instrumentation = createInstrumentation();
 
@@ -149,7 +149,7 @@ describe('Search execution service', () => {
         assert.ok(result.snapshot.pendingAggregates);
     });
 
-    it('records Flex diagnostics for checkpoint searches', async () => {
+    it('records merge diagnostics for checkpoint searches', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
         const instrumentation = createInstrumentation();
 
@@ -165,7 +165,7 @@ describe('Search execution service', () => {
         assert.strictEqual(result.instrumentation?.exitReason, 'iterations');
         assert.strictEqual(result.snapshot.frontier.kind, ENGINE_FRONTIER_KIND.FACTORIZED);
         if (result.snapshot.frontier.kind !== ENGINE_FRONTIER_KIND.FACTORIZED) {
-            throw new Error('Expected factorized Flex frontier');
+            throw new Error('Expected factorized frontier');
         }
         assert.strictEqual(result.snapshot.pendingEntries.length, 0);
         assert.ok(result.snapshot.pendingAggregates);
@@ -174,10 +174,14 @@ describe('Search execution service', () => {
         const search = result.instrumentation?.search;
         assert.ok(search);
         assert.strictEqual(search.pendingEntryCount, result.snapshot.pendingCount);
+        assert.ok((search.exactPoolCount ?? 0) > 0);
+        assert.ok((search.sharedGraphCount ?? 0) > 0);
+        assert.ok((search.mergedPoolCount ?? 0) > 0);
+        assert.ok((search.sharedGraphCount ?? 0) < (search.exactPoolCount ?? 0));
         assert.ok(Math.abs(snapshotAccountingTotal(result) - 1) < 1e-12);
     });
 
-    it('keeps clue-conditioned Flex checkpoints on the native factorized frontier', async () => {
+    it('keeps clue-conditioned checkpoints on the native factorized frontier', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
 
         const result = await engine.searchToCheckpoint({
@@ -201,7 +205,7 @@ describe('Search execution service', () => {
         );
     });
 
-    it('exposes Flex mass accounting details without changing compatible public totals', async () => {
+    it('exposes Flex rank-merge mass accounting details without changing compatible public totals', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
 
         const result = await engine.searchToCheckpoint({
@@ -235,7 +239,7 @@ describe('Search execution service', () => {
         assert.ok(Math.abs(snapshotAccountingTotal(result) - 1) < 1e-12);
     });
 
-    it('folds detailed Flex mass accounting back to public buckets', async () => {
+    it('folds detailed Flex rank-merge mass accounting back to public buckets', async () => {
         const cases: Array<{ readonly label: string; readonly request: CheckpointSearchRequest }> = [
             {
                 label: 'bounded book checkpoint',
@@ -272,21 +276,21 @@ describe('Search execution service', () => {
         ];
 
         for (const testCase of cases) {
-            const flex = await EngineFactory.createForVersion('1.21.11').searchToCheckpoint({
+            const result = await EngineFactory.createForVersion('1.21.11').searchToCheckpoint({
                 ...testCase.request,
                 useCache: false
             });
 
-            const flexPublic = getPublicAccountingUnits(flex, testCase.label);
+            const publicAccounting = getPublicAccountingUnits(result, testCase.label);
             assertAccountingUnitsEqual(
-                `${testCase.label}: folded Flex details`,
-                foldFlexDetailUnits(flex, testCase.label),
-                flexPublic
+                `${testCase.label}: folded search details`,
+                foldSearchDetailUnits(result, testCase.label),
+                publicAccounting
             );
         }
     });
 
-    it('resumes cached Flex runs across one-at-a-time checkpoint calls', async () => {
+    it('resumes cached Flex rank-merge runs across one-at-a-time checkpoint calls', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
         engine.resetCaches();
 
@@ -312,11 +316,11 @@ describe('Search execution service', () => {
         assert.ok((resumed.instrumentation?.search?.runCacheHits ?? 0) >= 1);
     });
 
-    it('keeps the Flex run cache bounded', async () => {
+    it('keeps the Flex rank-merge run cache bounded', async () => {
         const service = new SearchExecutionService();
         const cases = createCacheFillCases(FLEX_RUN_CACHE_LIMITS.RUNS + 12);
 
-        assert.ok(cases.length > FLEX_RUN_CACHE_LIMITS.RUNS, 'fixture should exceed the Flex run cache capacity');
+        assert.ok(cases.length > FLEX_RUN_CACHE_LIMITS.RUNS, 'fixture should exceed the Flex rank-merge run cache capacity');
         for (const testCase of cases) {
             await service.searchToCheckpoint({
                 registry: testCase.registry,
@@ -329,12 +333,12 @@ describe('Search execution service', () => {
         }
 
         assert.ok(
-            getFlexRunCacheSize(service) <= FLEX_RUN_CACHE_LIMITS.RUNS,
-            'Flex run cache should evict old runs instead of growing without bound'
+            getFlexSearchRunCacheSize(service) <= FLEX_RUN_CACHE_LIMITS.RUNS,
+            'Flex search run cache should evict old runs instead of growing without bound'
         );
     });
 
-    it('supports Flex through the public stats API while preserving compatible accounting', async () => {
+    it('supports Flex rank-merge through the public stats API while preserving compatible accounting', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
         engine.resetCaches();
 
@@ -353,7 +357,7 @@ describe('Search execution service', () => {
         assert.ok(Math.abs(accountingTotal(stats) - 1) < 1e-12);
     });
 
-    it('matches explicit Flex stats to the default public API for a fully resolved case', async () => {
+    it('matches explicit Flex rank-merge stats to the default public API for a fully resolved case', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
         engine.resetCaches();
 
@@ -377,10 +381,10 @@ describe('Search execution service', () => {
             })
         ]);
 
-        assertPublicStatsMatch('Flex public stats', defaults, explicit);
+        assertPublicStatsMatch('Flex rank-merge public stats', defaults, explicit);
     });
 
-    it('uses program-aware Flex identity when a mutated registry breaks the reduced-key invariant', async () => {
+    it('supports Flex rank-merge for mutated registries with dense conflict graphs', async () => {
         const registry = RegistryFactory.buildWithMutations('1.21.11', [
             { type: 'addConflictRule', rule: { enchants: ['Smite', 'Looting'], valid_from: '1.0' } },
             { type: 'addConflictRule', rule: { enchants: ['Looting', 'Unbreaking'], valid_from: '1.0' } },
@@ -398,11 +402,11 @@ describe('Search execution service', () => {
             instrumentation
         });
 
-        assert.strictEqual(result.instrumentation?.search?.flexStateIdentityMode, 'program');
+        assert.ok((result.instrumentation?.search?.exactPoolCount ?? 0) > 0);
         assert.ok(result.snapshot.mass.resolved + result.snapshot.mass.pending > 0);
     });
 
-    it('keeps reduced Flex identity for mutated registries that satisfy the reduced-key invariant', async () => {
+    it('supports Flex rank-merge for mutated registries with looser conflict graphs', async () => {
         const registry = RegistryFactory.buildWithMutations('1.21.11', {
             type: 'removeConflictRule',
             selector: { enchants: ['Smite', 'Sharpness'], valid_from: '1.0' }
@@ -419,7 +423,7 @@ describe('Search execution service', () => {
             instrumentation
         });
 
-        assert.strictEqual(result.instrumentation?.search?.flexStateIdentityMode, 'reduced');
+        assert.ok((result.instrumentation?.search?.exactPoolCount ?? 0) > 0);
         assert.ok(result.snapshot.mass.resolved + result.snapshot.mass.pending > 0);
     });
 
@@ -463,6 +467,47 @@ describe('Search execution service', () => {
         assert.ok(stats.accounting.resolved > 0);
         assert.ok(Object.keys(stats.combos).length > 0);
         assert.ok(Math.abs(accountingTotal(stats) - 1) < 1e-12);
+    });
+
+    it('uses merged graph sharing for vanilla no-clue exhaustive public searches', async () => {
+        const engine = EngineFactory.createForVersion('1.7.2');
+        const instrumentation = createInstrumentation();
+
+        const result = await engine.searchToCheckpoint({
+            item: 'book',
+            material: 'book',
+            xp: 30,
+            exhaustive: true,
+            instrumentation,
+            useCache: false
+        });
+
+        const search = result.instrumentation?.search;
+        assert.ok(search);
+        assert.strictEqual(result.snapshot.pendingCount, 0);
+        assert.strictEqual(search.exactPoolCount, 8);
+        assert.strictEqual(search.sharedGraphCount, 3);
+        assert.strictEqual(search.mergedPoolCount, 5);
+        assert.ok((search.pendingMergeCount ?? 0) > 0);
+        assert.ok((search.lateForwardCount ?? 0) > 0);
+    });
+
+    it('uses merged graph sharing for clue-conditioned exhaustive public searches', async () => {
+        const engine = EngineFactory.createForVersion('1.21.11');
+        const instrumentation = createInstrumentation();
+
+        const result = await engine.searchToCheckpoint({
+            item: 'sword',
+            material: 'diamond',
+            xp: 30,
+            clue: 'Sharpness IV',
+            exhaustive: true,
+            instrumentation,
+            useCache: false
+        });
+
+        assert.ok((result.instrumentation?.search?.exactPoolCount ?? 0) > 0);
+        assert.strictEqual(result.snapshot.pendingCount, 0);
     });
 
     it('uses the default stats checkpoint for simple stats calls', async () => {
@@ -745,7 +790,7 @@ describe('Search execution service', () => {
         );
     });
 
-    it('aborts Flex checkpoint searches after yielding between chunks', async () => {
+    it('aborts Flex rank-merge checkpoint searches after yielding between chunks', async () => {
         const engine = EngineFactory.createForVersion('1.7.2');
         const controller = new AbortController();
 
@@ -830,7 +875,7 @@ describe('Search execution service', () => {
         assert.strictEqual(fresh.instrumentation?.totalIterations, 10);
     });
 
-    it('omits legacy structural graph-cache counters on the Flex runtime', async () => {
+    it('omits obsolete structural graph-cache counters on the default runtime', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
         engine.resetCaches();
 
@@ -877,6 +922,6 @@ function createCacheFillCases(limit: number): CacheFillCase[] {
     return cases;
 }
 
-function getFlexRunCacheSize(service: SearchExecutionService): number {
-    return (service as unknown as SearchExecutionServiceInternals).flexRunCache.size;
+function getFlexSearchRunCacheSize(service: SearchExecutionService): number {
+    return (service as unknown as SearchExecutionServiceInternals).flexSearchRunCache.size;
 }

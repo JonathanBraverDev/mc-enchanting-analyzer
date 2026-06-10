@@ -67,7 +67,7 @@ describe('RegistryKernel', () => {
         assert.strictEqual(modern.additionalEnchantmentLevelDivisor, 2);
     });
 
-    it('keeps rank-family signatures stable across candidate order', () => {
+    it('keeps rank-merge signatures stable across candidate order', () => {
         const forward = RegistryFactory.buildWithMutations('1.21.11', [
             { type: 'removeEnchantableItemRule', selector: { item: 'sword', valid_from: '1.0' } },
             {

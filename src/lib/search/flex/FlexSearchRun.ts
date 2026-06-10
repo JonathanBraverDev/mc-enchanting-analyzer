@@ -1,4 +1,8 @@
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
+import { ENGINE_LIMITS } from '#constants/engine.js';
+import type { EngineExitReason } from '#types/index.js';
+import type { MassAccountingBreakdown } from '#types/mass.js';
+import { AsyncUtils } from '#utils/async/AsyncUtils.js';
 import { PRECISION, ProbUtils } from '#utils/index.js';
 import type { SearchPool, SearchPoolFamilySignature } from '#lib/search/registry/RegistryKernel.js';
 import type { RegistryKernel } from '#lib/search/registry/RegistryKernel.js';
@@ -13,57 +17,57 @@ import {
 import { RankSelectionStore as DefaultRankSelectionStore } from '#lib/search/flex/RankSelectionStore.js';
 import { type RankPoolId, RankPoolStore } from '#lib/search/flex/RankPoolStore.js';
 import {
-    RankFamilyGraph,
-    type RankFamilyEdge,
-    type RankFamilyGraphMemoryStats,
-    type RankFamilyNodeId
-} from '#lib/search/flex/RankFamilyGraph.js';
+    FlexSearchGraph,
+    type FlexSearchEdge,
+    type FlexSearchGraphStats,
+    type FlexSearchNodeId
+} from '#lib/search/flex/FlexSearchGraph.js';
 
-interface RankFamilyGraphRecord {
+interface FlexSearchGraphRecord {
     readonly id: number;
-    readonly graph: RankFamilyGraph;
+    readonly graph: FlexSearchGraph;
 }
 
-interface RankFamilyResolvedRecord {
+interface FlexSearchResolvedRecord {
     readonly factorSetId: FactorSetId;
     readonly rankPoolMixId: RankPoolMixId;
     readonly mass: bigint;
 }
 
-interface RankFamilyResidueBucket {
-    readonly pools: readonly RankFamilyResiduePool[];
+interface FlexSearchResidueBucket {
+    readonly pools: readonly FlexSearchResiduePool[];
 }
 
-interface RankFamilyResiduePool {
+interface FlexSearchResiduePool {
     readonly rankPoolId: RankPoolId;
     readonly numerator: bigint;
 }
 
-interface RankFamilyResidueRecord {
+interface FlexSearchResidueRecord {
     readonly denominator: bigint;
-    readonly buckets: readonly (RankFamilyResidueBucket | undefined)[];
+    readonly buckets: readonly (FlexSearchResidueBucket | undefined)[];
     readonly residueMass: bigint;
 }
 
-export interface RankFamilyPendingEntry {
+export interface FlexSearchPendingEntry {
     readonly graphId: number;
-    readonly nodeId: RankFamilyNodeId;
+    readonly nodeId: FlexSearchNodeId;
     readonly factorSetId: FactorSetId;
     readonly rankPoolMixId: RankPoolMixId;
     readonly mass: bigint;
 }
 
-interface RankFamilyPendingRecord extends RankFamilyPendingEntry {
+interface FlexSearchPendingRecord extends FlexSearchPendingEntry {
     readonly key: string;
     readonly sequence: number;
     heapIndex: number;
 }
 
-interface RankFamilyPendingInput extends RankFamilyPendingEntry {
+interface FlexSearchPendingInput extends FlexSearchPendingEntry {
     readonly key: string;
 }
 
-export interface RankFamilySearchRunMemoryStats {
+export interface FlexSearchRunMemoryStats {
     readonly graphCount: number;
     readonly rankPoolCount: number;
     readonly factorCount: number;
@@ -76,54 +80,97 @@ export interface RankFamilySearchRunMemoryStats {
     readonly seededMass: bigint;
     readonly pendingMass: bigint;
     readonly resolvedMass: bigint;
+    readonly sievedMass: bigint;
     readonly overflowMass: bigint;
     readonly iterations: number;
+    readonly lastExpandedMass: bigint;
     readonly lateForwardCount: number;
     readonly roundingLoss: bigint;
-    readonly graphs: readonly RankFamilyGraphMemoryStats[];
+    readonly activeResidueCount: number;
+    readonly activeResidueMass: bigint;
+    readonly graphs: readonly FlexSearchGraphStats[];
 }
 
-export interface RankFamilySearchRunOptions {
+export interface FlexSearchRunOptions {
     readonly distributionService?: ModifiedLevelDistributionService | undefined;
     readonly selections?: RankSelectionStore | undefined;
 }
 
+export interface FlexSearchCheckpointRequest {
+    readonly threshold?: number | bigint | undefined;
+    readonly maxIterations?: number | undefined;
+    readonly drainEqualMassBand?: boolean | undefined;
+    readonly exhaustive?: boolean | undefined;
+    readonly targetClassifiedMass?: number | bigint | undefined;
+    readonly probabilityFloor?: number | bigint | undefined;
+    readonly signal?: AbortSignal | undefined;
+    readonly yieldEveryIterations?: number | undefined;
+}
+
+export interface FlexSearchRunState {
+    readonly mass: MassAccountingBreakdown;
+    readonly iterations: number;
+    readonly lastExpandedMass: bigint;
+    readonly pendingCount: number;
+    readonly largestPendingMass: bigint;
+    readonly graphCount: number;
+    readonly seededLevelCount: number;
+    readonly activeResidueCount: number;
+    readonly activeResidueMass: bigint;
+    readonly fullyResolved: boolean;
+    readonly exitReason: EngineExitReason | undefined;
+}
+
+interface FlexSearchAdvanceCriteria {
+    readonly threshold: bigint;
+    readonly maxIterations: number;
+    readonly drainEqualMassBand: boolean;
+    readonly targetClassifiedMass: bigint | undefined;
+    readonly probabilityFloor: bigint;
+    readonly signal?: AbortSignal | undefined;
+}
+
 /**
- * Seed-stage standalone rank-family runtime.
+ * Flex search runtime with rank-merge graph sharing.
  *
- * This intentionally does not replace the current Flex runtime. It proves the
- * new ownership split: graphs are keyed by rank family, exact pools are payload,
- * and pending identity uses `(graph,node,factorSet)` instead of exact rank pool.
+ * This keeps the V8 Flex ownership model: one weighted frontier owns mass flow,
+ * while shared graphs are keyed by future behavior and exact rank pools travel
+ * as payloads for projection.
  */
-export class RankFamilySearchRun {
+export class FlexSearchRun {
     public readonly rankPools = new RankPoolStore();
     public readonly selections: RankSelectionStore;
 
     private readonly distributionService: ModifiedLevelDistributionService;
-    private readonly graphsByFamily = new Map<SearchPoolFamilySignature, RankFamilyGraphRecord>();
-    private readonly graphs: RankFamilyGraph[] = [];
-    private readonly pending = new RankFamilyFrontier();
+    private readonly graphsByFamily = new Map<SearchPoolFamilySignature, FlexSearchGraphRecord>();
+    private readonly graphs: FlexSearchGraph[] = [];
+    private readonly pending = new FlexSearchFrontier();
     private readonly expandedKeys = new Set<string>();
-    private readonly residuesByKey = new Map<string, RankFamilyResidueRecord>();
-    private readonly resolvedByFactorSet = new Map<FactorSetId, RankFamilyResolvedRecord>();
+    private readonly residuesByKey = new Map<string, FlexSearchResidueRecord>();
+    private readonly resolvedByFactorSet = new Map<FactorSetId, FlexSearchResolvedRecord>();
     private seededMass = 0n;
+    private pendingMass = 0n;
+    private resolvedMass = 0n;
+    private sievedMass = 0n;
     private overflowMass = 0n;
     private pendingMergeCount = 0;
     private iterations = 0;
+    private lastExpandedMass = 0n;
     private lateForwardCount = 0;
     private roundingLoss = 0n;
+    private exitReason: EngineExitReason | undefined;
     private seeded = false;
 
     public constructor(
         private readonly kernel: RegistryKernel,
-        options: RankFamilySearchRunOptions = {}
+        options: FlexSearchRunOptions = {}
     ) {
         this.distributionService = options.distributionService ?? new ModifiedLevelDistributionService();
         this.selections = options.selections ?? new DefaultRankSelectionStore();
     }
 
     public seedXp(xp: number): void {
-        if (this.seeded) throw new Error('RankFamilySearchRun can only be seeded once. Create a new run for a new cell.');
+        if (this.seeded) throw new Error('FlexSearchRun can only be seeded once. Create a new run for a new cell.');
         this.seeded = true;
 
         const distribution = this.distributionService.getModifiedLevelDist(
@@ -149,7 +196,7 @@ export class RankFamilySearchRun {
         this.seededMass = seededMass;
     }
 
-    public getPendingEntries(): readonly RankFamilyPendingEntry[] {
+    public getPendingEntries(): readonly FlexSearchPendingEntry[] {
         return Object.freeze([...this.pending.values()]);
     }
 
@@ -164,29 +211,90 @@ export class RankFamilySearchRun {
         return entries;
     }
 
-    public getGraph(graphId: number): RankFamilyGraph {
+    public getGraph(graphId: number): FlexSearchGraph {
         const graph = this.graphs[graphId];
-        if (!graph) throw new Error(`Unknown rank-family graph ID ${graphId}.`);
+        if (!graph) throw new Error(`Unknown Flex search graph ID ${graphId}.`);
         return graph;
     }
 
-    public advance(maxSteps = 1): number {
+    public advance(maxSteps = 1, options: { readonly probabilityFloor?: bigint | undefined } = {}): number {
         if (!Number.isInteger(maxSteps) || maxSteps < 0) {
-            throw new Error('Rank-family advance step count must be a non-negative integer.');
+            throw new Error('Flex search advance step count must be a non-negative integer.');
         }
 
         let advanced = 0;
-        while (advanced < maxSteps && this.step()) {
+        while (advanced < maxSteps && this.step(options.probabilityFloor ?? 0n)) {
             advanced++;
         }
         if (this.pending.size === 0) this.releaseCompletedFrontierState();
         return advanced;
     }
 
-    public getMemoryStats(): RankFamilySearchRunMemoryStats {
+    public searchToCheckpointState(request: FlexSearchCheckpointRequest = {}): FlexSearchRunState {
+        const criteria = this.createAdvanceCriteria(request);
+        this.advanceUntilCheckpoint(criteria);
+        return this.state();
+    }
+
+    public async searchToCheckpointStateAsync(request: FlexSearchCheckpointRequest = {}): Promise<FlexSearchRunState> {
+        const criteria = this.createAdvanceCriteria(request);
+        const chunkIterations = Math.max(
+            1,
+            request.yieldEveryIterations ?? ENGINE_LIMITS.ASYNC_SEARCH_CHUNK_ITERATIONS
+        );
+
+        while (!this.advanceUntilCheckpoint(criteria, chunkIterations)) {
+            await AsyncUtils.yield();
+        }
+
+        return this.state();
+    }
+
+    public state(): FlexSearchRunState {
+        const memory = this.getMemoryStats();
+        const pending = memory.pendingMass;
+        const resolved = memory.resolvedMass;
+        const rounding = memory.roundingLoss;
+        const mass = Object.freeze({
+            resolved: ProbUtils.toNumber(resolved),
+            clueIncompatible: 0,
+            pending: ProbUtils.toNumber(pending),
+            sieved: ProbUtils.toNumber(memory.sievedMass),
+            overflow: ProbUtils.toNumber(memory.overflowMass),
+            capped: 0,
+            rounding: ProbUtils.toNumber(rounding),
+            recoveredRounding: 0,
+            recoveredSieved: 0,
+            units: Object.freeze({
+                resolved: resolved.toString(),
+                clueIncompatible: '0',
+                pending: pending.toString(),
+                sieved: memory.sievedMass.toString(),
+                overflow: memory.overflowMass.toString(),
+                capped: '0',
+                rounding: rounding.toString(),
+                recoveredRounding: '0',
+                recoveredSieved: '0'
+            })
+        }) satisfies MassAccountingBreakdown;
+
+        return Object.freeze({
+            mass,
+            iterations: memory.iterations,
+            lastExpandedMass: memory.lastExpandedMass,
+            pendingCount: memory.pendingCount,
+            largestPendingMass: this.pending.peek()?.mass ?? 0n,
+            graphCount: memory.graphCount,
+            seededLevelCount: memory.rankPoolCount,
+            activeResidueCount: memory.activeResidueCount,
+            activeResidueMass: memory.activeResidueMass,
+            fullyResolved: memory.pendingCount === 0,
+            exitReason: this.exitReason
+        });
+    }
+
+    public getMemoryStats(): FlexSearchRunMemoryStats {
         const selectionStats = this.selections.getMemoryStats();
-        const pendingMass = sumPendingMass(this.pending.values());
-        const resolvedMass = sumResolvedMass(this.resolvedByFactorSet.values());
         return {
             graphCount: this.graphs.length,
             rankPoolCount: this.rankPools.getMemoryStats().poolCount,
@@ -198,28 +306,104 @@ export class RankFamilySearchRun {
             pendingMergeCount: this.pendingMergeCount,
             resolvedCount: this.resolvedByFactorSet.size,
             seededMass: this.seededMass,
-            pendingMass,
-            resolvedMass,
+            pendingMass: this.pendingMass,
+            resolvedMass: this.resolvedMass,
+            sievedMass: this.sievedMass,
             overflowMass: this.overflowMass,
             iterations: this.iterations,
+            lastExpandedMass: this.lastExpandedMass,
             lateForwardCount: this.lateForwardCount,
             roundingLoss: this.roundingLoss,
+            activeResidueCount: this.residuesByKey.size,
+            activeResidueMass: sumResidueMass(this.residuesByKey.values()),
             graphs: this.graphs.map(graph => graph.getMemoryStats())
         };
     }
 
-    private step(): boolean {
+    private createAdvanceCriteria(request: FlexSearchCheckpointRequest): FlexSearchAdvanceCriteria {
+        const targetClassifiedMass = request.targetClassifiedMass === undefined
+            ? undefined
+            : ProbUtils.toBigInt(request.targetClassifiedMass);
+        const threshold = request.exhaustive ? 0n : ProbUtils.toBigInt(request.threshold ?? 0n);
+        const maxIterations = request.exhaustive
+            ? Number.POSITIVE_INFINITY
+            : request.maxIterations ?? Number.POSITIVE_INFINITY;
+        const probabilityFloor = request.exhaustive
+            ? 0n
+            : request.probabilityFloor !== undefined
+                ? ProbUtils.toBigInt(request.probabilityFloor)
+                : ProbUtils.toBigInt(ENGINE_LIMITS.SYSTEM_THRESHOLD_FLOOR);
+        const hasBoundedStopCondition = targetClassifiedMass !== undefined
+            || (request.threshold !== undefined && threshold > 0n)
+            || request.maxIterations !== undefined;
+
+        if (!request.exhaustive && !hasBoundedStopCondition) {
+            throw new Error('FlexSearchRun has no bounded stop condition. Provide a positive threshold, a finite maxIterations, a mass target, or set exhaustive: true.');
+        }
+
+        return {
+            threshold,
+            maxIterations,
+            drainEqualMassBand: request.exhaustive ? false : request.drainEqualMassBand === true,
+            targetClassifiedMass,
+            probabilityFloor,
+            signal: request.signal
+        };
+    }
+
+    private advanceUntilCheckpoint(criteria: FlexSearchAdvanceCriteria, chunkIterations?: number): boolean {
+        this.exitReason = undefined;
+        let advancedInChunk = 0;
+
+        while (true) {
+            if (criteria.signal?.aborted) throw new Error('Aborted');
+            const exitReason = this.getExitReason(criteria);
+            if (exitReason !== undefined) {
+                this.exitReason = exitReason;
+                return true;
+            }
+            if (chunkIterations !== undefined && advancedInChunk >= chunkIterations) return false;
+            if (!this.step(criteria.probabilityFloor)) {
+                this.exitReason = 'empty';
+                return true;
+            }
+            advancedInChunk++;
+        }
+    }
+
+    private getExitReason(criteria: FlexSearchAdvanceCriteria): EngineExitReason | undefined {
+        const pending = this.pending.peek();
+        if (!pending) return 'empty';
+        if (criteria.targetClassifiedMass !== undefined && this.getClassifiedMass() >= criteria.targetClassifiedMass) return 'mass';
+        if (pending.mass < criteria.threshold) return 'threshold';
+        if (this.hasReachedIterationStop(criteria, pending.mass)) return 'iterations';
+        return undefined;
+    }
+
+    private hasReachedIterationStop(criteria: FlexSearchAdvanceCriteria, nextMass: bigint): boolean {
+        if (this.iterations < criteria.maxIterations) return false;
+        if (!criteria.drainEqualMassBand) return true;
+        if (this.lastExpandedMass === 0n) return true;
+        return nextMass < this.lastExpandedMass;
+    }
+
+    private getClassifiedMass(): bigint {
+        return this.seededMass - this.pendingMass;
+    }
+
+    private step(probabilityFloor: bigint): boolean {
         const current = this.popNextPending();
         if (!current) return false;
 
         this.expandedKeys.add(current.key);
-        this.processEntry(current.key, current);
+        this.lastExpandedMass = current.mass;
+        this.processEntry(current.key, current, probabilityFloor);
         this.iterations++;
-        this.drainLateForwardEntries();
+        this.drainLateForwardEntries(probabilityFloor);
         return true;
     }
 
-    private processEntry(key: string, entry: RankFamilyPendingEntry): void {
+    private processEntry(key: string, entry: FlexSearchPendingEntry, probabilityFloor: bigint): void {
         const graph = this.getGraph(entry.graphId);
         const expansion = graph.getExpansion(entry.nodeId);
         this.assertRankPoolMixTotal(
@@ -237,6 +421,8 @@ export class RankFamilySearchRun {
                 this.overflowMass += split.forwardMass;
             } else if (expansion.totalWeight <= 0 || expansion.edges.length === 0) {
                 this.recordResolved(entry.factorSetId, split.forwardMixId!, split.forwardMass);
+            } else if (expansion.count > 0 && probabilityFloor > 0n && split.forwardMass < probabilityFloor) {
+                this.sievedMass += split.forwardMass;
             } else {
                 this.forwardMass(
                     key,
@@ -250,35 +436,37 @@ export class RankFamilySearchRun {
         }
     }
 
-    private graphForPool(pool: SearchPool): RankFamilyGraphRecord {
+    private graphForPool(pool: SearchPool): FlexSearchGraphRecord {
         const existing = this.graphsByFamily.get(pool.familySignature);
         if (existing) return existing;
 
         const record = Object.freeze({
             id: this.graphs.length,
-            graph: new RankFamilyGraph(this.kernel, pool, this.selections)
+            graph: new FlexSearchGraph(this.kernel, pool, this.selections)
         });
         this.graphs.push(record.graph);
         this.graphsByFamily.set(pool.familySignature, record);
         return record;
     }
 
-    private popNextPending(): RankFamilyPendingRecord | undefined {
-        return this.pending.pop();
+    private popNextPending(): FlexSearchPendingRecord | undefined {
+        const record = this.pending.pop();
+        if (record) this.pendingMass -= record.mass;
+        return record;
     }
 
-    private selectNextPending(): RankFamilyPendingRecord | undefined {
+    private selectNextPending(): FlexSearchPendingRecord | undefined {
         return this.pending.peek();
     }
 
-    private drainLateForwardEntries(): void {
+    private drainLateForwardEntries(probabilityFloor: bigint): void {
         while (true) {
             const current = this.selectNextPending();
             if (!current || !this.expandedKeys.has(current.key)) return;
 
-            this.pending.pop();
+            this.popNextPending();
             this.lateForwardCount++;
-            this.processEntry(current.key, current);
+            this.processEntry(current.key, current, probabilityFloor);
         }
     }
 
@@ -287,15 +475,15 @@ export class RankFamilySearchRun {
         graphId: number,
         currentFactorSetId: FactorSetId,
         sourceMixId: RankPoolMixId,
-        edges: readonly RankFamilyEdge[],
+        edges: readonly FlexSearchEdge[],
         totalWeightNumber: number
     ): void {
         const totalWeight = BigInt(totalWeightNumber);
         const oldResidues = this.residuesByKey.get(sourceKey);
         if (oldResidues && oldResidues.denominator !== totalWeight) {
-            throw new Error(`Rank-family residue denominator changed for frontier key ${sourceKey}.`);
+            throw new Error(`Flex residue denominator changed for frontier key ${sourceKey}.`);
         }
-        const nextBuckets: (RankFamilyResidueBucket | undefined)[] = [];
+        const nextBuckets: (FlexSearchResidueBucket | undefined)[] = [];
         let nextResidueNumerator = 0n;
         const sourceMix = this.selections.getRankPoolMix(sourceMixId);
 
@@ -310,7 +498,7 @@ export class RankFamilySearchRun {
             const factorSetId = this.selections.appendFactorToSet(currentFactorSetId, edge.factorId);
             const basePools: RankPoolWeight[] = [];
             const promotedPools: RankPoolWeight[] = [];
-            const nextResiduePools: RankFamilyResiduePool[] = [];
+            const nextResiduePools: FlexSearchResiduePool[] = [];
 
             for (const pool of sourceMix.pools) {
                 while (
@@ -388,7 +576,7 @@ export class RankFamilySearchRun {
 
     private pushPending(
         graphId: number,
-        nodeId: RankFamilyNodeId,
+        nodeId: FlexSearchNodeId,
         factorSetId: FactorSetId,
         rankPoolMixId: RankPoolMixId,
         mass: bigint
@@ -397,11 +585,13 @@ export class RankFamilySearchRun {
         const key = createPendingKey(graphId, nodeId, factorSetId);
         const existing = this.pending.get(key);
         if (!existing) {
+            this.pendingMass += mass;
             this.pending.set(Object.freeze({ key, graphId, nodeId, factorSetId, rankPoolMixId, mass }));
             return;
         }
 
         this.pendingMergeCount++;
+        this.pendingMass += mass;
         this.pending.set(Object.freeze({
             key,
             graphId,
@@ -413,6 +603,7 @@ export class RankFamilySearchRun {
     }
 
     private recordResolved(factorSetId: FactorSetId, rankPoolMixId: RankPoolMixId, mass: bigint): void {
+        this.resolvedMass += mass;
         const scaledMixId = this.selections.scaleRankPoolMix(rankPoolMixId, mass);
         const existing = this.resolvedByFactorSet.get(factorSetId);
         if (!existing) {
@@ -460,7 +651,7 @@ export class RankFamilySearchRun {
 
     private assertRankPoolMixTotal(mix: RankPoolMix, expected: bigint): void {
         if (mix.totalWeight !== expected) {
-            throw new Error(`Rank-family mix total ${mix.totalWeight} does not match expected mass ${expected}.`);
+            throw new Error(`Flex rank-pool mix total ${mix.totalWeight} does not match expected mass ${expected}.`);
         }
     }
 
@@ -470,28 +661,28 @@ export class RankFamilySearchRun {
     }
 }
 
-class RankFamilyFrontier {
-    private readonly heap: RankFamilyPendingRecord[] = [];
-    private readonly recordsByKey = new Map<string, RankFamilyPendingRecord>();
+class FlexSearchFrontier {
+    private readonly heap: FlexSearchPendingRecord[] = [];
+    private readonly recordsByKey = new Map<string, FlexSearchPendingRecord>();
     private nextSequence = 0;
 
     public get size(): number {
         return this.heap.length;
     }
 
-    public get(key: string): RankFamilyPendingRecord | undefined {
+    public get(key: string): FlexSearchPendingRecord | undefined {
         return this.recordsByKey.get(key);
     }
 
-    public values(): Iterable<RankFamilyPendingRecord> {
+    public values(): Iterable<FlexSearchPendingRecord> {
         return this.heap.values();
     }
 
-    public peek(): RankFamilyPendingRecord | undefined {
+    public peek(): FlexSearchPendingRecord | undefined {
         return this.heap[0];
     }
 
-    public pop(): RankFamilyPendingRecord | undefined {
+    public pop(): FlexSearchPendingRecord | undefined {
         const first = this.heap[0];
         if (!first) return undefined;
 
@@ -505,7 +696,7 @@ class RankFamilyFrontier {
         return first;
     }
 
-    public set(record: RankFamilyPendingInput): void {
+    public set(record: FlexSearchPendingInput): void {
         const existing = this.recordsByKey.get(record.key);
         if (!existing) {
             const pendingRecord = {
@@ -574,7 +765,7 @@ class RankFamilyFrontier {
     }
 }
 
-function comparePendingRecords(left: RankFamilyPendingRecord, right: RankFamilyPendingRecord): number {
+function comparePendingRecords(left: FlexSearchPendingRecord, right: FlexSearchPendingRecord): number {
     if (left.mass > right.mass) return 1;
     if (left.mass < right.mass) return -1;
     if (left.sequence < right.sequence) return 1;
@@ -582,20 +773,8 @@ function comparePendingRecords(left: RankFamilyPendingRecord, right: RankFamilyP
     return 0;
 }
 
-function createPendingKey(graphId: number, nodeId: RankFamilyNodeId, factorSetId: FactorSetId): string {
+function createPendingKey(graphId: number, nodeId: FlexSearchNodeId, factorSetId: FactorSetId): string {
     return `${graphId}:${String(nodeId)}:${String(factorSetId)}`;
-}
-
-function sumPendingMass(entries: Iterable<RankFamilyPendingEntry>): bigint {
-    let mass = 0n;
-    for (const entry of entries) mass += entry.mass;
-    return mass;
-}
-
-function sumResolvedMass(entries: Iterable<RankFamilyResolvedRecord>): bigint {
-    let mass = 0n;
-    for (const entry of entries) mass += entry.mass;
-    return mass;
 }
 
 function sumRankPoolWeights(pools: readonly RankPoolWeight[]): bigint {
@@ -604,8 +783,14 @@ function sumRankPoolWeights(pools: readonly RankPoolWeight[]): bigint {
     return mass;
 }
 
-function sumResidueNumerators(pools: readonly RankFamilyResiduePool[]): bigint {
+function sumResidueNumerators(pools: readonly FlexSearchResiduePool[]): bigint {
     let numerator = 0n;
     for (const pool of pools) numerator += pool.numerator;
     return numerator;
+}
+
+function sumResidueMass(entries: Iterable<FlexSearchResidueRecord>): bigint {
+    let mass = 0n;
+    for (const entry of entries) mass += entry.residueMass;
+    return mass;
 }

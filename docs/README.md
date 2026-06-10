@@ -8,5 +8,5 @@ Start here when you need the maintained project documentation:
 - [`../ARCHITECTURE.md`](../ARCHITECTURE.md) - current architecture map.
 - [`../MASS_HANDLING.md`](../MASS_HANDLING.md) - probability mass accounting and residue rules.
 - [`public-api.md`](public-api.md) - supported library API boundary and release review policy.
-- [`search-engine.md`](search-engine.md) - search engine and factorized-tree reference.
-- [`rank-family-merge.md`](rank-family-merge.md) - clean rank-family merge implementation plan.
+- [`search-engine.md`](search-engine.md) - maintained Flex search engine deep dive, including rank merge.
+- [`flex-rank-merge.md`](flex-rank-merge.md) - design notes for the rank-merge model now integrated into Flex search.
