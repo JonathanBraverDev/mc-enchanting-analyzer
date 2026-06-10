@@ -116,7 +116,8 @@ export class SearchExecutionService {
 
     private createFlexSearchRun(request: CheckpointSearchContext): FlexSearchRun {
         const run = new FlexSearchRun(this.createKernel(request), {
-            distributionService: this.distributionService
+            distributionService: this.distributionService,
+            targetClueId: request.targetClueId
         });
         run.seedXp(request.xp);
         return run;

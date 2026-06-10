@@ -1,5 +1,5 @@
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
-import { ENGINE_LIMITS } from '#constants/engine.js';
+import { ENGINE_LIMITS, PACKING_CONSTANTS } from '#constants/engine.js';
 import type { EngineExitReason } from '#types/index.js';
 import type { MassAccountingBreakdown } from '#types/mass.js';
 import { AsyncUtils } from '#utils/async/AsyncUtils.js';
@@ -80,6 +80,7 @@ export interface FlexSearchRunMemoryStats {
     readonly seededMass: bigint;
     readonly pendingMass: bigint;
     readonly resolvedMass: bigint;
+    readonly clueIncompatibleMass: bigint;
     readonly sievedMass: bigint;
     readonly overflowMass: bigint;
     readonly iterations: number;
@@ -94,6 +95,7 @@ export interface FlexSearchRunMemoryStats {
 export interface FlexSearchRunOptions {
     readonly distributionService?: ModifiedLevelDistributionService | undefined;
     readonly selections?: RankSelectionStore | undefined;
+    readonly targetClueId?: number | undefined;
 }
 
 export interface FlexSearchCheckpointRequest {
@@ -144,6 +146,7 @@ export class FlexSearchRun {
     private readonly distributionService: ModifiedLevelDistributionService;
     private readonly graphsByFamily = new Map<SearchPoolFamilySignature, FlexSearchGraphRecord>();
     private readonly graphs: FlexSearchGraph[] = [];
+    private readonly targetClueId: number | undefined;
     private readonly pending = new FlexSearchFrontier();
     private readonly expandedKeys = new Set<string>();
     private readonly residuesByKey = new Map<string, FlexSearchResidueRecord>();
@@ -151,6 +154,7 @@ export class FlexSearchRun {
     private seededMass = 0n;
     private pendingMass = 0n;
     private resolvedMass = 0n;
+    private clueIncompatibleMass = 0n;
     private sievedMass = 0n;
     private overflowMass = 0n;
     private pendingMergeCount = 0;
@@ -167,6 +171,7 @@ export class FlexSearchRun {
     ) {
         this.distributionService = options.distributionService ?? new ModifiedLevelDistributionService();
         this.selections = options.selections ?? new DefaultRankSelectionStore();
+        this.targetClueId = options.targetClueId;
     }
 
     public seedXp(xp: number): void {
@@ -184,6 +189,12 @@ export class FlexSearchRun {
             if (rootMass === 0n) continue;
             const level = Number(levelText);
             const pool = this.kernel.getPool(level);
+            if (!this.isTargetClueCompatible(pool)) {
+                this.clueIncompatibleMass += rootMass;
+                seededMass += rootMass;
+                continue;
+            }
+
             const graph = this.graphForPool(pool);
             const root = graph.graph.getRootNodeId(level);
             const rankPoolId = this.rankPools.getOrCreate(pool);
@@ -254,10 +265,11 @@ export class FlexSearchRun {
         const memory = this.getMemoryStats();
         const pending = memory.pendingMass;
         const resolved = memory.resolvedMass;
+        const clueIncompatible = memory.clueIncompatibleMass;
         const rounding = memory.roundingLoss;
         const mass = Object.freeze({
             resolved: ProbUtils.toNumber(resolved),
-            clueIncompatible: 0,
+            clueIncompatible: ProbUtils.toNumber(clueIncompatible),
             pending: ProbUtils.toNumber(pending),
             sieved: ProbUtils.toNumber(memory.sievedMass),
             overflow: ProbUtils.toNumber(memory.overflowMass),
@@ -267,7 +279,7 @@ export class FlexSearchRun {
             recoveredSieved: 0,
             units: Object.freeze({
                 resolved: resolved.toString(),
-                clueIncompatible: '0',
+                clueIncompatible: clueIncompatible.toString(),
                 pending: pending.toString(),
                 sieved: memory.sievedMass.toString(),
                 overflow: memory.overflowMass.toString(),
@@ -308,6 +320,7 @@ export class FlexSearchRun {
             seededMass: this.seededMass,
             pendingMass: this.pendingMass,
             resolvedMass: this.resolvedMass,
+            clueIncompatibleMass: this.clueIncompatibleMass,
             sievedMass: this.sievedMass,
             overflowMass: this.overflowMass,
             iterations: this.iterations,
@@ -447,6 +460,16 @@ export class FlexSearchRun {
         this.graphs.push(record.graph);
         this.graphsByFamily.set(pool.familySignature, record);
         return record;
+    }
+
+    private isTargetClueCompatible(pool: SearchPool): boolean {
+        if (this.targetClueId === undefined) return true;
+
+        const targetEnchantId = this.targetClueId >> PACKING_CONSTANTS.ENCHANT_SHIFT;
+        return pool.entries.some(entry =>
+            entry.enchantId === targetEnchantId
+            && entry.packedEnchant === this.targetClueId
+        );
     }
 
     private popNextPending(): FlexSearchPendingRecord | undefined {

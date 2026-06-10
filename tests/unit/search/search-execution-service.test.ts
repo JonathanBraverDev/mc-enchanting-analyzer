@@ -205,6 +205,27 @@ describe('Search execution service', () => {
         );
     });
 
+    it('accounts exact clue-incompatible rank pools before pending projection', async () => {
+        const engine = EngineFactory.createForVersion('1.21.11');
+
+        const result = await engine.searchToCheckpoint({
+            item: 'sword',
+            material: 'diamond',
+            xp: 30,
+            clue: 'Sharpness IV',
+            threshold: 0,
+            maxIterations: 1,
+            useCache: false
+        });
+
+        const searchCluePruned = getOperationDetailUnits(result, 'search', 'cluePrune', 'clueIncompatible');
+        assert.ok(searchCluePruned > 0n);
+        assert.ok(getOperationDetailUnits(result, 'search', 'cluePrune', 'pending') < 0n);
+        assert.ok(BigInt(result.snapshot.mass.units!.clueIncompatible) >= searchCluePruned);
+        assert.ok(BigInt(result.snapshot.mass.units!.pending) < PRECISION - searchCluePruned);
+        assert.ok(Math.abs(snapshotAccountingTotal(result) - 1) < 1e-12);
+    });
+
     it('exposes Flex rank-merge mass accounting details without changing compatible public totals', async () => {
         const engine = EngineFactory.createForVersion('1.21.11');
 

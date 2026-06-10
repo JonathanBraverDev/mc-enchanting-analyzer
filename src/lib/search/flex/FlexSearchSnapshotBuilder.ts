@@ -108,10 +108,11 @@ function createMass(
     pending: PendingProjection
 ): MassAccountingBreakdown {
     const rounding = memory.roundingLoss + projection.projectionLoss + pending.projectionLoss;
+    const clueIncompatible = memory.clueIncompatibleMass + projection.clueIncompatible + pending.clueIncompatible;
     const details = createMassDetails(memory, projection, pending);
     return Object.freeze({
         resolved: ProbUtils.toNumber(projection.projectedMass),
-        clueIncompatible: ProbUtils.toNumber(projection.clueIncompatible + pending.clueIncompatible),
+        clueIncompatible: ProbUtils.toNumber(clueIncompatible),
         pending: ProbUtils.toNumber(pending.projectedMass),
         sieved: ProbUtils.toNumber(memory.sievedMass),
         overflow: ProbUtils.toNumber(memory.overflowMass),
@@ -121,7 +122,7 @@ function createMass(
         recoveredSieved: 0,
         units: Object.freeze({
             resolved: projection.projectedMass.toString(),
-            clueIncompatible: (projection.clueIncompatible + pending.clueIncompatible).toString(),
+            clueIncompatible: clueIncompatible.toString(),
             pending: pending.projectedMass.toString(),
             sieved: memory.sievedMass.toString(),
             overflow: memory.overflowMass.toString(),
@@ -141,7 +142,13 @@ function createMassDetails(
 ): MassAccountingBreakdown['details'] {
     const accountant = new ProbabilityMassAccountant();
     accountant.recordSearch(SEARCH_MASS_OPERATION.Seed, SEARCH_MASS_BUCKET.Pending, memory.seededMass);
-    accountant.recordSearch(SEARCH_MASS_OPERATION.Frontier, SEARCH_MASS_BUCKET.Pending, pending.sourceMass - memory.seededMass);
+    accountant.subtractSearch(SEARCH_MASS_OPERATION.CluePrune, SEARCH_MASS_BUCKET.Pending, memory.clueIncompatibleMass);
+    accountant.recordSearch(SEARCH_MASS_OPERATION.CluePrune, SEARCH_MASS_BUCKET.ClueIncompatible, memory.clueIncompatibleMass);
+    accountant.recordSearch(
+        SEARCH_MASS_OPERATION.Frontier,
+        SEARCH_MASS_BUCKET.Pending,
+        pending.sourceMass - (memory.seededMass - memory.clueIncompatibleMass)
+    );
     accountant.recordSearch(SEARCH_MASS_OPERATION.Resolve, SEARCH_MASS_BUCKET.Resolved, memory.resolvedMass);
     accountant.recordSearch(SEARCH_MASS_OPERATION.ProbabilityFloor, SEARCH_MASS_BUCKET.Sieved, memory.sievedMass);
     accountant.recordSearch(SEARCH_MASS_OPERATION.Overflow, SEARCH_MASS_BUCKET.Overflow, memory.overflowMass);

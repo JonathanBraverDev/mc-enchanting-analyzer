@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { RegistryFactory } from '#core/factory.js';
 import { RegistryKernel } from '#lib/search/index.js';
+import { PACKING_CONSTANTS } from '#constants/engine.js';
 import {
     FlexSearchGraph,
     FlexSearchProjector,
@@ -58,6 +59,27 @@ describe('FlexSearchRun', () => {
             assert.strictEqual(entry.factorSetId, run.selections.emptyFactorSet);
             assert.strictEqual(node.count, 0);
             assert.ok(run.selections.getRankPoolMix(entry.rankPoolMixId).totalWeight > 0n);
+        }
+    });
+
+    it('prunes exact clue-incompatible rank pools at the seed boundary', () => {
+        const registry = RegistryFactory.build('1.21.11');
+        const kernel = new RegistryKernel({ registry, item: 'sword', material: 'diamond' });
+        const sharpnessId = registry.idMap.get('Sharpness')!;
+        const targetClueId = (sharpnessId << PACKING_CONSTANTS.ENCHANT_SHIFT) | 4;
+        const run = new FlexSearchRun(kernel, { targetClueId });
+        run.seedXp(30);
+
+        const stats = run.getMemoryStats();
+        assert.ok(stats.clueIncompatibleMass > 0n);
+        assert.ok(stats.pendingMass < stats.seededMass);
+        assertMassConserved(run);
+
+        for (const entry of run.getPendingEntries()) {
+            const mix = run.selections.getRankPoolMix(entry.rankPoolMixId);
+            for (const pool of mix.pools) {
+                assert.strictEqual(run.rankPools.resolve(pool.rankPoolId, sharpnessId), targetClueId);
+            }
         }
     });
 
@@ -180,7 +202,15 @@ describe('FlexSearchRun', () => {
 
 function assertMassConserved(run: FlexSearchRun): void {
     const stats = run.getMemoryStats();
-    assert.strictEqual(stats.pendingMass + stats.resolvedMass + stats.overflowMass + stats.roundingLoss, stats.seededMass);
+    assert.strictEqual(
+        stats.pendingMass
+            + stats.resolvedMass
+            + stats.clueIncompatibleMass
+            + stats.sievedMass
+            + stats.overflowMass
+            + stats.roundingLoss,
+        stats.seededMass
+    );
 
     for (const entry of run.getPendingEntries()) {
         assert.strictEqual(run.selections.getRankPoolMix(entry.rankPoolMixId).totalWeight, entry.mass);
@@ -206,7 +236,7 @@ function projectExhaustive(
         ? undefined
         : ((registry.idMap.get(clueName)! << 8) | clueRank);
 
-    const currentRun = new FlexSearchRun(kernel);
+    const currentRun = new FlexSearchRun(kernel, { targetClueId });
     currentRun.seedXp(xp);
     for (let steps = 0; steps < 100_000 && currentRun.getPendingEntries().length > 0;) {
         const advanced = currentRun.advance(10_000);
@@ -233,7 +263,12 @@ function projectExhaustive(
         projectionLoss: projected.projectionLoss,
         clueIncompatible: projected.clueIncompatible,
         pendingCount: currentRun.getPendingEntries().length,
-        massConserved: memory.pendingMass + memory.resolvedMass + memory.overflowMass + memory.roundingLoss === memory.seededMass
+        massConserved: memory.pendingMass
+            + memory.resolvedMass
+            + memory.clueIncompatibleMass
+            + memory.sievedMass
+            + memory.overflowMass
+            + memory.roundingLoss === memory.seededMass
     };
 }
 
