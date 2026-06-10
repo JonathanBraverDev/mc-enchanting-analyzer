@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## v8.1.0 (2026-06-10)
+
+### Changed
+- **Flex search implementation**: Checkpoint, worker-refinement, clue-filtered, custom-registry, and exhaustive searches now use the rank-merged Flex implementation internally. Public result shapes and package APIs are unchanged.
+
+### Cleanup
+- **Legacy Flex internals**: Removed the old grouped-Flex comparison runtime, probes, and unit tests now that the maintained Flex path handles public search execution.
+
+### Developer Experience
+- **Search diagnostics**: Diagnostic snapshots now report Flex graph/pool merge counters and projection/accounting loss with default-engine field names instead of old backend labels.
+- **Release coverage**: Added coverage for representative item, book, clue-conditioned, custom-registry, and exhaustive cases on the maintained Flex path.
+
+### Documentation
+- **Engine documentation**: Updated the architecture, search-engine deep dive, Flex rank-merge notes, contribution guide, and public API notes to describe the current Flex implementation and keep implementation-specific classes outside the supported package API.
+
 ## v8.0.0 (2026-05-29)
 
 ### The "Mental Gymnastics" Update

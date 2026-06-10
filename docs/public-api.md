@@ -129,7 +129,7 @@ The following are repository/internal tools. They can change or disappear when t
 - direct imports of `SearchExecutionService`;
 - direct imports of `EngineFactory` or `RegistryFactory`;
 - direct imports from `src/lib/search/flex/**`;
-- direct use of `FlexSearchRun`, `FlexSearchGraph`, `FlexSearchProjector`, `RankSelectionStore`, `GroupedFlexSearchRun`, `FlexCoordinator`, `FlexProjector`, or `FlexProgramStore`;
+- direct use of `FlexSearchRun`, `FlexSearchGraph`, `FlexSearchProjector`, `RankSelectionStore`, or other search internals;
 - direct runtime parity scripts and profiling scripts.
 
 ## Engine Replacement Policy
@@ -143,6 +143,8 @@ The project may replace the internal search runtime in a minor release when the 
 - internal engine names, diagnostics, and direct search classes may change.
 
 The current search implementation should remain behind the supported API, not become a new product-facing API.
+
+v8.1.0 review note: the supported package/API boundary is unchanged. Public checkpoint, sequential checkpoint, clue-conditioned, mutated-registry, and exhaustive searches now use the default Flex search engine with rank merging internally, but callers still use the same analyzer request/result types and should treat engine diagnostics as non-contractual.
 
 ## Release Policy
 
