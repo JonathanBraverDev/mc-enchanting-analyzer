@@ -168,18 +168,18 @@
     "sieved": 0,
     "overflow": 5.941953422350377e-9,
     "capped": 0,
-    "rounding": 3.235259282696745e-16,
-    "recoveredRounding": 7.979727989493313e-17,
+    "rounding": 3.2439329000766293e-16,
+    "recoveredRounding": 0,
     "recoveredSieved": 0,
     "units": {
-      "resolved": "1152921497756240723",
+      "resolved": "1152921497756240722",
       "clueIncompatible": "0",
       "pending": "0",
       "sieved": "0",
       "overflow": "6850605880",
       "capped": "0",
-      "rounding": "373",
-      "recoveredRounding": "92",
+      "rounding": "374",
+      "recoveredRounding": "0",
       "recoveredSieved": "0"
     },
     "details": {
@@ -188,19 +188,15 @@
           "buckets": {
             "resolved": {
               "value": 0.9999999940580463,
-              "units": "1152921497756240723"
+              "units": "1152921497756240722"
             },
             "overflow": {
               "value": 5.941953422350377e-9,
               "units": "6850605880"
             },
             "rounding": {
-              "value": 3.235259282696745e-16,
-              "units": "373"
-            },
-            "recoveredRounding": {
-              "value": 7.979727989493313e-17,
-              "units": "92"
+              "value": 3.2439329000766293e-16,
+              "units": "374"
             }
           },
           "operations": {
@@ -224,15 +220,15 @@
               "buckets": {
                 "resolved": {
                   "value": 0.9999999940580463,
-                  "units": "1152921497756240723"
+                  "units": "1152921497756240722"
                 }
               }
             },
             "edgeSplit": {
               "buckets": {
                 "rounding": {
-                  "value": 3.235259282696745e-16,
-                  "units": "373"
+                  "value": 3.2439329000766293e-16,
+                  "units": "374"
                 }
               }
             },
@@ -243,14 +239,6 @@
                   "units": "6850605880"
                 }
               }
-            },
-            "residue": {
-              "buckets": {
-                "recoveredRounding": {
-                  "value": 7.979727989493313e-17,
-                  "units": "92"
-                }
-              }
             }
           }
         },
@@ -258,11 +246,11 @@
           "buckets": {
             "source": {
               "value": 0.9999999940580463,
-              "units": "1152921497756240723"
+              "units": "1152921497756240722"
             },
             "projected": {
               "value": 0.9999999940580463,
-              "units": "1152921497756240723"
+              "units": "1152921497756240722"
             }
           },
           "operations": {
@@ -270,11 +258,11 @@
               "buckets": {
                 "source": {
                   "value": 0.9999999940580463,
-                  "units": "1152921497756240723"
+                  "units": "1152921497756240722"
                 },
                 "projected": {
                   "value": 0.9999999940580463,
-                  "units": "1152921497756240723"
+                  "units": "1152921497756240722"
                 }
               }
             }
@@ -285,34 +273,35 @@
   },
   "diagnostics": {
     "engine": {
-      "totalIterations": 479,
+      "totalIterations": 260,
       "roundingErrorEvents": 1,
-      "levelsProcessed": 6,
-      "levelsFullyResolved": 6,
+      "levelsProcessed": 3,
+      "levelsFullyResolved": 3,
       "fullyResolved": true,
       "resultsSize": 119,
       "queueSize": 0,
       "exitReason": "empty"
     },
     "search": {
-      "graphCount": 6,
+      "graphCount": 3,
       "seededLevelCount": 6,
       "pendingEntryCount": 0,
       "largestPendingMass": 0,
-      "lastExpandedMass": 5.3e-11,
-      "activeResidueCount": 740,
+      "lastExpandedMass": 7.1685e-8,
+      "activeResidueCount": 211,
       "activeResidueMass": 0,
       "canImprove": false,
-      "flexStateIdentityMode": "reduced",
-      "flexSolidNodeCount": 318,
-      "flexPlexNodeCount": 0,
-      "flexSingletonGroupCount": 1140,
-      "flexChoiceGroupCount": 0,
-      "flexGroupedAlternativeCount": 1140,
-      "flexExpandedSolidNodeCount": 479,
-      "flexExpandedPlexNodeCount": 0,
-      "flexProjectionLoss": 0,
-      "flexProjectionClueIncompatible": 0
+      "exactPoolCount": 6,
+      "sharedGraphCount": 3,
+      "mergedPoolCount": 3,
+      "factorCount": 6,
+      "factorSetCount": 64,
+      "rankPoolMixCount": 1857,
+      "selectionCount": 64,
+      "pendingMergeCount": 699,
+      "lateForwardCount": 169,
+      "searchRoundingLoss": 0,
+      "projectionLoss": 0
     }
   }
 }

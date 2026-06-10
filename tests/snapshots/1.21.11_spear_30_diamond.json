@@ -476,18 +476,18 @@
     "sieved": 0,
     "overflow": 0.000008650657760711153,
     "capped": 0,
-    "rounding": 9.445569326693715e-16,
-    "recoveredRounding": 2.645453300864631e-16,
+    "rounding": 9.740472317609772e-16,
+    "recoveredRounding": 0,
     "recoveredSieved": 0,
     "units": {
-      "resolved": "1152911531077484569",
+      "resolved": "1152911531077484535",
       "clueIncompatible": "0",
       "pending": "0",
       "sieved": "0",
       "overflow": "9973529361318",
       "capped": "0",
-      "rounding": "1089",
-      "recoveredRounding": "305",
+      "rounding": "1123",
+      "recoveredRounding": "0",
       "recoveredSieved": "0"
     },
     "details": {
@@ -505,10 +505,6 @@
             "rounding": {
               "value": 7.892991815694472e-16,
               "units": "910"
-            },
-            "recoveredRounding": {
-              "value": 2.645453300864631e-16,
-              "units": "305"
             }
           },
           "operations": {
@@ -551,14 +547,6 @@
                   "units": "9973529361318"
                 }
               }
-            },
-            "residue": {
-              "buckets": {
-                "recoveredRounding": {
-                  "value": 2.645453300864631e-16,
-                  "units": "305"
-                }
-              }
             }
           }
         },
@@ -570,11 +558,11 @@
             },
             "projected": {
               "value": 0.9999913493422383,
-              "units": "1152911531077484569"
+              "units": "1152911531077484535"
             },
             "loss": {
-              "value": 1.5525775109992423e-16,
-              "units": "179"
+              "value": 1.8474805019152996e-16,
+              "units": "213"
             }
           },
           "operations": {
@@ -586,11 +574,11 @@
                 },
                 "projected": {
                   "value": 0.9999913493422383,
-                  "units": "1152911531077484569"
+                  "units": "1152911531077484535"
                 },
                 "loss": {
-                  "value": 1.5525775109992423e-16,
-                  "units": "179"
+                  "value": 1.8474805019152996e-16,
+                  "units": "213"
                 }
               }
             }
@@ -601,34 +589,35 @@
   },
   "diagnostics": {
     "engine": {
-      "totalIterations": 1003,
+      "totalIterations": 384,
       "roundingErrorEvents": 1,
-      "levelsProcessed": 6,
-      "levelsFullyResolved": 6,
+      "levelsProcessed": 1,
+      "levelsFullyResolved": 1,
       "fullyResolved": true,
       "resultsSize": 415,
       "queueSize": 0,
       "exitReason": "empty"
     },
     "search": {
-      "graphCount": 6,
+      "graphCount": 1,
       "seededLevelCount": 6,
       "pendingEntryCount": 0,
       "largestPendingMass": 0,
-      "lastExpandedMass": 1.67e-10,
-      "activeResidueCount": 1908,
+      "lastExpandedMass": 1.9419e-7,
+      "activeResidueCount": 359,
       "activeResidueMass": 0,
       "canImprove": false,
-      "flexStateIdentityMode": "reduced",
-      "flexSolidNodeCount": 347,
-      "flexPlexNodeCount": 292,
-      "flexSingletonGroupCount": 2497,
-      "flexChoiceGroupCount": 365,
-      "flexGroupedAlternativeCount": 3592,
-      "flexExpandedSolidNodeCount": 374,
-      "flexExpandedPlexNodeCount": 629,
-      "flexProjectionLoss": 0,
-      "flexProjectionClueIncompatible": 0
+      "exactPoolCount": 6,
+      "sharedGraphCount": 1,
+      "mergedPoolCount": 5,
+      "factorCount": 6,
+      "factorSetCount": 64,
+      "rankPoolMixCount": 1711,
+      "selectionCount": 64,
+      "pendingMergeCount": 1471,
+      "lateForwardCount": 284,
+      "searchRoundingLoss": 0,
+      "projectionLoss": 0
     }
   }
 }

@@ -148,17 +148,17 @@
     "sieved": 0,
     "overflow": 0,
     "capped": 0,
-    "rounding": 8.500145032286355e-17,
+    "rounding": 9.71445146547012e-17,
     "recoveredRounding": 0,
     "recoveredSieved": 0,
     "units": {
-      "resolved": "1152921504606846878",
+      "resolved": "1152921504606846864",
       "clueIncompatible": "0",
       "pending": "0",
       "sieved": "0",
       "overflow": "0",
       "capped": "0",
-      "rounding": "98",
+      "rounding": "112",
       "recoveredRounding": "0",
       "recoveredSieved": "0"
     },
@@ -218,11 +218,11 @@
             },
             "projected": {
               "value": 0.9999999999999999,
-              "units": "1152921504606846878"
+              "units": "1152921504606846864"
             },
             "loss": {
-              "value": 1.1275702593849246e-17,
-              "units": "13"
+              "value": 2.3418766925686896e-17,
+              "units": "27"
             }
           },
           "operations": {
@@ -234,11 +234,11 @@
                 },
                 "projected": {
                   "value": 0.9999999999999999,
-                  "units": "1152921504606846878"
+                  "units": "1152921504606846864"
                 },
                 "loss": {
-                  "value": 1.1275702593849246e-17,
-                  "units": "13"
+                  "value": 2.3418766925686896e-17,
+                  "units": "27"
                 }
               }
             }
@@ -251,32 +251,33 @@
     "engine": {
       "totalIterations": 180,
       "roundingErrorEvents": 1,
-      "levelsProcessed": 8,
-      "levelsFullyResolved": 8,
+      "levelsProcessed": 3,
+      "levelsFullyResolved": 3,
       "fullyResolved": true,
       "resultsSize": 36,
       "queueSize": 0,
       "exitReason": "empty"
     },
     "search": {
-      "graphCount": 8,
+      "graphCount": 3,
       "seededLevelCount": 8,
       "pendingEntryCount": 0,
       "largestPendingMass": 0,
       "lastExpandedMass": 0.000010638298,
-      "activeResidueCount": 169,
+      "activeResidueCount": 11,
       "activeResidueMass": 0,
       "canImprove": false,
-      "flexStateIdentityMode": "reduced",
-      "flexSolidNodeCount": 147,
-      "flexPlexNodeCount": 33,
-      "flexSingletonGroupCount": 99,
-      "flexChoiceGroupCount": 24,
-      "flexGroupedAlternativeCount": 164,
-      "flexExpandedSolidNodeCount": 147,
-      "flexExpandedPlexNodeCount": 33,
-      "flexProjectionLoss": 0,
-      "flexProjectionClueIncompatible": 0
+      "exactPoolCount": 8,
+      "sharedGraphCount": 3,
+      "mergedPoolCount": 5,
+      "factorCount": 17,
+      "factorSetCount": 18,
+      "rankPoolMixCount": 161,
+      "selectionCount": 18,
+      "pendingMergeCount": 0,
+      "lateForwardCount": 0,
+      "searchRoundingLoss": 0,
+      "projectionLoss": 0
     }
   }
 }

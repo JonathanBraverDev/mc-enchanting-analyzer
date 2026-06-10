@@ -264,18 +264,18 @@
     "sieved": 0,
     "overflow": 0,
     "capped": 0,
-    "rounding": 4.397524011601206e-16,
-    "recoveredRounding": 1.0581813203458523e-16,
+    "rounding": 4.570996359198887e-16,
+    "recoveredRounding": 0,
     "recoveredSieved": 0,
     "units": {
-      "resolved": "1152921504606846469",
+      "resolved": "1152921504606846449",
       "clueIncompatible": "0",
       "pending": "0",
       "sieved": "0",
       "overflow": "0",
       "capped": "0",
-      "rounding": "507",
-      "recoveredRounding": "122",
+      "rounding": "527",
+      "recoveredRounding": "0",
       "recoveredSieved": "0"
     },
     "details": {
@@ -284,15 +284,11 @@
           "buckets": {
             "resolved": {
               "value": 0.9999999999999997,
-              "units": "1152921504606846572"
+              "units": "1152921504606846561"
             },
             "rounding": {
-              "value": 3.5041414214731503e-16,
-              "units": "404"
-            },
-            "recoveredRounding": {
-              "value": 1.0581813203458523e-16,
-              "units": "122"
+              "value": 3.5995512126518747e-16,
+              "units": "415"
             }
           },
           "operations": {
@@ -316,23 +312,15 @@
               "buckets": {
                 "resolved": {
                   "value": 0.9999999999999997,
-                  "units": "1152921504606846572"
+                  "units": "1152921504606846561"
                 }
               }
             },
             "edgeSplit": {
               "buckets": {
                 "rounding": {
-                  "value": 3.5041414214731503e-16,
-                  "units": "404"
-                }
-              }
-            },
-            "residue": {
-              "buckets": {
-                "recoveredRounding": {
-                  "value": 1.0581813203458523e-16,
-                  "units": "122"
+                  "value": 3.5995512126518747e-16,
+                  "units": "415"
                 }
               }
             }
@@ -342,15 +330,15 @@
           "buckets": {
             "source": {
               "value": 0.9999999999999997,
-              "units": "1152921504606846572"
+              "units": "1152921504606846561"
             },
             "projected": {
               "value": 0.9999999999999996,
-              "units": "1152921504606846469"
+              "units": "1152921504606846449"
             },
             "loss": {
-              "value": 8.933825901280557e-17,
-              "units": "103"
+              "value": 9.71445146547012e-17,
+              "units": "112"
             }
           },
           "operations": {
@@ -358,15 +346,15 @@
               "buckets": {
                 "source": {
                   "value": 0.9999999999999997,
-                  "units": "1152921504606846572"
+                  "units": "1152921504606846561"
                 },
                 "projected": {
                   "value": 0.9999999999999996,
-                  "units": "1152921504606846469"
+                  "units": "1152921504606846449"
                 },
                 "loss": {
-                  "value": 8.933825901280557e-17,
-                  "units": "103"
+                  "value": 9.71445146547012e-17,
+                  "units": "112"
                 }
               }
             }

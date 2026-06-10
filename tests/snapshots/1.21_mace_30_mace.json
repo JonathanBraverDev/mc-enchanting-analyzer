@@ -117,17 +117,17 @@
     "sieved": 0,
     "overflow": 0,
     "capped": 0,
-    "rounding": 1.0148132334464322e-16,
+    "rounding": 1.0321604682062002e-16,
     "recoveredRounding": 0,
     "recoveredSieved": 0,
     "units": {
-      "resolved": "1152921504606846859",
+      "resolved": "1152921504606846857",
       "clueIncompatible": "0",
       "pending": "0",
       "sieved": "0",
       "overflow": "0",
       "capped": "0",
-      "rounding": "117",
+      "rounding": "119",
       "recoveredRounding": "0",
       "recoveredSieved": "0"
     },
@@ -187,11 +187,11 @@
             },
             "projected": {
               "value": 0.9999999999999999,
-              "units": "1152921504606846859"
+              "units": "1152921504606846857"
             },
             "loss": {
-              "value": 3.903127820947816e-17,
-              "units": "45"
+              "value": 4.0766001685454967e-17,
+              "units": "47"
             }
           },
           "operations": {
@@ -203,11 +203,11 @@
                 },
                 "projected": {
                   "value": 0.9999999999999999,
-                  "units": "1152921504606846859"
+                  "units": "1152921504606846857"
                 },
                 "loss": {
-                  "value": 3.903127820947816e-17,
-                  "units": "45"
+                  "value": 4.0766001685454967e-17,
+                  "units": "47"
                 }
               }
             }
@@ -218,34 +218,35 @@
   },
   "diagnostics": {
     "engine": {
-      "totalIterations": 189,
+      "totalIterations": 104,
       "roundingErrorEvents": 1,
-      "levelsProcessed": 6,
-      "levelsFullyResolved": 6,
+      "levelsProcessed": 1,
+      "levelsFullyResolved": 1,
       "fullyResolved": true,
       "resultsSize": 61,
       "queueSize": 0,
       "exitReason": "empty"
     },
     "search": {
-      "graphCount": 6,
+      "graphCount": 1,
       "seededLevelCount": 6,
       "pendingEntryCount": 0,
       "largestPendingMass": 0,
-      "lastExpandedMass": 2.54737e-7,
-      "activeResidueCount": 148,
+      "lastExpandedMass": 5.20833e-7,
+      "activeResidueCount": 66,
       "activeResidueMass": 0,
       "canImprove": false,
-      "flexStateIdentityMode": "reduced",
-      "flexSolidNodeCount": 66,
-      "flexPlexNodeCount": 52,
-      "flexSingletonGroupCount": 144,
-      "flexChoiceGroupCount": 57,
-      "flexGroupedAlternativeCount": 372,
-      "flexExpandedSolidNodeCount": 69,
-      "flexExpandedPlexNodeCount": 120,
-      "flexProjectionLoss": 0,
-      "flexProjectionClueIncompatible": 0
+      "exactPoolCount": 6,
+      "sharedGraphCount": 1,
+      "mergedPoolCount": 5,
+      "factorCount": 3,
+      "factorSetCount": 8,
+      "rankPoolMixCount": 724,
+      "selectionCount": 8,
+      "pendingMergeCount": 76,
+      "lateForwardCount": 62,
+      "searchRoundingLoss": 0,
+      "projectionLoss": 0
     }
   }
 }
