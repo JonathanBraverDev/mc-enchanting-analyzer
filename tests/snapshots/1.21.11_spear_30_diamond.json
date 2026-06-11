@@ -474,19 +474,19 @@
     "clueIncompatible": 0,
     "pending": 0,
     "sieved": 0,
-    "overflow": 0.000008650657760711153,
+    "overflow": 0.000008650657760712888,
     "capped": 0,
-    "rounding": 9.740472317609772e-16,
+    "rounding": 9.653736143810931e-16,
     "recoveredRounding": 0,
     "recoveredSieved": 0,
     "units": {
-      "resolved": "1152911531077484535",
+      "resolved": "1152911531077484543",
       "clueIncompatible": "0",
       "pending": "0",
       "sieved": "0",
-      "overflow": "9973529361318",
+      "overflow": "9973529361320",
       "capped": "0",
-      "rounding": "1123",
+      "rounding": "1113",
       "recoveredRounding": "0",
       "recoveredSieved": "0"
     },
@@ -496,15 +496,15 @@
           "buckets": {
             "resolved": {
               "value": 0.9999913493422385,
-              "units": "1152911531077484748"
+              "units": "1152911531077484759"
             },
             "overflow": {
-              "value": 0.000008650657760711153,
-              "units": "9973529361318"
+              "value": 0.000008650657760712888,
+              "units": "9973529361320"
             },
             "rounding": {
-              "value": 7.892991815694472e-16,
-              "units": "910"
+              "value": 7.78023478975598e-16,
+              "units": "897"
             }
           },
           "operations": {
@@ -528,23 +528,23 @@
               "buckets": {
                 "resolved": {
                   "value": 0.9999913493422385,
-                  "units": "1152911531077484748"
+                  "units": "1152911531077484759"
                 }
               }
             },
             "edgeSplit": {
               "buckets": {
                 "rounding": {
-                  "value": 7.892991815694472e-16,
-                  "units": "910"
+                  "value": 7.78023478975598e-16,
+                  "units": "897"
                 }
               }
             },
             "overflow": {
               "buckets": {
                 "overflow": {
-                  "value": 0.000008650657760711153,
-                  "units": "9973529361318"
+                  "value": 0.000008650657760712888,
+                  "units": "9973529361320"
                 }
               }
             }
@@ -554,15 +554,15 @@
           "buckets": {
             "source": {
               "value": 0.9999913493422385,
-              "units": "1152911531077484748"
+              "units": "1152911531077484759"
             },
             "projected": {
               "value": 0.9999913493422383,
-              "units": "1152911531077484535"
+              "units": "1152911531077484543"
             },
             "loss": {
-              "value": 1.8474805019152996e-16,
-              "units": "213"
+              "value": 1.8735013540549517e-16,
+              "units": "216"
             }
           },
           "operations": {
@@ -570,15 +570,15 @@
               "buckets": {
                 "source": {
                   "value": 0.9999913493422385,
-                  "units": "1152911531077484748"
+                  "units": "1152911531077484759"
                 },
                 "projected": {
                   "value": 0.9999913493422383,
-                  "units": "1152911531077484535"
+                  "units": "1152911531077484543"
                 },
                 "loss": {
-                  "value": 1.8474805019152996e-16,
-                  "units": "213"
+                  "value": 1.8735013540549517e-16,
+                  "units": "216"
                 }
               }
             }
@@ -604,7 +604,7 @@
       "pendingEntryCount": 0,
       "largestPendingMass": 0,
       "lastExpandedMass": 1.9419e-7,
-      "activeResidueCount": 359,
+      "activeResidueCount": 362,
       "activeResidueMass": 0,
       "canImprove": false,
       "exactPoolCount": 6,
@@ -612,10 +612,10 @@
       "mergedPoolCount": 5,
       "factorCount": 6,
       "factorSetCount": 64,
-      "rankPoolMixCount": 1711,
+      "rankPoolMixCount": 1688,
       "selectionCount": 64,
-      "pendingMergeCount": 1471,
-      "lateForwardCount": 284,
+      "pendingMergeCount": 1459,
+      "lateForwardCount": 273,
       "searchRoundingLoss": 0,
       "projectionLoss": 0
     }

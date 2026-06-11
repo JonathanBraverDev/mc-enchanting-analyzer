@@ -241,10 +241,10 @@
       "mergedPoolCount": 5,
       "factorCount": 3,
       "factorSetCount": 8,
-      "rankPoolMixCount": 724,
+      "rankPoolMixCount": 718,
       "selectionCount": 8,
-      "pendingMergeCount": 76,
-      "lateForwardCount": 62,
+      "pendingMergeCount": 78,
+      "lateForwardCount": 60,
       "searchRoundingLoss": 0,
       "projectionLoss": 0
     }

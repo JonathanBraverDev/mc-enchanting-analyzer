@@ -118504,23 +118504,23 @@
   },
   "accuracy": 0.99999995777,
   "accounting": {
-    "resolved": 0.9999999577702893,
+    "resolved": 0.9999999577702917,
     "clueIncompatible": 0,
     "pending": 0,
     "sieved": 0,
-    "overflow": 4.222800483334038e-8,
+    "overflow": 4.2228004590479096e-8,
     "capped": 0,
-    "rounding": 1.7058481363574352e-12,
+    "rounding": 1.7037170285671976e-12,
     "recoveredRounding": 0,
     "recoveredSieved": 0,
     "units": {
-      "resolved": "1152921455919305398",
+      "resolved": "1152921455919308135",
       "clueIncompatible": "0",
       "pending": "0",
       "sieved": "0",
-      "overflow": "48685574869",
+      "overflow": "48685574589",
       "capped": "0",
-      "rounding": "1966709",
+      "rounding": "1964252",
       "recoveredRounding": "0",
       "recoveredSieved": "0"
     },
@@ -118529,16 +118529,16 @@
         "search": {
           "buckets": {
             "resolved": {
-              "value": 0.9999999577715349,
-              "units": "1152921455920741505"
+              "value": 0.9999999577715345,
+              "units": "1152921455920741028"
             },
             "overflow": {
-              "value": 4.222800483334038e-8,
-              "units": "48685574869"
+              "value": 4.2228004590479096e-8,
+              "units": "48685574589"
             },
             "rounding": {
-              "value": 4.602238729001229e-13,
-              "units": "530602"
+              "value": 4.608804657357801e-13,
+              "units": "531359"
             }
           },
           "operations": {
@@ -118561,24 +118561,24 @@
             "resolve": {
               "buckets": {
                 "resolved": {
-                  "value": 0.9999999577715349,
-                  "units": "1152921455920741505"
+                  "value": 0.9999999577715345,
+                  "units": "1152921455920741028"
                 }
               }
             },
             "edgeSplit": {
               "buckets": {
                 "rounding": {
-                  "value": 4.602238729001229e-13,
-                  "units": "530602"
+                  "value": 4.608804657357801e-13,
+                  "units": "531359"
                 }
               }
             },
             "overflow": {
               "buckets": {
                 "overflow": {
-                  "value": 4.222800483334038e-8,
-                  "units": "48685574869"
+                  "value": 4.2228004590479096e-8,
+                  "units": "48685574589"
                 }
               }
             }
@@ -118587,32 +118587,32 @@
         "projection": {
           "buckets": {
             "source": {
-              "value": 0.9999999577715349,
-              "units": "1152921455920741505"
+              "value": 0.9999999577715345,
+              "units": "1152921455920741028"
             },
             "projected": {
-              "value": 0.9999999577702893,
-              "units": "1152921455919305398"
+              "value": 0.9999999577702917,
+              "units": "1152921455919308135"
             },
             "loss": {
-              "value": 1.2456242634573123e-12,
-              "units": "1436107"
+              "value": 1.2428365628314175e-12,
+              "units": "1432893"
             }
           },
           "operations": {
             "results": {
               "buckets": {
                 "source": {
-                  "value": 0.9999999577715349,
-                  "units": "1152921455920741505"
+                  "value": 0.9999999577715345,
+                  "units": "1152921455920741028"
                 },
                 "projected": {
-                  "value": 0.9999999577702893,
-                  "units": "1152921455919305398"
+                  "value": 0.9999999577702917,
+                  "units": "1152921455919308135"
                 },
                 "loss": {
-                  "value": 1.2456242634573123e-12,
-                  "units": "1436107"
+                  "value": 1.2428365628314175e-12,
+                  "units": "1432893"
                 }
               }
             }

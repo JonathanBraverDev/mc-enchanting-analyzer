@@ -63,19 +63,19 @@
     "clueIncompatible": 0.8354661157569118,
     "pending": 0,
     "sieved": 0,
-    "overflow": 0.000004896874496001548,
+    "overflow": 0.000004896874495999813,
     "capped": 0,
-    "rounding": 3.8163916471489756e-16,
+    "rounding": 3.95516952522712e-16,
     "recoveredRounding": 0,
     "recoveredSieved": 0,
     "units": {
-      "resolved": "189689007668437884",
-      "clueIncompatible": "963226851226496851",
+      "resolved": "189689007668437877",
+      "clueIncompatible": "963226851226496844",
       "pending": "0",
       "sieved": "0",
-      "overflow": "5645711911801",
+      "overflow": "5645711911799",
       "capped": "0",
-      "rounding": "440",
+      "rounding": "456",
       "recoveredRounding": "0",
       "recoveredSieved": "0"
     },
@@ -85,19 +85,19 @@
           "buckets": {
             "resolved": {
               "value": 0.41610621423661476,
-              "units": "479737802593936928"
+              "units": "479737802593936912"
             },
             "clueIncompatible": {
               "value": 0.5838888888888889,
               "units": "673178056300997895"
             },
             "overflow": {
-              "value": 0.000004896874496001548,
-              "units": "5645711911801"
+              "value": 0.000004896874495999813,
+              "units": "5645711911799"
             },
             "rounding": {
-              "value": 3.0531133177191805e-16,
-              "units": "352"
+              "value": 3.209238430557093e-16,
+              "units": "370"
             }
           },
           "operations": {
@@ -121,23 +121,23 @@
               "buckets": {
                 "resolved": {
                   "value": 0.41610621423661476,
-                  "units": "479737802593936928"
+                  "units": "479737802593936912"
                 }
               }
             },
             "edgeSplit": {
               "buckets": {
                 "rounding": {
-                  "value": 3.0531133177191805e-16,
-                  "units": "352"
+                  "value": 3.209238430557093e-16,
+                  "units": "370"
                 }
               }
             },
             "overflow": {
               "buckets": {
                 "overflow": {
-                  "value": 0.000004896874496001548,
-                  "units": "5645711911801"
+                  "value": 0.000004896874495999813,
+                  "units": "5645711911799"
                 }
               }
             },
@@ -159,19 +159,19 @@
           "buckets": {
             "clueIncompatible": {
               "value": 0.2515772268680228,
-              "units": "290048794925498956"
+              "units": "290048794925498949"
             },
             "source": {
               "value": 0.41610621423661476,
-              "units": "479737802593936928"
+              "units": "479737802593936912"
             },
             "projected": {
               "value": 0.1645289873685919,
-              "units": "189689007668437884"
+              "units": "189689007668437877"
             },
             "loss": {
-              "value": 7.632783294297951e-17,
-              "units": "88"
+              "value": 7.45931094670027e-17,
+              "units": "86"
             }
           },
           "operations": {
@@ -179,19 +179,19 @@
               "buckets": {
                 "clueIncompatible": {
                   "value": 0.2515772268680228,
-                  "units": "290048794925498956"
+                  "units": "290048794925498949"
                 },
                 "source": {
                   "value": 0.41610621423661476,
-                  "units": "479737802593936928"
+                  "units": "479737802593936912"
                 },
                 "projected": {
                   "value": 0.1645289873685919,
-                  "units": "189689007668437884"
+                  "units": "189689007668437877"
                 },
                 "loss": {
-                  "value": 7.632783294297951e-17,
-                  "units": "88"
+                  "value": 7.45931094670027e-17,
+                  "units": "86"
                 }
               }
             }
