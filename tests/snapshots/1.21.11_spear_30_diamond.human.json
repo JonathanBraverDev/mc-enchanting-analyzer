@@ -474,20 +474,20 @@
     "clueIncompatible": 0,
     "pending": 0,
     "sieved": 0,
-    "overflow": 0.000008650657760711153,
+    "overflow": 0.000008650657760712888,
     "capped": 0,
-    "rounding": 9.445569326693715e-16,
-    "recoveredRounding": 2.645453300864631e-16,
+    "rounding": 9.653736143810931e-16,
+    "recoveredRounding": 0,
     "recoveredSieved": 0,
     "units": {
-      "resolved": "1152911531077484569",
+      "resolved": "1152911531077484543",
       "clueIncompatible": "0",
       "pending": "0",
       "sieved": "0",
-      "overflow": "9973529361318",
+      "overflow": "9973529361320",
       "capped": "0",
-      "rounding": "1089",
-      "recoveredRounding": "305",
+      "rounding": "1113",
+      "recoveredRounding": "0",
       "recoveredSieved": "0"
     },
     "details": {
@@ -496,19 +496,15 @@
           "buckets": {
             "resolved": {
               "value": 0.9999913493422385,
-              "units": "1152911531077484748"
+              "units": "1152911531077484759"
             },
             "overflow": {
-              "value": 0.000008650657760711153,
-              "units": "9973529361318"
+              "value": 0.000008650657760712888,
+              "units": "9973529361320"
             },
             "rounding": {
-              "value": 7.892991815694472e-16,
-              "units": "910"
-            },
-            "recoveredRounding": {
-              "value": 2.645453300864631e-16,
-              "units": "305"
+              "value": 7.78023478975598e-16,
+              "units": "897"
             }
           },
           "operations": {
@@ -532,31 +528,23 @@
               "buckets": {
                 "resolved": {
                   "value": 0.9999913493422385,
-                  "units": "1152911531077484748"
+                  "units": "1152911531077484759"
                 }
               }
             },
             "edgeSplit": {
               "buckets": {
                 "rounding": {
-                  "value": 7.892991815694472e-16,
-                  "units": "910"
+                  "value": 7.78023478975598e-16,
+                  "units": "897"
                 }
               }
             },
             "overflow": {
               "buckets": {
                 "overflow": {
-                  "value": 0.000008650657760711153,
-                  "units": "9973529361318"
-                }
-              }
-            },
-            "residue": {
-              "buckets": {
-                "recoveredRounding": {
-                  "value": 2.645453300864631e-16,
-                  "units": "305"
+                  "value": 0.000008650657760712888,
+                  "units": "9973529361320"
                 }
               }
             }
@@ -566,15 +554,15 @@
           "buckets": {
             "source": {
               "value": 0.9999913493422385,
-              "units": "1152911531077484748"
+              "units": "1152911531077484759"
             },
             "projected": {
               "value": 0.9999913493422383,
-              "units": "1152911531077484569"
+              "units": "1152911531077484543"
             },
             "loss": {
-              "value": 1.5525775109992423e-16,
-              "units": "179"
+              "value": 1.8735013540549517e-16,
+              "units": "216"
             }
           },
           "operations": {
@@ -582,15 +570,15 @@
               "buckets": {
                 "source": {
                   "value": 0.9999913493422385,
-                  "units": "1152911531077484748"
+                  "units": "1152911531077484759"
                 },
                 "projected": {
                   "value": 0.9999913493422383,
-                  "units": "1152911531077484569"
+                  "units": "1152911531077484543"
                 },
                 "loss": {
-                  "value": 1.5525775109992423e-16,
-                  "units": "179"
+                  "value": 1.8735013540549517e-16,
+                  "units": "216"
                 }
               }
             }

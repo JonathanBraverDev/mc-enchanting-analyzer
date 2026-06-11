@@ -56,7 +56,7 @@
     "overflow": 0,
     "capped": 0,
     "rounding": 1.214306433183765e-16,
-    "recoveredRounding": 2.949029909160572e-17,
+    "recoveredRounding": 0,
     "recoveredSieved": 0,
     "units": {
       "resolved": "508868261221058679",
@@ -66,7 +66,7 @@
       "overflow": "0",
       "capped": "0",
       "rounding": "140",
-      "recoveredRounding": "34",
+      "recoveredRounding": "0",
       "recoveredSieved": "0"
     },
     "details": {
@@ -84,22 +84,14 @@
             "rounding": {
               "value": 1.214306433183765e-16,
               "units": "140"
-            },
-            "recoveredRounding": {
-              "value": 2.949029909160572e-17,
-              "units": "34"
             }
           },
           "operations": {
             "seed": {
               "buckets": {
-                "clueIncompatible": {
-                  "value": 0.40049999999999997,
-                  "units": "461745062595042169"
-                },
                 "pending": {
-                  "value": 0.5995,
-                  "units": "691176442011804807"
+                  "value": 1,
+                  "units": "1152921504606846976"
                 }
               }
             },
@@ -127,11 +119,15 @@
                 }
               }
             },
-            "residue": {
+            "cluePrune": {
               "buckets": {
-                "recoveredRounding": {
-                  "value": 2.949029909160572e-17,
-                  "units": "34"
+                "clueIncompatible": {
+                  "value": 0.40049999999999997,
+                  "units": "461745062595042169"
+                },
+                "pending": {
+                  "value": -0.40049999999999997,
+                  "units": "-461745062595042169"
                 }
               }
             }
@@ -176,34 +172,35 @@
   },
   "diagnostics": {
     "engine": {
-      "totalIterations": 188,
+      "totalIterations": 118,
       "roundingErrorEvents": 1,
-      "levelsProcessed": 2,
-      "levelsFullyResolved": 2,
+      "levelsProcessed": 1,
+      "levelsFullyResolved": 1,
       "fullyResolved": true,
       "resultsSize": 24,
       "queueSize": 0,
       "exitReason": "empty"
     },
     "search": {
-      "graphCount": 2,
+      "graphCount": 1,
       "seededLevelCount": 2,
       "pendingEntryCount": 0,
       "largestPendingMass": 0,
-      "lastExpandedMass": 7.8363e-8,
-      "activeResidueCount": 279,
+      "lastExpandedMass": 0.000001106373,
+      "activeResidueCount": 90,
       "activeResidueMass": 0,
       "canImprove": false,
-      "flexStateIdentityMode": "reduced",
-      "flexSolidNodeCount": 118,
-      "flexPlexNodeCount": 0,
-      "flexSingletonGroupCount": 435,
-      "flexChoiceGroupCount": 0,
-      "flexGroupedAlternativeCount": 435,
-      "flexExpandedSolidNodeCount": 188,
-      "flexExpandedPlexNodeCount": 0,
-      "flexProjectionLoss": 0,
-      "flexProjectionClueIncompatible": 0.15812714054
+      "exactPoolCount": 2,
+      "sharedGraphCount": 1,
+      "mergedPoolCount": 1,
+      "factorCount": 5,
+      "factorSetCount": 32,
+      "rankPoolMixCount": 843,
+      "selectionCount": 32,
+      "pendingMergeCount": 273,
+      "lateForwardCount": 70,
+      "searchRoundingLoss": 0,
+      "projectionLoss": 0
     }
   },
   "clue": {
