@@ -56,7 +56,7 @@
     "overflow": 0,
     "capped": 0,
     "rounding": 1.214306433183765e-16,
-    "recoveredRounding": 2.949029909160572e-17,
+    "recoveredRounding": 0,
     "recoveredSieved": 0,
     "units": {
       "resolved": "508868261221058679",
@@ -66,7 +66,7 @@
       "overflow": "0",
       "capped": "0",
       "rounding": "140",
-      "recoveredRounding": "34",
+      "recoveredRounding": "0",
       "recoveredSieved": "0"
     },
     "details": {
@@ -84,22 +84,14 @@
             "rounding": {
               "value": 1.214306433183765e-16,
               "units": "140"
-            },
-            "recoveredRounding": {
-              "value": 2.949029909160572e-17,
-              "units": "34"
             }
           },
           "operations": {
             "seed": {
               "buckets": {
-                "clueIncompatible": {
-                  "value": 0.40049999999999997,
-                  "units": "461745062595042169"
-                },
                 "pending": {
-                  "value": 0.5995,
-                  "units": "691176442011804807"
+                  "value": 1,
+                  "units": "1152921504606846976"
                 }
               }
             },
@@ -127,11 +119,15 @@
                 }
               }
             },
-            "residue": {
+            "cluePrune": {
               "buckets": {
-                "recoveredRounding": {
-                  "value": 2.949029909160572e-17,
-                  "units": "34"
+                "clueIncompatible": {
+                  "value": 0.40049999999999997,
+                  "units": "461745062595042169"
+                },
+                "pending": {
+                  "value": -0.40049999999999997,
+                  "units": "-461745062595042169"
                 }
               }
             }

@@ -2,9 +2,7 @@
 
 ## Common Description
 
-This document is the maintained reference for search behavior. The engine searches one globally weighted frontier across registry-derived grouped graphs, keeps probability mass in fixed-point accounting buckets, and produces checkpoint snapshots that the UI and reporting services can consume directly.
-
-The implementation still uses the internal `flex` namespace for code that can represent both singleton paths and factorized choice paths. That name is an implementation detail, not a separate product engine.
+This document is the maintained reference for search behavior. Flex search is the engine's rank-merged search model: it searches one globally weighted frontier across registry-derived shared-rank graphs, keeps probability mass in fixed-point accounting buckets, and produces checkpoint snapshots that the UI and reporting services can consume directly.
 
 ## Table of Contents
 
@@ -14,6 +12,7 @@ The implementation still uses the internal `flex` namespace for code that can re
 - [Implementation Shape](#implementation-shape)
 - [Component Responsibilities](#component-responsibilities)
 - [Factorized Tree Model](#factorized-tree-model)
+- [Flex Rank Merge Model](#flex-rank-merge-model)
 - [Projection and Snapshot Boundary](#projection-and-snapshot-boundary)
 - [Search Identity](#search-identity)
 - [Checkpoint Semantics](#checkpoint-semantics)
@@ -32,26 +31,25 @@ The implementation still uses the internal `flex` namespace for code that can re
 
 ## Purpose / Scope
 
-The search engine handles probability search, checkpointing, reporting, and worker-facing refinement. It searches one weighted frontier over shared future state, and represents identical future eligibility once even when multiple enchantment choices lead there.
+The search engine handles probability search, checkpointing, reporting, and worker-facing refinement. Flex search represents identical future eligibility once even when multiple exact rank pools lead there; exact ranks remain payload data until projection.
 
 The core model is:
 
 ```text
-weighted modified-level roots -> grouped registry graph -> global frontier -> checkpoint snapshot
+weighted modified-level roots -> Flex shared-rank graph -> global frontier -> checkpoint snapshot
 ```
 
 This document describes behavior and invariants that should remain useful across release labels.
 
 ## Runtime Invariants
 
-- The grouped search runtime defines product search behavior.
+- The shared-rank runtime defines product search behavior.
 - Search scheduling is global: the highest-weight pending state expands next across the whole request/cell.
 - `RegistryKernel` owns immutable registry projection and exact pool construction.
-- `GroupedFlexGraph` owns registry-derived structural graph state.
-- `FlexCoordinator` owns mutable probability flow, frontier scheduling, residue, and checkpoint exits.
-- `FlexProgramStore` records generated result programs separately from mass movement.
-- `SolidNode` represents a definite singleton transition.
-- `PlexNode` represents a multiplexed enchantment choice whose alternatives share future eligibility.
+- `FlexSearchGraph` owns registry-derived structural graph state.
+- `FlexSearchRun` owns mutable probability flow, frontier scheduling, residue, and checkpoint exits.
+- `RankSelectionStore` records abstract selected factors separately from exact ranked pool payloads.
+- `RankPoolStore` resolves abstract enchant IDs back to exact packed enchant ranks for projection.
 - Public checkpoint outputs remain exact: `SearchResult`, combo maps, snapshots, summary aggregates, and accounting keep their supported meanings.
 - Factorized pending frontier state is allowed internally; resolved user-facing combo rows remain exact.
 - Canonical golden snapshots should use exhaustive searches when the case can bottom out within practical runtime/heap limits.
@@ -66,34 +64,33 @@ UI / caller request
   -> EnchantEngine
   -> SearchExecutionService
   -> ModifiedLevelDistributionService
-  -> RegistryKernel / SearchPoolSignature
-  -> GroupedFlexGraph
-  -> FlexCoordinator global weighted frontier
+  -> RegistryKernel / Flex rank-merge signature
+  -> FlexSearchGraph
+  -> FlexSearchRun global weighted frontier
   -> ProbabilityMassAccountant
-  -> FlexSnapshotBuilder / EngineSearchSnapshot
+  -> FlexSearchSnapshotBuilder / EngineSearchSnapshot
   -> SearchResult
   -> SummaryAggregationService / SnapshotService / reporting projections
 ```
 
-The search starts by computing the modified-level distribution for the requested XP, item, material, and version mechanics. Each modified level is mapped to an eligible registry pool. Pools with equivalent future behavior share graph structure through `SearchPoolSignature`, so adjacent levels can converge after level halving instead of repeating the same suffix independently.
+The search starts by computing the modified-level distribution for the requested XP, item, material, and version mechanics. Each modified level is mapped to an eligible registry pool. Pools with equivalent future behavior share Flex graph structure through a rank-merge pool signature, so adjacent levels can converge after level halving instead of repeating the same suffix independently.
 
-The engine then seeds each modified-level root with its weighted probability mass and advances one global frontier. Each expansion chooses the largest pending `(graphId, nodeId)` entry, forwards mass through weighted edges, records resolved/terminal mass, and updates fixed-point accounting. A checkpoint snapshot is built only at requested boundaries.
+The engine then seeds each modified-level root with its weighted probability mass and advances one global frontier. Each expansion chooses the largest pending `(graphId, nodeId, factorSetId)` entry, forwards exact rank-pool payload mass through weighted edges, records resolved/terminal mass, and updates fixed-point accounting. A checkpoint snapshot is built only at requested boundaries.
 
 ## Implementation Shape
 
 Implemented search behavior:
 
 - `RegistryKernel` projects resolved registry state into immutable runtime lookup structures.
-- `SearchPoolSignature` groups modified levels that can reuse the same exact graph.
-- `GroupedFlexGraph` scans registry pool entries and groups alternatives that lead to the same child exclusion state.
-- Singleton groups append fixed emissions and produce `SolidNode`s.
-- Multi-alternative groups append weighted choice emissions and produce `PlexNode`s.
-- `FlexProgramStore` records fixed and choice emissions as compact parent-linked program history.
-- `FlexCoordinator` seeds weighted modified-level roots into one best-first frontier.
-- Frontier entries are keyed by graph and node, so convergent future states merge pending mass.
+- Rank-merge signatures group modified levels that can reuse the same future graph even when exact enchant ranks differ.
+- `FlexSearchGraph` scans registry pool entries and emits rank-agnostic alternatives that lead to child exclusion states.
+- `RankSelectionStore` records selected abstract factors and factor-set identity.
+- `RankPoolStore` retains exact ranked pool payloads for projection.
+- `FlexSearchRun` seeds weighted modified-level roots into one best-first frontier.
+- Frontier entries are keyed by graph, node, and factor set, so convergent future states merge pending mass while exact rank-pool mixes remain payload data.
 - Edge-local split residue is forwarded and recovered only at the same source expansion.
 - `ProbabilityMassAccountant` tracks public buckets and detailed stage/operation buckets.
-- `FlexSnapshotBuilder` creates engine snapshots directly from coordinator state.
+- `FlexSearchSnapshotBuilder` creates engine snapshots directly from run state.
 - Exact combo rows remain the result output.
 - Pending frontier summaries use the native factorized shape instead of materializing every pending row by default.
 - Book removal, clue conditioning, pending aggregates, and result summaries are snapshot/reporting concerns, not caller concerns.
@@ -105,7 +102,7 @@ Non-goals:
 - No second production search runtime.
 - No serialized cross-worker resume snapshot; live run caching owns resume behavior.
 - No engine-owned chart matrix scheduler; the chart worker owns matrix orchestration and uses XP-cell run caching.
-- No compatibility promise for internal `flex` classes, graph IDs, node IDs, or diagnostic-only scripts.
+- No compatibility promise for internal search classes, graph IDs, node IDs, rank-pool IDs, factor IDs, or diagnostic-only scripts.
 
 ## Component Responsibilities
 
@@ -118,40 +115,50 @@ Responsibilities:
 - Resolve item/material/version mechanics.
 - Precompute enchant IDs, ranks, weights, conflicts, packed combo indexes, and active rule data.
 - Compute eligible pools by modified level.
-- Assign `SearchPoolSignature` values for exact graph reuse.
+- Assign rank-merge signatures for shared graph reuse across exact rank-variant pools.
 - Provide cheap access to immutable graph inputs.
 
-### GroupedFlexGraph
+### FlexSearchGraph
 
-Immutable/lazy structural graph for a pool signature.
+Immutable/lazy structural graph for a rank-merge pool signature.
 
 Responsibilities:
 
 - Canonical node IDs.
-- Node exclusion-mask/current-level/count/program state.
+- Node exclusion-mask/current-level/count state.
 - Root and non-root expansion over registry pool entries.
-- Grouping alternatives by child exclusion state.
-- Choosing `SolidNode` vs `PlexNode` representation.
-- Tracking node kind counts and internal memory/probe diagnostics.
+- Emitting rank-agnostic alternatives that preserve exact future eligibility.
+- Tracking graph counts and internal memory/probe diagnostics.
 - Providing debug expansion objects for tests.
-- Providing scratch-backed search expansions for the coordinator hot loop.
+- Providing expansion data for the search-run hot loop.
 
-No probability mass belongs in `GroupedFlexGraph`.
+No probability mass belongs in `FlexSearchGraph`.
 
-### FlexProgramStore
+### RankSelectionStore
 
-Compact generated-program history.
+Compact selected-factor history.
 
 Responsibilities:
 
-- Intern root, fixed-emission, and choice-emission program IDs.
-- Store parent links so programs can be walked without allocating full arrays in the search loop.
-- Preserve exact fixed enchant order and choice weights for result projection.
-- Expose program metadata for snapshot construction, pending summaries, and diagnostics.
+- Intern abstract pick factors and selected factor sets.
+- Intern exact rank-pool mixes that carry weighted rank-pool payloads.
+- Keep selected future identity separate from exact ranked payload identity.
+- Expose factor and mix metadata for snapshot construction, pending summaries, and diagnostics.
 
-Program identity is separate from structural node identity. A graph node says what future search can do; a program says what the user-facing result has already generated.
+### RankPoolStore
 
-### FlexCoordinator
+Exact rank-pool payload storage.
+
+Responsibilities:
+
+- Intern exact ranked modified-level pools.
+- Resolve abstract enchant IDs to exact packed enchant ranks for a rank pool.
+- Keep rank-variant pools separate even when they share one future graph.
+- Provide projection-time lookup data without forcing graph nodes to carry exact rank identity.
+
+Factor-set identity is separate from structural node identity. A graph node says what future search can do; a factor set says what abstract selections have already happened; a rank-pool mix says which exact ranked pools contributed the probability mass.
+
+### FlexSearchRun
 
 Mutable weighted probability flow through one or more grouped graphs.
 
@@ -159,26 +166,38 @@ Responsibilities:
 
 - Seed modified-level root mass.
 - Coordinate lazy graph expansion, frontier scheduling, mass accounting, residue, and checkpoint exit checks.
-- Merge pending mass at identical future states.
+- Merge pending mass at identical future/factor-set states while merging exact rank-pool payload mixes.
 - Schedule global best-first expansion.
 - Forward edge mass with fixed-point residue recovery.
-- Record stop mass by `programId`.
+- Record stop mass by factor-set identity and exact rank-pool mix.
 - Maintain active residue diagnostics without rescanning hot structures.
-- Produce coordinator state for snapshot construction.
+- Maintain pending and resolved mass totals incrementally for target-mass checkpoints.
+- Produce run state for snapshot construction.
 
-`FlexCoordinator` should not own registry semantics or presentation formatting. Its job is probability flow.
+`FlexSearchRun` should not own registry semantics or presentation formatting. Its job is probability flow.
 
-### FlexSnapshotBuilder
+### FlexSearchSnapshotBuilder
 
 Native checkpoint snapshot construction.
 
 Responsibilities:
 
-- Build `EngineSearchSnapshot` directly from coordinator state.
+- Build `EngineSearchSnapshot` directly from run state.
 - Maintain cumulative exact resolved combo rows.
 - Maintain exact resolved aggregate buckets.
 - Build factorized pending frontier summaries without forcing materialized pending rows.
 - Fold detailed projection/search accounting back into public accounting units exactly.
+
+### FlexSearchProjector
+
+Exact output projection.
+
+Responsibilities:
+
+- Walk factor sets and exact rank-pool mixes into exact `PackedCombo` rows.
+- Apply book-removal semantics at the result boundary.
+- Apply exact clue matching and clue-incompatible projection accounting.
+- Project pending aggregate summaries without materializing every pending concrete row.
 
 ### Projection and Reporting Services
 
@@ -197,29 +216,46 @@ Changing display targets or summary limits should not rerun search when the unde
 
 ## Factorized Tree Model
 
-The engine separates future search identity from generated result identity.
+The engine separates future search identity from exact ranked result identity.
 
 ```text
-SolidNode
-  program: fixed enchantment history
-  future: one definite child exclusion state
+FlexSearchGraph node
+  future: exclusion mask + current level + enchant count
 
-PlexNode
-  program: fixed history + one weighted choice slot
-  future: one shared child exclusion state
+FactorSet
+  selected abstract enchant IDs
+
+RankPoolMix
+  exact ranked pool payload weights
 ```
 
-A `PlexNode` is valid only when every alternative in its choice group has the same future eligibility after conflicts and selected enchant exclusions are applied. For example, several sword damage alternatives may all block the same damage group and therefore lead to the same future search state. They can share one child node while keeping their distinct result weights in the program.
+A shared graph node is valid only when every exact rank-pool variant has the same future eligibility after conflicts and selected enchant exclusions are applied. For example, several sword damage ranks may all block the same damage group and therefore lead to the same future search state. They can share one child node while exact ranks remain in the rank-pool payload for later projection.
 
-This is why the grouped runtime can explore fewer frontier entries than a concrete selected-prefix tree without weakening final output. The search loop moves mass through future behavior. Snapshot construction expands the program factors back into exact user-facing combos when rows are requested.
+This is why the runtime can explore fewer frontier entries than a concrete selected-prefix tree without weakening final output. The search loop moves mass through future behavior. Snapshot construction expands abstract factors through exact rank pools back into exact user-facing combos when rows are requested.
 
-The graph stores nodes by reduced identity when safe:
+The graph stores nodes by rank-agnostic future identity:
 
 ```text
 (exclusionMask, currentLevel, count)
 ```
 
-For mutated registries that break the reduced-key invariant, the engine falls back to program-aware identity so different histories do not accidentally share unsafe future state.
+Exact ranked payload identity is not part of the graph key. It is carried by `RankPoolMix`, so mutated registries and vanilla rank variants can share future structure only where future behavior is actually rank-agnostic.
+
+## Flex Rank Merge Model
+
+Rank merge is part of Flex search, not a backend selector.
+
+The engine groups work at three different identities:
+
+- `FlexSearchGraph` owns rank-agnostic future eligibility: exclusion mask, continuation level, enchant count, and registry facts that affect future choices.
+- `RankSelectionStore` owns selected abstract factors and canonical factor sets, so different pick orders can converge when they have the same selected factors.
+- `RankPoolStore` and rank-pool mixes own exact ranked payloads, so projection can still recover concrete enchant ranks for every represented modified-level pool.
+
+This lets the hot loop merge pending mass by future behavior while preserving exact result rows. A frontier entry can represent several exact rank pools only after those pools have the same future search behavior and the same selected factor set. The exact rank-pool mix is carried as payload, not as part of the frontier merge key.
+
+When a merged entry resolves, `FlexSearchProjector` expands the selected factors through the exact rank pools and applies book and clue rules at the output boundary. This is why shared graph counts can drop while combo rows remain exact.
+
+Pre-8.1 grouped-Flex code is not part of the branch. Validation for this engine uses current Flex invariants, reviewed snapshots, public API/worker coverage, clue-conditioned cases, mutated-registry cases, and representative exhaustive row-shape coverage.
 
 ## Projection and Snapshot Boundary
 
@@ -237,35 +273,35 @@ A shared node is valid only when future behavior is identical.
 type GraphKey = {
   version: string;
   item: string;
-  poolSignature: string;
+  rankMergeSignature: string;
   bookMode: string;
   clueMode: string | null;
-  identityMode: 'reduced' | 'program';
 };
 
-type ReducedNodeKey = {
+type NodeKey = {
   exclusionMask: bigint | number;
   currentLevel: number;
   count: number;
 };
 
-type ProgramAwareNodeKey = ReducedNodeKey & {
-  programId: number;
+type FrontierKey = {
+  graphId: number;
+  nodeId: number;
+  factorSetId: number;
 };
 ```
 
-Two pending entries may merge only if both graph identity and node identity match.
+Two pending entries may merge only if graph identity, node identity, and factor-set identity match. Their exact rank-pool mixes are then merged as payload.
 
-`SearchPoolSignature` must include all data that can affect exact future search behavior:
+The rank-merge signature must include all data that can affect exact future search behavior:
 
-- eligible enchant/rank list
+- eligible enchant family list
 - weights
 - conflict masks
-- rank/index packing assumptions
 - book behavior
 - clue policy shape, when applicable
 
-Reduced identity is the fast path. Program-aware identity exists for adversarial/mutated registries where two histories can have the same exclusion mask but different payload effects.
+Exact ranks and combo indexes are projection payload data, not graph identity data.
 
 ## Checkpoint Semantics
 
@@ -351,7 +387,7 @@ The engine models search normally, then applies book removal at the projection/s
 - Resolved rows and aggregates include the book-removal factors.
 - Pending summaries do not pretend to know the final removed slot; they summarize the unfinished frontier in the native factorized view.
 
-This keeps the hot search loop focused on future eligibility and leaves display/result semantics at the boundary where result programs are already available.
+This keeps the hot search loop focused on future eligibility and leaves display/result semantics at the boundary where selected factors and exact rank-pool payloads are already available.
 
 ## Clue-Conditioned Search
 
@@ -387,18 +423,18 @@ Material is intentionally absent because material affects modified-level distrib
 ### Search Run Cache
 
 ```text
-version + item + material + xp + clue + registry mutations + identity mode -> GroupedFlexSearchRun
+version + item + material + xp + clue + registry mutations -> FlexSearchRun
 ```
 
 The run cache supports one-at-a-time checkpoint refinement. A later checkpoint with the same request signature resumes the existing run instead of restarting from the root.
 
-### Grouped Graph and Shape Caches
+### Shared Graph and Shape Caches
 
-`GroupedFlexGraph` caches reusable expansion shapes where that avoids repeated registry grouping work. Hot search expansions use scratch-backed arrays that are valid only during the coordinator callback, so the coordinator does not allocate frozen one-off edge arrays per expansion.
+`FlexSearchGraph` caches reusable rank-agnostic expansion shapes where that avoids repeated registry grouping work. Hot search expansions keep exact rank payloads outside the graph, so graph reuse does not erase exact result rows.
 
-### Program and Projection Caches
+### Selection and Projection Caches
 
-Program history is interned by `FlexProgramStore`. Snapshot construction can cache projection-friendly facts owned by the snapshot/projection layer, but those caches must not change exact per-entry rounding semantics.
+Factor sets and rank-pool mixes are interned by `RankSelectionStore`. Snapshot construction can cache projection-friendly facts owned by the snapshot/projection layer, but those caches must not change exact per-entry rounding semantics or retain explosive concrete products for modern book cases.
 
 ## Worker Model
 
@@ -426,7 +462,7 @@ Fixed-point division creates remainders. The engine uses local residue rules:
 - Residue diagnostics are tracked separately from active conservation buckets.
 - Projection loss belongs to projection, not search.
 
-Two searches are semantically equivalent when public rows, summaries, and public mass buckets match within the tolerance explicitly owned by the test. Exhaustive self-comparisons should be exact.
+Two searches are semantically equivalent when public rows, summaries, and public mass buckets match within the tolerance explicitly owned by the test. Exhaustive self-comparisons inside the current Flex engine should be exact.
 
 For non-exhaustive checkpoints, raw iteration counts are not a semantic metric. Different tree shapes explore different node shapes. Compare classified mass, public outputs, pending mass, and accounting buckets before comparing iteration counts.
 
@@ -436,16 +472,17 @@ Current optimization layers:
 
 1. Modified-level distribution cache.
 2. Registry pool cache.
-3. Pool-signature graph reuse.
-4. Reduced node identity when safe.
-5. Program-aware fallback when reduced identity is unsafe.
-6. Grouped expansion by child exclusion mask.
-7. Scratch-backed search expansion path.
-8. Best-first global frontier with graph-scoped node indexes.
-9. Incremental residue diagnostics.
-10. Native factorized pending summaries.
-11. Exact resolved aggregate maintenance.
-12. Lazy pending aggregate bucket construction for snapshots that only need accounting.
+3. Flex rank-merge graph reuse across exact rank-variant pools.
+4. Rank-agnostic node identity for identical future behavior.
+5. Abstract factor-set identity for selected enchant families.
+6. Exact rank-pool mix payloads for projection.
+7. Best-first global frontier with graph-scoped node indexes.
+8. Cached late-forward replay for mass that reaches already-expanded frontier keys.
+9. Incremental pending/resolved mass totals for target-mass checkpoints.
+10. Incremental residue diagnostics.
+11. Native factorized pending summaries.
+12. Exact resolved aggregate maintenance.
+13. Lazy pending aggregate bucket construction for snapshots that only need accounting.
 
 Optimization rules:
 
@@ -454,6 +491,7 @@ Optimization rules:
 - Do not trade exact resolved output for speed.
 - Prefer target-mass benchmarks over fixed-iteration benchmarks when comparing different tree shapes.
 - Keep diagnostic scripts reusable when they catch a real class of regression.
+- Do not reintroduce a second production search runtime just to compare against pre-merge Flex behavior.
 
 ## Validation Strategy
 
@@ -463,7 +501,7 @@ Validation should cover both exact public behavior and internal accounting shape
 - representative XP 30 item cases;
 - modern book checkpoints at target classified mass;
 - exact clue-conditioned cases;
-- mutated-registry reduced-key safe and unsafe cases;
+- mutated-registry cases;
 - sequential checkpoints;
 - accounting detail fold-back;
 - no public combo row `0`;
@@ -481,11 +519,11 @@ Internal search modules are not part of the stable caller API:
 
 - `EngineFactory`
 - `RegistryFactory`
-- `GroupedFlexSearchRun`
-- `FlexCoordinator`
-- `GroupedFlexGraph`
-- `FlexProgramStore`
-- direct graph/node/program IDs
+- `FlexSearchRun`
+- `FlexSearchGraph`
+- `RankSelectionStore`
+- `RankPoolStore`
+- direct graph/node/factor/rank-pool IDs
 - debug/profiling scripts
 
 ## References / Related Docs
@@ -501,4 +539,4 @@ Jonathan Braver / search engine maintainers.
 
 ## Last Updated
 
-2026-05-27
+2026-06-10

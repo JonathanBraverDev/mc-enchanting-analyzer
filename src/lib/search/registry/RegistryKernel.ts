@@ -157,11 +157,12 @@ export class RegistryKernel {
     }
 
     private createPoolFamilySignature(entries: readonly SearchPoolEntry[]): SearchPoolFamilySignature {
+        const structuralEntries = [...entries].sort(compareSearchPoolFamilyEntries);
         const parts = [
             `v=${this.version}`,
             `item=${this.item}`,
             `book=${this.multiEnchantBooks ? 'multi' : 'single'}`,
-            ...entries.map(entry => [
+            ...structuralEntries.map(entry => [
                 entry.enchantId,
                 entry.weight,
                 entry.conflictBitset.toString(16)
@@ -170,6 +171,14 @@ export class RegistryKernel {
 
         return `pool-family:${fnv1a64(parts.join('|'))}` as SearchPoolFamilySignature;
     }
+}
+
+function compareSearchPoolFamilyEntries(a: SearchPoolEntry, b: SearchPoolEntry): number {
+    if (a.enchantId !== b.enchantId) return a.enchantId - b.enchantId;
+    if (a.weight !== b.weight) return a.weight - b.weight;
+    if (a.conflictBitset < b.conflictBitset) return -1;
+    if (a.conflictBitset > b.conflictBitset) return 1;
+    return 0;
 }
 
 function fnv1a64(input: string): string {

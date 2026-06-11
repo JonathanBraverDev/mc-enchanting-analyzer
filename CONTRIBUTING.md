@@ -45,21 +45,21 @@ We follow a specialized workflow to keep production history clean while preservi
 
 ## Release PR Style
 
-Release PRs into `main` are policy-checked from the base branch so the release rules cannot be relaxed by editing workflow files inside the PR. Treat the PR head as release data and keep the release metadata commit predictable.
+Release PRs into `main` are checked by the trusted rules already on `main`, so a PR cannot relax its own release policy by editing workflow files. Keep the PR description and final release commit predictable so reviewers can compare the release notes, version bump, and archive state quickly.
 
-Release validation is split into separate checks so failures point at the right layer:
+Required checks are split by reviewer question:
 
-- `Validate Release Format`: PR title, package versions, changelog entry, PR body, and SemVer jump.
-- `Validate Changelog SemVer Policy`: changelog sections that imply major/minor/patch scope, including PR comments when the proposed version should be promoted.
-- `Validate Release Branch`: final release metadata commit shape, current archive state, branch base, linear unsquashed release history, and snapshot commit isolation.
+- `Validate Release Format`: does the PR title, package version, changelog entry, PR body, and version jump describe the same release?
+- `Validate Changelog SemVer Policy`: do the changelog sections match the requested major, minor, or patch version?
+- `Validate Release Branch`: is the branch based on the current release snapshot, with linear history, isolated generated snapshots, a valid final metadata commit, and a ready archive branch?
 
-Non-required advisory checks review generated or CI-sensitive changes:
+Advisory checks are review prompts, not automatic merge blockers:
 
-- `CI Change Advisory` runs from the base branch and comments on CI-sensitive file changes. It exits green and resolves any active advisory comment when no CI-sensitive behavior changed; it fails red when reviewers should inspect workflow behavior, release/advisory validator scripts, or package scripts reached from workflow-called commands.
-- `Snapshot Advisory` runs from the base branch and comments when generated snapshot files changed. It exits green and resolves any active advisory comment when no snapshot files changed. A red snapshot advisory means reviewers should inspect the generated output summary before merging.
-- Preview advisory jobs run from the PR branch with read-only permissions and write only to the job summary. They show branch-authored classifier output before that classifier exists on `main`; trusted base-branch advisory comments remain the source of truth. Preview jobs also exit green when their classifier finds no relevant advisory changes.
+- `CI Change Advisory` asks reviewers to inspect workflow, validator, or package-script behavior when CI-sensitive files change. It resolves itself when no CI-sensitive behavior changed.
+- `Snapshot Advisory` asks reviewers to inspect generated snapshot summaries when snapshot files change. It resolves itself when no generated snapshot files changed.
+- Preview advisory jobs run from the PR branch with read-only permissions and write only to the job summary. They can show newer branch-side classifier output, but trusted base-branch advisory comments remain the source of truth.
 
-A red advisory is not a merge blocker by itself. It is a reviewer signal that the PR changes generated output, CI behavior, or the checks that decide whether release policy ran.
+A red advisory means "review this area before merging." It does not block the release by itself.
 
 ### Required PR shape
 
@@ -73,7 +73,7 @@ A red advisory is not a merge blocker by itself. It is a reviewer signal that th
 
 ### Changelog section policy
 
-Release changelog entries should use concrete section headings so release intent is machine-checkable and readable.
+Release changelog entries should use the standard section headings below so release intent is clear to readers and release checks.
 
 Major release entries must also include exactly one human-readable release name heading before the normal changelog sections:
 
@@ -90,9 +90,10 @@ The name heading is release metadata, not a SemVer category. It follows the hist
 
 Write release notes reader-first:
 
-- User-facing sections should describe the observable outcome: what is new, fixed, faster, safer, cleaned up, removed, or behaviorally different. Avoid implementation details unless the detail is itself part of the public or diagnostic surface.
-- Developer-facing sections can summarize the supporting work: tests, benchmark harnesses, release policy, diagnostics, migration notes, and documentation changes. Use docs for the deeper "how"; the changelog should be enough for users and a useful TL;DR for developers.
-- When a change has both sides, put the user-visible result in `### Fixed`, `### Performance`, `### Added`, etc., then put the validation or migration detail in `### Developer Experience` or `### Documentation`.
+- In user-facing sections, describe what changes for app, CLI, or library users: what is new, fixed, faster, safer, cleaned up, removed, or behaviorally different.
+- Keep implementation names out of user-facing bullets unless users see that name in the public API, CLI output, diagnostics, or documented workflow.
+- Put supporting work in `### Developer Experience` or `### Documentation`: tests, benchmark harnesses, release policy, diagnostics, migration notes, and deeper design docs.
+- When a change has both sides, put the user-visible result in `### Fixed`, `### Performance`, `### Added`, etc., then put the validation or migration detail in the developer-facing section.
 
 | Section | Use for | Patch | Minor | Major | Version advice |
 | --- | --- | --- | --- | --- | --- |
@@ -226,10 +227,10 @@ npx tsx scripts/profile_perf_cases.ts
 These scripts report tree shape, throughput, result counts, active search time, post-processing time, and total engine time.
 
 ### Optimizing the Search
-- Keep Minecraft rule lookup in the registry/core layer, structural graph work in `GroupedFlexGraph`, and weighted probability movement in `FlexCoordinator`.
+- Keep Minecraft rule lookup in the registry/core layer, structural graph work in `FlexSearchGraph`, rank-pool/factor identity in `RankSelectionStore` and `RankPoolStore`, and weighted probability movement in `FlexSearchRun`.
 - Avoid object allocation in hot loops such as graph expansion, weighted fanout, frontier push/pop, and summary aggregation.
 - Prefer dense graph node IDs, packed combos, typed arrays, precomputed `SearchPoolEntry` metadata, and reusable grouped expansion shapes over repeated map/key reconstruction.
-- Measure wall-clock runtime, not only iteration counts. Suffix merging is the current example where fewer frontier pops can still be slower because canonicalization overhead dominates.
+- Measure wall-clock runtime, classified mass, and projection cost, not only iteration counts. Rank merging can reduce frontier work while still exposing projection or canonicalization costs.
 
 ## Mass Conservation Invariants
 

@@ -264,18 +264,18 @@
     "sieved": 0,
     "overflow": 0,
     "capped": 0,
-    "rounding": 4.397524011601206e-16,
-    "recoveredRounding": 1.0581813203458523e-16,
+    "rounding": 4.36282954208167e-16,
+    "recoveredRounding": 0,
     "recoveredSieved": 0,
     "units": {
-      "resolved": "1152921504606846469",
+      "resolved": "1152921504606846473",
       "clueIncompatible": "0",
       "pending": "0",
       "sieved": "0",
       "overflow": "0",
       "capped": "0",
-      "rounding": "507",
-      "recoveredRounding": "122",
+      "rounding": "503",
+      "recoveredRounding": "0",
       "recoveredSieved": "0"
     },
     "details": {
@@ -284,15 +284,11 @@
           "buckets": {
             "resolved": {
               "value": 0.9999999999999997,
-              "units": "1152921504606846572"
+              "units": "1152921504606846568"
             },
             "rounding": {
-              "value": 3.5041414214731503e-16,
-              "units": "404"
-            },
-            "recoveredRounding": {
-              "value": 1.0581813203458523e-16,
-              "units": "122"
+              "value": 3.5388358909926865e-16,
+              "units": "408"
             }
           },
           "operations": {
@@ -316,23 +312,15 @@
               "buckets": {
                 "resolved": {
                   "value": 0.9999999999999997,
-                  "units": "1152921504606846572"
+                  "units": "1152921504606846568"
                 }
               }
             },
             "edgeSplit": {
               "buckets": {
                 "rounding": {
-                  "value": 3.5041414214731503e-16,
-                  "units": "404"
-                }
-              }
-            },
-            "residue": {
-              "buckets": {
-                "recoveredRounding": {
-                  "value": 1.0581813203458523e-16,
-                  "units": "122"
+                  "value": 3.5388358909926865e-16,
+                  "units": "408"
                 }
               }
             }
@@ -342,15 +330,15 @@
           "buckets": {
             "source": {
               "value": 0.9999999999999997,
-              "units": "1152921504606846572"
+              "units": "1152921504606846568"
             },
             "projected": {
               "value": 0.9999999999999996,
-              "units": "1152921504606846469"
+              "units": "1152921504606846473"
             },
             "loss": {
-              "value": 8.933825901280557e-17,
-              "units": "103"
+              "value": 8.239936510889834e-17,
+              "units": "95"
             }
           },
           "operations": {
@@ -358,15 +346,15 @@
               "buckets": {
                 "source": {
                   "value": 0.9999999999999997,
-                  "units": "1152921504606846572"
+                  "units": "1152921504606846568"
                 },
                 "projected": {
                   "value": 0.9999999999999996,
-                  "units": "1152921504606846469"
+                  "units": "1152921504606846473"
                 },
                 "loss": {
-                  "value": 8.933825901280557e-17,
-                  "units": "103"
+                  "value": 8.239936510889834e-17,
+                  "units": "95"
                 }
               }
             }
@@ -377,34 +365,35 @@
   },
   "diagnostics": {
     "engine": {
-      "totalIterations": 537,
+      "totalIterations": 237,
       "roundingErrorEvents": 1,
-      "levelsProcessed": 6,
-      "levelsFullyResolved": 6,
+      "levelsProcessed": 1,
+      "levelsFullyResolved": 1,
       "fullyResolved": true,
       "resultsSize": 207,
       "queueSize": 0,
       "exitReason": "empty"
     },
     "search": {
-      "graphCount": 6,
+      "graphCount": 1,
       "seededLevelCount": 6,
       "pendingEntryCount": 0,
       "largestPendingMass": 0,
-      "lastExpandedMass": 6.746e-9,
-      "activeResidueCount": 793,
+      "lastExpandedMass": 3.74404e-7,
+      "activeResidueCount": 208,
       "activeResidueMass": 0,
       "canImprove": false,
-      "flexStateIdentityMode": "reduced",
-      "flexSolidNodeCount": 189,
-      "flexPlexNodeCount": 158,
-      "flexSingletonGroupCount": 1034,
-      "flexChoiceGroupCount": 191,
-      "flexGroupedAlternativeCount": 1607,
-      "flexExpandedSolidNodeCount": 200,
-      "flexExpandedPlexNodeCount": 337,
-      "flexProjectionLoss": 0,
-      "flexProjectionClueIncompatible": 0
+      "exactPoolCount": 6,
+      "sharedGraphCount": 1,
+      "mergedPoolCount": 5,
+      "factorCount": 5,
+      "factorSetCount": 32,
+      "rankPoolMixCount": 1334,
+      "selectionCount": 32,
+      "pendingMergeCount": 639,
+      "lateForwardCount": 149,
+      "searchRoundingLoss": 0,
+      "projectionLoss": 0
     }
   }
 }

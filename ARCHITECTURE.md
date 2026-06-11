@@ -84,8 +84,8 @@ UI input
   -> WorkerShell.dispatchEvent
   -> EnchantEngine.searchSequentialCheckpoints or searchToCheckpoint
   -> SearchExecutionService
-  -> FlexCoordinator seeded with weighted modified-level root mass
-  -> GroupedFlexGraph best-first expansion
+  -> FlexSearchRun seeded with weighted modified-level root mass
+  -> FlexSearchGraph shared future-state expansion
   -> ProbabilityMassAccountant
   -> EngineSearchSnapshot / SearchResult at each checkpoint
   -> SummaryAggregationService
@@ -138,9 +138,9 @@ Missing `groups` on an enchantable item rule means “all active table enchantme
 |---|---|
 | `EnchantEngine` | Validates requests, owns registry access, cache lookups, and public orchestration |
 | `SearchExecutionService` | Coordinates shared search runs, checkpoint aggregation, instrumentation, and cache reuse |
-| `GroupedFlexSearchRun` / `FlexCoordinator` / `GroupedFlexGraph` | Runs the globally weighted best-first expansion loop, grouped graph expansion, fixed/choice result programs, mass accounting, residue forwarding, and checkpoint exits. See `docs/search-engine.md`. |
-| `FlexProgramStore` | Stores fixed and choice emissions for exact result projection without expanding every concrete combo in the search loop |
-| `FlexSnapshotBuilder` / `FlexProjector` | Builds checkpoint snapshots, exact result combos, pending aggregates, and book/clue projection views |
+| `FlexSearchRun` / `FlexSearchGraph` | Runs the globally weighted best-first expansion loop over rank-agnostic shared graphs while retaining exact ranked pool payloads for projection. See `docs/search-engine.md`. |
+| `RankSelectionStore` / `RankPoolStore` | Store abstract selected factors, exact rank-pool mixes, and exact rank resolution data without expanding every concrete combo in the search loop |
+| `FlexSearchSnapshotBuilder` / `FlexSearchProjector` | Build checkpoint snapshots, exact result combos, pending aggregates, and book/clue projection views |
 | `ProbabilityMassAccountant` | Records folded public mass buckets and diagnostic search/projection stage details |
 | `ModifiedLevelDistributionService` | Computes the BigInt distribution of modified enchantment levels |
 | `SummaryAggregationService` | Scans resolved combos and pending frontiers once to derive shared any/rank/count/clue mass buckets |
@@ -162,7 +162,7 @@ interface SearchResult {
 }
 ```
 
-`SearchExecutionService` searches or resumes the current V8 run for the request signature. The engine keeps the factorized-tree boundary internal: graph construction can emit fixed or choice factors, while the runtime remains a mostly generic best-first mass-flow loop and the checkpoint result stays public-compatible. The selected run seeds each modified level as weighted root mass, expands the highest-probability pending graph node globally, and snapshots the completed checkpoint state. The checkpoint result owns:
+`SearchExecutionService` searches or resumes the current V8 run for the request signature. The engine keeps the shared-rank boundary internal: graph construction emits abstract selected factors, exact ranked pools stay in payload mixes, and the runtime remains a best-first mass-flow loop whose checkpoint result stays public-compatible. The selected run seeds each modified level as weighted root mass, expands the highest-probability pending graph node globally, and snapshots the completed checkpoint state. The checkpoint result owns:
 
 - global combo mass
 - mass accounting buckets
@@ -181,18 +181,18 @@ Target combo filtering is a reporting projection, not a search mode. The UI send
 
 ## Shared Frontier Model
 
-The V8 search path separates graph node identity from weighted frontier priority:
+The V8 search path separates future graph identity, exact ranked payload identity, and weighted frontier priority:
 
-- `GroupedFlexGraph` assigns each canonical future state a dense `nodeId`.
-- `RegistryKernel` groups modified levels by `SearchPoolSignature`, so levels with the same eligible enchant pool reuse the same structural graph.
-- Internal nodes store exclusion masks, current levels, enchant counts, and program IDs on dense node IDs.
+- `FlexSearchGraph` assigns each canonical rank-agnostic future state a dense `nodeId`.
+- `RegistryKernel` groups modified levels by rank-merge signature, so levels whose pools differ only by exact enchant ranks reuse the same structural graph.
+- Internal nodes store exclusion masks, current levels, and enchant counts on dense node IDs.
 - `SearchPoolEntry` precomputes rank, weight, availability, combo index, id bit, and conflict metadata for each eligible enchant.
-- Same-future alternatives can collapse into a `PlexNode`, while singleton transitions remain `SolidNode`s.
-- The frontier stores `graphId`, `nodeId`, and pending weighted probability mass, using direct merge/heap lookups for best-first scheduling.
+- Selected enchantments are recorded as abstract factors, while `RankPoolStore` resolves those abstract factors back to exact packed enchant ranks at projection time.
+- The frontier stores `graphId`, `nodeId`, factor-set identity, exact rank-pool mix identity, and pending weighted probability mass, using direct merge/heap lookups for best-first scheduling.
 - Forwarding residue is tracked by exact source expansion and outgoing edge, so fixed-point leftovers can recover only when later mass reaches the same equivalence point.
-- Mutated-registry safety can switch from reduced node identity to program-aware identity when reduced identity is not sufficient.
+- Mutated registries use the same default path; exact ranked payloads remain separate from the rank-agnostic future graph so unsafe rank conflation does not become a public mode switch.
 
-This preserves best-first semantics while changing the scheduling scope: the highest-probability pending weighted node expands first across the whole XP search, not inside one modified level at a time. The scaling improvement comes from sharing graph identity and cache state across the weighted run instead of repeating independent per-modified-level searches.
+This preserves best-first semantics while changing the scheduling scope: the highest-probability pending weighted node expands first across the whole XP search, not inside one modified level at a time. The scaling improvement comes from sharing future graph identity across exact rank-variant pools while projecting exact ranked result rows at the boundary.
 
 ## Worker Model
 
@@ -212,13 +212,13 @@ The browser uses two dedicated workers:
 | Cache | Purpose |
 |---|---|
 | distribution cache | Modified-level distributions by version/xp/enchantability |
-| pool cache | Eligible enchant pools by version/item/level; material is intentionally absent because it affects modified-level distribution, not per-level eligibility |
+| pool cache | Eligible enchant pools and rank-merge signatures by version/item/level; material is intentionally absent because it affects modified-level distribution, not per-level eligibility |
 | search run cache | Reusable V8 runs keyed by version/item/material/xp/clue/request signature |
-| grouped graph cache | Reusable grouped graphs keyed by pool signature and search policy |
+| shared graph cache | Reusable shared graphs keyed by rank-merge pool signature and search policy |
 
 The registry rule model declares item/material compatibility together, but the engine cache keys still follow the computation they cache. Pool entries only depend on the fixed enchantable item pool at a modified level. Search run entries include material because material changes enchantability, which changes the modified-level distribution and therefore the weighted search state. Threshold-aware reads can reuse more precise cached state when it already satisfies the requested checkpoint.
 
-Grouped graph caching preserves exact search behavior while reducing repeated candidate checks. The internal implementation is behind the stable engine API, not a separate public engine. Program construction happens during graph building, while checkpoint projection hides the internal representation from UI/reporting callers. The obsolete Plex prototype was removed after the current implementation covered the same diagnostic role with better alignment and cleaner clue behavior.
+Flex rank merging preserves exact row identity at projection time while reducing repeated candidate checks and repeated future-state expansion. The internal implementation is behind the stable engine API, not a separate public engine. Abstract factor construction happens during graph building, exact rank-pool payloads move with frontier mass, and checkpoint projection hides the internal representation from UI/reporting callers. The obsolete Plex prototype was removed after the maintained engine covered the same diagnostic role with better alignment and cleaner clue behavior.
 
 ## Release Documentation Rule
 

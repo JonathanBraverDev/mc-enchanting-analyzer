@@ -117,17 +117,17 @@
     "sieved": 0,
     "overflow": 0,
     "capped": 0,
-    "rounding": 1.0148132334464322e-16,
+    "rounding": 1.0321604682062002e-16,
     "recoveredRounding": 0,
     "recoveredSieved": 0,
     "units": {
-      "resolved": "1152921504606846859",
+      "resolved": "1152921504606846857",
       "clueIncompatible": "0",
       "pending": "0",
       "sieved": "0",
       "overflow": "0",
       "capped": "0",
-      "rounding": "117",
+      "rounding": "119",
       "recoveredRounding": "0",
       "recoveredSieved": "0"
     },
@@ -187,11 +187,11 @@
             },
             "projected": {
               "value": 0.9999999999999999,
-              "units": "1152921504606846859"
+              "units": "1152921504606846857"
             },
             "loss": {
-              "value": 3.903127820947816e-17,
-              "units": "45"
+              "value": 4.0766001685454967e-17,
+              "units": "47"
             }
           },
           "operations": {
@@ -203,11 +203,11 @@
                 },
                 "projected": {
                   "value": 0.9999999999999999,
-                  "units": "1152921504606846859"
+                  "units": "1152921504606846857"
                 },
                 "loss": {
-                  "value": 3.903127820947816e-17,
-                  "units": "45"
+                  "value": 4.0766001685454967e-17,
+                  "units": "47"
                 }
               }
             }

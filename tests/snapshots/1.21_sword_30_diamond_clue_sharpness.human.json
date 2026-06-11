@@ -57,26 +57,26 @@
     "Sweeping Edge III+Unbreaking III+Looting III+Fire Aspect II+Sharpness IV": 0.000130618095,
     "Sweeping Edge III+Unbreaking III+Looting III+Fire Aspect II+Knockback II+Sharpness IV": 0.000110897729
   },
-  "accuracy": 0.999997551563,
+  "accuracy": 0.999995103126,
   "accounting": {
-    "resolved": 0.16452898736859184,
-    "clueIncompatible": 0.8354685641941598,
+    "resolved": 0.1645289873685919,
+    "clueIncompatible": 0.8354661157569118,
     "pending": 0,
     "sieved": 0,
-    "overflow": 0.000002448437247999473,
+    "overflow": 0.000004896874495999813,
     "capped": 0,
-    "rounding": 3.5214886562329184e-16,
-    "recoveredRounding": 5.117434254131581e-17,
+    "rounding": 3.95516952522712e-16,
+    "recoveredRounding": 0,
     "recoveredSieved": 0,
     "units": {
-      "resolved": "189689007668437813",
-      "clueIncompatible": "963229674082452858",
+      "resolved": "189689007668437877",
+      "clueIncompatible": "963226851226496844",
       "pending": "0",
       "sieved": "0",
-      "overflow": "2822855955899",
+      "overflow": "5645711911799",
       "capped": "0",
-      "rounding": "406",
-      "recoveredRounding": "59",
+      "rounding": "456",
+      "recoveredRounding": "0",
       "recoveredSieved": "0"
     },
     "details": {
@@ -84,36 +84,28 @@
         "search": {
           "buckets": {
             "resolved": {
-              "value": 0.2515772268680228,
-              "units": "290048794925498932"
+              "value": 0.41610621423661476,
+              "units": "479737802593936912"
             },
             "clueIncompatible": {
-              "value": 0.7484203246947289,
-              "units": "862869886825391739"
+              "value": 0.5838888888888889,
+              "units": "673178056300997895"
             },
             "overflow": {
-              "value": 0.000002448437247999473,
-              "units": "2822855955899"
+              "value": 0.000004896874495999813,
+              "units": "5645711911799"
             },
             "rounding": {
-              "value": 3.5214886562329184e-16,
-              "units": "406"
-            },
-            "recoveredRounding": {
-              "value": 5.117434254131581e-17,
-              "units": "59"
+              "value": 3.209238430557093e-16,
+              "units": "370"
             }
           },
           "operations": {
             "seed": {
               "buckets": {
-                "clueIncompatible": {
-                  "value": 0.5838888888888889,
-                  "units": "673178056300997895"
-                },
                 "pending": {
-                  "value": 0.4161111111111111,
-                  "units": "479743448305849081"
+                  "value": 1,
+                  "units": "1152921504606846976"
                 }
               }
             },
@@ -128,40 +120,36 @@
             "resolve": {
               "buckets": {
                 "resolved": {
-                  "value": 0.2515772268680228,
-                  "units": "290048794925498932"
+                  "value": 0.41610621423661476,
+                  "units": "479737802593936912"
                 }
               }
             },
             "edgeSplit": {
               "buckets": {
                 "rounding": {
-                  "value": 3.5214886562329184e-16,
-                  "units": "406"
+                  "value": 3.209238430557093e-16,
+                  "units": "370"
                 }
               }
             },
             "overflow": {
               "buckets": {
                 "overflow": {
-                  "value": 0.000002448437247999473,
-                  "units": "2822855955899"
-                }
-              }
-            },
-            "residue": {
-              "buckets": {
-                "recoveredRounding": {
-                  "value": 5.117434254131581e-17,
-                  "units": "59"
+                  "value": 0.000004896874495999813,
+                  "units": "5645711911799"
                 }
               }
             },
             "cluePrune": {
               "buckets": {
                 "clueIncompatible": {
-                  "value": 0.16453143580583995,
-                  "units": "189691830524393844"
+                  "value": 0.5838888888888889,
+                  "units": "673178056300997895"
+                },
+                "pending": {
+                  "value": -0.5838888888888889,
+                  "units": "-673178056300997895"
                 }
               }
             }
@@ -170,32 +158,40 @@
         "projection": {
           "buckets": {
             "clueIncompatible": {
-              "value": 0.08704823949943097,
-              "units": "100359787257061119"
+              "value": 0.2515772268680228,
+              "units": "290048794925498949"
             },
             "source": {
-              "value": 0.2515772268680228,
-              "units": "290048794925498932"
+              "value": 0.41610621423661476,
+              "units": "479737802593936912"
             },
             "projected": {
-              "value": 0.16452898736859184,
-              "units": "189689007668437813"
+              "value": 0.1645289873685919,
+              "units": "189689007668437877"
+            },
+            "loss": {
+              "value": 7.45931094670027e-17,
+              "units": "86"
             }
           },
           "operations": {
             "results": {
               "buckets": {
                 "clueIncompatible": {
-                  "value": 0.08704823949943097,
-                  "units": "100359787257061119"
+                  "value": 0.2515772268680228,
+                  "units": "290048794925498949"
                 },
                 "source": {
-                  "value": 0.2515772268680228,
-                  "units": "290048794925498932"
+                  "value": 0.41610621423661476,
+                  "units": "479737802593936912"
                 },
                 "projected": {
-                  "value": 0.16452898736859184,
-                  "units": "189689007668437813"
+                  "value": 0.1645289873685919,
+                  "units": "189689007668437877"
+                },
+                "loss": {
+                  "value": 7.45931094670027e-17,
+                  "units": "86"
                 }
               }
             }

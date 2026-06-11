@@ -152,28 +152,28 @@ const phaseRules: readonly PhaseRule[] = [
     {
         name: 'flex/projection',
         matches: frame => flexProjectionFunctions.has(frame.functionName)
-            || frame.url.includes('search/flex/FlexProjector.ts')
+            || frame.url.includes('search/flex/FlexSearchProjector.ts')
             || (frame.url.includes('ComboUtils') && (frame.functionName === 'pack' || frame.functionName === '(anonymous)'))
     },
     {
-        name: 'flex/graph-grouping',
-        matches: frame => frame.url.includes('search/flex/GroupedFlexGraph.ts') && flexGraphFunctions.has(frame.functionName)
+        name: 'flex/graph',
+        matches: frame => frame.url.includes('search/flex/FlexSearchGraph.ts') && flexGraphFunctions.has(frame.functionName)
     },
     {
-        name: 'flex/program-store',
-        matches: frame => frame.url.includes('search/flex/FlexProgramStore.ts') && flexProgramFunctions.has(frame.functionName)
+        name: 'flex/selection-store',
+        matches: frame => frame.url.includes('search/flex/RankSelectionStore.ts') && flexProgramFunctions.has(frame.functionName)
     },
     {
         name: 'flex/frontier',
-        matches: frame => frame.url.includes('search/flex/FlexCoordinator.ts') && flexFrontierFunctions.has(frame.functionName)
+        matches: frame => frame.url.includes('search/flex/FlexSearchRun.ts') && flexFrontierFunctions.has(frame.functionName)
     },
     {
         name: 'flex/forwarding',
-        matches: frame => frame.url.includes('search/flex/FlexCoordinator.ts') && flexForwardingFunctions.has(frame.functionName)
+        matches: frame => frame.url.includes('search/flex/FlexSearchRun.ts') && flexForwardingFunctions.has(frame.functionName)
     },
     {
-        name: 'flex/coordinator',
-        matches: frame => frame.url.includes('search/flex/FlexCoordinator.ts') && flexCoordinatorFunctions.has(frame.functionName)
+        name: 'flex/run',
+        matches: frame => frame.url.includes('search/flex/FlexSearchRun.ts') && flexCoordinatorFunctions.has(frame.functionName)
     },
     {
         name: 'flex/accounting',

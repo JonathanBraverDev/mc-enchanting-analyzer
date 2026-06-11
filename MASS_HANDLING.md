@@ -29,8 +29,9 @@ This document covers engine-internal probability conservation. It does not descr
 
 Use this file when changing:
 
-- `FlexCoordinator` mass movement,
-- `GroupedFlexGraph` expansion semantics,
+- `FlexSearchRun` mass movement,
+- `FlexSearchGraph` expansion semantics,
+- rank-pool mix and factor-set merge semantics,
 - residue/remainder handling,
 - clue pruning,
 - book redistribution,
@@ -84,8 +85,8 @@ The detailed view currently uses two stages:
 
 | Stage | Operations | Meaning |
 | --- | --- | --- |
-| `search` | `seed`, `frontier`, `resolve`, `edgeSplit`, `cluePrune`, `probabilityFloor`, `overflow`, `residue` | Movement inside the coordinator before snapshot projection. |
-| `projection` | `results`, `pending` | Checkpoint-time materialization of resolved result programs and factorized pending summaries. |
+| `search` | `seed`, `frontier`, `resolve`, `edgeSplit`, `cluePrune`, `probabilityFloor`, `overflow`, `residue` | Movement inside the search run before snapshot projection. |
+| `projection` | `results`, `pending` | Checkpoint-time materialization of resolved selected factors and factorized pending summaries. |
 
 Operation buckets may be signed deltas. For example, `search.frontier.pending` is negative when a frontier entry is popped for expansion, then positive when child pending mass is queued. Stage bucket totals are the net sum of their operation buckets.
 
@@ -186,14 +187,14 @@ This may leave tiny active `rounding` mass, but it preserves exact accounting wi
 
 ## Book Redistribution
 
-Modern enchanted books can generate multiple enchantments and then remove one selected enchantment. The engine handles this after a generated result program resolves:
+Modern enchanted books can generate multiple enchantments and then remove one selected enchantment. The engine handles this after the selected factor set and exact rank-pool payload resolve:
 
-1. Search resolves the generated multi-enchant book program.
+1. Search resolves the generated multi-enchant book factor set.
 2. Projection enumerates the possible post-removal combos.
 3. Mass is divided across those post-removal combos.
 4. Any local redistribution remainder is carried as projection loss or book redistribution residue, depending on the materialization path.
 
-Book redistribution is allowed to assign within that local resolved context because the original generated program has already fully resolved. This is different from edge-split residue, where future branches may still have incompatible structure.
+Book redistribution is allowed to assign within that local resolved context because the original generated factor set has already fully resolved. This is different from edge-split residue, where future branches may still have incompatible structure.
 
 ## Clue-Conditioned Searches
 
@@ -218,7 +219,7 @@ Important separations:
 - `summaryLimit` and `comboLimit` control export size, not search work.
 - Target combo filters are projections over the snapshot, not separate search modes.
 - Chart cells and top results consume the same snapshot semantics.
-- Pending frontier entries are meaningful data, but the engine can summarize factorized pending state without exposing every internal node/program detail to product callers.
+- Pending frontier entries are meaningful data, but the engine can summarize factorized pending state without exposing every internal node/factor/rank-pool detail to product callers.
 - Projection-stage loss must fold back into public `rounding` exactly.
 
 ## Optimization Guardrails
@@ -227,14 +228,14 @@ Optimizations are welcome only when they preserve the active invariant and the s
 
 Current safe/default optimizations:
 
-- `SearchPoolSignature` structural graph reuse for exact pool-equivalent modified levels.
-- Grouped same-future choices represented as `PlexNode`s.
-- Compact `FlexProgramStore` history for fixed and choice emissions.
+- Flex rank-merge structural graph reuse for exact rank-variant modified levels.
+- Abstract factor-set identity for selected enchant families.
+- Exact rank-pool mix payloads for projection.
 - XP-cell run caching for refinement resume.
-- Native snapshot construction from coordinator state.
+- Native snapshot construction from search-run state.
 - Lazy pending aggregate projection reuse.
 
-Never merge by visible combo alone. Visible output can match while future eligible pools or program history differ.
+Never merge by visible combo alone. Visible output can match while future eligible pools or selected-factor history differ.
 
 ## Troubleshooting
 

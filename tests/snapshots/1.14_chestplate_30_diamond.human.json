@@ -169,7 +169,7 @@
     "overflow": 5.941953422350377e-9,
     "capped": 0,
     "rounding": 3.235259282696745e-16,
-    "recoveredRounding": 7.979727989493313e-17,
+    "recoveredRounding": 0,
     "recoveredSieved": 0,
     "units": {
       "resolved": "1152921497756240723",
@@ -179,7 +179,7 @@
       "overflow": "6850605880",
       "capped": "0",
       "rounding": "373",
-      "recoveredRounding": "92",
+      "recoveredRounding": "0",
       "recoveredSieved": "0"
     },
     "details": {
@@ -197,10 +197,6 @@
             "rounding": {
               "value": 3.235259282696745e-16,
               "units": "373"
-            },
-            "recoveredRounding": {
-              "value": 7.979727989493313e-17,
-              "units": "92"
             }
           },
           "operations": {
@@ -241,14 +237,6 @@
                 "overflow": {
                   "value": 5.941953422350377e-9,
                   "units": "6850605880"
-                }
-              }
-            },
-            "residue": {
-              "buckets": {
-                "recoveredRounding": {
-                  "value": 7.979727989493313e-17,
-                  "units": "92"
                 }
               }
             }

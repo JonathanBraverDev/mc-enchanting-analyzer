@@ -121,8 +121,28 @@ export interface SearchInstrumentation {
   runCacheHits?: number | undefined;
   /** Cumulative resumable search-run cache misses for this engine instance. */
   runCacheMisses?: number | undefined;
-  /** Internal grouped-runtime: structural state identity mode used by this run. */
-  flexStateIdentityMode?: 'reduced' | 'program' | undefined;
+  /** Exact ranked modified-level pools represented by the run. */
+  exactPoolCount?: number | undefined;
+  /** Shared structural graph count after rank-agnostic pool coalescing. */
+  sharedGraphCount?: number | undefined;
+  /** Exact ranked pools eliminated by structural graph sharing. */
+  mergedPoolCount?: number | undefined;
+  /** Abstract pick-factor count. */
+  factorCount?: number | undefined;
+  /** Abstract selected-factor-set count. */
+  factorSetCount?: number | undefined;
+  /** Exact rank-pool mix count. */
+  rankPoolMixCount?: number | undefined;
+  /** Exact projection selection count. */
+  selectionCount?: number | undefined;
+  /** Pending frontier merges by rank-free identity. */
+  pendingMergeCount?: number | undefined;
+  /** Reopened frontier forwards replayed through cached expansions. */
+  lateForwardCount?: number | undefined;
+  /** Search-stage integer rounding loss as a normalized probability. */
+  searchRoundingLoss?: number | undefined;
+  /** Projection-stage integer loss as a normalized probability. */
+  projectionLoss?: number | undefined;
   /** Internal grouped-runtime: SolidNode count across structural graphs. */
   flexSolidNodeCount?: number | undefined;
   /** Internal grouped-runtime: PlexNode count across structural graphs. */

@@ -1,23 +1,29 @@
 import { ModifiedLevelDistributionService } from '#engine/distribution/ModifiedLevelDistributionService.js';
-import { SearchResult, SequentialCheckpointSearchContext, CheckpointSearchContext, EngineInstrumentation, SearchTiming, RegistryState, MutatedRegistryState } from '#types/index.js';
+import { SearchResult, SequentialCheckpointSearchContext, CheckpointSearchContext, EngineInstrumentation, SearchTiming } from '#types/index.js';
 import { RegistryKernel } from '#lib/search/registry/RegistryKernel.js';
-import { GroupedFlexSearchRun, checkFlexReducedKeyInvariant, type FlexNativeCheckpoint, type FlexReducedKeyInvariantResult, type FlexRunMemoryStats, type FlexRunState, type FlexStateIdentityMode } from '#lib/search/flex/index.js';
-import { FLEX_REDUCED_KEY_INVARIANT_LIMITS, FLEX_RUN_CACHE_LIMITS } from '#lib/search/flex/FlexConstants.js';
-import { PRECISION, ProbUtils } from '#utils/index.js';
+import {
+    FlexSearchProjector,
+    FlexSearchRun,
+    FlexSearchSnapshotBuilder,
+    type FlexSearchNativeCheckpoint,
+    type FlexSearchRunState,
+    type FlexSearchRunMemoryStats
+} from '#lib/search/flex/index.js';
+import { FLEX_RUN_CACHE_LIMITS } from '#lib/search/flex/FlexConstants.js';
+import { ProbUtils } from '#utils/index.js';
 import { LRUCache } from '#utils/collections/LRUCache.js';
 
 /**
  * Engine-facing service that advances shared search runs to checkpoint boundaries.
  *
  * It owns run lookup/resume, checkpoint sequencing, instrumentation, and timing.
- * The Flex grouped runtime owns probability flow; higher-level services own public
- * summary and UI projection.
+ * The Flex search runtime owns probability flow; higher-level services
+ * own public summary and UI projection.
  */
 export class SearchExecutionService {
-    private readonly flexReducedKeyInvariantCache = new LRUCache<string, FlexReducedKeyInvariantResult>(FLEX_RUN_CACHE_LIMITS.REDUCED_KEY_INVARIANT_CHECKS);
-    private readonly flexRunCache = new LRUCache<string, GroupedFlexSearchRun>(FLEX_RUN_CACHE_LIMITS.RUNS);
-    private flexRunCacheHits = 0;
-    private flexRunCacheMisses = 0;
+    private readonly flexSearchRunCache = new LRUCache<string, FlexSearchRun>(FLEX_RUN_CACHE_LIMITS.RUNS);
+    private flexSearchRunCacheHits = 0;
+    private flexSearchRunCacheMisses = 0;
 
     public constructor(
         private readonly distributionService: ModifiedLevelDistributionService = new ModifiedLevelDistributionService()
@@ -25,19 +31,17 @@ export class SearchExecutionService {
 
     /** Clears all cached invariant checks and resumable runs owned by this service. */
     public clearCache(): void {
-        this.flexReducedKeyInvariantCache.clear();
-        this.flexRunCache.clear();
-        this.flexRunCacheHits = 0;
-        this.flexRunCacheMisses = 0;
+        this.flexSearchRunCache.clear();
+        this.flexSearchRunCacheHits = 0;
+        this.flexSearchRunCacheMisses = 0;
     }
 
     /** Advances one request to its next checkpoint or final stop condition. */
     public async searchToCheckpoint(request: CheckpointSearchContext): Promise<SearchResult> {
         const timingStart = request.timing ? performance.now() : 0;
         this.throwIfAborted(request.signal);
-        const flexStateIdentityMode = this.getFlexStateIdentityMode(request);
-        const run = this.getFlexRun(request, flexStateIdentityMode);
-        const flexState = await run.searchToCheckpointStateAsync({
+        const run = this.getFlexSearchRun(request);
+        const state = await run.searchToCheckpointStateAsync({
             threshold: request.exhaustive ? 0n : request.threshold ?? 0n,
             maxIterations: request.exhaustive ? undefined : request.maxIterations,
             drainEqualMassBand: request.drainEqualMassBand,
@@ -46,22 +50,17 @@ export class SearchExecutionService {
             probabilityFloor: request.probabilityFloor,
             signal: request.signal
         });
-        const checkpoint = run.buildEngineSnapshot(flexState);
+        const checkpoint = this.buildFlexSearchCheckpoint(request, run, state);
         this.finishTiming(request.timing, timingStart, 0);
-        return this.toFlexSearchResult(checkpoint, flexState, flexStateIdentityMode, request.exhaustive ? 0n : request.threshold ?? 0n, request.targetClassifiedMass, request.instrumentation, request.timing, run.getMemoryStats());
+        return this.toFlexSearchResult(checkpoint, state, run.getMemoryStats(), request.exhaustive ? 0n : request.threshold ?? 0n, request.instrumentation, request.timing);
     }
 
     /** Advances one run through an ordered checkpoint plan, streaming each completed boundary. */
     public async searchSequentialCheckpoints(request: SequentialCheckpointSearchContext): Promise<SearchResult> {
         const timingStart = request.timing ? performance.now() : 0;
-        return this.searchSequentialFlexCheckpoints(request, timingStart);
-    }
-
-    private async searchSequentialFlexCheckpoints(request: SequentialCheckpointSearchContext, timingStart: number): Promise<SearchResult> {
         let recordedSearchMs = 0;
         this.throwIfAborted(request.signal);
-        const flexStateIdentityMode = this.getFlexStateIdentityMode(request);
-        const run = this.getFlexRun(request, flexStateIdentityMode);
+        const run = this.getFlexSearchRun(request);
         let lastResult: SearchResult | undefined;
 
         for (let checkpointIndex = 0; checkpointIndex < request.checkpoints.length; checkpointIndex++) {
@@ -70,9 +69,9 @@ export class SearchExecutionService {
             const checkpoint = request.checkpoints[checkpointIndex];
             if (!checkpoint) continue;
 
-            let flexState: FlexRunState;
+            let state: FlexSearchRunState;
             try {
-                flexState = await run.searchToCheckpointStateAsync({
+                state = await run.searchToCheckpointStateAsync({
                     threshold: checkpoint.threshold,
                     maxIterations: checkpoint.limit,
                     drainEqualMassBand: request.drainEqualMassBand,
@@ -84,63 +83,61 @@ export class SearchExecutionService {
                 if (request.signal?.aborted && lastResult) return lastResult;
                 throw error;
             }
-            const nativeCheckpoint = run.buildEngineSnapshot(flexState);
+            const nativeCheckpoint = this.buildFlexSearchCheckpoint(request, run, state);
             recordedSearchMs = this.finishTiming(request.timing, timingStart, recordedSearchMs);
-            lastResult = this.toFlexSearchResult(nativeCheckpoint, flexState, flexStateIdentityMode, checkpoint.threshold, checkpoint.targetClassifiedMass, request.instrumentation, request.timing, run.getMemoryStats());
+            lastResult = this.toFlexSearchResult(nativeCheckpoint, state, run.getMemoryStats(), checkpoint.threshold, request.instrumentation, request.timing);
             request.onCheckpointComplete(lastResult, checkpointIndex);
         }
 
         if (lastResult) return lastResult;
 
         this.finishTiming(request.timing, timingStart, recordedSearchMs);
-        const flexState = run.state();
-        const checkpoint = run.buildEngineSnapshot(flexState);
-        return this.toFlexSearchResult(checkpoint, flexState, flexStateIdentityMode, 0, undefined, request.instrumentation, request.timing, run.getMemoryStats());
+        const state = run.state();
+        const checkpoint = this.buildFlexSearchCheckpoint(request, run, state);
+        return this.toFlexSearchResult(checkpoint, state, run.getMemoryStats(), 0, request.instrumentation, request.timing);
     }
 
-    private getFlexRun(request: CheckpointSearchContext, stateIdentityMode: FlexStateIdentityMode): GroupedFlexSearchRun {
-        const create = () => this.createFlexRun(request, stateIdentityMode);
+    private getFlexSearchRun(request: CheckpointSearchContext): FlexSearchRun {
+        const create = () => this.createFlexSearchRun(request);
         if (request.useCache === false) return create();
 
-        const key = this.createRunCacheKey(request, stateIdentityMode);
-        const cached = this.flexRunCache.get(key);
+        const key = this.createRunCacheKey(request);
+        const cached = this.flexSearchRunCache.get(key);
         if (cached) {
-            this.flexRunCacheHits++;
+            this.flexSearchRunCacheHits++;
             return cached;
         }
 
-        this.flexRunCacheMisses++;
+        this.flexSearchRunCacheMisses++;
         const run = create();
-        this.flexRunCache.set(key, run);
+        this.flexSearchRunCache.set(key, run);
         return run;
     }
 
-    private createFlexRun(request: CheckpointSearchContext, stateIdentityMode: FlexStateIdentityMode): GroupedFlexSearchRun {
-        const run = new GroupedFlexSearchRun(this.createKernel(request), {
+    private createFlexSearchRun(request: CheckpointSearchContext): FlexSearchRun {
+        const run = new FlexSearchRun(this.createKernel(request), {
             distributionService: this.distributionService,
-            targetClueId: request.targetClueId,
-            stateIdentityMode
+            targetClueId: request.targetClueId
         });
         run.seedXp(request.xp);
         return run;
     }
 
-    private getFlexStateIdentityMode(request: CheckpointSearchContext): FlexStateIdentityMode {
-        if (!isMutatedRegistry(request.registry)) return 'reduced';
-
-        const key = this.createFlexInvariantCacheKey(request);
-        let result = this.flexReducedKeyInvariantCache.get(key);
-        if (!result) {
-            result = checkFlexReducedKeyInvariant({
-                kernel: this.createKernel(request),
-                xp: request.xp,
-                distributionService: this.distributionService,
-                maxConflicts: FLEX_REDUCED_KEY_INVARIANT_LIMITS.MIN_REPORTED_CONFLICTS
-            });
-            this.flexReducedKeyInvariantCache.set(key, result);
-        }
-
-        return result.ok ? 'reduced' : 'program';
+    private buildFlexSearchCheckpoint(
+        request: CheckpointSearchContext,
+        run: FlexSearchRun,
+        state: FlexSearchRunState
+    ): FlexSearchNativeCheckpoint {
+        const projector = new FlexSearchProjector(run.rankPools, run.selections, request.registry.enchantToIndex, {
+            applyBookRemoval: request.item === 'book',
+            targetClueId: request.targetClueId,
+            indexToEnchant: request.registry.indexToEnchant
+        });
+        return new FlexSearchSnapshotBuilder(
+            run,
+            projector,
+            request.registry.indexToEnchant
+        ).build(state);
     }
 
     private createKernel(request: CheckpointSearchContext): RegistryKernel {
@@ -151,49 +148,27 @@ export class SearchExecutionService {
         });
     }
 
-    private createRunCacheKey(
-        request: CheckpointSearchContext,
-        flexStateIdentityMode?: FlexStateIdentityMode
-    ): string {
+    private createRunCacheKey(request: CheckpointSearchContext): string {
         return JSON.stringify({
             schema: 1,
             version: request.registry.version,
             item: request.item,
             material: request.material,
             xp: request.xp,
-            targetClueId: request.targetClueId ?? null,
-            flexStateIdentityMode: flexStateIdentityMode ?? null
-        });
-    }
-
-    private createFlexInvariantCacheKey(request: CheckpointSearchContext): string {
-        return JSON.stringify({
-            schema: 1,
-            version: request.registry.version,
-            item: request.item,
-            material: request.material,
-            xp: request.xp,
-            mutations: isMutatedRegistry(request.registry) ? request.registry.mutations : null
+            targetClueId: request.targetClueId ?? null
         });
     }
 
     private toFlexSearchResult(
-        checkpoint: FlexNativeCheckpoint,
-        flexState: FlexRunState,
-        flexStateIdentityMode: FlexStateIdentityMode,
+        checkpoint: FlexSearchNativeCheckpoint,
+        state: FlexSearchRunState,
+        memory: FlexSearchRunMemoryStats,
         threshold: number | bigint | undefined,
-        targetClassifiedMass?: number | bigint | undefined,
         instrumentation?: EngineInstrumentation | undefined,
-        timing?: SearchTiming | undefined,
-        memory?: FlexRunMemoryStats | undefined
+        timing?: SearchTiming | undefined
     ): SearchResult {
         const snapshot = checkpoint.snapshot;
         const thresholdUnits = ProbUtils.toBigInt(threshold ?? 0);
-        const targetClassifiedMassUnits = targetClassifiedMass === undefined
-            ? undefined
-            : ProbUtils.toBigInt(targetClassifiedMass);
-        const pendingUnits = BigInt(snapshot.mass.units?.pending ?? 0);
-        const classifiedMassUnits = PRECISION - pendingUnits;
 
         if (instrumentation) {
             instrumentation.totalIterations = snapshot.iterations;
@@ -204,39 +179,31 @@ export class SearchExecutionService {
             instrumentation.fullyResolved = snapshot.fullyResolved;
             instrumentation.resultsSize = snapshot.results.size;
             instrumentation.queueSize = snapshot.pendingCount;
-            instrumentation.exitReason = flexState.exitReason ?? (snapshot.fullyResolved
-                ? 'empty'
-                : targetClassifiedMassUnits !== undefined && classifiedMassUnits >= targetClassifiedMassUnits
-                    ? 'mass'
-                    : snapshot.largestPendingMass < thresholdUnits ? 'threshold' : 'iterations');
+            instrumentation.exitReason = state.exitReason ?? (snapshot.fullyResolved ? 'empty' : 'iterations');
             instrumentation.poolCache = instrumentation.poolCache ?? { hits: 0, misses: 0 };
             instrumentation.distCache = instrumentation.distCache ?? { hits: 0, misses: 0 };
-            const flexSolidNodeCount = memory?.graphs.reduce((total, graph) => total + graph.solidNodeCount, 0);
-            const flexPlexNodeCount = memory?.graphs.reduce((total, graph) => total + graph.plexNodeCount, 0);
-            const flexSingletonGroupCount = memory?.graphs.reduce((total, graph) => total + graph.singletonGroupCount, 0);
-            const flexChoiceGroupCount = memory?.graphs.reduce((total, graph) => total + graph.choiceGroupCount, 0);
-            const flexGroupedAlternativeCount = memory?.graphs.reduce((total, graph) => total + graph.groupedAlternativeCount, 0);
             instrumentation.search = {
                 graphCount: snapshot.graphCount,
-                seededLevelCount: snapshot.graphCount,
+                seededLevelCount: memory.rankPoolCount,
                 pendingEntryCount: snapshot.pendingCount,
                 largestPendingMass: ProbUtils.toNumber(snapshot.largestPendingMass),
                 lastExpandedMass: ProbUtils.toNumber(snapshot.lastExpandedMass),
                 activeResidueCount: snapshot.activeResidueCount,
                 activeResidueMass: ProbUtils.toNumber(snapshot.activeResidueMass),
                 canImprove: !snapshot.fullyResolved && snapshot.largestPendingMass >= thresholdUnits,
-                runCacheHits: this.flexRunCacheHits,
-                runCacheMisses: this.flexRunCacheMisses,
-                flexStateIdentityMode,
-                flexSolidNodeCount,
-                flexPlexNodeCount,
-                flexSingletonGroupCount,
-                flexChoiceGroupCount,
-                flexGroupedAlternativeCount,
-                flexExpandedSolidNodeCount: memory?.coordinator.expandedSolidNodeCount,
-                flexExpandedPlexNodeCount: memory?.coordinator.expandedPlexNodeCount,
-                flexProjectionLoss: ProbUtils.toNumber(checkpoint.projectionLoss),
-                flexProjectionClueIncompatible: ProbUtils.toNumber(checkpoint.projectionClueIncompatible)
+                runCacheHits: this.flexSearchRunCacheHits,
+                runCacheMisses: this.flexSearchRunCacheMisses,
+                exactPoolCount: memory.rankPoolCount,
+                sharedGraphCount: memory.graphCount,
+                mergedPoolCount: memory.rankPoolCount - memory.graphCount,
+                factorCount: memory.factorCount,
+                factorSetCount: memory.factorSetCount,
+                rankPoolMixCount: memory.rankPoolMixCount,
+                selectionCount: memory.selectionCount,
+                pendingMergeCount: memory.pendingMergeCount,
+                lateForwardCount: memory.lateForwardCount,
+                searchRoundingLoss: ProbUtils.toNumber(memory.roundingLoss),
+                projectionLoss: ProbUtils.toNumber(checkpoint.projectionLoss)
             };
         }
 
@@ -262,8 +229,4 @@ export class SearchExecutionService {
         timing.totalMs = (timing.totalMs ?? 0) + delta;
         return elapsed;
     }
-}
-
-function isMutatedRegistry(registry: RegistryState): registry is MutatedRegistryState {
-    return 'source' in registry && registry.source === 'mutated';
 }
