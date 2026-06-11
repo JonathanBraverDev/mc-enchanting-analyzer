@@ -86,17 +86,21 @@ export class FlexSearchSnapshotBuilder {
 
     private getPendingProjectionEntries() {
         const targetClueId = this.projector.options.targetClueId;
-        if (targetClueId === undefined) return this.run.getPendingEntries();
-
-        const targetEnchantId = targetClueId >> PACKING_CONSTANTS.ENCHANT_SHIFT;
-        const targetBit = BIGINT_CONSTANTS.ID_BIT_LOOKUP[targetEnchantId];
-        if (targetBit === undefined) return this.run.getPendingEntries();
+        const targetEnchantId = targetClueId === undefined
+            ? undefined
+            : targetClueId >> PACKING_CONSTANTS.ENCHANT_SHIFT;
+        const targetBit = targetEnchantId === undefined
+            ? undefined
+            : BIGINT_CONSTANTS.ID_BIT_LOOKUP[targetEnchantId];
 
         return this.run.getPendingEntries().map(entry => {
             const node = this.run.getGraph(entry.graphId).getNode(entry.nodeId);
             return Object.freeze({
                 ...entry,
-                targetClueReachable: (node.exclusionMask & targetBit) === 0n
+                count: node.count,
+                ...(targetBit === undefined
+                    ? {}
+                    : { targetClueReachable: (node.exclusionMask & targetBit) === 0n })
             });
         });
     }
