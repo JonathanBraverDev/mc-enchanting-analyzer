@@ -60,11 +60,13 @@ export interface FlexSearchPendingEntry {
 interface FlexSearchPendingRecord extends FlexSearchPendingEntry {
     readonly key: string;
     readonly sequence: number;
+    readonly priorityMass: bigint;
     heapIndex: number;
 }
 
 interface FlexSearchPendingInput extends FlexSearchPendingEntry {
     readonly key: string;
+    readonly priorityMass: bigint;
 }
 
 export interface FlexSearchRunMemoryStats {
@@ -295,7 +297,7 @@ export class FlexSearchRun {
             iterations: memory.iterations,
             lastExpandedMass: memory.lastExpandedMass,
             pendingCount: memory.pendingCount,
-            largestPendingMass: this.pending.peek()?.mass ?? 0n,
+            largestPendingMass: this.pending.peek()?.priorityMass ?? 0n,
             graphCount: memory.graphCount,
             seededLevelCount: memory.rankPoolCount,
             activeResidueCount: memory.activeResidueCount,
@@ -388,8 +390,8 @@ export class FlexSearchRun {
         const pending = this.pending.peek();
         if (!pending) return 'empty';
         if (criteria.targetClassifiedMass !== undefined && this.getClassifiedMass() >= criteria.targetClassifiedMass) return 'mass';
-        if (pending.mass < criteria.threshold) return 'threshold';
-        if (this.hasReachedIterationStop(criteria, pending.mass)) return 'iterations';
+        if (pending.priorityMass < criteria.threshold) return 'threshold';
+        if (this.hasReachedIterationStop(criteria, pending.priorityMass)) return 'iterations';
         return undefined;
     }
 
@@ -409,7 +411,7 @@ export class FlexSearchRun {
         if (!current) return false;
 
         this.expandedKeys.add(current.key);
-        this.lastExpandedMass = current.mass;
+        this.lastExpandedMass = current.priorityMass;
         this.processEntry(current.key, current, probabilityFloor);
         this.iterations++;
         this.drainLateForwardEntries(probabilityFloor);
@@ -547,10 +549,10 @@ export class FlexSearchRun {
 
                 if (baseMass > 0n) basePools.push({ rankPoolId: pool.rankPoolId, weight: baseMass });
                 if (promotedMass > 0n) promotedPools.push({ rankPoolId: pool.rankPoolId, weight: promotedMass });
-                if (edgeResidue > 0n) nextResiduePools.push(Object.freeze({
+                if (edgeResidue > 0n) nextResiduePools.push({
                     rankPoolId: pool.rankPoolId,
                     numerator: edgeResidue
-                }));
+                });
             }
 
             while (oldResidueIndex < oldResiduePools.length) {
@@ -576,9 +578,7 @@ export class FlexSearchRun {
 
             const edgeResidue = sumResidueNumerators(nextResiduePools);
             if (edgeResidue > 0n) {
-                nextBuckets[index] = Object.freeze({
-                    pools: Object.freeze(nextResiduePools)
-                });
+                nextBuckets[index] = { pools: nextResiduePools };
                 nextResidueNumerator += edgeResidue;
             }
         }
@@ -586,11 +586,11 @@ export class FlexSearchRun {
         const oldResidueMass = oldResidues?.residueMass ?? 0n;
         const newResidueMass = nextResidueNumerator / totalWeight;
         if (nextResidueNumerator > 0n) {
-            this.residuesByKey.set(sourceKey, Object.freeze({
+            this.residuesByKey.set(sourceKey, {
                 denominator: totalWeight,
-                buckets: Object.freeze(nextBuckets),
+                buckets: nextBuckets,
                 residueMass: newResidueMass
-            }));
+            });
         } else {
             this.residuesByKey.delete(sourceKey);
         }
@@ -609,20 +609,30 @@ export class FlexSearchRun {
         const existing = this.pending.get(key);
         if (!existing) {
             this.pendingMass += mass;
-            this.pending.set(Object.freeze({ key, graphId, nodeId, factorSetId, rankPoolMixId, mass }));
+            this.pending.set({
+                key,
+                graphId,
+                nodeId,
+                factorSetId,
+                rankPoolMixId,
+                mass,
+                priorityMass: this.selections.getRankPoolMix(rankPoolMixId).priorityMass
+            });
             return;
         }
 
         this.pendingMergeCount++;
         this.pendingMass += mass;
-        this.pending.set(Object.freeze({
+        const mergedMixId = this.selections.mergeRankPoolMixPair(existing.rankPoolMixId, rankPoolMixId);
+        this.pending.set({
             key,
             graphId,
             nodeId,
             factorSetId,
-            rankPoolMixId: this.selections.mergeRankPoolMixPair(existing.rankPoolMixId, rankPoolMixId),
-            mass: existing.mass + mass
-        }));
+            rankPoolMixId: mergedMixId,
+            mass: existing.mass + mass,
+            priorityMass: this.selections.getRankPoolMix(mergedMixId).priorityMass
+        });
     }
 
     private recordResolved(factorSetId: FactorSetId, rankPoolMixId: RankPoolMixId, mass: bigint): void {
@@ -630,15 +640,15 @@ export class FlexSearchRun {
         const scaledMixId = this.selections.scaleRankPoolMix(rankPoolMixId, mass);
         const existing = this.resolvedByFactorSet.get(factorSetId);
         if (!existing) {
-            this.resolvedByFactorSet.set(factorSetId, Object.freeze({ factorSetId, rankPoolMixId: scaledMixId, mass }));
+            this.resolvedByFactorSet.set(factorSetId, { factorSetId, rankPoolMixId: scaledMixId, mass });
             return;
         }
 
-        this.resolvedByFactorSet.set(factorSetId, Object.freeze({
+        this.resolvedByFactorSet.set(factorSetId, {
             factorSetId,
             rankPoolMixId: this.selections.mergeRankPoolMixPair(existing.rankPoolMixId, scaledMixId),
             mass: existing.mass + mass
-        }));
+        });
     }
 
     private splitByContinueProbability(
@@ -789,6 +799,8 @@ class FlexSearchFrontier {
 }
 
 function comparePendingRecords(left: FlexSearchPendingRecord, right: FlexSearchPendingRecord): number {
+    if (left.priorityMass > right.priorityMass) return 1;
+    if (left.priorityMass < right.priorityMass) return -1;
     if (left.mass > right.mass) return 1;
     if (left.mass < right.mass) return -1;
     if (left.sequence < right.sequence) return 1;

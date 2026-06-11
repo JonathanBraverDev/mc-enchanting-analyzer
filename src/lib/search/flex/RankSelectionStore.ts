@@ -23,6 +23,7 @@ export interface RankPoolWeight {
 export interface RankPoolMix {
     readonly pools: readonly RankPoolWeight[];
     readonly totalWeight: bigint;
+    readonly priorityMass: bigint;
 }
 
 export interface FactorSet {
@@ -130,7 +131,8 @@ export class RankSelectionStore {
         const id = this.rankPoolMixes.length as RankPoolMixId;
         this.rankPoolMixes.push(Object.freeze({
             pools: Object.freeze(canonical),
-            totalWeight: canonical.reduce((sum, pool) => sum + pool.weight, 0n)
+            totalWeight: canonical.reduce((sum, pool) => sum + pool.weight, 0n),
+            priorityMass: getRankPoolMixPriorityMass(canonical)
         }));
         this.rankPoolMixIdsByKey.set(key, id);
         return id;
@@ -477,6 +479,14 @@ function mergeCanonicalRankPoolWeights(
     }
 
     return merged;
+}
+
+function getRankPoolMixPriorityMass(pools: readonly RankPoolWeight[]): bigint {
+    let priority = 0n;
+    for (const pool of pools) {
+        if (pool.weight > priority) priority = pool.weight;
+    }
+    return priority;
 }
 
 function splitWeightByPools(

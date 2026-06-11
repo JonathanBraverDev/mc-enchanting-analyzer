@@ -36,6 +36,7 @@ export interface FlexSearchProjectedPendingAggregateResults {
 }
 
 export interface FlexSearchPendingProjectionEntry extends FlexSearchPendingEntry {
+    readonly count: number;
     readonly targetClueReachable?: boolean | undefined;
 }
 
@@ -112,41 +113,44 @@ export class FlexSearchProjector {
 
             for (const pool of rankPoolMix.pools) {
                 sourceMass += pool.weight;
-                let assigned = 0n;
 
-                this.visitFactorSetFactors(entry.factorSetId, pool.rankPoolId, (combo, count, numerator, denominator, matchesTargetClue) => {
-                    const share = (pool.weight * numerator) / denominator;
-                    assigned += share;
-                    if (share === 0n) return;
+                if (clueJoint) {
+                    const split = this.getPendingClueSplit(
+                        entry.factorSetId,
+                        pool.rankPoolId,
+                        pool.weight,
+                        entry.count,
+                        entry.targetClueReachable
+                    );
+                    projectedMass += split.projectedMass;
+                    clueIncompatible += split.clueIncompatible;
+                    projectionLoss += split.projectionLoss;
 
-                    if (!clueJoint) {
-                        projectedMass += share;
-                        addComboAggregate(pendingAggregates, combo, count, share, this.options.applyBookRemoval === true, this.options.indexToEnchant);
-                        return;
+                    if (split.clueKnownSpace > 0n) {
+                        addMapMass(
+                            pendingAggregates.shownClueDistribution,
+                            clueJoint.targetClueId,
+                            split.clueKnownSpace
+                        );
+                        this.addPendingClueJointAggregate(
+                            clueJoint,
+                            entry.factorSetId,
+                            pool.rankPoolId,
+                            split.clueKnownSpace,
+                            entry.count
+                        );
                     }
+                    continue;
+                }
 
-                    if (matchesTargetClue) {
-                        projectedMass += share;
-                        const clueKnownSpace = count > 0 ? share / BigInt(count) : 0n;
-                        if (clueKnownSpace > 0n) {
-                            addMapMass(
-                                pendingAggregates.shownClueDistribution,
-                                clueJoint.targetClueId,
-                                clueKnownSpace
-                            );
-                            addPendingClueJointAggregate(clueJoint, combo, count, clueKnownSpace, this.options.applyBookRemoval === true, this.options.indexToEnchant);
-                        }
-                        return;
-                    }
-
-                    if (entry.targetClueReachable === false) {
-                        clueIncompatible += share;
-                    } else {
-                        projectedMass += share;
-                    }
-                });
-
-                projectionLoss += pool.weight - assigned;
+                projectedMass += pool.weight;
+                this.addPendingFactorSetAggregate(
+                    pendingAggregates,
+                    entry.factorSetId,
+                    pool.rankPoolId,
+                    pool.weight,
+                    entry.count
+                );
             }
         }
 
@@ -157,6 +161,168 @@ export class FlexSearchProjector {
             projectedMass,
             sourceMass
         });
+    }
+
+    private getPendingClueSplit(
+        factorSetId: FactorSetId,
+        rankPoolId: RankPoolId,
+        mass: bigint,
+        count: number,
+        targetClueReachable: boolean | undefined
+    ): {
+        readonly projectedMass: bigint;
+        readonly clueIncompatible: bigint;
+        readonly projectionLoss: bigint;
+        readonly clueKnownSpace: bigint;
+    } {
+        const targetClueId = this.options.targetClueId;
+        if (targetClueId === undefined) {
+            return { projectedMass: mass, clueIncompatible: 0n, projectionLoss: 0n, clueKnownSpace: 0n };
+        }
+
+        for (const factorId of this.selections.getFactorSet(factorSetId).factors) {
+            const factor = this.selections.getFactor(factorId);
+            const targetAlternative = factor.alternatives.find(alternative =>
+                this.rankPools.resolve(rankPoolId, alternative.enchantId) === targetClueId
+            );
+            if (!targetAlternative) continue;
+
+            const totalWeight = BigInt(factor.totalWeight);
+            const targetWeight = BigInt(targetAlternative.weight);
+            const nonTargetWeight = totalWeight - targetWeight;
+            const targetMass = (mass * targetWeight) / totalWeight;
+            const nonTargetMass = (mass * nonTargetWeight) / totalWeight;
+            const splitLoss = mass - targetMass - nonTargetMass;
+            const nonTargetCanStillReachClue = targetClueReachable === true;
+
+            return {
+                projectedMass: targetMass + (nonTargetCanStillReachClue ? nonTargetMass : 0n),
+                clueIncompatible: nonTargetCanStillReachClue ? 0n : nonTargetMass,
+                projectionLoss: splitLoss,
+                clueKnownSpace: count > 0 ? targetMass / BigInt(count) : 0n
+            };
+        }
+
+        return targetClueReachable === true
+            ? { projectedMass: mass, clueIncompatible: 0n, projectionLoss: 0n, clueKnownSpace: 0n }
+            : { projectedMass: 0n, clueIncompatible: mass, projectionLoss: 0n, clueKnownSpace: 0n };
+    }
+
+    private addPendingFactorSetAggregate(
+        pendingAggregates: MutablePendingFrontierAggregates,
+        factorSetId: FactorSetId,
+        rankPoolId: RankPoolId,
+        mass: bigint,
+        count: number
+    ): void {
+        if (mass <= 0n) return;
+
+        const displayCount = this.options.applyBookRemoval && count > 1 ? count - 1 : count;
+        addArrayMass(pendingAggregates.count, displayCount, mass);
+        if (count <= 0) return;
+
+        const clueQuotient = mass / BigInt(count);
+        const clueRemainder = Number(mass % BigInt(count));
+        const factors = this.selections.getFactorSet(factorSetId).factors;
+
+        for (let factorIndex = 0; factorIndex < factors.length; factorIndex++) {
+            const factor = this.selections.getFactor(factors[factorIndex]!);
+            const clueSlotMass = clueQuotient + (factorIndex < clueRemainder ? 1n : 0n);
+            const totalWeight = BigInt(factor.totalWeight);
+
+            for (const alternative of factor.alternatives) {
+                const packedEnchant = this.rankPools.resolve(rankPoolId, alternative.enchantId);
+                if (packedEnchant === null) {
+                    throw new Error(`Rank pool ${rankPoolId} cannot resolve enchant ID ${alternative.enchantId}.`);
+                }
+
+                this.addPendingEmissionAggregate(
+                    pendingAggregates,
+                    packedEnchant,
+                    (mass * BigInt(alternative.weight)) / totalWeight,
+                    (clueSlotMass * BigInt(alternative.weight)) / totalWeight,
+                    count
+                );
+            }
+        }
+    }
+
+    private addPendingEmissionAggregate(
+        pendingAggregates: MutablePendingFrontierAggregates,
+        packedEnchant: number,
+        mass: bigint,
+        clueMass: bigint,
+        count: number
+    ): void {
+        if (mass <= 0n || !this.enchantToIndex.has(packedEnchant)) return;
+
+        const aggregateMass = this.options.applyBookRemoval && count > 1
+            ? (mass * BigInt(count - 1)) / BigInt(count)
+            : mass;
+        const id = packedEnchant >> PACKING_CONSTANTS.ENCHANT_SHIFT;
+        addArrayMass(pendingAggregates.any, id, aggregateMass);
+        addArrayMass(pendingAggregates.ranks, packedEnchant, aggregateMass);
+
+        if (clueMass > 0n) {
+            addMapMass(pendingAggregates.shownClueDistribution, packedEnchant, clueMass);
+        }
+    }
+
+    private addPendingClueJointAggregate(
+        clueJoint: MutablePendingClueJointAggregates,
+        factorSetId: FactorSetId,
+        rankPoolId: RankPoolId,
+        clueMass: bigint,
+        count: number
+    ): void {
+        if (clueMass <= 0n) return;
+
+        clueJoint.knownSpace += clueMass;
+        const displayCount = this.options.applyBookRemoval && count > 1 ? count - 1 : count;
+        addArrayMass(clueJoint.count, displayCount, clueMass);
+
+        const targetClueId = clueJoint.targetClueId;
+        const factors = this.selections.getFactorSet(factorSetId).factors;
+        for (const factorId of factors) {
+            const factor = this.selections.getFactor(factorId);
+            const targetAlternative = factor.alternatives.find(alternative =>
+                this.rankPools.resolve(rankPoolId, alternative.enchantId) === targetClueId
+            );
+            if (targetAlternative) {
+                this.addPendingClueJointEmissionAggregate(clueJoint, targetClueId, clueMass, count);
+                continue;
+            }
+
+            const totalWeight = BigInt(factor.totalWeight);
+            for (const alternative of factor.alternatives) {
+                const packedEnchant = this.rankPools.resolve(rankPoolId, alternative.enchantId);
+                if (packedEnchant === null) {
+                    throw new Error(`Rank pool ${rankPoolId} cannot resolve enchant ID ${alternative.enchantId}.`);
+                }
+                this.addPendingClueJointEmissionAggregate(
+                    clueJoint,
+                    packedEnchant,
+                    (clueMass * BigInt(alternative.weight)) / totalWeight,
+                    count
+                );
+            }
+        }
+    }
+
+    private addPendingClueJointEmissionAggregate(
+        clueJoint: MutablePendingClueJointAggregates,
+        packedEnchant: number,
+        mass: bigint,
+        count: number
+    ): void {
+        if (mass <= 0n || !this.enchantToIndex.has(packedEnchant)) return;
+
+        const aggregateMass = this.options.applyBookRemoval && count > 1
+            ? (mass * BigInt(count - 1)) / BigInt(count)
+            : mass;
+        const id = packedEnchant >> PACKING_CONSTANTS.ENCHANT_SHIFT;
+        addArrayMass(clueJoint.any, id, aggregateMass);
+        addArrayMass(clueJoint.ranks, packedEnchant, aggregateMass);
     }
 
     private visitSelectionFactors(
@@ -308,67 +474,6 @@ function freezePendingAggregates(
             }
             : {})
     });
-}
-
-function addComboAggregate(
-    target: MutablePendingFrontierAggregates,
-    combo: PackedCombo,
-    count: number,
-    mass: bigint,
-    applyBookRemoval: boolean,
-    indexToEnchant: readonly number[] | undefined
-): void {
-    if (mass <= 0n) return;
-
-    const displayCount = applyBookRemoval && count > 1 ? count - 1 : count;
-    addArrayMass(target.count, displayCount, mass);
-    visitPackedCombo(combo, count, indexToEnchant, (packedEnchant) => {
-        const aggregateMass = applyBookRemoval && count > 1
-            ? (mass * BigInt(count - 1)) / BigInt(count)
-            : mass;
-        const id = packedEnchant >> PACKING_CONSTANTS.ENCHANT_SHIFT;
-        addArrayMass(target.any, id, aggregateMass);
-        addArrayMass(target.ranks, packedEnchant, aggregateMass);
-    });
-}
-
-function addPendingClueJointAggregate(
-    clueJoint: MutablePendingClueJointAggregates,
-    combo: PackedCombo,
-    count: number,
-    clueMass: bigint,
-    applyBookRemoval: boolean,
-    indexToEnchant: readonly number[] | undefined
-): void {
-    if (clueMass <= 0n) return;
-
-    clueJoint.knownSpace += clueMass;
-    const displayCount = applyBookRemoval && count > 1 ? count - 1 : count;
-    addArrayMass(clueJoint.count, displayCount, clueMass);
-    visitPackedCombo(combo, count, indexToEnchant, (packedEnchant) => {
-        const aggregateMass = applyBookRemoval && count > 1
-            ? (clueMass * BigInt(count - 1)) / BigInt(count)
-            : clueMass;
-        const id = packedEnchant >> PACKING_CONSTANTS.ENCHANT_SHIFT;
-        addArrayMass(clueJoint.any, id, aggregateMass);
-        addArrayMass(clueJoint.ranks, packedEnchant, aggregateMass);
-    });
-}
-
-function visitPackedCombo(
-    combo: PackedCombo,
-    count: number,
-    indexToEnchant: readonly number[] | undefined,
-    visitor: (packedEnchant: number) => void
-): void {
-    if (!indexToEnchant) return;
-    let remaining = combo;
-    for (let index = 0; index < count; index++) {
-        const packedIndex = remaining % PACKING_CONSTANTS.BYTE_BASIS;
-        const packedEnchant = indexToEnchant[packedIndex];
-        if (packedEnchant !== undefined && packedEnchant > 0) visitor(packedEnchant);
-        remaining = Math.floor(remaining / PACKING_CONSTANTS.BYTE_BASIS) as PackedCombo;
-    }
 }
 
 function addArrayMass(target: bigint[], key: number, mass: bigint): void {
